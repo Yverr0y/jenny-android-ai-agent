@@ -411,3 +411,13 @@ Commit sempre con `-s`: la CI controlla il DCO al primo push
 | congelare il flush sembra "Jenny si è fermata" | dura quanto la selezione e recupera in un frame. L'alternativa è lo stato attuale, in cui selezionare non si può proprio |
 | la `WeakMap` duplica il testo dei messaggi | limitato alla pagina di transcript già nel DOM, che come HTML renderizzato pesa molto di più |
 | una tappa Tab in più per risposta | voluta: è l'affordance visibile. Coperta da `aria-label` |
+
+## Superato (13/09/2026, sera)
+
+L'utente ha bucato `pinSelectionAnchor` con una variante del gesto (trascinare
+il manico *iniziale*, che scambia base ed estensione). La radice è un'altra e
+sta nel motore: al tocco di un manico Chromium ri-deriva l'estremo fermo con un
+hit-test dalle sue coordinate di schermo, e quel hit-test non attraversa il
+ritaglio di uno scroller **interno**. Diagnosi con il codice di Chromium e con
+tre pagine di prova sul telefono, e piano che toglie il rattoppo e cambia lo
+scroller della chat: [`chat-selection-root-plan.md`](./chat-selection-root-plan.md).

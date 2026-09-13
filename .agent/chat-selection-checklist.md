@@ -127,7 +127,7 @@ un force-push.
       che portano il markdown (elenco numerato incluso). Foglio `⋯` → "Seleziona
       testo" con selezione nativa e "Seleziona tutto"; Indietro lo chiude e non
       lascia più la selezione appesa. `::selection` leggibile su entrambi i fondi.
-- [ ] 8.2 PR (solo se richiesta).
+- [ ] 8.2 PR (solo se richiesta). **Sospesa**: il lavoro continua in `chat-selection-root-checklist.md`.
 
 ## Trovato sul telefono, non nel piano
 
