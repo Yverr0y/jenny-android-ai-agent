@@ -20,6 +20,7 @@ import { OnboardingController } from './mobile-onboarding.js';
 import { JennyCompanion } from './mobile-jenny.js';
 import { UiQueryResponder } from './mobile-ui-query.js';
 import { keyboard } from './shared/keyboard.js';
+import { hasSelection } from './shared/selection.js';
 import { homeView } from './shared/home-view.js';
 import './shared/theme.js';
 
@@ -888,7 +889,11 @@ class MobileApp {
       scrim.style.opacity = String(opacity);
     };
 
-    const H_SLOP = 10;       // px of travel before deciding the gesture is horizontal
+    // 24px, non 10: il touch slop di Android è ~8dp (≈20-24px reali), e sotto
+    // quella soglia `preventDefault()` cade dentro la finestra in cui Chromium
+    // sta ancora decidendo se la pressione è un long-press — che a quel punto
+    // viene scartato, e la selezione di testo non si apre più.
+    const H_SLOP = 24;       // px of travel before deciding the gesture is horizontal
     const PEEK = 0.13;       // asymptotic peek offset toward a neighbor (fraction of width)
     const EDGE_PEEK = 0.05;  // asymptotic peek offset at the ends
 
@@ -925,6 +930,9 @@ class MobileApp {
       if (this._firstRun && !localStorage.getItem('onboarding-complete')) return;
       // Guard: an open drawer owns its own (vertical) swipe.
       if (this.drawer.activeDrawer) return;
+      // Guard: c'è del testo selezionato. Trascinare per aggiustare i manici
+      // della selezione non deve far scivolare la vista sotto le dita.
+      if (hasSelection()) return;
 
       view = document.getElementById(`view-${this.currentMode}`);
       if (!view) return;
@@ -951,7 +959,9 @@ class MobileApp {
 
       if (horizontal === null) {
         if (Math.abs(dx) < H_SLOP && Math.abs(dy) < H_SLOP) return;
-        if (Math.abs(dx) <= Math.abs(dy)) { reset(); return; } // vertical → let it scroll
+        // Dominanza orizzontale vera: un trascinamento diagonale (tipico di chi
+        // aggiusta una selezione) non arma più lo swipe.
+        if (Math.abs(dx) <= Math.abs(dy) * 1.5) { reset(); return; } // vertical → let it scroll
         if (this._insideHScroll(startTarget, dx, main)) { reset(); return; }
         horizontal = true;
         view.style.transition = 'none';

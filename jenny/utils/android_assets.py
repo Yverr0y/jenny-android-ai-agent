@@ -267,6 +267,7 @@ _UI_MANIFEST = [
     "assets/shared/provider-brand.js",
     "assets/shared/rpc-client.js",
     "assets/shared/scope-chip.js",
+    "assets/shared/selection.js",
     "assets/shared/write-switch.js",
     "assets/shared/session-manager.js",
     "assets/shared/state.js",

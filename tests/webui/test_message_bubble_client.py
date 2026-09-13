@@ -95,6 +95,10 @@ function runFrames() {
   for (const cb of pending) cb();
 }
 
+/* Nessuna selezione aperta: il guard di `_flushRender` non congela niente e il
+   rendering si comporta come in una sessione di sola lettura. */
+const selectionInside = () => false;
+
 const renderMarkdown = (text) => text;
 const renderKaTeX = () => {};
 
@@ -117,6 +121,10 @@ function makeChat() {
     _renderTraceRow() {},
     _renderMediaAttachments() {},
     _appendLatency() {},
+    // Registro del sorgente e riga di azioni: fuori misura qui, dove si guarda
+    // solo quale blocco di testo finisce dipinto.
+    _setMessageSource() {},
+    _appendMsgActions() {},
     _appendSessionBoundary() {},
     _renderReasoningBody() {},
     _bumpUnread() { this.unread += 1; },

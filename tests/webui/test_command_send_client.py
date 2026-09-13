@@ -78,6 +78,10 @@ function makeChat({ draft = '', images = [] } = {}) {
     resized: 0,
     _renderMediaAttachments(_msg, entries) { chat.rendered.push(entries); },
     scrollToBottom() {},
+    // La bolla dell'eco registra il proprio sorgente e si appende la riga di
+    // azioni: entrambi fuori misura qui.
+    _setMessageSource() {},
+    _appendMsgActions() {},
     _resetStreamState() {},
     _updateSendState() {},
     _updateActions() {},

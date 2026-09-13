@@ -174,7 +174,7 @@ I cinque punti, che nessun passo può saltare:
 | dove | riga | testo |
 |---|---|---|
 | `_buildCompletedMessage` | `:1122` | `text` (history, `message`, utente esterno) |
-| `_renderTurn` | `:1028` | `turn.content.trim()` |
+| `_flushPersistedTurn` | `:1028` | `turn.content.trim()` |
 | `_handleStreamEnd` | `:1653` | `fullText \|\| this._deltaBuffer` |
 | `_handleMessage` (blocco `message`) | `:1773` | `msg.text` |
 | `sendMessage` (eco utente) | `:3277` | `text` |
@@ -258,11 +258,22 @@ che si paga volentieri.
 - `_setMessageSource(msg, text)` / `_messageText(msg)` sulla `WeakMap`, con i
   cinque agganci della tabella sopra e `innerText` dei `.chat-content` come rete.
 - `.chat-msg-actions` in coda alla bolla: **solo sulle risposte**, e **solo
-  quando il messaggio si è posato** — cioè in `_handleTurnEnd`, accanto a
-  `_appendLatency`, non durante lo streaming. Non si offre di copiare una
-  risposta a metà.
+  quando il messaggio si è posato**, non durante lo streaming. Non si offre di
+  copiare una risposta a metà.
   L'aggancio è indipendente da `_appendLatency`, che esce presto se `latencyMs`
   è `null`.
+- **Tre agganci, non uno.** `_handleTurnEnd` da solo copre soltanto le risposte
+  arrivate mentre guardavi: le bolle dello storico nascono da `_flushPersistedTurn`
+  ([`:1028`](../jenny/templates/ui/assets/mobile-chat.js)), che non passa mai da
+  lì, e una consegna proattiva entra dal blocco `message` di `_handleMessage`
+  (`:1773`), che si appende la sua `.chat-content` per conto proprio. Con il solo
+  aggancio vivo, riaprire l'app lascia **zero** pulsanti Copia — cioè scopre
+  esattamente il caso d'uso dominante, «copio quella cosa di ieri».
+  Quindi: un `_appendMsgActions(msg)` unico, chiamato da tutti e tre.
+- Il helper è **idempotente e sempre in coda**: se la riga c'è già la rimette in
+  fondo (`msg.appendChild(existing)`) invece di aggiungerne una seconda. Serve
+  perché nel percorso vivo `_appendLatency` può appendere la meta-row *dopo* il
+  blocco `message`, e la riga di azioni deve restare l'ultimo figlio.
 - Niente riga sulle bolle utente: sono già corte e allineate a destra, e il loro
   testo è `textContent` puro — la selezione nativa riparata basta. Il menu `⋯`
   le raggiunge comunque al passo 5.
@@ -326,10 +337,12 @@ Test nuovi, nelle due forme che il repo già usa:
   `_flushRender` è guardato da `selectionInside`; l'uscita anticipata di
   `scrollToBottom` nomina la selezione; `shared/selection.js` è in
   `_UI_MANIFEST`; i due `<dialog>` nuovi sono fuori da `#app`; nessun `onclick`
-  inline aggiunto.
+  inline aggiunto; `_appendMsgActions` chiamato dai **tre** percorsi
+  (`_handleTurnEnd`, `_flushPersistedTurn`, blocco `message`).
 - `tests/webui/test_chat_copy_client.py` — in node: `_messageText` rende il
   sorgente registrato quando c'è, la rete `innerText` quando manca, e
-  **concatena** più `.chat-content` della stessa bolla.
+  **concatena** più `.chat-content` della stessa bolla; `_appendMsgActions`
+  chiamato due volte lascia una riga sola, e la lascia in coda.
 - La parità i18n è coperta da `test_i18n_parity.py` appena le chiavi entrano in
   tutti e due i file.
 

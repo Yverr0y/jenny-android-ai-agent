@@ -13,6 +13,7 @@ import { getProviderBrand } from './shared/provider-brand.js';
 import { confirmDialog, detailDialog } from './shared/dialog.js';
 import { commandsChip } from './shared/commands-chip.js';
 import { isTypeAheadKey } from './shared/type-ahead.js';
+import { hasSelection, selectionInside, onSelectionChange } from './shared/selection.js';
 import {
   saActions,
   saActivityFrame,
@@ -156,6 +157,11 @@ export class ChatController {
     this.secondaryActions = document.getElementById('secondary-actions');
 
     this._deltaBuffer = '';
+    /* Il sorgente markdown di ogni bolla, registrato dove la bolla nasce.
+       `innerText` non basta come unica fonte: perde le recinzioni dei blocchi
+       di codice e il loro linguaggio. WeakMap perché quando la vista viene
+       buttata (`chatArea.innerHTML = ''`) le voci se ne vanno da sole. */
+    this._msgSource = new WeakMap();
     this._reasoningBuffer = '';
     // Un turno può avere più segmenti di ragionamento (uno per richiesta al
     // modello): il flag segna il confine, non la fine.
@@ -372,6 +378,12 @@ export class ChatController {
     // la tastiera virtuale a comparire (non c'è keydown senza input già a fuoco).
     document.addEventListener('keydown', (e) => this._maybeTypeAheadFocus(e));
 
+    /* Quando la selezione cade, il rendering congelato da `_flushRender`
+       riparte: un frame e il testo è di nuovo allineato al buffer. */
+    onSelectionChange((active) => {
+      if (!active && (this._deltaDirty || this._reasoningDirty)) this._scheduleFlush();
+    });
+
     // C1: delegated copy handler for code-block buttons (replaces inline onclick).
     this.chatArea.addEventListener('click', (e) => {
       // Un link dentro il markdown di una risposta è una navigazione di main
@@ -395,6 +407,15 @@ export class ChatController {
       }
       const btn = e.target.closest('.chat-code-copy');
       if (btn && this.chatArea.contains(btn)) { copyCodeFromButton(btn); return; }
+      // Riga di azioni della bolla. Delegato come tutto il resto: la CSP della
+      // shell è `script-src 'self'`, niente `onclick` inline.
+      const msgAction = e.target.closest('.chat-msg-action');
+      if (msgAction && this.chatArea.contains(msgAction)) {
+        const bubble = msgAction.closest('.chat-msg');
+        if (msgAction.classList.contains('chat-msg-copy')) this._copyMessage(bubble);
+        else this._showMessageSheet(bubble);
+        return;
+      }
       // Tap su un'immagine (media allegato o immagine markdown inline) → lightbox.
       const img = e.target.closest('img');
       if (img && this.chatArea.contains(img)) this._openLightbox(img.currentSrc || img.src, img.alt || '');
@@ -1031,6 +1052,7 @@ export class ChatController {
         renderKaTeX(content);
         this._makeFilePathsClickable(content);
       }
+      this._setMessageSource(node, turn.content.trim());
       hasContent = true;
     }
 
@@ -1042,6 +1064,7 @@ export class ChatController {
     if (!hasContent) return;
 
     this._appendLatency(node, turn.latencyMs);
+    this._appendMsgActions(node);
 
     if (toTop) {
       this._insertAtTop(node);
@@ -1078,6 +1101,161 @@ export class ChatController {
     meta.className = 'chat-meta';
     meta.textContent = (latencyMs / 1000).toFixed(1) + 's';
     msg.appendChild(meta);
+  }
+
+  /* Registra (accumulando) il sorgente di una bolla. Una bolla AI può contenere
+     più `.chat-content` — un turno testo → tool → testo apre un segmento nuovo
+     a ogni stream — quindi i segmenti si separano con una riga vuota invece di
+     sostituirsi. */
+  _setMessageSource(msg, text) {
+    if (!msg) return;
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    const prev = this._msgSource.get(msg);
+    this._msgSource.set(msg, prev ? `${prev}\n\n${clean}` : clean);
+  }
+
+  /** Il testo copiabile di una bolla: il sorgente registrato se c'è, altrimenti
+      la rete di `innerText` — che perde le recinzioni ma non lascia mai un
+      pulsante Copia che non copia niente. */
+  _messageText(msg) {
+    if (!msg) return '';
+    const recorded = this._msgSource.get(msg);
+    if (recorded) return recorded;
+    return [...msg.querySelectorAll('.chat-content')]
+      .map((el) => (el.innerText || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  _buildMsgActionButton(cls, icon, label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `chat-msg-action ${cls}`;
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    btn.innerHTML = `<i class="ti ${icon}"></i>`;
+    return btn;
+  }
+
+  /* La riga di azioni in coda alla bolla. Idempotente e sempre ultima: se c'è
+     già la rimette in fondo invece di aggiungerne una seconda, perché nel
+     percorso vivo `_appendLatency` può appendere la meta-row dopo di lei.
+     Tre chiamanti — `_handleTurnEnd` (vivo), `_flushPersistedTurn` (storico) e
+     il blocco `message` di `_handleMessage` (consegna proattiva): con il solo
+     aggancio vivo, riaprire l'app lascerebbe zero pulsanti Copia. */
+  _appendMsgActions(msg) {
+    if (!msg) return;
+    const isUser = msg.classList.contains('chat-msg-user');
+    // Un turno di soli tool non ha niente da copiare.
+    if (!isUser && !this._messageText(msg)) return;
+    const existing = msg.querySelector(':scope > .chat-msg-actions');
+    if (existing) { msg.appendChild(existing); return; }
+
+    const row = document.createElement('div');
+    row.className = 'chat-msg-actions';
+    // Sulle bolle utente niente Copia: sono corte e la selezione nativa
+    // riparata basta. Il `⋯` c'è lo stesso, che è come le raggiunge il foglio.
+    if (!isUser) {
+      row.appendChild(this._buildMsgActionButton('chat-msg-copy', 'ti-copy', i18n.t('chat.copy')));
+    }
+    row.appendChild(
+      this._buildMsgActionButton('chat-msg-more', 'ti-dots', i18n.t('chat.messageActions')));
+    msg.appendChild(row);
+  }
+
+  /** Il messaggio come lo leggerebbe un umano: niente `**` né `##`. Specchio di
+      `_messageText`, che invece rende il sorgente. */
+  _messagePlain(msg) {
+    if (!msg) return '';
+    const rendered = [...msg.querySelectorAll('.chat-content')]
+      .map((el) => (el.innerText || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+    return rendered || this._messageText(msg);
+  }
+
+  async _copyMessage(msg, markdown = true) {
+    const text = markdown ? this._messageText(msg) : this._messagePlain(msg);
+    if (!text) return;
+    if (!(await copyToClipboard(text))) {
+      showToast(i18n.t('chat.copyFailed'), 'error');
+      return;
+    }
+    showToast(i18n.t('chat.copied'), 'success');
+  }
+
+  /* Foglio delle azioni di un messaggio. Stesso schema di
+     `showAndroidAppSheet`, finestra di grazia sul backdrop compresa: il tap
+     sintetico che segue una pressione lunga non deve richiudere il foglio
+     appena aperto. */
+  _showMessageSheet(msg) {
+    const sheet = document.getElementById('chat-msg-sheet');
+    const actionsEl = document.getElementById('chat-msg-sheet-actions');
+    if (!sheet || !actionsEl || !msg) return;
+
+    const actions = [
+      { icon: 'ti-copy', label: i18n.t('chat.copyPlain'), run: () => this._copyMessage(msg, false) },
+      { icon: 'ti-markdown', label: i18n.t('chat.copyMarkdown'), run: () => this._copyMessage(msg, true) },
+      { icon: 'ti-text-caption', label: i18n.t('chat.selectText'), run: () => this._showSelectSheet(msg) },
+    ];
+    actionsEl.innerHTML = '';
+    const close = () => sheet.close();
+    for (const a of actions) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'oc-sheet-action';
+      btn.innerHTML = `<i class="ti ${a.icon}"></i>`;
+      btn.appendChild(document.createTextNode(a.label));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        close();
+        a.run();
+      });
+      actionsEl.appendChild(btn);
+    }
+    const cancelBtn = document.getElementById('chat-msg-sheet-cancel');
+    if (cancelBtn) cancelBtn.onclick = close;
+    const openedAt = Date.now();
+    sheet.onclick = (e) => { if (e.target === sheet && Date.now() - openedAt > 400) close(); };
+    sheet.showModal();
+  }
+
+  /* La superficie isolata: qui la selezione non ha avversari. Il foglio è
+     figlio diretto di <body>, quindi fuori da `.main` e dal listener dello
+     swipe; niente lo riscrive e niente lo scrolla da sé. */
+  _showSelectSheet(msg) {
+    const sheet = document.getElementById('chat-select-sheet');
+    const body = document.getElementById('chat-select-body');
+    if (!sheet || !body || !msg) return;
+
+    // Il messaggio *renderizzato*: su una risposta in prosa il markdown grezzo
+    // sarebbe pieno di `**` e `##` da scavalcare col dito. Il sorgente ha già
+    // la sua strada in "Copia come Markdown".
+    body.innerHTML = renderMarkdown(this._messageText(msg));
+    renderKaTeX(body);
+
+    const close = () => {
+      document.getSelection()?.removeAllRanges();
+      sheet.close();
+    };
+    const selectAll = document.getElementById('chat-select-all');
+    if (selectAll) {
+      selectAll.onclick = (e) => {
+        e.stopPropagation();
+        const sel = document.getSelection();
+        if (!sel) return;
+        sel.removeAllRanges();
+        const range = document.createRange();
+        range.selectNodeContents(body);
+        sel.addRange(range);
+      };
+    }
+    const cancelBtn = document.getElementById('chat-select-cancel');
+    if (cancelBtn) cancelBtn.onclick = close;
+    const openedAt = Date.now();
+    sheet.onclick = (e) => { if (e.target === sheet && Date.now() - openedAt > 400) close(); };
+    sheet.showModal();
   }
 
   _appendFileEdits(msg, edits) {
@@ -1137,6 +1315,8 @@ export class ChatController {
     // file), così la preview non si perde dopo un reload.
     if (media?.length) this._renderMediaAttachments(msg, media);
     if (role === 'user') this._appendOriginBadge(msg, origin);
+    this._setMessageSource(msg, text);
+    this._appendMsgActions(msg);
     return msg;
   }
 
@@ -1426,13 +1606,20 @@ export class ChatController {
     this._pendingFrame = requestAnimationFrame(() => this._flushRender());
   }
 
+  /* `innerHTML =` ricrea tutti i nodi di testo, quindi una selezione aperta
+     dentro il blocco che si sta riscrivendo muore al frame dopo. Finché la
+     selezione è lì dentro non si riscrive e il flag *resta sporco*: il buffer
+     continua ad accumulare e il testo recupera in un frame solo quando la
+     selezione cade (ci pensa `onSelectionChange` in `setupEventListeners`).
+     Il guard è per blocco: una selezione in una bolla vecchia non congela
+     niente, perché quella bolla nessuno la riscrive. */
   _flushRender() {
     this._pendingFrame = null;
-    if (this._deltaDirty && this._currentContent) {
+    if (this._deltaDirty && this._currentContent && !selectionInside(this._currentContent)) {
       this._currentContent.innerHTML = renderMarkdown(this._deltaBuffer);
       this._deltaDirty = false;
     }
-    if (this._reasoningDirty && this._currentThinking) {
+    if (this._reasoningDirty && this._currentThinking && !selectionInside(this._currentThinking)) {
       this._renderReasoningBody();
       this._reasoningDirty = false;
     }
@@ -1655,6 +1842,7 @@ export class ChatController {
       this._currentContent.innerHTML = renderMarkdown(finalText);
       renderKaTeX(this._currentContent);
       this._makeFilePathsClickable(this._currentContent);
+      this._setMessageSource(this._currentMsg, finalText);
     }
     // Chiude il segmento. Un turno con testo → tool → testo produce più
     // stream, ma `_resetStreamState` scatta solo a turn_end: senza questo
@@ -1689,6 +1877,7 @@ export class ChatController {
 
   _handleTurnEnd(latencyMs) {
     this._appendLatency(this._currentMsg, latencyMs);
+    this._appendMsgActions(this._currentMsg);
     this._dropTerminatedSubagents();
 
     this._resetStreamState();
@@ -1773,6 +1962,11 @@ export class ChatController {
       content.innerHTML = renderMarkdown(msg.text);
       renderKaTeX(content);
       this._makeFilePathsClickable(content);
+      this._setMessageSource(this._currentMsg, msg.text);
+      /* Una consegna proattiva può non avere un `turn_end` dietro: la riga di
+         azioni si posa qui, e `_handleTurnEnd` la rimetterà in coda se il turno
+         poi continua. */
+      this._appendMsgActions(this._currentMsg);
       // `_currentContent` resta null: il delta successivo apre il proprio blocco.
     }
 
@@ -3283,6 +3477,8 @@ export class ChatController {
     // file): senza questo l'anteprima del composer sparirebbe al clear.
     const entries = attachments ? this.imageHandler.getAttachmentEntries() : [];
     if (entries.length) this._renderMediaAttachments(msg, entries);
+    this._setMessageSource(msg, text);
+    this._appendMsgActions(msg);
     this.chatArea.appendChild(msg);
     this._autoScroll = true;
     this.scrollToBottom(true);
@@ -3308,7 +3504,13 @@ export class ChatController {
   }
 
   scrollToBottom(force = false) {
-    if (!force && (!this._autoScroll || this._userTouching)) return;
+    /* `hasSelection()` sta nella *stessa* uscita di `_userTouching`, non in una
+       nuova: `_userTouching` torna false sul `touchend`, cioè nell'istante in
+       cui la selezione compare, e il primo flush dopo si porterebbe via il testo
+       selezionato mentre la barra di selezione è ancora su. Le chiamate con
+       `force` restano tali: sono tutte intenzioni esplicite (FAB, invio,
+       rientro nella vista). */
+    if (!force && (!this._autoScroll || this._userTouching || hasSelection())) return;
     requestAnimationFrame(() => {
       this.chatArea.scrollTop = this.chatArea.scrollHeight;
     });
