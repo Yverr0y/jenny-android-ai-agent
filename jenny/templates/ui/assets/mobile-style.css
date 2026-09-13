@@ -290,6 +290,10 @@ body {
   grid-template-rows: 1fr var(--dock-height);
   position: absolute;
   inset: 0;
+  /* L'altezza del viewport visibile la scrive setupViewportHeight() come
+     variabile: con la tastiera su il guscio si restringe. In chat la stessa
+     variabile fa da `min-height`, v. `:root.mode-chat` più sotto. */
+  height: var(--vv-height, auto);
   overflow: hidden;
   background: var(--bg);
   font-size: 12px;
@@ -1121,6 +1125,12 @@ body {
   background: var(--bg);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  /* In chat il guscio è alto quanto la cronologia e il dock resta a filo del
+     viewport da solo; fuori dalla chat non c'è scroll e sticky non fa niente
+     (v. "Lo scroller della chat è il documento"). */
+  position: sticky;
+  bottom: 0;
+  z-index: 7;
 }
 
 .dock-item {
@@ -1617,6 +1627,11 @@ body {
   flex: 1; overflow-y: auto;
   padding: 14px 16px;
   display: flex; flex-direction: column; gap: 12px;
+  /* Selezionabile è solo il testo dei messaggi: meta, orari, riga delle
+     azioni, header dei tool, chip e "carica altro" ereditano `none`, le bolle
+     rimettono `text` (v. `.chat-area .chat-content` più sotto). */
+  user-select: none;
+  -webkit-user-select: none;
 }
 /* Niente di impilato in una colonna che scorre può restringersi. La colonna ha
    spazio libero NEGATIVO appena il contenuto supera lo schermo, e i flex item la
@@ -1636,14 +1651,69 @@ body {
    proprietà appartiene: vale in qualunque punto finisca. */
 .chat-area > * { flex-shrink: 0; }
 
-/* Ancora per il FAB "vai in fondo" */
-#view-chat { position: relative; }
+/* ── Lo scroller della chat è il documento ────────────────────────────────
+   Al tocco di un manico di selezione Chromium ri-deriva l'estremo fermo con un
+   hit-test dalle sue coordinate di schermo, e quel hit-test ignora solo il
+   ritaglio del viewport: il testo scrollato fuori da uno scroller INTERNO è
+   irraggiungibile, e la selezione saltava sul composer prendendosi tutto.
+   Quindi in chat scorre `html`, e nessun antenato del testo ritaglia.
+   Solo in chat: senza `mode-chat` il guscio è quello fisso di sempre.
+   Ragionamento e misure: .agent/chat-selection-root-plan.md. */
+#view-chat { position: relative; flex-direction: column; height: 100%; }
+
+:root.mode-chat { overflow-y: auto; overflow-x: hidden; }
+:root.mode-chat body { position: static; overflow: visible; }
+:root.mode-chat .app {
+  position: relative;
+  inset: auto;
+  height: auto;
+  min-height: var(--vv-height, 100dvh);
+  overflow: visible;
+}
+:root.mode-chat .body,
+:root.mode-chat .main { overflow: visible; height: auto; }
+:root.mode-chat #view-chat {
+  height: auto;
+  /* La chat corta tiene comunque il composer in fondo allo schermo. */
+  min-height: calc(var(--vv-height, 100dvh) - var(--dock-height));
+}
+:root.mode-chat .chat-area { overflow: visible; }
+
+/* Quello che sta fermo mentre la chat scorre resta in FLUSSO e si incolla al
+   fondo del viewport: niente padding da calcolare, niente ResizeObserver. Il
+   composer sopra il dock, il dock a filo. */
+.chat-bottom {
+  position: sticky;
+  bottom: var(--dock-height);
+  z-index: 6;
+  background: var(--bg);
+}
+
+/* Le superfici che oggi sono `absolute` dentro un guscio alto quanto lo
+   schermo, con il guscio alto quanto la chat devono ancorarsi al viewport. */
+:root.mode-chat .jenny-duo,
+:root.mode-chat .drawer,
+:root.mode-chat .drawer-backdrop,
+:root.mode-chat .swipe-scrim { position: fixed; }
+
+/* Finché c'è una selezione la chrome non partecipa al hit-test: è la
+   condizione perché il motore ritrovi il testo sotto il composer o il dock
+   (misurato: .agent/selection-rig, pagina C). Il tap che così finirebbe sotto
+   lo riconsegna forwardTapsThroughChrome() in shared/selection.js. */
+:root.has-selection .chat-bottom,
+:root.has-selection .dock,
+:root.has-selection .jenny-duo { pointer-events: none; }
+
+/* Le bolle rimettono `text` sotto il `none` di `.chat-area`: "Seleziona
+   tutto" della barra di sistema prende così soltanto il testo dei messaggi. */
+.chat-area .chat-content { user-select: text; -webkit-user-select: text; }
 
 /* FAB "vai in fondo": visibile solo quando l'utente è staccato dal fondo chat */
 .chat-scroll-fab {
   position: absolute;
   right: 14px;
-  bottom: 74px;
+  /* Dentro `.chat-bottom`: appena sopra il suo bordo, e lo segue da sé. */
+  top: -54px;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -4876,23 +4946,6 @@ body {
   width: 100%;
   text-align: left;
 }
-/* Superficie di selezione isolata: corpo scorrevole con tetto, sul modello di
-   `.oc-detail-body`, e `user-select: text` dichiarato invece che ereditato. */
-.oc-select-body {
-  max-height: 52vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  padding: 4px 2px 10px;
-  user-select: text;
-  -webkit-user-select: text;
-}
-.oc-select .oc-sheet-actions {
-  border-top: 0.5px solid var(--border);
-  margin-top: 6px;
-  padding-top: 4px;
-}
-
 .oc-sheet-action:hover {
   background: var(--overlay-strong);
 }

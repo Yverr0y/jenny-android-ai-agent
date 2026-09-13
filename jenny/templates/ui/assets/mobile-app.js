@@ -20,7 +20,7 @@ import { OnboardingController } from './mobile-onboarding.js';
 import { JennyCompanion } from './mobile-jenny.js';
 import { UiQueryResponder } from './mobile-ui-query.js';
 import { keyboard } from './shared/keyboard.js';
-import { hasSelection, pinSelectionAnchor } from './shared/selection.js';
+import { hasSelection, exposeSelectionState, forwardTapsThroughChrome } from './shared/selection.js';
 import { homeView } from './shared/home-view.js';
 import './shared/theme.js';
 
@@ -211,7 +211,12 @@ class MobileApp {
     this.setupSwipeNav();
     /* Vale per tutta la pagina, non solo per la chat: il salto dell'ancora
        colpisce qualunque testo lungo, fogli compresi. */
-    pinSelectionAnchor();
+    /* Finché c'è una selezione, composer, dock e mascotte escono dal hit-test:
+       è la condizione perché il tocco di un manico non ributti l'estremo
+       fermo sulla chrome (v. .agent/chat-selection-root-plan.md, pagina C).
+       Il tap che così finirebbe sotto viene riconsegnato al bersaglio vero. */
+    exposeSelectionState();
+    forwardTapsThroughChrome(['.chat-bottom', '.dock']);
 
     // Determine initial mode
     const urlParams = new URLSearchParams(window.location.search);
@@ -331,11 +336,17 @@ class MobileApp {
   }
 
   setupViewportHeight() {
-    const app = document.querySelector('.app');
+    const root = document.documentElement;
     const setH = () => {
       if (!window.visualViewport) return;
-      app.style.height = window.visualViewport.height + 'px';
-      window.scrollTo(0, 0);
+      // Il CSS legge `--vv-height` (`.app` fuori dalla chat, `min-height` in
+      // chat): la tastiera restringe il viewport e il guscio la segue.
+      root.style.setProperty('--vv-height', window.visualViewport.height + 'px');
+      // In chat lo scroller è il documento e la posizione di scroll è una
+      // posizione di lettura: non si azzera per un resize (chi era in fondo
+      // ci torna da sé, v. ChatController). Fuori dalla chat il guscio è
+      // fisso e uno scroll residuo della pagina va rimesso a zero, come prima.
+      if (!root.classList.contains('mode-chat')) window.scrollTo(0, 0);
     };
     window.visualViewport?.addEventListener('resize', setH);
     setH();

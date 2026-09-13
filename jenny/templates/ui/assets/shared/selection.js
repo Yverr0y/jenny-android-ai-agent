@@ -45,132 +45,91 @@ export function onSelectionChange(fn) {
   return () => document.removeEventListener('selectionchange', handler);
 }
 
-/* ── L'ancora che scappa ──────────────────────────────────────────────────────
-   Trascinando un manico di selezione mentre l'ALTRO estremo è fuori dall'area
-   visibile, la WebView ricalcola quell'estremo fermo dalle sue ultime
-   coordinate *di schermo*, che nel frattempo sono state ritagliate dentro il
-   viewport: l'ancora salta sul bordo visibile e la selezione si mangia tutto
-   quello che c'è in mezzo.
+/* ── La chrome esce dal hit-test finché c'è una selezione ───────────────────
+   Al tocco di un manico Chromium ri-deriva l'estremo *fermo* della selezione
+   con un hit-test dalle sue coordinate di schermo (`OnDragBegin` →
+   `SelectBetweenCoordinates`). Se in quel punto c'è il composer o il dock,
+   vincono loro: la selezione salta sulla chrome o collassa. Con
+   `pointer-events: none` la chrome non partecipa al hit-test e il motore
+   ritrova da solo il testo che ci sta sotto — misurato con tre pagine di
+   prova in .agent/selection-rig (pagina C). La classe la mette questo modulo,
+   la regola sta in mobile-style.css. */
+export const SELECTING_CLASS = 'has-selection';
 
-   Misurato sul Titan 2 il 13/09/2026, con questo gesto: seleziono una frase,
-   scrollo finché metà selezione esce dallo schermo in alto, allungo di due
-   parole — e la selezione parte dalla cima dello schermo. Nel foglio
-   "Seleziona testo" si è presa perfino il titolo del dialog, che non fa parte
-   del messaggio: è la prova che il salto è geometrico, non di contenuto.
-
-   Non è riparabile a monte (è il motore a decidere), quindi ce la ricordiamo
-   noi: l'ancora non cambia mai durante un trascinamento, e se cambia proprio
-   quando quella vecchia era fuori schermo e la nuova è incollata al bordo, è
-   il salto — e la rimettiamo dov'era. */
-
-/* Il ritaglio della WebView lascia una frazione di pixel oltre il bordo: senza
-   questa tolleranza "fuori schermo" non è mai vero. */
-export const EDGE_EPS = 4;
-
-/** La firma geometrica del salto: l'ancora vecchia era fuori dall'area
-    visibile, la nuova è incollata allo stesso bordo. Pura, così è misurabile
-    in un test senza un browser. */
-export function anchorWasClamped(pinnedRect, anchorRect, viewportHeight, edgeSlack = 80) {
-  if (!pinnedRect) return false;
-  /* Non `< 0`, e nemmeno `<= 0`: misurato sul Titan 2, l'ancora finita sopra il
-     bordo riporta `bottom ≈ 0.4` — la WebView ritaglia i rettangoli dei range
-     all'area visibile e lascia una frazione di pixel. Con `< 0` la riparazione
-     non scattava mai, e con `<= 0` nemmeno: serve la tolleranza. */
-  const offAbove = pinnedRect.bottom <= EDGE_EPS;
-  const offBelow = pinnedRect.top >= viewportHeight - EDGE_EPS;
-  if (!offAbove && !offBelow) return false;
-  /* Il rettangolo della *nuova* ancora può mancare del tutto (stessa misura:
-     `anc=0/0`). Se l'ancora vecchia era fuori schermo e questa non è una
-     selezione nuova, il salto è già acclarato senza la seconda prova. */
-  if (!anchorRect) return true;
-  const atTop = anchorRect.top < edgeSlack;
-  const atBottom = anchorRect.bottom > viewportHeight - edgeSlack;
-  return (offAbove && atTop) || (offBelow && atBottom);
+/** Tiene `has-selection` su `<html>` allineata allo stato della selezione.
+    Torna la funzione che stacca il listener. */
+export function exposeSelectionState(root = document.documentElement) {
+  const apply = (active) => root.classList.toggle(SELECTING_CLASS, active);
+  apply(hasSelection());
+  return onSelectionChange(apply);
 }
 
-/* Un range **collassato** in Chromium torna spesso un rettangolo vuoto, quindi
-   si misura un carattere di margine invece del punto: è la differenza fra
-   sapere dov'è l'ancora e non saperlo. */
-function pointRect(node, offset) {
-  if (!node || !document.contains(node)) return null;
+/* Un tocco è un tap se il dito non si è spostato più di così (px CSS). Sotto
+   c'è lo slop di Android (8dp): un movimento maggiore è uno scroll, e lo
+   scroll deve restare nativo. */
+const TAP_SLOP = 12;
+
+/* Il hit-test a classe spenta: chi c'è *davvero* sotto il dito, chrome
+   compresa. La classe torna su subito dopo, qualunque cosa succeda. */
+function chromeUnder(root, x, y, chromeSelector) {
+  root.classList.remove(SELECTING_CLASS);
+  let el = null;
   try {
-    const len = node.nodeType === Node.TEXT_NODE ? node.data.length : node.childNodes.length;
-    const start = Math.max(0, Math.min(offset, len));
-    const range = document.createRange();
-    if (start < len) {
-      range.setStart(node, start);
-      range.setEnd(node, start + 1);
-    } else if (start > 0) {
-      range.setStart(node, start - 1);
-      range.setEnd(node, start);
-    } else {
-      range.setStart(node, start);
-      range.setEnd(node, start);
-    }
-    const rects = range.getClientRects();
-    const rect = rects.length ? rects[0] : range.getBoundingClientRect();
-    if (!rect) return null;
-    if (!rect.width && !rect.height && !rect.top && !rect.bottom) return null;
-    return rect;
-  } catch {
-    return null;
+    el = document.elementFromPoint(x, y);
+  } finally {
+    root.classList.add(SELECTING_CLASS);
   }
+  return el && el.closest(chromeSelector) ? el : null;
 }
 
-/* Una pressione lunga su un'altra parola *sostituisce* la selezione: anche lì
-   l'ancora cambia, ma è una selezione nuova e non va riportata indietro. Si
-   riconosce dalla forma: un morso corto dentro un solo nodo di testo. */
-function looksLikeFreshWord(sel) {
-  return sel.anchorNode === sel.focusNode && Math.abs(sel.focusOffset - sel.anchorOffset) <= 40;
+/* Cosa voleva il dito: scrivere, se è caduto su un campo; premere, per tutto
+   il resto (il bottone che contiene il punto, o l'elemento stesso). */
+function deliverTap(el) {
+  const field = el.closest('textarea, input, [contenteditable]');
+  if (field) {
+    field.focus();
+    return;
+  }
+  const control = el.closest('button, [role="button"], .dock-item, a[href]');
+  (control || el).click();
 }
 
-/** Tiene ferma l'ancora della selezione per tutta la pagina. Torna la funzione
-    che smonta il tutto. */
-export function pinSelectionAnchor({ edgeSlack = 80, settleMs = 120 } = {}) {
-  let pinned = null;
-  let timer = null;
+/** Il prezzo della trasparenza, ripagato: con una selezione attiva un tap sul
+    composer o sul dock arriverebbe al testo sotto (e chiuderebbe solo la
+    selezione). Qui il tap viene riconosciuto sul `touchend`, il click nativo
+    che finirebbe sotto viene annullato, la selezione chiusa e il tap
+    consegnato al bersaglio vero. Solo con la classe su, solo per bersagli
+    dentro `selectors`, solo per un tap (un trascinamento resta uno scroll).
+    Torna la funzione che smonta il tutto. */
+export function forwardTapsThroughChrome(selectors, root = document.documentElement) {
+  const chromeSelector = selectors.join(', ');
+  let pending = null;
 
-  const settle = () => {
-    timer = null;
-    const sel = document.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed || inEditableField()) {
-      pinned = null;
-      return;
-    }
-    if (!pinned) {
-      pinned = { node: sel.anchorNode, offset: sel.anchorOffset };
-      return;
-    }
-    if (sel.anchorNode === pinned.node && sel.anchorOffset === pinned.offset) return;
-
-    const jumped = !looksLikeFreshWord(sel) && anchorWasClamped(
-      pointRect(pinned.node, pinned.offset),
-      pointRect(sel.anchorNode, sel.anchorOffset),
-      window.innerHeight,
-      edgeSlack,
-    );
-    if (!jumped) {
-      pinned = { node: sel.anchorNode, offset: sel.anchorOffset };
-      return;
-    }
-    try {
-      // Rimette l'ancora dov'era, lasciando al dito l'estremo che sta muovendo.
-      sel.setBaseAndExtent(pinned.node, pinned.offset, sel.focusNode, sel.focusOffset);
-    } catch {
-      pinned = { node: sel.anchorNode, offset: sel.anchorOffset };
-    }
+  const onStart = (e) => {
+    pending = null;
+    if (e.touches.length !== 1 || !root.classList.contains(SELECTING_CLASS)) return;
+    const t = e.touches[0];
+    const target = chromeUnder(root, t.clientX, t.clientY, chromeSelector);
+    if (target) pending = { target, x: t.clientX, y: t.clientY };
+  };
+  const onEnd = (e) => {
+    const p = pending;
+    pending = null;
+    if (!p) return;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (t && (Math.abs(t.clientX - p.x) > TAP_SLOP || Math.abs(t.clientY - p.y) > TAP_SLOP)) return;
+    // Annulla il click sintetico che il browser manderebbe al testo sotto la
+    // chrome (un "Copia" di una bolla, ad esempio).
+    e.preventDefault();
+    document.getSelection()?.removeAllRanges();
+    deliverTap(p.target);
   };
 
-  /* Si agisce a trascinamento **fermo**, non a ogni frame: durante il gesto la
-     WebView riscrive la selezione a ogni movimento e una correzione per frame
-     le combatterebbe contro (e si vedrebbe lampeggiare). */
-  const handler = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(settle, settleMs);
-  };
-  document.addEventListener('selectionchange', handler);
+  document.addEventListener('touchstart', onStart, { passive: true, capture: true });
+  document.addEventListener('touchend', onEnd, { passive: false, capture: true });
+  document.addEventListener('touchcancel', () => { pending = null; }, { passive: true, capture: true });
   return () => {
-    document.removeEventListener('selectionchange', handler);
-    if (timer) clearTimeout(timer);
+    document.removeEventListener('touchstart', onStart, { capture: true });
+    document.removeEventListener('touchend', onEnd, { capture: true });
   };
 }

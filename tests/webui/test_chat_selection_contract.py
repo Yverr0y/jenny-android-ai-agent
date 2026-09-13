@@ -154,48 +154,9 @@ def test_the_actions_row_is_idempotent_and_last() -> None:
     assert "msg.appendChild(existing)" in body
 
 
-def test_the_sheets_live_outside_the_swipe_surface() -> None:
+def test_the_sheet_lives_outside_the_swipe_surface() -> None:
     """Dentro `#app` (e quindi `.main`) il listener dello swipe si prende il gesto."""
-    for sheet in ("chat-msg-sheet", "chat-select-sheet"):
-        assert "app" not in _ancestor_ids(sheet), sheet
-
-
-def test_the_anchor_is_pinned_across_a_handle_drag() -> None:
-    """Il salto dell'ancora (v. `test_selection_anchor_client.py`) va disarmato
-    all'avvio, e per tutta la pagina: colpisce la chat come i fogli."""
-    assert "export function pinSelectionAnchor(" in SELECTION_JS
-    assert "setBaseAndExtent" in SELECTION_JS
-    assert "pinSelectionAnchor()" in APP_JS
-
-
-def test_the_repair_measures_a_character_not_a_point() -> None:
-    """Un range collassato in Chromium torna spesso un rettangolo vuoto.
-
-    Misurato sul telefono (`anc=0/0`): senza un carattere di margine la
-    riparazione non sa nemmeno dov'è l'ancora.
-    """
-    body = re.search(r"function pointRect\(.*?\n\}", SELECTION_JS, re.S)
-    assert body, "pointRect non trovata"
-    assert "getClientRects()" in body.group(0)
-
-
-def test_the_pin_waits_for_the_drag_to_stop() -> None:
-    """Una correzione per frame combatterebbe contro il trascinamento vivo."""
-    body = re.search(r"export function pinSelectionAnchor\(.*?\n\}", SELECTION_JS, re.S)
-    assert body, "pinSelectionAnchor non trovata"
-    assert "setTimeout(settle" in body.group(0)
-
-
-def test_the_selection_sheet_drops_its_selection_on_any_close() -> None:
-    """Il tasto Indietro congeda il `<dialog>` senza passare da `close()`.
-
-    Misurato sul telefono il 13/09/2026: senza `onclose`, uscire col tasto
-    Indietro lasciava viva la selezione — barra di sistema appesa sopra la chat,
-    e un `hasSelection()` perennemente vero che congela rendering e autoscroll.
-    """
-    body = _method(CHAT_JS, "_showSelectSheet")
-    assert "sheet.onclose" in body
-    assert "removeAllRanges()" in body.split("sheet.onclose", 1)[1].split("\n", 1)[0]
+    assert "app" not in _ancestor_ids("chat-msg-sheet")
 
 
 def test_no_inline_handlers_were_added() -> None:
@@ -204,8 +165,21 @@ def test_no_inline_handlers_were_added() -> None:
 
 
 def test_the_new_keys_exist_in_both_locales() -> None:
-    keys = ("messageActions", "copyPlain", "copyMarkdown", "selectText", "selectAll")
+    keys = ("messageActions", "copyPlain", "copyMarkdown")
     for lang in ("it", "en"):
         chat = json.loads((ASSETS / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))["chat"]
         for key in keys:
             assert chat.get(key), f"{lang}.chat.{key}"
+
+
+def test_the_select_sheet_and_the_anchor_pin_are_gone() -> None:
+    """Il foglio era uno scroller interno e riproduceva il difetto al suo
+    interno; il pin era un'euristica in JS su un difetto del motore. La radice
+    sta in `test_chat_root_scroller_contract.py`."""
+    assert "chat-select-sheet" not in INDEX_HTML
+    assert "_showSelectSheet" not in CHAT_JS
+    assert "pinSelectionAnchor" not in SELECTION_JS and "pinSelectionAnchor" not in APP_JS
+    assert "setBaseAndExtent" not in _code_only(SELECTION_JS), "nessuna scrittura della selezione da JS"
+    for lang in ("it", "en"):
+        chat = json.loads((ASSETS / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))["chat"]
+        assert "selectText" not in chat and "selectAll" not in chat, lang

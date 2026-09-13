@@ -333,7 +333,10 @@ export class ChatController {
     // è a fondo chat. Nessun guard sugli scroll programmatici: assegnano scrollTop
     // al fondo in modo istantaneo, quindi il loro evento ricalcola comunque
     // _autoScroll = true e non serve distinguerli da quelli dell'utente.
-    this.chatArea.addEventListener('scroll', () => {
+    // Lo scroller è il documento (v. `_scroller`): l'evento arriva a `window`.
+    // Fuori dalla chat `html` è `overflow: hidden` e non scorre, quindi il
+    // listener non scatta a vuoto sulle altre viste.
+    window.addEventListener('scroll', () => {
       this._autoScroll = this._isNearBottom();
       this._updateScrollFab();
       this._rememberScrollAnchor();
@@ -341,7 +344,10 @@ export class ChatController {
 
     // Mentre il dito è giù non va MAI eseguito uno scroll programmatico
     // (combatterebbe il gesto: durante lo streaming il flush gira ogni frame).
-    this.chatArea.addEventListener('touchstart', () => {
+    // Sulla vista intera, non su `.chat-area`: con lo scroller documento un
+    // dito che parte dal composer scorre la chat come uno che parte dal testo.
+    const touchSurface = document.getElementById('view-chat') || this.chatArea;
+    touchSurface.addEventListener('touchstart', () => {
       this._userTouching = true;
     }, { passive: true });
     const onTouchDone = () => {
@@ -349,8 +355,14 @@ export class ChatController {
       this._autoScroll = this._isNearBottom();
       this._updateScrollFab();
     };
-    this.chatArea.addEventListener('touchend', onTouchDone, { passive: true });
-    this.chatArea.addEventListener('touchcancel', onTouchDone, { passive: true });
+    touchSurface.addEventListener('touchend', onTouchDone, { passive: true });
+    touchSurface.addEventListener('touchcancel', onTouchDone, { passive: true });
+
+    // Tastiera: la finestra si restringe e il fondo della chat finirebbe
+    // sotto il composer. Chi era in fondo ci resta.
+    window.visualViewport?.addEventListener('resize', () => {
+      if (this._autoScroll) this.scrollToBottom(true);
+    });
 
     // Rotella/tastiera (Titan 2 emette wheel dalla rotella capacitiva): un colpo
     // verso l'alto stacca subito, senza aspettare che superi la soglia dei 60px.
@@ -610,8 +622,8 @@ export class ChatController {
   }
 
   setupInfiniteScroll() {
-    this.chatArea.addEventListener('scroll', () => {
-      if (this.chatArea.scrollTop === 0 &&
+    window.addEventListener('scroll', () => {
+      if (this._scroller.scrollTop === 0 &&
           !this.isLoadingHistory &&
           this.hasMoreHistory) {
         this.loadMoreHistory();
@@ -827,7 +839,7 @@ export class ChatController {
      rendere di nuovo possibile il gesto. */
   _ensureHistoryReach() {
     const existing = this.chatArea.querySelector('.chat-history-more');
-    const canScroll = this.chatArea.scrollHeight > this.chatArea.clientHeight + 4;
+    const canScroll = this._scroller.scrollHeight > this._scroller.clientHeight + 4;
     if (!this.hasMoreHistory || canScroll) {
       existing?.remove();
       return;
@@ -892,7 +904,7 @@ export class ChatController {
       return;
     }
     this.isLoadingHistory = true;
-    const scrollHeightBefore = this.chatArea.scrollHeight;
+    const scrollHeightBefore = this._scroller.scrollHeight;
     try {
       const { thread } = await sessionManager.loadThread(key, 120, this.historyCursor);
       if (generation !== sessionManager.switchGeneration) return;
@@ -901,8 +913,8 @@ export class ChatController {
       this.historyCursor = thread.page?.before_cursor || null;
       this.hasMoreHistory = thread.page?.has_more_before !== false;
       this._ensureHistoryReach();
-      const scrollHeightAfter = this.chatArea.scrollHeight;
-      this.chatArea.scrollTop = scrollHeightAfter - scrollHeightBefore;
+      const scrollHeightAfter = this._scroller.scrollHeight;
+      this._scroller.scrollTop = scrollHeightAfter - scrollHeightBefore;
     } catch (err) {
       console.error('Failed to load more history:', err);
     } finally {
@@ -1197,7 +1209,6 @@ export class ChatController {
     const actions = [
       { icon: 'ti-copy', label: i18n.t('chat.copyPlain'), run: () => this._copyMessage(msg, false) },
       { icon: 'ti-markdown', label: i18n.t('chat.copyMarkdown'), run: () => this._copyMessage(msg, true) },
-      { icon: 'ti-text-caption', label: i18n.t('chat.selectText'), run: () => this._showSelectSheet(msg) },
     ];
     actionsEl.innerHTML = '';
     const close = () => sheet.close();
@@ -1215,46 +1226,6 @@ export class ChatController {
       actionsEl.appendChild(btn);
     }
     const cancelBtn = document.getElementById('chat-msg-sheet-cancel');
-    if (cancelBtn) cancelBtn.onclick = close;
-    const openedAt = Date.now();
-    sheet.onclick = (e) => { if (e.target === sheet && Date.now() - openedAt > 400) close(); };
-    sheet.showModal();
-  }
-
-  /* La superficie isolata: qui la selezione non ha avversari. Il foglio è
-     figlio diretto di <body>, quindi fuori da `.main` e dal listener dello
-     swipe; niente lo riscrive e niente lo scrolla da sé. */
-  _showSelectSheet(msg) {
-    const sheet = document.getElementById('chat-select-sheet');
-    const body = document.getElementById('chat-select-body');
-    if (!sheet || !body || !msg) return;
-
-    // Il messaggio *renderizzato*: su una risposta in prosa il markdown grezzo
-    // sarebbe pieno di `**` e `##` da scavalcare col dito. Il sorgente ha già
-    // la sua strada in "Copia come Markdown".
-    body.innerHTML = renderMarkdown(this._messageText(msg));
-    renderKaTeX(body);
-
-    /* La selezione si scarta alla chiusura, **da qualunque strada** arrivi. Il
-       tasto Indietro congeda il `<dialog>` da sé, senza passare da `close()`:
-       misurato sul telefono, lasciava viva la selezione e con lei la barra di
-       sistema appesa sopra la chat — e `hasSelection()` avrebbe continuato a
-       congelare rendering e autoscroll su un foglio che non c'è più. */
-    sheet.onclose = () => document.getSelection()?.removeAllRanges();
-    const close = () => sheet.close();
-    const selectAll = document.getElementById('chat-select-all');
-    if (selectAll) {
-      selectAll.onclick = (e) => {
-        e.stopPropagation();
-        const sel = document.getSelection();
-        if (!sel) return;
-        sel.removeAllRanges();
-        const range = document.createRange();
-        range.selectNodeContents(body);
-        sel.addRange(range);
-      };
-    }
-    const cancelBtn = document.getElementById('chat-select-cancel');
     if (cancelBtn) cancelBtn.onclick = close;
     const openedAt = Date.now();
     sheet.onclick = (e) => { if (e.target === sheet && Date.now() - openedAt > 400) close(); };
@@ -1372,7 +1343,7 @@ export class ChatController {
     // Contenitore nascosto: 0 non è una posizione di lettura, è l'assenza di
     // un box. Registrarlo cancellerebbe l'ancora buona.
     if (!this.chatArea.clientHeight) return;
-    this._scrollAnchor = this.chatArea.scrollHeight - this.chatArea.scrollTop;
+    this._scrollAnchor = this._scroller.scrollHeight - this._scroller.scrollTop;
   }
 
   /* Rientro in chat di chi era risalito a leggere: prima si tornava sempre in
@@ -1384,7 +1355,7 @@ export class ChatController {
     const anchor = this._scrollAnchor;
     requestAnimationFrame(() => {
       if (!this._active) return;  // già usciti di nuovo
-      this.chatArea.scrollTop = Math.max(0, this.chatArea.scrollHeight - anchor);
+      this._scroller.scrollTop = Math.max(0, this._scroller.scrollHeight - anchor);
       this._autoScroll = this._isNearBottom();
       this._updateScrollFab();
     });
@@ -3506,6 +3477,17 @@ export class ChatController {
     }
   }
 
+  /* Lo scroller della chat è il **documento**, non `.chat-area`
+     (`:root.mode-chat` in mobile-style.css). Ragione: al tocco di un manico
+     di selezione Chromium ri-deriva l'estremo fermo con un hit-test che
+     ignora solo il ritaglio del viewport, mai quello di uno scroller interno;
+     con la chat in un `div` scrollabile, l'estremo uscito di vista finiva sul
+     composer e la selezione si prendeva tutto (v. .agent/chat-selection-root-plan.md).
+     Ogni lettura e scrittura di scroll passa da qui: un solo punto da cambiare. */
+  get _scroller() {
+    return document.scrollingElement || document.documentElement;
+  }
+
   scrollToBottom(force = false) {
     /* `hasSelection()` sta nella *stessa* uscita di `_userTouching`, non in una
        nuova: `_userTouching` torna false sul `touchend`, cioè nell'istante in
@@ -3515,7 +3497,7 @@ export class ChatController {
        rientro nella vista). */
     if (!force && (!this._autoScroll || this._userTouching || hasSelection())) return;
     requestAnimationFrame(() => {
-      this.chatArea.scrollTop = this.chatArea.scrollHeight;
+      this._scroller.scrollTop = this._scroller.scrollHeight;
     });
     this._unreadCount = 0;
     this._updateScrollFab();
@@ -3542,7 +3524,7 @@ export class ChatController {
   }
 
   _isNearBottom() {
-    const { scrollTop, scrollHeight, clientHeight } = this.chatArea;
+    const { scrollTop, scrollHeight, clientHeight } = this._scroller;
     return scrollHeight - scrollTop - clientHeight < this._scrollThreshold;
   }
 

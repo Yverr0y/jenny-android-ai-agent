@@ -20,8 +20,6 @@
     "messageActions": "Message actions",
     "copyPlain": "Copy text",
     "copyMarkdown": "Copy as Markdown",
-    "selectText": "Select text",
-    "selectAll": "Select all",
     "close": "Close",
     "filesModified": "{count} files modified",
     "jenny": "Jenny",

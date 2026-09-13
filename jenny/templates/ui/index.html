@@ -117,8 +117,13 @@
       </div>
 
       <!-- VIEW: Chat -->
-      <div id="view-chat" class="view" style="display:flex;flex-direction:column;height:100%">
+      <div id="view-chat" class="view" style="display:flex">
         <div class="chat-area" id="chat-area"></div>
+        <!-- Tutto quello che sta fermo in fondo mentre la chat scorre: il
+             blocco è `position: sticky` (mobile-style.css), quindi resta in
+             flusso e nessuno deve misurarne l'altezza. Il FAB "vai in fondo"
+             vive qui dentro, assoluto sopra il composer, e lo segue da sé. -->
+        <div class="chat-bottom" id="chat-bottom">
         <button id="chat-scroll-fab" class="chat-scroll-fab" aria-label="Vai in fondo" data-i18n-aria="chat.scrollToBottom">
           <i class="ti ti-chevron-down"></i>
           <span class="chat-scroll-fab-badge" style="display:none"></span>
@@ -181,6 +186,7 @@
             </div>
             <button id="btn-send" class="compose-send" disabled><i class="ti ti-arrow-up"></i></button>
           </div>
+        </div>
         </div>
       </div>
 
@@ -350,17 +356,6 @@
 
 <!-- Superficie di selezione isolata: il messaggio renderizzato, fermo, in un
      contenitore che nessuno riscrive e nessuno scrolla. -->
-<dialog class="oc-sheet oc-select" id="chat-select-sheet">
-  <div class="oc-sheet-inner">
-    <div class="oc-sheet-title" data-i18n="chat.selectText">Seleziona testo</div>
-    <div class="oc-select-body chat-content" id="chat-select-body"></div>
-    <div class="oc-sheet-actions">
-      <button class="oc-sheet-action" id="chat-select-all" type="button"><i class="ti ti-select-all"></i><span data-i18n="chat.selectAll">Seleziona tutto</span></button>
-    </div>
-    <button class="oc-sheet-cancel" id="chat-select-cancel" data-i18n="common.close">Chiudi</button>
-  </div>
-</dialog>
-
 <dialog class="oc-sheet" id="jenny-app-sheet">
   <div class="oc-sheet-inner">
     <div class="oc-sheet-title" id="jenny-app-sheet-title"></div>

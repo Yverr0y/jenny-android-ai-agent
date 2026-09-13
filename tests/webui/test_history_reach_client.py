@@ -82,9 +82,10 @@ function makeChat({ scrollHeight, clientHeight, hasMoreHistory }) {
     __ENSURE__,
     __CREATE__,
   };
+  /* Lo scroller è il documento, non `.chat-area` (v. `_scroller` in
+     mobile-chat.js): le misure stanno lì, il DOM della chat resta sull'area. */
+  chat._scroller = { scrollHeight, clientHeight };
   chat.chatArea = {
-    scrollHeight,
-    clientHeight,
     querySelector(selector) {
       return withClass(selector.replace('.', ''))[0] || null;
     },
@@ -148,7 +149,7 @@ def test_it_disappears_once_the_chat_has_grown() -> None:
       const chat = makeChat({ scrollHeight: 400, clientHeight: 400, hasMoreHistory: true });
       chat._ensureHistoryReach();
       assert.equal(rows().length, 1);
-      chat.chatArea.scrollHeight = 3000;
+      chat._scroller.scrollHeight = 3000;
       chat._ensureHistoryReach();
       assert.equal(rows().length, 0, 'il bottone è rimasto dopo che scorrere è tornato possibile');
     """)
