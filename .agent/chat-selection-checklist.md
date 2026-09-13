@@ -48,7 +48,7 @@ un force-push.
 - [x] 2.2 `H_SLOP` 10 → 24, con il commento che lo lega al touch slop di Android.
 - [x] 2.3 Dominanza orizzontale: `Math.abs(dx) <= Math.abs(dy) * 1.5`.
 - [x] 2.4 Soglia di commit (`max(60, w * 0.22)`) **non** toccata.
-- [ ] 2.5 Provato sul telefono: long-press su una bolla ferma apre la selezione;
+- [x] 2.5 Provato sul telefono: long-press su una bolla ferma apre la selezione;
       lo swipe fra le sezioni è ancora pronto. **Se lo swipe è peggiorato, ci si
       ferma qui e si ritara prima di andare avanti.**
 
@@ -61,7 +61,7 @@ un force-push.
 - [x] 3.4 `scrollToBottom`: `hasSelection()` entra nella **stessa** uscita
       anticipata di `_userTouching`, non in una nuova; le chiamate `force`
       restano tali.
-- [ ] 3.5 Provato sul telefono **durante** una risposta lunga: si seleziona nel
+- [x] 3.5 Provato sul telefono **durante** una risposta lunga: si seleziona nel
       testo già scritto e non scappa; alzato il dito, il testo riprende.
 
 ## Passo 4 — registro del sorgente e pulsante Copia
@@ -93,7 +93,7 @@ un force-push.
 - [x] 5.3 Finestra di grazia sul backdrop, come `showAndroidAppSheet`.
 - [x] 5.4 `⋯` presente anche sulle bolle utente.
 - [x] 5.5 Chiavi i18n nuove in **it.json e en.json**.
-- [ ] 5.6 Provato sul telefono: nel foglio la selezione si prende e si aggiusta
+- [x] 5.6 Provato sul telefono: nel foglio la selezione si prende e si aggiusta
       senza che niente si muova; Indietro lo chiude.
 
 ## Passo 6 — riparazioni piccole
@@ -118,5 +118,20 @@ un force-push.
 
 ## Chiusura
 
-- [ ] 8.1 Giro finale sul telefono su tutti e sei i passi insieme.
+- [x] 8.1 Giro finale sul telefono su tutti e sei i passi insieme — 13/09/2026,
+      Titan 2, build release installata. Long-press su bolla ferma **e a stream
+      aperto**: selezione aperta, tenuta per 4s senza che niente si muova, e
+      testo che recupera quando la selezione cade. Swipe fra le sezioni ancora
+      pronto (800px e 400px in 150ms, entrambi commettono). Riga Copia + `⋯` su
+      risposte vive **e sullo storico dopo un riavvio dell'app**, con gli appunti
+      che portano il markdown (elenco numerato incluso). Foglio `⋯` → "Seleziona
+      testo" con selezione nativa e "Seleziona tutto"; Indietro lo chiude e non
+      lascia più la selezione appesa. `::selection` leggibile su entrambi i fondi.
 - [ ] 8.2 PR (solo se richiesta).
+
+## Trovato sul telefono, non nel piano
+
+- [x] 9.1 Il tasto Indietro congeda un `<dialog>` senza passare da `close()`:
+      la selezione restava viva dopo l'uscita dal foglio. Corretto con
+      `sheet.onclose`, coperto da test e annotato in
+      [`gotchas.md`](./gotchas.md).

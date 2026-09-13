@@ -227,3 +227,21 @@ rispetto all'avvio del processo prima di guardare altro.
 Storia: un host SSH aggiunto alle 13:18 su un'app avviata alle 13:12 non è
 arrivato al subagent `sysadmin` lanciato alle 13:32. Vedi
 `tests/agent/test_subagent_config_freshness.py`.
+
+## Il tasto Indietro chiude un `<dialog>` senza passare dal tuo `close()`
+
+Ogni foglio della SPA è un `<dialog>` aperto con `showModal()`, e il tasto
+Indietro di Android lo congeda da sé: nessun listener nostro viene chiamato,
+perché il browser emette `cancel` e poi `close`, non un click sul pulsante
+Annulla. Quindi tutto ciò che il tuo `close()` faceva **oltre** a `sheet.close()`
+semplicemente non succede quando l'utente esce da lì.
+
+Misurato il 13/09/2026 sul foglio "Seleziona testo": la pulizia della selezione
+stava dentro `close()`, così uscire con Indietro lasciava la selezione viva —
+barra di selezione di sistema appesa sopra la chat, e un `hasSelection()`
+perennemente vero, che è esattamente la condizione che congela il rendering
+dello streaming e l'autoscroll (`_flushRender`, `scrollToBottom`).
+
+La regola: la pulizia va su `sheet.onclose`, che scatta da qualunque strada
+arrivi la chiusura (pulsante, backdrop, Indietro, `close()` programmatico). Il
+`close()` resta solo `sheet.close()`.
