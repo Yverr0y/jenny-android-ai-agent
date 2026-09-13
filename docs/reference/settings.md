@@ -226,7 +226,7 @@ Settings intentionally does not expose everything the backend supports. The foll
 
 - `agents.defaults.timezone` — has a working update endpoint but no field in the UI; empty string means "use the device's timezone"
 - `agents.defaults.bot_icon` — the emoji shown next to the bot's name; has a working update endpoint but no field in the UI
-- `agents.defaults.context_window_tokens` — has a working update endpoint but no field in the UI (valid values: 65536 or 262144)
+- `agents.defaults.context_window_tokens` — has a working update endpoint but no field in the UI (valid values: 65536 or 262144). Through **0.11.0** that endpoint saved the value and nothing else: the running agent kept its old window, and no `requires_restart` was reported either, so the only way to apply it was restarting the app. It is applied live from the next version on.
 - `agents.defaults.tool_hint_max_length` — has a working update endpoint but no field in the UI (default 40, range 20–500)
 - `agents.defaults.reasoning_effort` = `adaptive` — the Advanced Parameters select saves the effort (see above), but `adaptive` is not one of the values the endpoint accepts, so that one value is config-only
 - `gateway.heartbeat.*` — the proactive Heartbeat cadence and behavior

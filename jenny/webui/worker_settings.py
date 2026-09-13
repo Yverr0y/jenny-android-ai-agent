@@ -221,6 +221,18 @@ def _flag(query: QueryParams, *names: str) -> bool:
 # identico non sposta la prossima scadenza; mentre perdersi la transizione di
 # ``enabled`` lascerebbe scritto nel file un valore che nessun job va a leggere
 # (su un gateway partito col lavoratore spento il job non e' registrato).
+#
+# **Questi due elenchi non vanno allungati**, ed e' l'opposto di cio' che si e'
+# fatto al gancio del provider, dove un elenco gemello e' stato cancellato
+# perche' marciva (v. ``_handle_settings_update`` in ``settings_routes.py``).
+# Qui non marcisce, per costruzione: coprono ``enabled`` e l'intervallo, cioe'
+# tutto cio' che vive nella *pianificazione* del job, mentre ogni altra
+# manopola — i budget di Dream, ``idleMin``, ``minHoursBetweenPasses`` — la
+# rilegge il lavoratore da disco a ogni run (v. i commenti gemelli in
+# ``runtime/cron_dispatch.py``, ``_run_gardener`` e ``_run_dream``). Un campo
+# nuovo qui dentro non e' inerte: vale al giro successivo. Aggiungercelo
+# significherebbe solo ri-armare un orologio per un valore che non riguarda
+# l'orologio.
 MEMORY_REARM_KEYS = ("dream_enabled", "dreamEnabled", "dream_interval_h", "dreamIntervalH")
 GARDENER_REARM_KEYS = (
     "gardener_enabled",
