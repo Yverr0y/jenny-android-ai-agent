@@ -131,6 +131,11 @@ un force-push.
 
 ## Trovato sul telefono, non nel piano
 
+- [x] 9.2 Il salto dell'ancora: trascinando un manico con l'altro estremo fuori
+      schermo la selezione si prendeva tutto. Riprodotto con `adb`, riparato con
+      `pinSelectionAnchor` e **riverificato con lo stesso gesto sul telefono** —
+      la selezione ora comincia dalla parola su cui è stata messa. Sezione
+      dedicata nel piano, residuo compreso.
 - [x] 9.1 Il tasto Indietro congeda un `<dialog>` senza passare da `close()`:
       la selezione restava viva dopo l'uscita dal foglio. Corretto con
       `sheet.onclose`, coperto da test e annotato in

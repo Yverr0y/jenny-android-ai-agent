@@ -245,3 +245,23 @@ dello streaming e l'autoscroll (`_flushRender`, `scrollToBottom`).
 La regola: la pulizia va su `sheet.onclose`, che scatta da qualunque strada
 arrivi la chiusura (pulsante, backdrop, Indietro, `close()` programmatico). Il
 `close()` resta solo `sheet.close()`.
+
+## Misurare un rettangolo di selezione nella WebView
+
+Due trappole, tutte e due misurate sul Titan 2 il 13/09/2026 mentre si riparava
+il salto dell'ancora (v. [`chat-selection-plan.md`](./chat-selection-plan.md)):
+
+- **i rettangoli dei `Range` sono ritagliati all'area visibile.** Un'ancora
+  finita sopra il bordo non riporta un `bottom` negativo: riporta `0.3`. Una
+  condizione scritta come `rect.bottom < 0` — e perfino `<= 0` — non scatta mai;
+- **un `Range` collassato spesso non ha rettangolo affatto** (`0/0`, tutto a
+  zero). Per sapere dov'è un punto bisogna misurarlo su *un carattere* di
+  margine e leggere `getClientRects()[0]`.
+
+E per vedere queste cose: **la WebView principale non è ispezionabile**
+(`setWebContentsDebuggingEnabled` è solo sulla WebView della ricerca, e non
+esiste un socket devtools). Il canale pratico è un overlay `position: fixed`
+scritto dal codice sotto misura, che rende lo screenshot il log — `console.log`
+non arriva a logcat perché `MainActivity` non implementa `onConsoleMessage`, e
+`/api/client-log` richiede il segreto dell'API, che un modulo condiviso non ha
+sottomano.

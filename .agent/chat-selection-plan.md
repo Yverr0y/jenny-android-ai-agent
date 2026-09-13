@@ -328,6 +328,48 @@ fatto che non devono muoversi. È una decisione di prodotto, non una pulizia.
 
 ---
 
+## Il salto dell'ancora (trovato dall'utente, 13/09/2026)
+
+Con i sei passi installati resta un difetto che non è nostro ma ci passa
+addosso: **trascinando un manico mentre l'altro estremo è fuori dall'area
+visibile, la selezione si mangia tutto quello che c'è in mezzo.** Il gesto che
+lo produce, parola dell'utente: seleziono una frase, scrollo finché metà
+selezione esce dallo schermo in alto, allungo di poco — e la selezione parte
+dalla cima dello schermo.
+
+Riprodotto con `adb` (`input motionevent`, che permette press-hold-drag veri) e
+misurato in due punti:
+
+- nel foglio "Seleziona testo" la selezione è arrivata a prendersi **il titolo
+  del dialog**. Quel testo non fa parte del messaggio: il salto è geometrico,
+  non di contenuto;
+- la WebView ricalcola l'estremo fermo dalle sue ultime coordinate **di
+  schermo**, che nel frattempo sono state ritagliate dentro il viewport.
+
+Non è riparabile a monte — decide il motore — quindi l'ancora ce la ricordiamo
+noi (`pinSelectionAnchor` in `shared/selection.js`) e la rimettiamo a posto
+quando il trascinamento si ferma, ma **solo** con la firma del salto: ancora
+vecchia fuori dall'area visibile, ancora nuova incollata a quello stesso bordo.
+Una pressione lunga su un'altra parola — un morso corto dentro un solo nodo di
+testo — ri-registra invece di essere annullata.
+
+Due misure hanno fatto fallire il primo tentativo, ed è la parte che vale la
+pena ricordare:
+
+| creduto | misurato sul telefono |
+|---|---|
+| un'ancora uscita dallo schermo ha `bottom` negativo | `bottom = 0.3` — i rettangoli dei range sono **ritagliati** all'area visibile, resta una frazione di pixel (da cui `EDGE_EPS`) |
+| un range collassato dà un rettangolo utilizzabile | spesso è **vuoto** (`0/0`): l'ancora si misura su un carattere di margine |
+
+**Residuo dichiarato:** la correzione è programmatica, e qualunque scrittura
+della selezione da JS congeda la barra di sistema. Resta l'evidenziazione
+giusta; un tap sulla selezione richiama barra e manici (un secondo tap la
+scarta, come sempre). Nella copia che segue quel tap il motore riallinea
+l'inizio al confine del paragrafo, quindi può perdere l'ultima frase del
+paragrafo precedente. Se dà fastidio, il passo successivo è una nostra
+affordance di copia mostrata subito dopo la correzione, che salta del tutto la
+barra di sistema.
+
 ## Verifiche
 
 Test nuovi, nelle due forme che il repo già usa:
