@@ -160,6 +160,21 @@ def test_the_sheets_live_outside_the_swipe_surface() -> None:
         assert "app" not in _ancestor_ids(sheet), sheet
 
 
+def test_the_anchor_is_pinned_across_a_handle_drag() -> None:
+    """Il salto dell'ancora (v. `test_selection_anchor_client.py`) va disarmato
+    all'avvio, e per tutta la pagina: colpisce la chat come i fogli."""
+    assert "export function pinSelectionAnchor(" in SELECTION_JS
+    assert "setBaseAndExtent" in SELECTION_JS
+    assert "pinSelectionAnchor()" in APP_JS
+
+
+def test_the_pin_waits_for_the_drag_to_stop() -> None:
+    """Una correzione per frame combatterebbe contro il trascinamento vivo."""
+    body = re.search(r"export function pinSelectionAnchor\(.*?\n\}", SELECTION_JS, re.S)
+    assert body, "pinSelectionAnchor non trovata"
+    assert "setTimeout(settle" in body.group(0)
+
+
 def test_the_selection_sheet_drops_its_selection_on_any_close() -> None:
     """Il tasto Indietro congeda il `<dialog>` senza passare da `close()`.
 

@@ -20,7 +20,7 @@ import { OnboardingController } from './mobile-onboarding.js';
 import { JennyCompanion } from './mobile-jenny.js';
 import { UiQueryResponder } from './mobile-ui-query.js';
 import { keyboard } from './shared/keyboard.js';
-import { hasSelection } from './shared/selection.js';
+import { hasSelection, pinSelectionAnchor } from './shared/selection.js';
 import { homeView } from './shared/home-view.js';
 import './shared/theme.js';
 
@@ -209,6 +209,9 @@ class MobileApp {
 
     // Horizontal swipe to navigate between dock tabs
     this.setupSwipeNav();
+    /* Vale per tutta la pagina, non solo per la chat: il salto dell'ancora
+       colpisce qualunque testo lungo, fogli compresi. */
+    pinSelectionAnchor();
 
     // Determine initial mode
     const urlParams = new URLSearchParams(window.location.search);
