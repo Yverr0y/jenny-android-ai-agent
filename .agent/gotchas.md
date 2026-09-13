@@ -246,22 +246,43 @@ La regola: la pulizia va su `sheet.onclose`, che scatta da qualunque strada
 arrivi la chiusura (pulsante, backdrop, Indietro, `close()` programmatico). Il
 `close()` resta solo `sheet.close()`.
 
-## Misurare un rettangolo di selezione nella WebView
+## Il testo selezionabile non vive mai in uno scroller interno
 
-Due trappole, tutte e due misurate sul Titan 2 il 13/09/2026 mentre si riparava
-il salto dell'ancora (v. [`chat-selection-plan.md`](./chat-selection-plan.md)):
+Al tocco di un manico di selezione Chromium ri-deriva l'estremo *fermo* con un
+hit-test dalle sue coordinate di schermo (`TouchSelectionController::OnDragBegin`
+→ `SelectBetweenCoordinates`). Quel hit-test porta `kIgnoreClipping`, che
+ignora **solo** il ritaglio del viewport: il testo scrollato fuori da un
+`overflow: auto` interno è irraggiungibile, e la base finisce su quello che
+occupa quel punto — il composer, il dock, il titolo di un `<dialog>`. Se il
+nodo colpito è `user-select: none`, la posizione è nulla e la selezione
+collassa. Misurato il 13/09/2026 con tre pagine di prova in Chrome sul Titan 2
+([`selection-rig/`](./selection-rig/)); il ragionamento completo sta in
+[`chat-selection-root-plan.md`](./chat-selection-root-plan.md).
 
-- **i rettangoli dei `Range` sono ritagliati all'area visibile.** Un'ancora
-  finita sopra il bordo non riporta un `bottom` negativo: riporta `0.3`. Una
-  condizione scritta come `rect.bottom < 0` — e perfino `<= 0` — non scatta mai;
-- **un `Range` collassato spesso non ha rettangolo affatto** (`0/0`, tutto a
-  zero). Per sapere dov'è un punto bisogna misurarlo su *un carattere* di
-  margine e leggere `getClientRects()[0]`.
+Conseguenze da rispettare:
 
-E per vedere queste cose: **la WebView principale non è ispezionabile**
-(`setWebContentsDebuggingEnabled` è solo sulla WebView della ricerca, e non
-esiste un socket devtools). Il canale pratico è un overlay `position: fixed`
-scritto dal codice sotto misura, che rende lo screenshot il log — `console.log`
-non arriva a logcat perché `MainActivity` non implementa `onConsoleMessage`, e
-`/api/client-log` richiede il segreto dell'API, che un modulo condiviso non ha
-sottomano.
+- **in chat scorre il documento** (`:root.mode-chat` in `mobile-style.css`),
+  e nessun antenato di `.chat-content` può ritagliare; il composer e il dock
+  stanno fermi con `position: sticky`, non con uno scroller attorno alla chat;
+- **finché c'è una selezione la chrome fissa è `pointer-events: none`**
+  (`:root.has-selection`, classe messa da `shared/selection.js`): altrimenti
+  vince lei nel hit-test. Il tap che così finirebbe sotto lo riconsegna
+  `forwardTapsThroughChrome()`;
+- **niente scrittura della selezione da JS**: `setBaseAndExtent`,
+  `addRange`, `selectAllChildren` mettono `is_handle_visible=false` in Blink,
+  i manici scompaiono e la barra di sistema viene congedata. Un "rimedio" che
+  riscrive la selezione è sempre peggio del difetto;
+- un nuovo foglio o pannello con testo selezionabile **e** uno scroller
+  proprio riporta il difetto dentro di sé. `.chat-thinking-body`, i pannelli
+  `.sa-*` e i `pre` con scroll orizzontale sono il confine dichiarato.
+
+## La WebView principale non è ispezionabile
+
+`setWebContentsDebuggingEnabled` è solo sulla WebView della ricerca, e
+`console.log` non arriva a logcat perché `MainActivity` non implementa
+`onConsoleMessage`. Per misurare *dentro* la pagina sul telefono il canale è un
+overlay `position: fixed` scritto dal codice sotto misura (lo screenshot è il
+log), oppure il JS vero dell'APK nel browser del Mac via `adb forward` e
+`#bs=<token>` (v. la memoria di lavoro). Per un difetto del *motore* conviene
+invece Chrome sul telefono con una pagina di prova: stessa
+`TouchSelectionController`, trenta righe, nessuna build.

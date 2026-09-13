@@ -339,9 +339,14 @@ class MobileApp {
     const root = document.documentElement;
     const setH = () => {
       if (!window.visualViewport) return;
+      // Una pagina caricata a vista nascosta (il pannello browser del Mac)
+      // misura 0: scriverlo azzererebbe il guscio, e il primo resize vero
+      // arriva comunque.
+      const h = window.visualViewport.height;
+      if (!h) return;
       // Il CSS legge `--vv-height` (`.app` fuori dalla chat, `min-height` in
       // chat): la tastiera restringe il viewport e il guscio la segue.
-      root.style.setProperty('--vv-height', window.visualViewport.height + 'px');
+      root.style.setProperty('--vv-height', h + 'px');
       // In chat lo scroller è il documento e la posizione di scroll è una
       // posizione di lettura: non si azzera per un resize (chi era in fondo
       // ci torna da sé, v. ChatController). Fuori dalla chat il guscio è
