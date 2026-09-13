@@ -1010,6 +1010,9 @@ body {
 
 /* ── Chat Input ── */
 #chat-input {
+  /* Sotto il `none` di `.chat-bottom`: è l'unico posto dove si scrive. */
+  user-select: text;
+  -webkit-user-select: text;
   flex: 1;
   background: transparent;
   border: none;
@@ -1705,13 +1708,19 @@ body {
 :root.has-selection .jenny-duo { pointer-events: none; }
 
 /* Le bolle rimettono `text` sotto il `none` di `.chat-area`: "Seleziona
-   tutto" della barra di sistema prende così soltanto il testo dei messaggi. */
+   tutto" della barra di sistema prende così soltanto il testo dei messaggi.
+   Misurato: senza il `none` anche su composer e dock, "Seleziona tutto"
+   evidenziava "Writes", "Commands" e il fiore del dock. Il campo di testo
+   resta selezionabile: è l'unico posto dove si scrive. */
 .chat-area .chat-content { user-select: text; -webkit-user-select: text; }
+.chat-bottom, .dock { user-select: none; -webkit-user-select: none; }
 
 /* FAB "vai in fondo": visibile solo quando l'utente è staccato dal fondo chat */
 .chat-scroll-fab {
   position: absolute;
-  right: 14px;
+  /* A sinistra della mascotte, che sta all'angolo destro con z-index 120 e
+     si mangiava il tap sul FAB (misurato: il bottone c'era, ma sotto Jenny). */
+  right: calc(var(--jenny-size, 120px) * 0.6 + 14px);
   /* Dentro `.chat-bottom`: appena sopra il suo bordo, e lo segue da sé. */
   top: -54px;
   width: 40px;

@@ -188,8 +188,12 @@ def test_nothing_writes_the_selection_from_js() -> None:
 
 
 def test_only_message_text_is_selectable() -> None:
+    """Misurato con "Seleziona tutto": senza il `none` anche sulla chrome
+    ferma si evidenziavano i chip del composer e il fiore del dock."""
     assert _declares(".chat-area", "user-select", "none")
     assert _declares(".chat-area .chat-content", "user-select", "text")
+    assert _declares(".chat-bottom, .dock", "user-select", "none")
+    assert _declares("#chat-input", "user-select", "text")
 
 
 # ── Lo scroll si legge da un punto solo ──────────────────────────────────────
