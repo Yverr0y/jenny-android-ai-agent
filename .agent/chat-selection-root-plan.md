@@ -307,3 +307,41 @@ senza la classe.
 - **Tap consegnati a mano** — `forwardTapsThroughChrome` è l'unico punto che
   "reinventa" un comportamento del browser. Perimetro minimo: solo con la
   classe su, solo per bersagli dentro la chrome, solo `focus()`/`click()`.
+
+## Misure (13/09/2026, sera — build release, Titan 2)
+
+Eseguito per intero; commit `12489e3` → `48ba6ae` e seguenti sul ramo `claude/fra-fai-pull-q8fxdq`.
+
+| punto | esito |
+|---|---|
+| 1. base sopra, fuori viewport, tocco il manico finale | inizio invariato ("vale la pena salire adesso"), fine mossa |
+| 2. gesto n. 2 dell'utente: ultima frase, manico iniziale su | fine invariata ("tuo"), inizio mosso |
+| 3. base sotto il **composer**, tocco l'altro manico | invariata |
+| 4. base sotto il **dock** | invariata |
+| 5. pressione lunga su un'altra parola | sostituisce |
+| 6. tap sul composer con selezione attiva | selezione via, campo a fuoco, caret |
+| 7. tap su una voce del dock con selezione attiva | cambia vista (Wiki) |
+| 8. streaming lungo | autoscroll segue; stacco con un trascinamento; FAB compare e riporta in fondo |
+| 9. "carica altro" in cima | la cronologia precedente arriva, il punto di lettura non salta |
+| 10. cambio vista e ritorno | stesso punto di lettura |
+| 11. tastiera soft | **non misurabile**: il Titan 2 ha la tastiera fisica e mostra solo la striscia IME |
+| 12. swipe da una chat con cronologia lunga | chat → Wiki fluido (il ritorno con lo swipe lo mangia il grafo, come sempre) |
+| 13-14. "Seleziona tutto" dalla barra | evidenziato solo il testo dei messaggi; alla prima build si prendeva anche "Writes", "Commands" e il fiore del dock → `user-select: none` su `.chat-bottom` e `.dock`. Residuo cosmetico: il placeholder del composer si evidenzia (il campo resta selezionabile di proposito) |
+
+Barra di sistema e manici **nativi** in tutti i casi: nessuna scrittura della
+selezione da JS.
+
+Due cose trovate strada facendo:
+
+- **il FAB "vai in fondo" stava sotto la mascotte** (`z-index: 120`, angolo in
+  basso a destra) — c'era già prima di questo piano, ma con il FAB dentro
+  `.chat-bottom` si vedeva chiaramente che non si vedeva. Ora sta alla sua
+  sinistra (`right: calc(var(--jenny-size) * 0.6 + 14px)`);
+- **una pagina caricata a vista nascosta misura `visualViewport.height = 0`**
+  (il pannello browser del Mac): scritto in `--vv-height` azzerava il guscio.
+  Uno 0 ora si ignora.
+
+Rischi del piano, misurati: lo swipe con la vista alta quanto la cronologia
+non ha mostrato scatti; "carica altro" non ha mostrato doppia compensazione
+(scroll anchoring + nostra); la tastiera resta da misurare su un dispositivo
+senza tastiera fisica.
