@@ -50,6 +50,11 @@ class GatewayContainer:
         self.bus: Any = None
         self.runtime_events: Any = None
         self.provider: Any = None
+        # Riassunto del config da cui ``self.provider`` e' stato costruito, per
+        # decidere in ``_on_settings_changed`` se ricostruirlo. ``None`` = non
+        # ne esiste uno (provider mai costruito, o costruzione fallita), e in
+        # quel caso il primo cambio di impostazioni si applica sempre.
+        self._provider_fingerprint: str | None = None
         self.session_manager: Any = None
         self.cron: Any = None
         self.snapshot: Any = None
@@ -104,27 +109,31 @@ class GatewayContainer:
         try:
             from jenny.config.loader import load_config as _reload_config
             from jenny.providers.factory import make_provider as _make_provider
+            from jenny.providers.factory import provider_fingerprint
 
             new_config = _reload_config()
+            # La guardia confronta *il config*, non l'oggetto provider gia'
+            # costruito. Guardare l'oggetto significa scegliere a mano quali
+            # attributi contano — ed era il difetto: modello, api_base e
+            # generation non dicono niente di ``caBundle``, ``apiKey``,
+            # ``extraHeaders``, ``apiType`` o della finestra di contesto, quindi
+            # salvarne uno solo lasciava vivo il provider di prima. Per la CA
+            # (issue #12) l'effetto era una chat che continuava a non fidarsi
+            # del certificato mentre la sonda del catalogo modelli, ricostruita
+            # a ogni richiesta, lo accettava.
+            new_fingerprint = provider_fingerprint(new_config)
+            if (
+                self._provider_fingerprint is not None
+                and new_fingerprint == self._provider_fingerprint
+            ):
+                # Niente e' cambiato di cio' che il provider legge: si esce
+                # *prima* di costruirlo, cosi' un salvataggio di impostazioni
+                # estranee non rilegge nemmeno il PEM della CA.
+                return
             new_provider = _make_provider(new_config)
             new_model = new_config.agents.defaults.model
             new_ctx = new_config.agents.defaults.context_window_tokens
             old_model = getattr(self._agent, "model", None)
-            old_provider = getattr(self._agent, "provider", None)
-            old_base = getattr(old_provider, "api_base", None)
-            new_base = getattr(new_provider, "api_base", None)
-            # GenerationSettings è un dataclass frozen, quindi il confronto è per
-            # valore: serve perché un cambio di max_tokens / temperature /
-            # reasoning_effort lascia model e api_base identici, e senza questo
-            # la guardia scartava proprio l'aggiornamento richiesto.
-            old_generation = getattr(old_provider, "generation", None)
-            new_generation = getattr(new_provider, "generation", None)
-            if (
-                new_model == old_model
-                and new_base == old_base
-                and new_generation == old_generation
-            ):
-                return
             self._agent._apply_provider_switch(
                 new_provider, new_model, new_ctx,
                 # Un cambio dei soli parametri di generazione non è un cambio di
@@ -132,6 +141,11 @@ class GatewayContainer:
                 # switch verso il modello che era già attivo.
                 publish_update=new_model != old_model,
             )
+            # Solo dopo lo switch riuscito: se ``make_provider`` solleva (una CA
+            # sparita, una chiave tolta) l'impronta resta quella vecchia e il
+            # prossimo salvataggio ritenta invece di credersi allineato.
+            self._provider_fingerprint = new_fingerprint
+            self.provider = new_provider
             logger.info(
                 "Hot-reloaded after settings change: model={!r} provider={!r}",
                 new_model,
@@ -312,7 +326,7 @@ class GatewayContainer:
         from jenny.channels.ui_query import UiQueryCoordinator
         from jenny.cron.service import CronService
         from jenny.cron.types import CronJob, CronPayload, CronSchedule
-        from jenny.providers.factory import make_provider
+        from jenny.providers.factory import make_provider, provider_fingerprint
         from jenny.runtime.cron_dispatch import CronDispatcher
         from jenny.runtime.delivery import ChannelDeliverer
         from jenny.session.manager import SessionManager
@@ -334,6 +348,7 @@ class GatewayContainer:
         self.ui_query = UiQueryCoordinator()
         try:
             self.provider = make_provider(config)
+            self._provider_fingerprint = provider_fingerprint(config)
         except (ValueError, RuntimeError) as exc:
             # Allow gateway to start without provider for onboarding.
             logger.warning("{}", exc)
@@ -562,9 +577,14 @@ class GatewayContainer:
         try:
             from jenny.config.loader import load_config as _reload_config
             from jenny.providers.factory import make_provider as _make_provider
+            from jenny.providers.factory import provider_fingerprint
 
             new_config = _reload_config()
             provider = _make_provider(new_config)
+            # Da qui in poi c'e' un provider vivo: l'impronta e' quella del
+            # config che l'ha prodotto, non piu' ``None``.
+            self.provider = provider
+            self._provider_fingerprint = provider_fingerprint(new_config)
         except Exception:
             logger.exception("Failed to create provider after onboarding")
             return

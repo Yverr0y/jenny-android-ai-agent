@@ -169,23 +169,28 @@ class WebUISettingsRouter:
             return self._unauthorized()
         return self._json_response(settings_payload())
 
-    # I parametri di generazione vivono in provider.generation, costruito una
-    # volta in factory.make_provider: senza rebuild resterebbero scritti nel
-    # config e inerti fino al riavvio, e la UI non mostra requires_restart.
-    _GENERATION_KEYS = (
-        "model", "default_provider",
-        "max_tokens", "maxTokens",
-        "temperature",
-        "reasoning_effort", "reasoningEffort",
-    )
-
     async def _handle_settings_update(self, request: WsRequest) -> Response:
-        def after(query: QueryParams, payload: dict[str, Any]) -> None:
-            if any(key in query for key in self._GENERATION_KEYS):
-                self._fire_settings_changed()
-
+        # Si chiama a ogni salvataggio riuscito, senza guardare *quali* campi
+        # sono arrivati. Qui c'era un elenco di nomi tenuto a mano
+        # (``_GENERATION_KEYS``) e gli mancava gia' ``context_window_tokens``:
+        # la rotta lo accetta e lo scrive, ma non essendo nell'elenco il gancio
+        # non partiva — config giusto su disco, «Saved!» nella UI, e l'agente
+        # vivo che continuava con la finestra vecchia. Lo stesso difetto della
+        # #12 un piano piu' su, e lo stesso di prima ancora con i parametri di
+        # generazione.
+        #
+        # L'elenco non si allunga, si cancella: quel sapere esiste gia',
+        # completo sullo schema e testato, in ``provider_fingerprint``. Chiamare
+        # sempre costa una ``load_config()`` e un ``model_dump()`` su un file
+        # che ``store.mutate()`` ha appena riscritto, perche' la guardia esce
+        # *prima* di costruire il provider quando non e' cambiato niente —
+        # ritorno anticipato aggiunto col fix della #12, ed e' cio' che rende
+        # sicuro questo "sempre".
         return await self._handle_mutation(
-            request, update_agent_settings, "settings update", on_success=after,
+            request,
+            update_agent_settings,
+            "settings update",
+            on_success=lambda query, payload: self._fire_settings_changed(),
         )
 
     async def _handle_settings_memory_update(self, request: WsRequest) -> Response:
@@ -229,25 +234,29 @@ class WebUISettingsRouter:
                 data["ca_bundle_clear"] = clear
             return await update_provider(data)
 
-        def after(query: QueryParams, payload: dict[str, Any]) -> None:
-            name = _query_param(query, "name")
-            if name and payload.get("default_provider") == name:
-                self._fire_settings_changed()
-
+        # Anche qui senza condizione: era «solo se il provider toccato e'
+        # quello attivo», cioe' un'altra cosa da tenere allineata a mano. La
+        # decide meglio il fingerprint, che riassume il solo provider *attivo*:
+        # modificarne uno inattivo da' un'impronta identica e la guardia
+        # ritorna da sola, senza ricostruire niente.
         return await self._handle_mutation(
-            request, handler, "provider update", on_success=after,
+            request,
+            handler,
+            "provider update",
+            on_success=lambda query, payload: self._fire_settings_changed(),
         )
 
     async def _handle_settings_provider_delete(self, request: WsRequest) -> Response:
         async def handler(query: QueryParams) -> dict[str, Any]:
             return await delete_provider({"name": _query_param(query, "name")})
 
-        def after(query: QueryParams, payload: dict[str, Any]) -> None:
-            if _query_param(query, "name"):
-                self._fire_settings_changed()
-
+        # ``on_success`` gira solo dopo una cancellazione riuscita, quindi un
+        # nome c'era per forza: la condizione qui non decideva niente.
         return await self._handle_mutation(
-            request, handler, "provider delete", on_success=after,
+            request,
+            handler,
+            "provider delete",
+            on_success=lambda query, payload: self._fire_settings_changed(),
         )
 
     async def _handle_settings_provider_models(self, request: WsRequest) -> Response:

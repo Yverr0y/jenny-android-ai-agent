@@ -20,6 +20,7 @@ from websockets.http11 import Request as WsRequest
 from jenny.channels.http_utils import check_api_secret, http_error, http_json_response, parse_query
 from jenny.config.loader import load_config, save_config
 from jenny.config.schema import Config, ProviderConfig
+from jenny.providers.factory import provider_fingerprint
 from jenny.runtime.context import get_runtime_context
 from jenny.webui.settings_routes import WebUISettingsRouter
 
@@ -123,14 +124,56 @@ async def test_settings_update_fires_on_settings_changed_for_model(config_path) 
     on_changed.assert_called_once()
 
 
-async def test_settings_update_does_not_fire_for_unrelated_field(config_path) -> None:
+async def test_settings_update_fires_for_an_unrelated_field_without_changing_the_provider(
+    config_path,
+) -> None:
+    """Scatta, e non ricostruisce niente — ed e' un cambio di garanzia.
+
+    Prima questo test pretendeva che la callback **non** partisse per un campo
+    estraneo, perche' la rotta sceglieva da un elenco di nomi scritto a mano. La
+    garanzia che l'utente puo' notare non e' pero' quella: e' che il provider
+    non venga ricostruito senza motivo. Adesso a deciderlo e' il fingerprint,
+    che e' completo sullo schema, e la rotta non prova piu' a indovinare.
+
+    L'impronta identica prima e dopo e' la prova che la guardia esce dal ramo
+    anticipato senza toccare il provider vivo.
+    """
     on_changed = MagicMock()
     router = _router(on_settings_changed=on_changed)
+    before = provider_fingerprint(load_config(config_path))
+
     response = await router.dispatch(
         _request("/api/settings/update?timezone=Asia/Tokyo"), "/api/settings/update"
     )
+
     assert response.status_code == 200
-    on_changed.assert_not_called()
+    on_changed.assert_called_once()
+    assert provider_fingerprint(load_config(config_path)) == before
+
+
+async def test_settings_update_fires_for_the_context_window(config_path) -> None:
+    """Il campo che l'elenco a mano si era dimenticato.
+
+    ``context_window_tokens`` la rotta lo accetta e lo scrive, ma non era in
+    ``_GENERATION_KEYS``: il gancio non partiva, la risposta non dichiarava
+    ``requires_restart``, e l'agente vivo continuava con la finestra vecchia —
+    che e' in memoria su ``AgentLoop``, ``AgentRunner`` e ``Consolidator``, e la
+    aggiorna solo ``_apply_provider_switch``.
+    """
+    on_changed = MagicMock()
+    router = _router(on_settings_changed=on_changed)
+    before = provider_fingerprint(load_config(config_path))
+
+    response = await router.dispatch(
+        _request("/api/settings/update?context_window_tokens=262144"),
+        "/api/settings/update",
+    )
+
+    assert response.status_code == 200
+    on_changed.assert_called_once()
+    assert load_config(config_path).agents.defaults.context_window_tokens == 262144
+    # E stavolta l'impronta *cambia*: la guardia ricostruira' davvero.
+    assert provider_fingerprint(load_config(config_path)) != before
 
 
 async def test_settings_update_swallows_on_settings_changed_exception(config_path) -> None:
@@ -168,7 +211,7 @@ async def test_provider_update_requires_name(config_path) -> None:
     assert response.status_code == 400
 
 
-async def test_provider_update_success_fires_settings_changed_when_default(config_path) -> None:
+async def test_provider_update_success_fires_settings_changed(config_path) -> None:
     on_changed = MagicMock()
     router = _router(on_settings_changed=on_changed)
     response = await router.dispatch(
@@ -180,6 +223,39 @@ async def test_provider_update_success_fires_settings_changed_when_default(confi
     providers = {p["name"]: p for p in body["providers"]}
     assert "my-provider" in providers
     on_changed.assert_called_once()
+
+
+async def test_provider_update_of_an_inactive_provider_changes_nothing(config_path) -> None:
+    """La condizione «solo se e' il default» non serve piu': decide l'impronta.
+
+    Era un'altra cosa da tenere allineata a mano. ``provider_fingerprint``
+    riassume il solo provider **attivo**, quindi toccarne uno inattivo lascia
+    l'impronta identica e la guardia ritorna presto da sola: la callback parte,
+    e il provider vivo non viene ricostruito.
+    """
+    config = load_config(config_path)
+    config.providers.providers.append(
+        ProviderConfig(name="attivo", format="openai_compat", api_key="sk-attivo")
+    )
+    config.providers.providers.append(
+        ProviderConfig(name="dormiente", format="openai_compat", api_key="sk-1")
+    )
+    config.providers.default = "attivo"
+    save_config(config, config_path)
+    before = provider_fingerprint(load_config(config_path))
+
+    on_changed = MagicMock()
+    router = _router(on_settings_changed=on_changed)
+    response = await router.dispatch(
+        _request("/api/settings/provider/update?name=dormiente&api_key=sk-2"),
+        "/api/settings/provider/update",
+    )
+
+    assert response.status_code == 200
+    on_changed.assert_called_once()
+    saved = load_config(config_path)
+    assert {p.name: p.api_key for p in saved.providers.providers}["dormiente"] == "sk-2"
+    assert provider_fingerprint(saved) == before
 
 
 # ---------------------------------------------------------------------------
