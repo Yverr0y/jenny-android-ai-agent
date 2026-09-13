@@ -63,26 +63,55 @@ export function onSelectionChange(fn) {
    quando quella vecchia era fuori schermo e la nuova è incollata al bordo, è
    il salto — e la rimettiamo dov'era. */
 
+/* Il ritaglio della WebView lascia una frazione di pixel oltre il bordo: senza
+   questa tolleranza "fuori schermo" non è mai vero. */
+export const EDGE_EPS = 4;
+
 /** La firma geometrica del salto: l'ancora vecchia era fuori dall'area
     visibile, la nuova è incollata allo stesso bordo. Pura, così è misurabile
     in un test senza un browser. */
 export function anchorWasClamped(pinnedRect, anchorRect, viewportHeight, edgeSlack = 80) {
-  if (!pinnedRect || !anchorRect) return false;
-  const offAbove = pinnedRect.bottom < 0;
-  const offBelow = pinnedRect.top > viewportHeight;
+  if (!pinnedRect) return false;
+  /* Non `< 0`, e nemmeno `<= 0`: misurato sul Titan 2, l'ancora finita sopra il
+     bordo riporta `bottom ≈ 0.4` — la WebView ritaglia i rettangoli dei range
+     all'area visibile e lascia una frazione di pixel. Con `< 0` la riparazione
+     non scattava mai, e con `<= 0` nemmeno: serve la tolleranza. */
+  const offAbove = pinnedRect.bottom <= EDGE_EPS;
+  const offBelow = pinnedRect.top >= viewportHeight - EDGE_EPS;
   if (!offAbove && !offBelow) return false;
+  /* Il rettangolo della *nuova* ancora può mancare del tutto (stessa misura:
+     `anc=0/0`). Se l'ancora vecchia era fuori schermo e questa non è una
+     selezione nuova, il salto è già acclarato senza la seconda prova. */
+  if (!anchorRect) return true;
   const atTop = anchorRect.top < edgeSlack;
   const atBottom = anchorRect.bottom > viewportHeight - edgeSlack;
   return (offAbove && atTop) || (offBelow && atBottom);
 }
 
+/* Un range **collassato** in Chromium torna spesso un rettangolo vuoto, quindi
+   si misura un carattere di margine invece del punto: è la differenza fra
+   sapere dov'è l'ancora e non saperlo. */
 function pointRect(node, offset) {
   if (!node || !document.contains(node)) return null;
   try {
+    const len = node.nodeType === Node.TEXT_NODE ? node.data.length : node.childNodes.length;
+    const start = Math.max(0, Math.min(offset, len));
     const range = document.createRange();
-    range.setStart(node, offset);
-    range.setEnd(node, offset);
-    return range.getBoundingClientRect();
+    if (start < len) {
+      range.setStart(node, start);
+      range.setEnd(node, start + 1);
+    } else if (start > 0) {
+      range.setStart(node, start - 1);
+      range.setEnd(node, start);
+    } else {
+      range.setStart(node, start);
+      range.setEnd(node, start);
+    }
+    const rects = range.getClientRects();
+    const rect = rects.length ? rects[0] : range.getBoundingClientRect();
+    if (!rect) return null;
+    if (!rect.width && !rect.height && !rect.top && !rect.bottom) return null;
+    return rect;
   } catch {
     return null;
   }
