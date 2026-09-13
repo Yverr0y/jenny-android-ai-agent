@@ -290,6 +290,10 @@ body {
   grid-template-rows: 1fr var(--dock-height);
   position: absolute;
   inset: 0;
+  /* L'altezza del viewport visibile la scrive setupViewportHeight() come
+     variabile: con la tastiera su il guscio si restringe. In chat la stessa
+     variabile fa da `min-height`, v. `:root.mode-chat` più sotto. */
+  height: var(--vv-height, auto);
   overflow: hidden;
   background: var(--bg);
   font-size: 12px;
@@ -1006,6 +1010,9 @@ body {
 
 /* ── Chat Input ── */
 #chat-input {
+  /* Sotto il `none` di `.chat-bottom`: è l'unico posto dove si scrive. */
+  user-select: text;
+  -webkit-user-select: text;
   flex: 1;
   background: transparent;
   border: none;
@@ -1121,6 +1128,12 @@ body {
   background: var(--bg);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  /* In chat il guscio è alto quanto la cronologia e il dock resta a filo del
+     viewport da solo; fuori dalla chat non c'è scroll e sticky non fa niente
+     (v. "Lo scroller della chat è il documento"). */
+  position: sticky;
+  bottom: 0;
+  z-index: 7;
 }
 
 .dock-item {
@@ -1617,6 +1630,11 @@ body {
   flex: 1; overflow-y: auto;
   padding: 14px 16px;
   display: flex; flex-direction: column; gap: 12px;
+  /* Selezionabile è solo il testo dei messaggi: meta, orari, riga delle
+     azioni, header dei tool, chip e "carica altro" ereditano `none`, le bolle
+     rimettono `text` (v. `.chat-area .chat-content` più sotto). */
+  user-select: none;
+  -webkit-user-select: none;
 }
 /* Niente di impilato in una colonna che scorre può restringersi. La colonna ha
    spazio libero NEGATIVO appena il contenuto supera lo schermo, e i flex item la
@@ -1636,14 +1654,75 @@ body {
    proprietà appartiene: vale in qualunque punto finisca. */
 .chat-area > * { flex-shrink: 0; }
 
-/* Ancora per il FAB "vai in fondo" */
-#view-chat { position: relative; }
+/* ── Lo scroller della chat è il documento ────────────────────────────────
+   Al tocco di un manico di selezione Chromium ri-deriva l'estremo fermo con un
+   hit-test dalle sue coordinate di schermo, e quel hit-test ignora solo il
+   ritaglio del viewport: il testo scrollato fuori da uno scroller INTERNO è
+   irraggiungibile, e la selezione saltava sul composer prendendosi tutto.
+   Quindi in chat scorre `html`, e nessun antenato del testo ritaglia.
+   Solo in chat: senza `mode-chat` il guscio è quello fisso di sempre.
+   Ragionamento e misure: .agent/chat-selection-root-plan.md. */
+#view-chat { position: relative; flex-direction: column; height: 100%; }
+
+:root.mode-chat { overflow-y: auto; overflow-x: hidden; }
+:root.mode-chat body { position: static; overflow: visible; }
+:root.mode-chat .app {
+  position: relative;
+  inset: auto;
+  height: auto;
+  min-height: var(--vv-height, 100dvh);
+  overflow: visible;
+}
+:root.mode-chat .body,
+:root.mode-chat .main { overflow: visible; height: auto; }
+:root.mode-chat #view-chat {
+  height: auto;
+  /* La chat corta tiene comunque il composer in fondo allo schermo. */
+  min-height: calc(var(--vv-height, 100dvh) - var(--dock-height));
+}
+:root.mode-chat .chat-area { overflow: visible; }
+
+/* Quello che sta fermo mentre la chat scorre resta in FLUSSO e si incolla al
+   fondo del viewport: niente padding da calcolare, niente ResizeObserver. Il
+   composer sopra il dock, il dock a filo. */
+.chat-bottom {
+  position: sticky;
+  bottom: var(--dock-height);
+  z-index: 6;
+  background: var(--bg);
+}
+
+/* Le superfici che oggi sono `absolute` dentro un guscio alto quanto lo
+   schermo, con il guscio alto quanto la chat devono ancorarsi al viewport. */
+:root.mode-chat .jenny-duo,
+:root.mode-chat .drawer,
+:root.mode-chat .drawer-backdrop,
+:root.mode-chat .swipe-scrim { position: fixed; }
+
+/* Finché c'è una selezione la chrome non partecipa al hit-test: è la
+   condizione perché il motore ritrovi il testo sotto il composer o il dock
+   (misurato: .agent/selection-rig, pagina C). Il tap che così finirebbe sotto
+   lo riconsegna forwardTapsThroughChrome() in shared/selection.js. */
+:root.has-selection .chat-bottom,
+:root.has-selection .dock,
+:root.has-selection .jenny-duo { pointer-events: none; }
+
+/* Le bolle rimettono `text` sotto il `none` di `.chat-area`: "Seleziona
+   tutto" della barra di sistema prende così soltanto il testo dei messaggi.
+   Misurato: senza il `none` anche su composer e dock, "Seleziona tutto"
+   evidenziava "Writes", "Commands" e il fiore del dock. Il campo di testo
+   resta selezionabile: è l'unico posto dove si scrive. */
+.chat-area .chat-content { user-select: text; -webkit-user-select: text; }
+.chat-bottom, .dock { user-select: none; -webkit-user-select: none; }
 
 /* FAB "vai in fondo": visibile solo quando l'utente è staccato dal fondo chat */
 .chat-scroll-fab {
   position: absolute;
-  right: 14px;
-  bottom: 74px;
+  /* A sinistra della mascotte, che sta all'angolo destro con z-index 120 e
+     si mangiava il tap sul FAB (misurato: il bottone c'era, ma sotto Jenny). */
+  right: calc(var(--jenny-size, 120px) * 0.6 + 14px);
+  /* Dentro `.chat-bottom`: appena sopra il suo bordo, e lo segue da sé. */
+  top: -54px;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -1783,6 +1862,53 @@ body {
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--meta);
+}
+
+/* Riga di azioni in coda alla bolla (Copia · ⋯). Discreta come `.chat-meta`,
+   che le sta accanto: è un'affordance, non un pulsante di prima fila. */
+.chat-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.chat-msg-user .chat-msg-actions {
+  justify-content: flex-end;
+}
+.chat-msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: var(--radius-seg);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .12s, background .12s;
+}
+.chat-msg-action i {
+  font-size: 14px;
+}
+.chat-msg-action:hover,
+.chat-msg-action:focus-visible {
+  color: var(--text);
+  background: var(--overlay);
+}
+.chat-msg-action:active {
+  opacity: .7;
+}
+
+/* L'evidenziazione, che finora nessuno dichiarava: la sceglieva la WebView da
+   `color-scheme`, su due fondi opposti (bolla utente chiara, risposta scura).
+   Una regola sola basta per entrambi: il fondo della pagina come colore del
+   testo è per costruzione il tono più lontano da `--meta` in ogni tema. */
+::selection {
+  background: var(--meta);
+  color: var(--bg);
 }
 
 /* Thinking / Reasoning pill */
@@ -1942,6 +2068,11 @@ body {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
+  /* L'header porta `user-select: none` per proteggere il tap che apre e chiude
+     il chip, ma la regola eredita sui figli e si portava via anche il nome del
+     tool. L'intento resta sull'header; il testo torna prendibile. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Markdown content */

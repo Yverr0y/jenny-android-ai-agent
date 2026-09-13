@@ -192,7 +192,7 @@ def test_the_chat_anchor_is_measured_while_the_view_is_still_visible() -> None:
     """
     chat = CHAT_JS.read_text(encoding="utf-8")
     listener = re.search(
-        r"this\.chatArea\.addEventListener\('scroll', \(\) => \{(.*?)\}, \{ passive: true \}\);",
+        r"window\.addEventListener\('scroll', \(\) => \{(.*?)\}, \{ passive: true \}\);",
         chat,
         re.S,
     )
@@ -200,7 +200,7 @@ def test_the_chat_anchor_is_measured_while_the_view_is_still_visible() -> None:
     assert "this._rememberScrollAnchor();" in listener.group(1)
 
     remember = _method(chat, "_rememberScrollAnchor")
-    assert "this.chatArea.scrollHeight - this.chatArea.scrollTop" in remember, (
+    assert "this._scroller.scrollHeight - this._scroller.scrollTop" in remember, (
         "l'ancora è la distanza dal fondo: scrollTop da solo scivola se arrivano messaggi"
     )
     assert "clientHeight" in remember, (
@@ -228,7 +228,7 @@ def test_the_chat_restores_the_reading_position_and_the_fab_with_it() -> None:
     restore = _method(chat, "_restoreScrollAnchor")
     assert "requestAnimationFrame" in restore
     assert "if (!this._active) return;" in restore, "usciti di nuovo, non si tocca più niente"
-    assert "this.chatArea.scrollHeight - anchor" in restore
+    assert "this._scroller.scrollHeight - anchor" in restore
     assert "this._updateScrollFab();" in restore, "la FAB va riallineata alla posizione ripristinata"
 
 

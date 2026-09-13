@@ -20,6 +20,7 @@ import { OnboardingController } from './mobile-onboarding.js';
 import { JennyCompanion } from './mobile-jenny.js';
 import { UiQueryResponder } from './mobile-ui-query.js';
 import { keyboard } from './shared/keyboard.js';
+import { hasSelection, exposeSelectionState, forwardTapsThroughChrome } from './shared/selection.js';
 import { homeView } from './shared/home-view.js';
 import './shared/theme.js';
 
@@ -208,6 +209,14 @@ class MobileApp {
 
     // Horizontal swipe to navigate between dock tabs
     this.setupSwipeNav();
+    /* Vale per tutta la pagina, non solo per la chat: il salto dell'ancora
+       colpisce qualunque testo lungo, fogli compresi. */
+    /* Finché c'è una selezione, composer, dock e mascotte escono dal hit-test:
+       è la condizione perché il tocco di un manico non ributti l'estremo
+       fermo sulla chrome (v. .agent/chat-selection-root-plan.md, pagina C).
+       Il tap che così finirebbe sotto viene riconsegnato al bersaglio vero. */
+    exposeSelectionState();
+    forwardTapsThroughChrome(['.chat-bottom', '.dock']);
 
     // Determine initial mode
     const urlParams = new URLSearchParams(window.location.search);
@@ -327,11 +336,22 @@ class MobileApp {
   }
 
   setupViewportHeight() {
-    const app = document.querySelector('.app');
+    const root = document.documentElement;
     const setH = () => {
       if (!window.visualViewport) return;
-      app.style.height = window.visualViewport.height + 'px';
-      window.scrollTo(0, 0);
+      // Una pagina caricata a vista nascosta (il pannello browser del Mac)
+      // misura 0: scriverlo azzererebbe il guscio, e il primo resize vero
+      // arriva comunque.
+      const h = window.visualViewport.height;
+      if (!h) return;
+      // Il CSS legge `--vv-height` (`.app` fuori dalla chat, `min-height` in
+      // chat): la tastiera restringe il viewport e il guscio la segue.
+      root.style.setProperty('--vv-height', h + 'px');
+      // In chat lo scroller è il documento e la posizione di scroll è una
+      // posizione di lettura: non si azzera per un resize (chi era in fondo
+      // ci torna da sé, v. ChatController). Fuori dalla chat il guscio è
+      // fisso e uno scroll residuo della pagina va rimesso a zero, come prima.
+      if (!root.classList.contains('mode-chat')) window.scrollTo(0, 0);
     };
     window.visualViewport?.addEventListener('resize', setH);
     setH();
@@ -888,7 +908,11 @@ class MobileApp {
       scrim.style.opacity = String(opacity);
     };
 
-    const H_SLOP = 10;       // px of travel before deciding the gesture is horizontal
+    // 24px, non 10: il touch slop di Android è ~8dp (≈20-24px reali), e sotto
+    // quella soglia `preventDefault()` cade dentro la finestra in cui Chromium
+    // sta ancora decidendo se la pressione è un long-press — che a quel punto
+    // viene scartato, e la selezione di testo non si apre più.
+    const H_SLOP = 24;       // px of travel before deciding the gesture is horizontal
     const PEEK = 0.13;       // asymptotic peek offset toward a neighbor (fraction of width)
     const EDGE_PEEK = 0.05;  // asymptotic peek offset at the ends
 
@@ -925,6 +949,9 @@ class MobileApp {
       if (this._firstRun && !localStorage.getItem('onboarding-complete')) return;
       // Guard: an open drawer owns its own (vertical) swipe.
       if (this.drawer.activeDrawer) return;
+      // Guard: c'è del testo selezionato. Trascinare per aggiustare i manici
+      // della selezione non deve far scivolare la vista sotto le dita.
+      if (hasSelection()) return;
 
       view = document.getElementById(`view-${this.currentMode}`);
       if (!view) return;
@@ -951,7 +978,9 @@ class MobileApp {
 
       if (horizontal === null) {
         if (Math.abs(dx) < H_SLOP && Math.abs(dy) < H_SLOP) return;
-        if (Math.abs(dx) <= Math.abs(dy)) { reset(); return; } // vertical → let it scroll
+        // Dominanza orizzontale vera: un trascinamento diagonale (tipico di chi
+        // aggiusta una selezione) non arma più lo swipe.
+        if (Math.abs(dx) <= Math.abs(dy) * 1.5) { reset(); return; } // vertical → let it scroll
         if (this._insideHScroll(startTarget, dx, main)) { reset(); return; }
         horizontal = true;
         view.style.transition = 'none';

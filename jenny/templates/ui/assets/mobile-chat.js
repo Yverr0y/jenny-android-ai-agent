@@ -13,6 +13,7 @@ import { getProviderBrand } from './shared/provider-brand.js';
 import { confirmDialog, detailDialog } from './shared/dialog.js';
 import { commandsChip } from './shared/commands-chip.js';
 import { isTypeAheadKey } from './shared/type-ahead.js';
+import { hasSelection, selectionInside, onSelectionChange } from './shared/selection.js';
 import {
   saActions,
   saActivityFrame,
@@ -156,6 +157,11 @@ export class ChatController {
     this.secondaryActions = document.getElementById('secondary-actions');
 
     this._deltaBuffer = '';
+    /* Il sorgente markdown di ogni bolla, registrato dove la bolla nasce.
+       `innerText` non basta come unica fonte: perde le recinzioni dei blocchi
+       di codice e il loro linguaggio. WeakMap perché quando la vista viene
+       buttata (`chatArea.innerHTML = ''`) le voci se ne vanno da sole. */
+    this._msgSource = new WeakMap();
     this._reasoningBuffer = '';
     // Un turno può avere più segmenti di ragionamento (uno per richiesta al
     // modello): il flag segna il confine, non la fine.
@@ -327,7 +333,10 @@ export class ChatController {
     // è a fondo chat. Nessun guard sugli scroll programmatici: assegnano scrollTop
     // al fondo in modo istantaneo, quindi il loro evento ricalcola comunque
     // _autoScroll = true e non serve distinguerli da quelli dell'utente.
-    this.chatArea.addEventListener('scroll', () => {
+    // Lo scroller è il documento (v. `_scroller`): l'evento arriva a `window`.
+    // Fuori dalla chat `html` è `overflow: hidden` e non scorre, quindi il
+    // listener non scatta a vuoto sulle altre viste.
+    window.addEventListener('scroll', () => {
       this._autoScroll = this._isNearBottom();
       this._updateScrollFab();
       this._rememberScrollAnchor();
@@ -335,7 +344,10 @@ export class ChatController {
 
     // Mentre il dito è giù non va MAI eseguito uno scroll programmatico
     // (combatterebbe il gesto: durante lo streaming il flush gira ogni frame).
-    this.chatArea.addEventListener('touchstart', () => {
+    // Sulla vista intera, non su `.chat-area`: con lo scroller documento un
+    // dito che parte dal composer scorre la chat come uno che parte dal testo.
+    const touchSurface = document.getElementById('view-chat') || this.chatArea;
+    touchSurface.addEventListener('touchstart', () => {
       this._userTouching = true;
     }, { passive: true });
     const onTouchDone = () => {
@@ -343,8 +355,14 @@ export class ChatController {
       this._autoScroll = this._isNearBottom();
       this._updateScrollFab();
     };
-    this.chatArea.addEventListener('touchend', onTouchDone, { passive: true });
-    this.chatArea.addEventListener('touchcancel', onTouchDone, { passive: true });
+    touchSurface.addEventListener('touchend', onTouchDone, { passive: true });
+    touchSurface.addEventListener('touchcancel', onTouchDone, { passive: true });
+
+    // Tastiera: la finestra si restringe e il fondo della chat finirebbe
+    // sotto il composer. Chi era in fondo ci resta.
+    window.visualViewport?.addEventListener('resize', () => {
+      if (this._autoScroll) this.scrollToBottom(true);
+    });
 
     // Rotella/tastiera (Titan 2 emette wheel dalla rotella capacitiva): un colpo
     // verso l'alto stacca subito, senza aspettare che superi la soglia dei 60px.
@@ -372,6 +390,12 @@ export class ChatController {
     // la tastiera virtuale a comparire (non c'è keydown senza input già a fuoco).
     document.addEventListener('keydown', (e) => this._maybeTypeAheadFocus(e));
 
+    /* Quando la selezione cade, il rendering congelato da `_flushRender`
+       riparte: un frame e il testo è di nuovo allineato al buffer. */
+    onSelectionChange((active) => {
+      if (!active && (this._deltaDirty || this._reasoningDirty)) this._scheduleFlush();
+    });
+
     // C1: delegated copy handler for code-block buttons (replaces inline onclick).
     this.chatArea.addEventListener('click', (e) => {
       // Un link dentro il markdown di una risposta è una navigazione di main
@@ -395,6 +419,15 @@ export class ChatController {
       }
       const btn = e.target.closest('.chat-code-copy');
       if (btn && this.chatArea.contains(btn)) { copyCodeFromButton(btn); return; }
+      // Riga di azioni della bolla. Delegato come tutto il resto: la CSP della
+      // shell è `script-src 'self'`, niente `onclick` inline.
+      const msgAction = e.target.closest('.chat-msg-action');
+      if (msgAction && this.chatArea.contains(msgAction)) {
+        const bubble = msgAction.closest('.chat-msg');
+        if (msgAction.classList.contains('chat-msg-copy')) this._copyMessage(bubble);
+        else this._showMessageSheet(bubble);
+        return;
+      }
       // Tap su un'immagine (media allegato o immagine markdown inline) → lightbox.
       const img = e.target.closest('img');
       if (img && this.chatArea.contains(img)) this._openLightbox(img.currentSrc || img.src, img.alt || '');
@@ -589,8 +622,8 @@ export class ChatController {
   }
 
   setupInfiniteScroll() {
-    this.chatArea.addEventListener('scroll', () => {
-      if (this.chatArea.scrollTop === 0 &&
+    window.addEventListener('scroll', () => {
+      if (this._scroller.scrollTop === 0 &&
           !this.isLoadingHistory &&
           this.hasMoreHistory) {
         this.loadMoreHistory();
@@ -806,7 +839,7 @@ export class ChatController {
      rendere di nuovo possibile il gesto. */
   _ensureHistoryReach() {
     const existing = this.chatArea.querySelector('.chat-history-more');
-    const canScroll = this.chatArea.scrollHeight > this.chatArea.clientHeight + 4;
+    const canScroll = this._scroller.scrollHeight > this._scroller.clientHeight + 4;
     if (!this.hasMoreHistory || canScroll) {
       existing?.remove();
       return;
@@ -871,7 +904,7 @@ export class ChatController {
       return;
     }
     this.isLoadingHistory = true;
-    const scrollHeightBefore = this.chatArea.scrollHeight;
+    const scrollHeightBefore = this._scroller.scrollHeight;
     try {
       const { thread } = await sessionManager.loadThread(key, 120, this.historyCursor);
       if (generation !== sessionManager.switchGeneration) return;
@@ -880,8 +913,8 @@ export class ChatController {
       this.historyCursor = thread.page?.before_cursor || null;
       this.hasMoreHistory = thread.page?.has_more_before !== false;
       this._ensureHistoryReach();
-      const scrollHeightAfter = this.chatArea.scrollHeight;
-      this.chatArea.scrollTop = scrollHeightAfter - scrollHeightBefore;
+      const scrollHeightAfter = this._scroller.scrollHeight;
+      this._scroller.scrollTop = scrollHeightAfter - scrollHeightBefore;
     } catch (err) {
       console.error('Failed to load more history:', err);
     } finally {
@@ -1031,6 +1064,7 @@ export class ChatController {
         renderKaTeX(content);
         this._makeFilePathsClickable(content);
       }
+      this._setMessageSource(node, turn.content.trim());
       hasContent = true;
     }
 
@@ -1042,6 +1076,7 @@ export class ChatController {
     if (!hasContent) return;
 
     this._appendLatency(node, turn.latencyMs);
+    this._appendMsgActions(node);
 
     if (toTop) {
       this._insertAtTop(node);
@@ -1078,6 +1113,123 @@ export class ChatController {
     meta.className = 'chat-meta';
     meta.textContent = (latencyMs / 1000).toFixed(1) + 's';
     msg.appendChild(meta);
+  }
+
+  /* Registra (accumulando) il sorgente di una bolla. Una bolla AI può contenere
+     più `.chat-content` — un turno testo → tool → testo apre un segmento nuovo
+     a ogni stream — quindi i segmenti si separano con una riga vuota invece di
+     sostituirsi. */
+  _setMessageSource(msg, text) {
+    if (!msg) return;
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    const prev = this._msgSource.get(msg);
+    this._msgSource.set(msg, prev ? `${prev}\n\n${clean}` : clean);
+  }
+
+  /** Il testo copiabile di una bolla: il sorgente registrato se c'è, altrimenti
+      la rete di `innerText` — che perde le recinzioni ma non lascia mai un
+      pulsante Copia che non copia niente. */
+  _messageText(msg) {
+    if (!msg) return '';
+    const recorded = this._msgSource.get(msg);
+    if (recorded) return recorded;
+    return [...msg.querySelectorAll('.chat-content')]
+      .map((el) => (el.innerText || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  _buildMsgActionButton(cls, icon, label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `chat-msg-action ${cls}`;
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    btn.innerHTML = `<i class="ti ${icon}"></i>`;
+    return btn;
+  }
+
+  /* La riga di azioni in coda alla bolla. Idempotente e sempre ultima: se c'è
+     già la rimette in fondo invece di aggiungerne una seconda, perché nel
+     percorso vivo `_appendLatency` può appendere la meta-row dopo di lei.
+     Tre chiamanti — `_handleTurnEnd` (vivo), `_flushPersistedTurn` (storico) e
+     il blocco `message` di `_handleMessage` (consegna proattiva): con il solo
+     aggancio vivo, riaprire l'app lascerebbe zero pulsanti Copia. */
+  _appendMsgActions(msg) {
+    if (!msg) return;
+    const isUser = msg.classList.contains('chat-msg-user');
+    // Un turno di soli tool non ha niente da copiare.
+    if (!isUser && !this._messageText(msg)) return;
+    const existing = msg.querySelector(':scope > .chat-msg-actions');
+    if (existing) { msg.appendChild(existing); return; }
+
+    const row = document.createElement('div');
+    row.className = 'chat-msg-actions';
+    // Sulle bolle utente niente Copia: sono corte e la selezione nativa
+    // riparata basta. Il `⋯` c'è lo stesso, che è come le raggiunge il foglio.
+    if (!isUser) {
+      row.appendChild(this._buildMsgActionButton('chat-msg-copy', 'ti-copy', i18n.t('chat.copy')));
+    }
+    row.appendChild(
+      this._buildMsgActionButton('chat-msg-more', 'ti-dots', i18n.t('chat.messageActions')));
+    msg.appendChild(row);
+  }
+
+  /** Il messaggio come lo leggerebbe un umano: niente `**` né `##`. Specchio di
+      `_messageText`, che invece rende il sorgente. */
+  _messagePlain(msg) {
+    if (!msg) return '';
+    const rendered = [...msg.querySelectorAll('.chat-content')]
+      .map((el) => (el.innerText || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+    return rendered || this._messageText(msg);
+  }
+
+  async _copyMessage(msg, markdown = true) {
+    const text = markdown ? this._messageText(msg) : this._messagePlain(msg);
+    if (!text) return;
+    if (!(await copyToClipboard(text))) {
+      showToast(i18n.t('chat.copyFailed'), 'error');
+      return;
+    }
+    showToast(i18n.t('chat.copied'), 'success');
+  }
+
+  /* Foglio delle azioni di un messaggio. Stesso schema di
+     `showAndroidAppSheet`, finestra di grazia sul backdrop compresa: il tap
+     sintetico che segue una pressione lunga non deve richiudere il foglio
+     appena aperto. */
+  _showMessageSheet(msg) {
+    const sheet = document.getElementById('chat-msg-sheet');
+    const actionsEl = document.getElementById('chat-msg-sheet-actions');
+    if (!sheet || !actionsEl || !msg) return;
+
+    const actions = [
+      { icon: 'ti-copy', label: i18n.t('chat.copyPlain'), run: () => this._copyMessage(msg, false) },
+      { icon: 'ti-markdown', label: i18n.t('chat.copyMarkdown'), run: () => this._copyMessage(msg, true) },
+    ];
+    actionsEl.innerHTML = '';
+    const close = () => sheet.close();
+    for (const a of actions) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'oc-sheet-action';
+      btn.innerHTML = `<i class="ti ${a.icon}"></i>`;
+      btn.appendChild(document.createTextNode(a.label));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        close();
+        a.run();
+      });
+      actionsEl.appendChild(btn);
+    }
+    const cancelBtn = document.getElementById('chat-msg-sheet-cancel');
+    if (cancelBtn) cancelBtn.onclick = close;
+    const openedAt = Date.now();
+    sheet.onclick = (e) => { if (e.target === sheet && Date.now() - openedAt > 400) close(); };
+    sheet.showModal();
   }
 
   _appendFileEdits(msg, edits) {
@@ -1137,6 +1289,8 @@ export class ChatController {
     // file), così la preview non si perde dopo un reload.
     if (media?.length) this._renderMediaAttachments(msg, media);
     if (role === 'user') this._appendOriginBadge(msg, origin);
+    this._setMessageSource(msg, text);
+    this._appendMsgActions(msg);
     return msg;
   }
 
@@ -1189,7 +1343,7 @@ export class ChatController {
     // Contenitore nascosto: 0 non è una posizione di lettura, è l'assenza di
     // un box. Registrarlo cancellerebbe l'ancora buona.
     if (!this.chatArea.clientHeight) return;
-    this._scrollAnchor = this.chatArea.scrollHeight - this.chatArea.scrollTop;
+    this._scrollAnchor = this._scroller.scrollHeight - this._scroller.scrollTop;
   }
 
   /* Rientro in chat di chi era risalito a leggere: prima si tornava sempre in
@@ -1201,7 +1355,7 @@ export class ChatController {
     const anchor = this._scrollAnchor;
     requestAnimationFrame(() => {
       if (!this._active) return;  // già usciti di nuovo
-      this.chatArea.scrollTop = Math.max(0, this.chatArea.scrollHeight - anchor);
+      this._scroller.scrollTop = Math.max(0, this._scroller.scrollHeight - anchor);
       this._autoScroll = this._isNearBottom();
       this._updateScrollFab();
     });
@@ -1426,13 +1580,20 @@ export class ChatController {
     this._pendingFrame = requestAnimationFrame(() => this._flushRender());
   }
 
+  /* `innerHTML =` ricrea tutti i nodi di testo, quindi una selezione aperta
+     dentro il blocco che si sta riscrivendo muore al frame dopo. Finché la
+     selezione è lì dentro non si riscrive e il flag *resta sporco*: il buffer
+     continua ad accumulare e il testo recupera in un frame solo quando la
+     selezione cade (ci pensa `onSelectionChange` in `setupEventListeners`).
+     Il guard è per blocco: una selezione in una bolla vecchia non congela
+     niente, perché quella bolla nessuno la riscrive. */
   _flushRender() {
     this._pendingFrame = null;
-    if (this._deltaDirty && this._currentContent) {
+    if (this._deltaDirty && this._currentContent && !selectionInside(this._currentContent)) {
       this._currentContent.innerHTML = renderMarkdown(this._deltaBuffer);
       this._deltaDirty = false;
     }
-    if (this._reasoningDirty && this._currentThinking) {
+    if (this._reasoningDirty && this._currentThinking && !selectionInside(this._currentThinking)) {
       this._renderReasoningBody();
       this._reasoningDirty = false;
     }
@@ -1655,6 +1816,7 @@ export class ChatController {
       this._currentContent.innerHTML = renderMarkdown(finalText);
       renderKaTeX(this._currentContent);
       this._makeFilePathsClickable(this._currentContent);
+      this._setMessageSource(this._currentMsg, finalText);
     }
     // Chiude il segmento. Un turno con testo → tool → testo produce più
     // stream, ma `_resetStreamState` scatta solo a turn_end: senza questo
@@ -1689,6 +1851,7 @@ export class ChatController {
 
   _handleTurnEnd(latencyMs) {
     this._appendLatency(this._currentMsg, latencyMs);
+    this._appendMsgActions(this._currentMsg);
     this._dropTerminatedSubagents();
 
     this._resetStreamState();
@@ -1773,6 +1936,11 @@ export class ChatController {
       content.innerHTML = renderMarkdown(msg.text);
       renderKaTeX(content);
       this._makeFilePathsClickable(content);
+      this._setMessageSource(this._currentMsg, msg.text);
+      /* Una consegna proattiva può non avere un `turn_end` dietro: la riga di
+         azioni si posa qui, e `_handleTurnEnd` la rimetterà in coda se il turno
+         poi continua. */
+      this._appendMsgActions(this._currentMsg);
       // `_currentContent` resta null: il delta successivo apre il proprio blocco.
     }
 
@@ -3283,6 +3451,8 @@ export class ChatController {
     // file): senza questo l'anteprima del composer sparirebbe al clear.
     const entries = attachments ? this.imageHandler.getAttachmentEntries() : [];
     if (entries.length) this._renderMediaAttachments(msg, entries);
+    this._setMessageSource(msg, text);
+    this._appendMsgActions(msg);
     this.chatArea.appendChild(msg);
     this._autoScroll = true;
     this.scrollToBottom(true);
@@ -3307,10 +3477,27 @@ export class ChatController {
     }
   }
 
+  /* Lo scroller della chat è il **documento**, non `.chat-area`
+     (`:root.mode-chat` in mobile-style.css). Ragione: al tocco di un manico
+     di selezione Chromium ri-deriva l'estremo fermo con un hit-test che
+     ignora solo il ritaglio del viewport, mai quello di uno scroller interno;
+     con la chat in un `div` scrollabile, l'estremo uscito di vista finiva sul
+     composer e la selezione si prendeva tutto (v. .agent/chat-selection-root-plan.md).
+     Ogni lettura e scrittura di scroll passa da qui: un solo punto da cambiare. */
+  get _scroller() {
+    return document.scrollingElement || document.documentElement;
+  }
+
   scrollToBottom(force = false) {
-    if (!force && (!this._autoScroll || this._userTouching)) return;
+    /* `hasSelection()` sta nella *stessa* uscita di `_userTouching`, non in una
+       nuova: `_userTouching` torna false sul `touchend`, cioè nell'istante in
+       cui la selezione compare, e il primo flush dopo si porterebbe via il testo
+       selezionato mentre la barra di selezione è ancora su. Le chiamate con
+       `force` restano tali: sono tutte intenzioni esplicite (FAB, invio,
+       rientro nella vista). */
+    if (!force && (!this._autoScroll || this._userTouching || hasSelection())) return;
     requestAnimationFrame(() => {
-      this.chatArea.scrollTop = this.chatArea.scrollHeight;
+      this._scroller.scrollTop = this._scroller.scrollHeight;
     });
     this._unreadCount = 0;
     this._updateScrollFab();
@@ -3337,7 +3524,7 @@ export class ChatController {
   }
 
   _isNearBottom() {
-    const { scrollTop, scrollHeight, clientHeight } = this.chatArea;
+    const { scrollTop, scrollHeight, clientHeight } = this._scroller;
     return scrollHeight - scrollTop - clientHeight < this._scrollThreshold;
   }
 

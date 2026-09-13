@@ -134,9 +134,9 @@ function makeChat() {
   };
   // Il DOM ridotto all'osso: svuotarlo si vede, ed è ciò che `invalidateHistory`
   // fa e che un caricamento scaduto non deve poter riempire.
+  // Lo scroller è il documento (`_scroller` in mobile-chat.js), non l'area.
+  chat._scroller = { scrollHeight: 0, scrollTop: 0 };
   chat.chatArea = {
-    scrollHeight: 0,
-    scrollTop: 0,
     get innerHTML() { return chat.rendered.join('\\n'); },
     set innerHTML(v) { if (v === '') chat.rendered = []; },
   };

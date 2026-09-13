@@ -227,3 +227,62 @@ rispetto all'avvio del processo prima di guardare altro.
 Storia: un host SSH aggiunto alle 13:18 su un'app avviata alle 13:12 non è
 arrivato al subagent `sysadmin` lanciato alle 13:32. Vedi
 `tests/agent/test_subagent_config_freshness.py`.
+
+## Il tasto Indietro chiude un `<dialog>` senza passare dal tuo `close()`
+
+Ogni foglio della SPA è un `<dialog>` aperto con `showModal()`, e il tasto
+Indietro di Android lo congeda da sé: nessun listener nostro viene chiamato,
+perché il browser emette `cancel` e poi `close`, non un click sul pulsante
+Annulla. Quindi tutto ciò che il tuo `close()` faceva **oltre** a `sheet.close()`
+semplicemente non succede quando l'utente esce da lì.
+
+Misurato il 13/09/2026 sul foglio "Seleziona testo": la pulizia della selezione
+stava dentro `close()`, così uscire con Indietro lasciava la selezione viva —
+barra di selezione di sistema appesa sopra la chat, e un `hasSelection()`
+perennemente vero, che è esattamente la condizione che congela il rendering
+dello streaming e l'autoscroll (`_flushRender`, `scrollToBottom`).
+
+La regola: la pulizia va su `sheet.onclose`, che scatta da qualunque strada
+arrivi la chiusura (pulsante, backdrop, Indietro, `close()` programmatico). Il
+`close()` resta solo `sheet.close()`.
+
+## Il testo selezionabile non vive mai in uno scroller interno
+
+Al tocco di un manico di selezione Chromium ri-deriva l'estremo *fermo* con un
+hit-test dalle sue coordinate di schermo (`TouchSelectionController::OnDragBegin`
+→ `SelectBetweenCoordinates`). Quel hit-test porta `kIgnoreClipping`, che
+ignora **solo** il ritaglio del viewport: il testo scrollato fuori da un
+`overflow: auto` interno è irraggiungibile, e la base finisce su quello che
+occupa quel punto — il composer, il dock, il titolo di un `<dialog>`. Se il
+nodo colpito è `user-select: none`, la posizione è nulla e la selezione
+collassa. Misurato il 13/09/2026 con tre pagine di prova in Chrome sul Titan 2
+([`selection-rig/`](./selection-rig/)); il ragionamento completo sta in
+[`chat-selection-root-plan.md`](./chat-selection-root-plan.md).
+
+Conseguenze da rispettare:
+
+- **in chat scorre il documento** (`:root.mode-chat` in `mobile-style.css`),
+  e nessun antenato di `.chat-content` può ritagliare; il composer e il dock
+  stanno fermi con `position: sticky`, non con uno scroller attorno alla chat;
+- **finché c'è una selezione la chrome fissa è `pointer-events: none`**
+  (`:root.has-selection`, classe messa da `shared/selection.js`): altrimenti
+  vince lei nel hit-test. Il tap che così finirebbe sotto lo riconsegna
+  `forwardTapsThroughChrome()`;
+- **niente scrittura della selezione da JS**: `setBaseAndExtent`,
+  `addRange`, `selectAllChildren` mettono `is_handle_visible=false` in Blink,
+  i manici scompaiono e la barra di sistema viene congedata. Un "rimedio" che
+  riscrive la selezione è sempre peggio del difetto;
+- un nuovo foglio o pannello con testo selezionabile **e** uno scroller
+  proprio riporta il difetto dentro di sé. `.chat-thinking-body`, i pannelli
+  `.sa-*` e i `pre` con scroll orizzontale sono il confine dichiarato.
+
+## La WebView principale non è ispezionabile
+
+`setWebContentsDebuggingEnabled` è solo sulla WebView della ricerca, e
+`console.log` non arriva a logcat perché `MainActivity` non implementa
+`onConsoleMessage`. Per misurare *dentro* la pagina sul telefono il canale è un
+overlay `position: fixed` scritto dal codice sotto misura (lo screenshot è il
+log), oppure il JS vero dell'APK nel browser del Mac via `adb forward` e
+`#bs=<token>` (v. la memoria di lavoro). Per un difetto del *motore* conviene
+invece Chrome sul telefono con una pagina di prova: stessa
+`TouchSelectionController`, trenta righe, nessuna build.
