@@ -160,6 +160,18 @@ def test_the_sheets_live_outside_the_swipe_surface() -> None:
         assert "app" not in _ancestor_ids(sheet), sheet
 
 
+def test_the_selection_sheet_drops_its_selection_on_any_close() -> None:
+    """Il tasto Indietro congeda il `<dialog>` senza passare da `close()`.
+
+    Misurato sul telefono il 13/09/2026: senza `onclose`, uscire col tasto
+    Indietro lasciava viva la selezione — barra di sistema appesa sopra la chat,
+    e un `hasSelection()` perennemente vero che congela rendering e autoscroll.
+    """
+    body = _method(CHAT_JS, "_showSelectSheet")
+    assert "sheet.onclose" in body
+    assert "removeAllRanges()" in body.split("sheet.onclose", 1)[1].split("\n", 1)[0]
+
+
 def test_no_inline_handlers_were_added() -> None:
     """La CSP della shell è `script-src 'self'`: un `onclick=` inline non gira."""
     assert "onclick=" not in INDEX_HTML

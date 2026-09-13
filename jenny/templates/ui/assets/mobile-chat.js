@@ -1235,10 +1235,13 @@ export class ChatController {
     body.innerHTML = renderMarkdown(this._messageText(msg));
     renderKaTeX(body);
 
-    const close = () => {
-      document.getSelection()?.removeAllRanges();
-      sheet.close();
-    };
+    /* La selezione si scarta alla chiusura, **da qualunque strada** arrivi. Il
+       tasto Indietro congeda il `<dialog>` da sé, senza passare da `close()`:
+       misurato sul telefono, lasciava viva la selezione e con lei la barra di
+       sistema appesa sopra la chat — e `hasSelection()` avrebbe continuato a
+       congelare rendering e autoscroll su un foglio che non c'è più. */
+    sheet.onclose = () => document.getSelection()?.removeAllRanges();
+    const close = () => sheet.close();
     const selectAll = document.getElementById('chat-select-all');
     if (selectAll) {
       selectAll.onclick = (e) => {
