@@ -35,9 +35,11 @@ from jenny import __version__
 
 __all__ = [
     "SESSION_HEADER",
+    "UNSUPPORTED_MESSAGE_KEYS",
     "catalog_headers",
     "conversation_scope",
     "current_conversation_id",
+    "message_keys",
     "session_headers",
     "uses_opencode",
     "user_agent",
@@ -45,6 +47,15 @@ __all__ = [
 
 SESSION_HEADER = "x-opencode-session"
 _OPENCODE_HOST = "opencode.ai"
+
+# Chiavi di messaggio che ``/chat/completions`` di Go rifiuta invece di
+# ignorare. ``name`` è opzionale nello schema OpenAI e Jenny lo mette sui
+# risultati dei tool per leggibilità della cronologia; Go risponde
+# ``HTTP 400 ... messages[N]: "name" is not supported by this endpoint`` e il
+# turno muore alla **seconda** richiesta, cioè appena il modello usa un tool.
+# La correlazione vera è ``tool_call_id``, quindi toglierlo dal filo non perde
+# niente: la cronologia locale continua a portarlo.
+UNSUPPORTED_MESSAGE_KEYS = frozenset({"name"})
 
 # La conversazione in corso, non il suo contenuto: la scrive chi sta per
 # chiamare il provider, la legge il provider al momento di firmare la richiesta.
@@ -139,3 +150,14 @@ def catalog_headers(api_base: str | None) -> dict[str, str]:
     if not uses_opencode(api_base):
         return {}
     return {"User-Agent": user_agent()}
+
+
+def message_keys(api_base: str | None, allowed: frozenset[str]) -> frozenset[str]:
+    """Le chiavi di messaggio ammesse sul filo, ristrette per OpenCode.
+
+    Fuori da OpenCode ritorna *allowed* immutato — stesso gate, stessa garanzia
+    di non toccare gli altri provider.
+    """
+    if not uses_opencode(api_base):
+        return allowed
+    return allowed - UNSUPPORTED_MESSAGE_KEYS

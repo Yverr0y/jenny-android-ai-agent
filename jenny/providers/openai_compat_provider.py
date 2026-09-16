@@ -58,6 +58,7 @@ from jenny.providers.openai_responses import (
     convert_tools,
     parse_response_output,
 )
+from jenny.providers.opencode import message_keys as opencode_message_keys
 from jenny.providers.opencode import session_headers
 from jenny.providers.tool_ids import unique_tool_ids_in_history
 
@@ -338,7 +339,14 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
 
     def _sanitize_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Strip non-standard keys, disambiguate colliding tool_call IDs."""
-        sanitized = LLMProvider._sanitize_request_messages(messages, _ALLOWABLE_MSG_KEYS)
+        sanitized = LLMProvider._sanitize_request_messages(
+            messages,
+            # Go rifiuta ``name`` sui messaggi invece di ignorarlo, quindi il
+            # set ammesso si stringe lì e solo lì (v. ``providers/opencode.py``).
+            opencode_message_keys(
+                self._effective_base or self.api_base, _ALLOWABLE_MSG_KEYS
+            ),
+        )
         # Unicità/riaccoppiamento degli id: regola condivisa con l'Anthropic
         # provider, vedi ``providers/tool_ids.py``. Il resto del loop qui sotto è
         # wire-specifico e resta dove sta.
