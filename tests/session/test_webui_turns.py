@@ -355,6 +355,35 @@ async def test_telegram_turn_mood_lands_on_the_webui_view(tmp_path, monkeypatch)
     assert frame.metadata["mascot_mood"] == "angry"
 
 
+async def test_la_richiesta_dell_umore_dichiara_la_conversazione(tmp_path, monkeypatch):
+    """La classificazione è una chiamata ausiliaria, e deve dire di chi parla.
+
+    Parte fuori dal turno, quindi senza questo passaggio arriverebbe al provider
+    anonima: è la forma di difetto su cui la stessa integrazione si è rotta
+    altrove (v. ``tests/agent/test_opencode_conversation_scope.py``).
+    """
+    from jenny.providers.opencode import SESSION_HEADER, conversation_scope, session_headers
+
+    monkeypatch.setattr(
+        "jenny.agent.token_usage.record_response_token_usage", lambda *a, **kw: None
+    )
+    go_base = "https://opencode.ai/zen/go/v1"
+    seen: list[str] = []
+    coordinator, bus, scheduled, provider, event = _mood_coordinator(tmp_path)
+    provider.chat_with_retry = AsyncMock(
+        side_effect=lambda *a, **k: seen.append(
+            session_headers(go_base, fallback_id="NESSUNO-SCOPE")[SESSION_HEADER]
+        ) or LLMResponse(content="A", usage={}),
+    )
+
+    await coordinator._handle_turn_completed_event(event)
+    await _run_scheduled(scheduled)
+
+    with conversation_scope("websocket:c1"):
+        atteso = session_headers(go_base, fallback_id="x")[SESSION_HEADER]
+    assert seen == [atteso]
+
+
 # --- proiezione dei turni esterni sulla vista WebUI --------------------------------
 
 

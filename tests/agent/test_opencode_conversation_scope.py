@@ -1,0 +1,176 @@
+"""Ogni percorso che chiama il provider deve dire a quale conversazione appartiene.
+
+Gli header di OpenCode li mette il provider (``tests/providers/test_opencode_session_header.py``),
+ma il provider può solo leggere quello che qualcuno ha dichiarato prima di lui.
+Qui si verifica che quel qualcuno esista **su tutti e tre** i percorsi che
+chiamano il provider in questo albero, e non solo sul turno dell'utente.
+
+Perché il turno da solo non basta: negli altri client la stessa integrazione si è
+rotta proprio sulle chiamate ausiliarie — generazione del messaggio di commit,
+pre-analisi di un'immagine — che partono fuori dal contesto del turno e restano
+senza header. Il sintomo non è un errore: è un degrado silenzioso, cache mancata
+e nei casi peggiori un 400 che fa ripiegare la richiesta altrove.
+
+In Jenny i percorsi sono tre: ``AgentRunner.run`` (il turno, e con lui cron,
+Dream e heartbeat), ``Consolidator.archive`` (la compattazione) e
+``classify_mood`` (l'umore della mascotte).
+"""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from jenny.agent.memory import Consolidator, MemoryStore
+from jenny.config.schema import AgentDefaults
+from jenny.providers.base import LLMProvider, LLMResponse
+from jenny.providers.opencode import SESSION_HEADER, session_headers
+from jenny.session import mascot_mood as mm
+
+GO_BASE = "https://opencode.ai/zen/go/v1"
+
+
+def _observed_id() -> str:
+    """L'ID che un provider OpenCode manderebbe se chiamato proprio adesso."""
+    return session_headers(GO_BASE, fallback_id="NESSUNO-SCOPE")[SESSION_HEADER]
+
+
+def _spying_provider() -> tuple[MagicMock, list[str]]:
+    """Provider finto che annota, a ogni chiamata, la conversazione dichiarata."""
+    seen: list[str] = []
+
+    async def chat_with_retry(*args, **kwargs):
+        seen.append(_observed_id())
+        return LLMResponse(content="ok", tool_calls=[], usage={})
+
+    provider = MagicMock(spec=LLMProvider)
+    provider.chat_with_retry = chat_with_retry
+    return provider, seen
+
+
+# --- il turno -----------------------------------------------------------------------
+
+
+class TestIlTurno:
+
+    async def _run(self, session_key: str | None) -> list[str]:
+        from jenny.agent.runner import AgentRunner, AgentRunSpec
+
+        provider, seen = _spying_provider()
+        tools = MagicMock()
+        tools.get_definitions.return_value = []
+        await AgentRunner(provider).run(AgentRunSpec(
+            initial_messages=[{"role": "user", "content": "ciao"}],
+            tools=tools,
+            model="m",
+            max_iterations=2,
+            max_tool_result_chars=AgentDefaults().max_tool_result_chars,
+            session_key=session_key,
+        ))
+        return seen
+
+    async def test_il_turno_dichiara_la_sua_sessione(self) -> None:
+        seen = await self._run("unified:default")
+        assert seen and seen[0] != "NESSUNO-SCOPE"
+
+    async def test_conversazioni_diverse_danno_id_diversi(self) -> None:
+        # È il caso vero: cron, Dream e heartbeat arrivano qui con il loro
+        # ``session_key_override`` e devono restare conversazioni distinte.
+        utente = await self._run("unified:default")
+        dream = await self._run("internal:dream")
+        heartbeat = await self._run("internal:heartbeat")
+        assert len({utente[0], dream[0], heartbeat[0]}) == 3
+
+    async def test_la_stessa_sessione_da_lo_stesso_id_fra_turni(self) -> None:
+        primo = await self._run("unified:default")
+        secondo = await self._run("unified:default")
+        assert primo[0] == secondo[0]
+
+    async def test_lo_scope_si_richiude_a_fine_turno(self) -> None:
+        await self._run("unified:default")
+        assert _observed_id() == "NESSUNO-SCOPE"
+
+    async def test_un_turno_senza_sessione_non_rompe(self) -> None:
+        seen = await self._run(None)
+        assert seen == ["NESSUNO-SCOPE"]
+
+
+# --- la compattazione ---------------------------------------------------------------
+
+
+class TestLaCompattazione:
+
+    @pytest.fixture
+    def _consolidator(self, tmp_path):
+        provider, seen = _spying_provider()
+        consolidator = Consolidator(
+            store=MemoryStore(tmp_path),
+            provider=provider,
+            model="m",
+            sessions=MagicMock(),
+            context_window_tokens=1000,
+            build_messages=MagicMock(return_value=[]),
+            get_tool_definitions=MagicMock(return_value=[]),
+            max_completion_tokens=100,
+        )
+        return consolidator, seen
+
+    async def test_archive_dichiara_la_sessione_che_sta_riassumendo(
+        self, _consolidator,
+    ) -> None:
+        consolidator, seen = _consolidator
+        await consolidator.archive(
+            [{"role": "user", "content": "ciao"}], session_key="unified:default",
+        )
+        assert seen and seen[0] != "NESSUNO-SCOPE"
+
+    async def test_e_la_stessa_conversazione_del_turno(self, _consolidator) -> None:
+        # Compattare non è un'altra conversazione: è la stessa, riassunta. Se
+        # l'ID divergesse, il gateway le vedrebbe come due.
+        consolidator, seen = _consolidator
+        await consolidator.archive(
+            [{"role": "user", "content": "ciao"}], session_key="unified:default",
+        )
+        from jenny.providers.opencode import conversation_scope
+
+        with conversation_scope("unified:default"):
+            atteso = _observed_id()
+        assert seen[0] == atteso
+
+    async def test_senza_chiave_non_rompe(self, _consolidator) -> None:
+        consolidator, seen = _consolidator
+        await consolidator.archive([{"role": "user", "content": "ciao"}])
+        assert seen == ["NESSUNO-SCOPE"]
+
+
+# --- l'umore della mascotte ---------------------------------------------------------
+
+
+class TestLUmoreDellaMascotte:
+
+    async def test_dichiara_la_sessione_quando_la_riceve(self) -> None:
+        provider, seen = _spying_provider()
+        provider.chat_with_retry = AsyncMock(
+            side_effect=lambda *a, **k: seen.append(_observed_id())
+            or LLMResponse(content="B", finish_reason="stop", usage={}),
+        )
+        await mm.classify_mood(
+            provider, "m", mm.MoodInputs(user="ciao", assistant="ok"),
+            bot_name="Jenny", session_key="unified:default",
+        )
+        assert seen and seen[0] != "NESSUNO-SCOPE"
+
+    async def test_resta_invocabile_senza_sessione(self) -> None:
+        # Il parametro è opzionale di proposito: la classificazione deve reggere
+        # da sola, e il ripiego del provider copre il resto.
+        provider, seen = _spying_provider()
+        provider.chat_with_retry = AsyncMock(
+            side_effect=lambda *a, **k: seen.append(_observed_id())
+            or LLMResponse(content="B", finish_reason="stop", usage={}),
+        )
+        mood, _ = await mm.classify_mood(
+            provider, "m", mm.MoodInputs(user="ciao", assistant="ok"), bot_name="Jenny",
+        )
+        assert mood == "sad"
+        assert seen == ["NESSUNO-SCOPE"]

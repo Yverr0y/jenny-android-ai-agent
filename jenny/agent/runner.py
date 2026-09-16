@@ -41,6 +41,7 @@ from jenny.agent.usage_accounting import (
     usage_or_estimate,
 )
 from jenny.providers.base import LLMProvider, LLMResponse, ToolCallRequest
+from jenny.providers.opencode import conversation_scope
 from jenny.utils.helpers import (
     build_assistant_message,
     extract_reasoning,
@@ -429,6 +430,20 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
         return True
 
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
+        """Esegue un turno dichiarando a quale conversazione appartiene.
+
+        Lo scope sta **qui** e non sui singoli ``provider.chat*`` perché questo è
+        il punto d'ingresso unico del turno: ci passano le quattro chiamate di
+        ``request_execution`` e tutto ciò che il turno innesca. Ne segue che
+        cron, Dream e heartbeat — che arrivano di qui con il loro
+        ``session_key_override`` — ottengono da soli un ID stabile e distinto,
+        che è esattamente ciò che OpenCode chiede. Un subagent costruisce un
+        ``AgentRunner`` proprio e apre quindi il suo, senza ereditare questo.
+        """
+        with conversation_scope(spec.session_key):
+            return await self._run_with_hooks(spec)
+
+    async def _run_with_hooks(self, spec: AgentRunSpec) -> AgentRunResult:
         hook = spec.hook or AgentHook()
         messages = list(spec.initial_messages)
         context = AgentRunHookContext(messages=deepcopy(messages))

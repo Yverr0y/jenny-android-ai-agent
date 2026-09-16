@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from jenny.providers.opencode import conversation_scope
 from jenny.session.history_meta import is_synthetic_history_row
 from jenny.utils.helpers import strip_think
 
@@ -214,23 +215,30 @@ async def classify_mood(
     inputs: MoodInputs,
     *,
     bot_name: str,
+    session_key: str | None = None,
 ) -> tuple[str, LLMResponse | None]:
     """Una richiesta al provider; ``(umore, risposta)``.
 
     La risposta torna al chiamante per la contabilita' dei token. Un errore del
     provider vale ``neutral`` e nessuna risposta: la mascotte resta ``idle``, che
     e' il comportamento di prima di questo modulo.
+
+    *session_key* dice a quale conversazione appartiene questa richiesta
+    ausiliaria. E' opzionale perche' serve solo a chi parla con un provider che
+    lo usa (v. ``providers/opencode.py``) e perche' la classificazione deve
+    restare invocabile da sola; il chiamante vero ce l'ha e lo passa.
     """
     try:
-        response = await provider.chat_with_retry(
-            build_mood_request(inputs, bot_name=bot_name),
-            tools=None,
-            model=model,
-            max_tokens=MOOD_MAX_TOKENS,
-            temperature=MOOD_TEMPERATURE,
-            reasoning_effort=MOOD_REASONING_EFFORT,
-            retry_mode="standard",
-        )
+        with conversation_scope(session_key):
+            response = await provider.chat_with_retry(
+                build_mood_request(inputs, bot_name=bot_name),
+                tools=None,
+                model=model,
+                max_tokens=MOOD_MAX_TOKENS,
+                temperature=MOOD_TEMPERATURE,
+                reasoning_effort=MOOD_REASONING_EFFORT,
+                retry_mode="standard",
+            )
     except Exception:
         logger.debug("mascot mood: provider call failed", exc_info=True)
         return NEUTRAL_MOOD, None
