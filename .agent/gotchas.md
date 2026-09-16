@@ -286,3 +286,18 @@ log), oppure il JS vero dell'APK nel browser del Mac via `adb forward` e
 `#bs=<token>` (v. la memoria di lavoro). Per un difetto del *motore* conviene
 invece Chrome sul telefono con una pagina di prova: stessa
 `TouchSelectionController`, trenta righe, nessuna build.
+
+## Una chiamata LLM nuova deve dire a quale conversazione appartiene
+
+`providers/opencode.py` tiene una ContextVar con la conversazione in corso, e il
+provider la legge per firmare la richiesta con `x-opencode-session` quando il
+base URL è OpenCode. Chi apre lo scope sono i **tre** percorsi che chiamano il
+provider: `AgentRunner.run` (il turno, e con lui cron, Dream e heartbeat, che
+arrivano lì col loro `session_key_override`), `Consolidator.archive` e
+`classify_mood`.
+
+Una quarta chiamata LLM aggiunta altrove deve aprire il suo
+`conversation_scope(session_key)`, altrimenti cade sul ripiego per-istanza. Il
+sintomo non è un errore: è prompt caching mancato — cioè niente, finché qualcuno
+non guarda il conto. È lo stesso difetto su cui questa integrazione si è rotta
+negli altri client, sempre sulle chiamate ausiliarie fuori dal turno.

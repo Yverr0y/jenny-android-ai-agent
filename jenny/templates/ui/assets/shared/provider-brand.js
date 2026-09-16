@@ -16,6 +16,7 @@ const PROVIDER_BRANDS = {
   stability:     { label: "Stability AI",  color: "#a855f7", logo: null },
   elevenlabs:    { label: "ElevenLabs",    color: "#000000", logo: null },
   openrouter:    { label: "OpenRouter",    color: "#6366f1", logo: null },
+  opencode:      { label: "OpenCode",      color: "#fbbf24", logo: null },
   lmstudio:      { label: "LM Studio",    color: "#000000", logo: null },
   textgen:       { label: "TextGen",       color: "#22c55e", logo: null },
   jan:           { label: "Jan",           color: "#000000", logo: null },
@@ -61,6 +62,8 @@ const PROVIDER_ALIASES = {
   ant_ling: 'antling',
   atomic_chat: 'localai',
   ovms: 'vllm',
+  opencode_go: 'opencode',
+  opencode_zen: 'opencode',
 };
 
 export function getProviderBrand(name) {
