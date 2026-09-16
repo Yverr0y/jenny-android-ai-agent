@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import Any
@@ -32,6 +33,7 @@ from jenny.providers.base import (
 )
 from jenny.providers.body_merge import deep_merge
 from jenny.providers.endpoint_budget import is_local_endpoint, request_timeout_s
+from jenny.providers.opencode import session_headers
 from jenny.providers.tool_ids import dedupe_tool_ids, unique_tool_ids_in_history
 
 
@@ -69,6 +71,9 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         # Contesto TLS del provider: ``None`` = default di httpx. Lo costruisce
         # il factory (v. ``providers/tls.py``), qui si inoltra e basta.
         self._ssl_context = ssl_context
+        # Ripiego di ``x-opencode-session`` per le richieste che partono senza
+        # scope di conversazione: v. ``providers/opencode.py``.
+        self._session_affinity_id = uuid.uuid4().hex
         self._http_client: httpx.AsyncClient | None = None
         self._init_http_client()
 
@@ -94,6 +99,32 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
             # di httpx: la fiducia di default non la ridefiniamo noi.
             verify=self._ssl_context or True,
         )
+
+    def _request_headers(self) -> dict[str, str] | None:
+        """Header da sovrapporre a quelli del client, o ``None`` se non servono.
+
+        Il client httpx monta i suoi header una volta sola alla costruzione
+        (``_init_http_client``), ma ``x-opencode-session`` cambia con la
+        conversazione: va quindi passato per richiesta. ``None`` e non ``{}``
+        fuori da OpenCode, così ogni altro endpoint riceve la chiamata
+        *identica* a quella di prima invece di un merge a vuoto.
+
+        Il gate legge ``api_base`` grezzo: ``_normalize_base_url`` toglie il
+        ``/v1`` finale ma l'host resta, e l'host è tutto ciò che guarda.
+
+        **Quello che l'utente ha scritto in ``extraHeaders`` vince**, e va tolto
+        qui a mano: gli ``extraHeaders`` stanno sul client, e in httpx un header
+        per richiesta *sovrascrive* quello del client, cioè il contrario del
+        ramo OpenAI — lì finiscono entrambi nello stesso dict e basta un
+        ``setdefault``. Senza questo filtro l'unica via per forzare un header su
+        questo formato smetterebbe di funzionare proprio sui nomi che servono.
+        Il confronto è case-insensitive perché i nomi degli header lo sono.
+        """
+        headers = session_headers(self.api_base, fallback_id=self._session_affinity_id)
+        if headers and self.extra_headers:
+            taken = {name.lower() for name in self.extra_headers}
+            headers = {k: v for k, v in headers.items() if k.lower() not in taken}
+        return headers or None
 
     @staticmethod
     def _normalize_base_url(api_base: str) -> str:
@@ -406,6 +437,7 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         )
         response = await self._http_client.post(
             "/v1/messages", json=kwargs, params=self._extra_query or None,
+            headers=self._request_headers(),
         )
         # HTTPStatusError sale intatta fino a chat(): riavvolgerla in una
         # RuntimeError butterebbe via ``.response``, e con essa status code,
@@ -450,6 +482,7 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         try:
             async with self._http_client.stream(
                 "POST", "/v1/messages", json=kwargs, params=self._extra_query or None,
+                headers=self._request_headers(),
             ) as response:
                 if response.status_code >= 400:
                     # Il body di uno stream non è ancora stato letto e il
