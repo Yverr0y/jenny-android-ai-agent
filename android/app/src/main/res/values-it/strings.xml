@@ -7,6 +7,12 @@
     <string name="alerts_channel_name">Avvisi</string>
     <string name="alerts_channel_description">Promemoria e messaggi che Jenny manda di sua iniziativa</string>
 
+    <string name="reply_action_label">Rispondi</string>
+    <string name="reply_input_hint">Scrivi a Jenny…</string>
+    <string name="reply_failed_title">Jenny non ha ricevuto il messaggio</string>
+    <string name="reply_failed_text">Non era attiva. Tocca per rimandarlo.</string>
+    <string name="reply_retry_label">Rimanda</string>
+
     <string name="update_channel_name">Aggiornamenti dell\'app</string>
     <string name="update_channel_description">Mostrata quando un aggiornamento già scaricato aspetta la tua conferma per installarsi</string>
     <string name="update_notification_title">Aggiornamento pronto da installare</string>

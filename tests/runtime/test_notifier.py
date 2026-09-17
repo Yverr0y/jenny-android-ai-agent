@@ -102,6 +102,36 @@ class TestPostAlert:
         assert ok is True
         assert bridge.calls == [("Jenny ⏰ spesa", "ricordati il pane", "cron:spesa")]
 
+    async def test_thread_overrides_the_tag_and_leaves_the_title(self, monkeypatch):
+        """Il canale della tendina passa un thread unico.
+
+        Il tag dice *dove* va la notifica — e le risposte dell'agente devono
+        coalizzare su una voce sola invece di impilarsi una per messaggio — ma
+        il titolo continua a dire *di cosa parla*, quindi resta quello che
+        ``alert_fields`` deriva dai metadata.
+        """
+        bridge = _FakeBridge()
+        monkeypatch.setattr(notifier, "get_android_context", lambda: object())
+
+        async def fake_get_bridge(context: Any) -> Any:
+            return bridge
+
+        monkeypatch.setattr(notifier, "_get_bridge", fake_get_bridge)
+        await notifier.post_alert("ecco", _meta("cron", "spesa"), thread="chat")
+        assert bridge.calls == [("Jenny ⏰ spesa", "ecco", "chat")]
+
+    async def test_without_thread_nothing_changes(self, monkeypatch):
+        """Gli avvisi proattivi tengono i loro tag distinti."""
+        bridge = _FakeBridge()
+        monkeypatch.setattr(notifier, "get_android_context", lambda: object())
+
+        async def fake_get_bridge(context: Any) -> Any:
+            return bridge
+
+        monkeypatch.setattr(notifier, "_get_bridge", fake_get_bridge)
+        await notifier.post_alert("ecco", _meta("heartbeat"), thread=None)
+        assert bridge.calls[0][2] == "heartbeat"
+
     async def test_bridge_error_is_swallowed(self, monkeypatch):
         monkeypatch.setattr(notifier, "get_android_context", lambda: object())
 

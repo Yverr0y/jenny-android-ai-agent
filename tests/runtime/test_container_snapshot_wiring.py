@@ -60,6 +60,9 @@ class _FakeChannels:
 def _bare_container(order: list[str], *, fail_shutdown: bool = False) -> GatewayContainer:
     """Container senza __init__: solo gli attributi che ``run()`` usa davvero."""
     container = GatewayContainer.__new__(GatewayContainer)
+    # ``run()`` aggancia l'ingresso nativo al bus come prima cosa. Qui non c'è
+    # un bus e non serve: ``bind_native_input`` lo dice e prosegue.
+    container.bus = None
     container.cron = SimpleNamespace(start=AsyncMock(), stop=MagicMock())
     container.snapshot = _RecordingSnapshot(order, fail_shutdown=fail_shutdown)
     container.channels = _FakeChannels()

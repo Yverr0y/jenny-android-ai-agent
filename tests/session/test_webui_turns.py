@@ -536,3 +536,44 @@ async def test_external_run_status_projected_on_view(tmp_path):
     assert call.metadata["goal_status"] == "running"
 
 
+
+
+# --- la tendina come terzo canale utente ------------------------------------------
+
+
+def _notification_ctx() -> RuntimeEventContext:
+    return RuntimeEventContext(
+        channel="notification",
+        chat_id="shade",
+        session_key="unified:default",
+        metadata={"webui_turn_id": "t9"},
+    )
+
+
+def test_the_shade_projects_onto_the_webui_view():
+    """La tendina è un canale utente come Telegram, e non va nominata da nessuna
+    parte perché lo sia: la regola di ``webui_view_target`` è "tutto ciò che non
+    è interno e sta sulla conversazione unica"."""
+    assert wt.webui_view_target(_notification_ctx()) == ("websocket", "default")
+
+
+async def test_a_reply_from_the_shade_is_echoed_in_chat(tmp_path):
+    """La prova che chi apre l'app vede **la domanda**, e non solo la risposta.
+
+    Senza questa eco il transcript conterrebbe un turno monco — e Dream
+    leggerebbe una risposta senza sapere a che cosa.
+    """
+    coordinator, bus, _scheduled = _coordinator(tmp_path)
+    event = SessionTurnStarted(
+        context=_notification_ctx(), content="rispondo dalla tendina"
+    )
+
+    await coordinator._handle_session_turn_started(event)
+
+    bus.publish_outbound.assert_awaited_once()
+    echo = bus.publish_outbound.await_args[0][0]
+    assert echo.channel == "websocket"
+    assert echo.chat_id == "default"
+    assert echo.content == "rispondo dalla tendina"
+    assert echo.metadata["_user_echo"] is True
+    assert echo.metadata["origin_channel"] == "notification"
