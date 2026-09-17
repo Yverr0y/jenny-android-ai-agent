@@ -49,6 +49,14 @@ if TYPE_CHECKING:
 # domanda* — due domande diverse che oggi hanno la stessa risposta.
 NATIVE_SOURCE_KEY = "_native_source"
 
+# Chiave dei metadata che porta il **filo** su cui è nata la domanda: il tag
+# della notifica a cui l'utente ha risposto. Torna a valle in
+# ``NotificationChannel.send``, che ci riporta sopra la risposta — così il
+# discorso resta nella scheda in cui è cominciato invece di aprirne una seconda.
+# Viaggia gratis: ``_assemble_outbound`` copia i metadata dell'inbound
+# sull'outbound (``meta = dict(msg.metadata or {})``).
+NATIVE_THREAD_KEY = "_native_thread"
+
 # La sorgente "risposta dalla tendina". Stringa condivisa con Kotlin
 # (``ReplyReceiver`` → ``GatewayService.deliverNativeText``): è un valore di
 # protocollo, non un'etichetta.
@@ -129,7 +137,7 @@ def _accept(text: str) -> bool:
     return bool(text) and len(text) <= MAX_TEXT_CHARS
 
 
-def _schedule(bus: Any, channel: str, text: str, source: str) -> None:
+def _schedule(bus: Any, channel: str, text: str, source: str, thread: str | None) -> None:
     """Crea il task di pubblicazione. Gira **sul** loop, non sul thread JNI.
 
     Il task si crea qui e non nel chiamante per una ragione precisa: costruire
@@ -137,29 +145,42 @@ def _schedule(bus: Any, channel: str, text: str, source: str) -> None:
     coroutine mai awaitato — un ``RuntimeWarning`` a carico di chi non c'entra,
     e nel percorso d'errore, cioè quello che si legge peggio.
     """
-    task = asyncio.get_running_loop().create_task(_publish(bus, channel, text, source))
+    task = asyncio.get_running_loop().create_task(
+        _publish(bus, channel, text, source, thread)
+    )
     _TASKS.add(task)
     task.add_done_callback(_TASKS.discard)
 
 
-async def _publish(bus: Any, channel: str, text: str, source: str) -> None:
+async def _publish(bus: Any, channel: str, text: str, source: str, thread: str | None) -> None:
     """Costruisce l'``InboundMessage`` e lo mette sul bus.
 
     ``publish_inbound`` fa backpressure da solo (coda limitata): se il gateway è
     sommerso, questo task attende il proprio turno invece di scartare.
     """
+    metadata: dict[str, Any] = {NATIVE_SOURCE_KEY: source}
+    if thread:
+        # Solo se c'è: una chiave a ``None`` nei metadata è una chiave che ogni
+        # lettore a valle deve imparare a ignorare.
+        metadata[NATIVE_THREAD_KEY] = thread
     msg = InboundMessage(
         channel=channel,
         sender_id="user",
         chat_id=NATIVE_CHAT_ID,
         content=text,
-        metadata={NATIVE_SOURCE_KEY: source},
+        metadata=metadata,
     )
     await bus.publish_inbound(msg)
-    logger.info("Native text published (source={}, chars={})", source, len(text))
+    logger.info(
+        "Native text published (source={}, thread={}, chars={})", source, thread, len(text)
+    )
 
 
-def on_native_text(text: str, source: str = SOURCE_NOTIFICATION) -> bool:
+def on_native_text(
+    text: str,
+    source: str = SOURCE_NOTIFICATION,
+    thread: str | None = None,
+) -> bool:
     """Riceve il testo da una superficie nativa. Chiamata da Kotlin (thread JNI).
 
     **Mai solleva verso Kotlin** — lo stesso contratto di ``power.on_wake_tick``.
@@ -170,6 +191,11 @@ def on_native_text(text: str, source: str = SOURCE_NOTIFICATION) -> bool:
     ``True`` significa soltanto "accettato e in viaggio verso il bus": la
     risposta dell'agente arriverà dopo, sul suo tempo, e per la tendina torna in
     superficie come nuovo alert (``NotificationChannel``).
+
+    *thread* è il tag della notifica da cui è partita la domanda. Arriva da
+    Kotlin e serve solo a tornare indietro: la risposta si posta su quel tag, e
+    il discorso resta dove è cominciato. Assente o vuoto vuol dire "non lo so",
+    e a valle si ricade sul filo di default.
 
     A differenza di un tick di sveglia, un ``False`` qui **non** è un esito
     innocuo: il tick perso lo recupera il giro successivo del cron, le parole
@@ -192,8 +218,12 @@ def on_native_text(text: str, source: str = SOURCE_NOTIFICATION) -> bool:
             source, len(clean), MAX_TEXT_CHARS,
         )
         return False
+    # Kotlin può passare ``None`` o una stringa vuota: entrambe vogliono dire
+    # "nessun filo", e normalizzarle qui evita che ogni lettore a valle debba
+    # distinguerle.
+    thread_tag = thread.strip() if isinstance(thread, str) else None
     try:
-        loop.call_soon_threadsafe(_schedule, bus, channel, clean, source)
+        loop.call_soon_threadsafe(_schedule, bus, channel, clean, source, thread_tag or None)
     except RuntimeError:
         # Loop chiuso fra il controllo e la chiamata: nessun destinatario.
         logger.opt(exception=True).warning("Native text could not reach the event loop")

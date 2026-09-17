@@ -31,14 +31,36 @@ from typing import Any
 from loguru import logger
 
 from jenny.bus.events import COORDINATION_FLAGS, NOTIFICATION_CHANNEL, OutboundMessage
+from jenny.runtime.native_input import NATIVE_THREAD_KEY
 from jenny.runtime.notifier import post_alert
 
-# Tag della notifica su cui coalizzano **tutte** le risposte dell'agente. Uno
-# solo, e non uno per messaggio: nella tendina questa è una conversazione, e una
-# conversazione è una voce che si aggiorna, non una pila che cresce. Gli avvisi
-# proattivi tengono i loro tag (``cron:<label>``, ``heartbeat``, ``update``)
-# perché sono avvisi distinti, non lo stesso discorso che continua.
+# Tag di ripiego per le risposte dell'agente: il filo della conversazione quando
+# non se ne conosce uno d'origine.
+#
+# **Il caso normale è un altro**, ed è il punto di questa meccanica: la domanda
+# arriva da una notifica precisa e ne porta il tag (``NATIVE_THREAD_KEY``), così
+# la risposta si posta **su quella** e il discorso resta nella scheda in cui è
+# cominciato. Rispondere al promemoria delle 8 e vedersi aprire una seconda
+# scheda altrove era il difetto, non lo stile.
+#
+# Questo ripiego copre l'unico caso in cui il tag non c'è: una notifica postata
+# da una versione precedente, il cui ``PendingIntent`` non porta l'extra.
 REPLY_THREAD_TAG = "chat"
+
+
+def _thread_of(metadata: dict[str, Any]) -> str:
+    """Il tag su cui postare la risposta: quello da cui è arrivata la domanda.
+
+    Il valore ha attraversato tutto il turno dentro i metadata — ce lo porta
+    ``_assemble_outbound``, che copia i metadata dell'inbound sull'outbound — e
+    qui si chiude il cerchio. Un valore non-stringa o vuoto è trattato come
+    assente: arriva da Kotlin, e un canale non si fida di ciò che gli entra
+    dall'esterno del processo.
+    """
+    raw = metadata.get(NATIVE_THREAD_KEY)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return REPLY_THREAD_TAG
 
 
 class NotificationChannel:
@@ -104,7 +126,7 @@ class NotificationChannel:
                 "Notification channel: {} media attachment(s) not sent to the shade",
                 len(msg.media),
             )
-        posted = await post_alert(content, meta, thread=REPLY_THREAD_TAG)
+        posted = await post_alert(content, meta, thread=_thread_of(meta))
         if not posted:
             # Esito normale e non un errore: l'app in primo piano sopprime
             # l'alert perché la risposta è già a schermo in chat.

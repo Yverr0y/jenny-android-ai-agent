@@ -138,6 +138,11 @@ class TestConfineConKotlin:
         assert 'callAttr("on_native_text"' in self._gateway_service()
         assert callable(ni.on_native_text)
 
+    def test_kotlin_passa_anche_il_filo(self):
+        """Terzo argomento: il tag della notifica. Se qui e là divergono, la
+        risposta finisce su un filo di ripiego e la seconda scheda torna."""
+        assert '"on_native_text", text, "notification", sourceTag' in self._gateway_service()
+
     def test_la_sorgente_che_passa_kotlin_e_riconosciuta(self):
         """Una sorgente fuori elenco viene rifiutata: se le due stringhe
         divergono, ogni risposta dalla tendina viene scartata."""
@@ -181,6 +186,29 @@ class TestConsegna:
         assert ok is True
         await asyncio.wait_for(bus.arrived.wait(), 2)
         assert bus.inbound[0].content == "scritto dal thread JNI"
+
+    async def test_il_tag_del_filo_entra_nei_metadata(self):
+        """È il tag della notifica da cui è partita la domanda: torna a valle e
+        ci fa postare la risposta **su quella scheda**."""
+        bus = await _bound()
+        assert ni.on_native_text("ok", ni.SOURCE_NOTIFICATION, "cron:spesa") is True
+        await asyncio.wait_for(bus.arrived.wait(), 2)
+        assert bus.inbound[0].metadata[ni.NATIVE_THREAD_KEY] == "cron:spesa"
+
+    @pytest.mark.parametrize("thread", [None, "", "   ", 42])
+    async def test_un_filo_assente_non_lascia_una_chiave_vuota(self, thread):
+        """Una chiave a ``None`` è una chiave che ogni lettore a valle deve
+        imparare a ignorare: meglio non scriverla."""
+        bus = await _bound()
+        assert ni.on_native_text("ok", ni.SOURCE_NOTIFICATION, thread) is True
+        await asyncio.wait_for(bus.arrived.wait(), 2)
+        assert ni.NATIVE_THREAD_KEY not in bus.inbound[0].metadata
+
+    async def test_il_tag_viene_ripulito(self):
+        bus = await _bound()
+        ni.on_native_text("ok", ni.SOURCE_NOTIFICATION, "  heartbeat \n")
+        await asyncio.wait_for(bus.arrived.wait(), 2)
+        assert bus.inbound[0].metadata[ni.NATIVE_THREAD_KEY] == "heartbeat"
 
     async def test_due_messaggi_di_fila_restano_due(self):
         bus = await _bound()

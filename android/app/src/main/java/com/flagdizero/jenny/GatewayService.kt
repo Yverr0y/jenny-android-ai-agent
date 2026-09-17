@@ -320,7 +320,7 @@ class GatewayService : Service() {
                 var attempts = 0
                 while (true) {
                     attempts++
-                    delivered = tryDeliverNativeText(text)
+                    delivered = tryDeliverNativeText(text, sourceTag)
                     if (delivered) {
                         Log.i(TAG, "Reply delivered to the gateway (attempt $attempts)")
                         break
@@ -352,18 +352,23 @@ class GatewayService : Service() {
     /**
      * Un tentativo di consegna. `false` se il gateway non è ancora agganciato.
      *
+     * *sourceTag* è il tag della notifica da cui è partita la risposta e serve
+     * a una cosa sola: tornare indietro. Python lo rimette nei metadata del
+     * turno e il canale ci riporta sopra la risposta, così il discorso resta
+     * nella scheda in cui è cominciato.
+     *
      * Non solleva: qualunque errore è un "non adesso", e chi chiama decide se
      * riprovare. `Python.isStarted()` falso significa che `startGateway` sta
      * alzando il runtime in questo momento — è la condizione che il retry
      * esiste per aspettare, non un guasto.
      */
-    private fun tryDeliverNativeText(text: String): Boolean = try {
+    private fun tryDeliverNativeText(text: String, sourceTag: String?): Boolean = try {
         if (!Python.isStarted()) {
             false
         } else {
             Python.getInstance()
                 .getModule("jenny.runtime.native_input")
-                .callAttr("on_native_text", text, "notification")
+                .callAttr("on_native_text", text, "notification", sourceTag)
                 .toBoolean()
         }
     } catch (e: Exception) {

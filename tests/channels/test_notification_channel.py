@@ -14,6 +14,7 @@ import pytest
 from jenny.bus.events import NOTIFICATION_CHANNEL, OutboundMessage
 from jenny.channels import notification as nc
 from jenny.channels.notification import REPLY_THREAD_TAG, NotificationChannel
+from jenny.runtime.native_input import NATIVE_THREAD_KEY
 
 
 class _Spy:
@@ -68,13 +69,30 @@ class TestContratto:
 
 
 class TestSend:
-    async def test_posta_sul_thread_unico(self, spy: _Spy):
+    async def test_senza_filo_posta_sul_ripiego(self, spy: _Spy):
+        """Nessun tag d'origine: è il caso di una notifica postata da una
+        versione precedente, il cui PendingIntent non porta l'extra."""
         ch = NotificationChannel()
         assert await ch.send(_msg("ecco fatto")) == []
 
         (content, _meta, thread) = spy.calls[0]
         assert content == "ecco fatto"
         assert thread == REPLY_THREAD_TAG
+
+    async def test_posta_sul_filo_da_cui_e_arrivata_la_domanda(self, spy: _Spy):
+        """Il caso normale, e la correzione del difetto: la risposta torna sulla
+        notifica a cui l'utente ha risposto, non su una scheda nuova."""
+        ch = NotificationChannel()
+        await ch.send(_msg("fatto", **{NATIVE_THREAD_KEY: "cron:spesa"}))
+        assert spy.calls[0][2] == "cron:spesa"
+
+    @pytest.mark.parametrize("bad", [None, "", "   ", 7, ["cron"]])
+    async def test_un_filo_malformato_ricade_sul_ripiego(self, spy: _Spy, bad):
+        """Il valore attraversa il confine con Kotlin: un canale non si fida di
+        ciò che gli entra da fuori del processo."""
+        ch = NotificationChannel()
+        await ch.send(_msg("fatto", **{NATIVE_THREAD_KEY: bad}))
+        assert spy.calls[0][2] == REPLY_THREAD_TAG
 
     async def test_i_metadata_arrivano_interi(self, spy: _Spy):
         """``alert_fields`` ne ricava il titolo: non vanno persi per strada."""

@@ -58,13 +58,22 @@ class ReplyReceiver : BroadcastReceiver() {
             return
         }
 
-        // L'alert a cui si è risposto lascia subito la tendina: la conversazione
-        // continua sul thread della risposta, e lasciarlo lì accumulerebbe
-        // avvisi già evasi. Il tag arriva cotto nel PendingIntent; l'ID è fisso
-        // per canale.
+        // L'avviso a cui si è risposto **diventa** la conversazione, con dentro
+        // ciò che l'utente ha appena scritto. Prima lo si cancellava: era un
+        // ripiego per non lasciare in giro un avviso già evaso, e lasciava la
+        // risposta di Jenny senza un posto dove andare se non una scheda nuova.
+        //
+        // Due guadagni, oltre alla forma. Android tiene viva la notifica a cui
+        // si è risposto (`LIFETIME_EXTENDED_BY_DIRECT_REPLY`) **aspettando che
+        // l'app la aggiorni**: aggiornandola si chiude quell'attesa invece di
+        // combatterla. E l'utente vede il proprio messaggio subito, mentre il
+        // turno gira, invece di una freccia che ruota nel vuoto.
         val sourceTag = intent.getStringExtra(NotifierBridge.EXTRA_REPLY_SOURCE_TAG)
         val manager = appContext.getSystemService(NotificationManager::class.java)
-        if (sourceTag != null) {
+        if (sourceTag != null && !NotifierBridge.startConversation(appContext, sourceTag, text)) {
+            // Niente da convertire (notifica già scartata, o sparita con il
+            // processo): resta il comportamento di prima, che a quel punto è un
+            // no-op utile solo a non lasciare residui.
             manager?.cancel(sourceTag, NotifierBridge.ALERT_ID)
         }
         if (isRetry) {
