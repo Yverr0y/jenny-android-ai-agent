@@ -599,7 +599,17 @@ class GatewayContainer:
 
     async def run(self) -> None:
         try:
-            # Prima cosa a event loop vivo: fissa su disco lo stamp di
+            # Prima ancora del config: aggancia l'ingresso nativo al bus. È la
+            # porta da cui Kotlin consegna il testo scritto nella tendina, e il
+            # riferimento al loop si può prendere solo da dentro il loop
+            # (``get_running_loop``) — il chiamante vero entrerà da un thread
+            # JNI, dove non esiste. Sta in cima perché la risposta a un alert
+            # vecchio arriva mentre il gateway sta ancora partendo: ogni riga
+            # che precede questa è una finestra in cui quel testo verrebbe
+            # rifiutato e Kotlin dovrebbe ritentare.
+            from jenny.runtime.native_input import bind_native_input
+            bind_native_input(self.bus)
+            # Poi il config: fissa su disco lo stamp di
             # ``configVersion``. Le migrazioni di schema valgono già in memoria,
             # ma senza questa scrittura ripartirebbero a ogni parse — e il
             # config viene letto più volte per boot.

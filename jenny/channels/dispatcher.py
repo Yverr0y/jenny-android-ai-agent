@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from jenny.bus.events import COORDINATION_FLAGS, OutboundMessage
+from jenny.bus.events import COORDINATION_FLAGS, NOTIFICATION_CHANNEL, OutboundMessage
 from jenny.bus.queue import MessageBus
 from jenny.config.schema import Config
 from jenny.runtime.notifier import notify_delivery
@@ -74,6 +74,7 @@ class WebSocketDispatcher:
 
         self._init_channel()
         self._init_telegram()
+        self._init_notification()
 
     def _init_channel(self) -> None:
         """Initialize the WebSocket channel from the top-level websocket config."""
@@ -139,6 +140,29 @@ class WebSocketDispatcher:
             language=self.config.agents.defaults.language,
         )
         logger.info("Telegram channel enabled")
+
+    def _init_notification(self) -> None:
+        """Crea il canale della tendina. Solo su Android, e senza config.
+
+        Non ha un interruttore nelle impostazioni, e la scelta è deliberata: il
+        campo di risposta vive sugli alert che l'app posta comunque, non aggiunge
+        un permesso (``POST_NOTIFICATIONS`` è già dichiarato) e non apre una
+        superficie nuova. Un flag in più sarebbe una combinazione in più da
+        testare, e nessuno la spegnerebbe.
+
+        Fuori da Android il canale non esiste: là non c'è nessuna tendina da cui
+        possa arrivare un inbound, quindi non c'è nemmeno un outbound da
+        consegnargli.
+        """
+        from jenny.runtime.context import get_android_context
+
+        if get_android_context() is None:
+            logger.info("Notification channel not available (no Android context)")
+            return
+        from jenny.channels.notification import NotificationChannel
+
+        self.channels[NOTIFICATION_CHANNEL] = NotificationChannel()
+        logger.info("Notification channel enabled")
 
     @property
     def enabled(self) -> bool:

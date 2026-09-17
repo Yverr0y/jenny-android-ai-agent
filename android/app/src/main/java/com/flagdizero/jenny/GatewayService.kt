@@ -12,6 +12,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -48,6 +49,26 @@ class GatewayService : Service() {
         /** Extra con cui `WakeReceiver` segnala che questo avvio è il tick di
          *  una sveglia di lavoro, non un semplice "assicurati che sia su". */
         const val EXTRA_WAKE_TICK = "com.flagdizero.jenny.extra.WAKE_TICK"
+
+        /** Testo scritto dall'utente nella tendina, da consegnare al gateway.
+         *  Lo mette `ReplyReceiver`. */
+        const val EXTRA_REPLY_TEXT = "com.flagdizero.jenny.extra.REPLY_TEXT"
+
+        /** Tag dell'alert da cui è partita la risposta: serve solo a rimetterlo
+         *  nella notifica di mancata consegna, così il "Rimanda" sa a quale
+         *  avviso apparteneva. */
+        const val EXTRA_REPLY_SOURCE_TAG = "com.flagdizero.jenny.extra.REPLY_SOURCE_TAG"
+
+        /** Quanto insistere per consegnare una risposta prima di arrendersi.
+         *
+         *  Sta **sotto** i 30 s di `PowerBridge.HANDOFF_TIMEOUT_MS` di
+         *  proposito: il lock di handoff è ciò che tiene la CPU sveglia mentre
+         *  il gateway si alza, e insistere oltre la sua scadenza vorrebbe dire
+         *  ritentare su un device che nel frattempo può essersi risospeso.
+         *
+         *  È un budget e non un numero di tentativi perché la variabile vera è
+         *  il tempo di avvio a freddo di Chaquopy, non quante volte si bussa. */
+        private const val REPLY_DELIVERY_BUDGET_MS = 25_000L
 
         /** Pausa fra l'uscita di `run_gateway` e il tentativo di rilanciarlo
          *  nello stesso thread. Allineata a `RETRY_DELAY_S` di
@@ -221,6 +242,13 @@ class GatewayService : Service() {
         if (intent?.getBooleanExtra(EXTRA_WAKE_TICK, false) == true) {
             deliverWakeTick()
         }
+        // `START_STICKY` riconsegna un intent **nullo** a un riavvio di
+        // sistema, mai il nostro: una risposta non può quindi essere consegnata
+        // due volte perché il service è stato ucciso e rialzato.
+        val replyText = intent?.getStringExtra(EXTRA_REPLY_TEXT)
+        if (intent != null && !replyText.isNullOrBlank()) {
+            deliverNativeText(replyText, intent.getStringExtra(EXTRA_REPLY_SOURCE_TAG))
+        }
         return START_STICKY
     }
 
@@ -257,6 +285,95 @@ class GatewayService : Service() {
                 PowerBridge.releaseHandoffLock()
             }
         }
+    }
+
+    /**
+     * Consegna al gateway il testo scritto nella tendina, e non lo perde.
+     *
+     * Gemello di `deliverWakeTick` per la disciplina — thread di lavoro, mai il
+     * main Looper, `releaseHandoffLock` in `finally` — ma con una differenza che
+     * è tutto il punto della funzione: **un tick di sveglia perso si recupera da
+     * sé, le parole dell'utente no.** Il tick lo rimedia il primo giro di
+     * `CronService.start`; una risposta scartata perché il gateway stava ancora
+     * partendo sparisce, e sparisce proprio nel caso normale — si risponde a un
+     * alert di ore prima, quando il gateway è quasi sempre da rimettere in piedi.
+     *
+     * Da qui i tre esiti, invece dei due del tick:
+     *
+     * 1. consegnata — `on_native_text` ha accettato e il turno parte;
+     * 2. non ancora — si riprova con backoff, finché il budget regge;
+     * 3. non ce l'ha fatta — il testo **torna all'utente** con il pulsante per
+     *    rimandarlo (`NotifierBridge.postReplyFailure`). Nessun accodamento al
+     *    buio: una consegna a sorpresa tre ore dopo sarebbe peggio di nessuna.
+     *
+     * Il backoff parte corto (mezzo secondo) perché a gateway già vivo la
+     * consegna riesce al primo colpo, e si allarga fino a due secondi perché
+     * oltre quel punto quello che si sta aspettando è l'avvio di Chaquopy, che
+     * non si affretta bussando più spesso.
+     */
+    private fun deliverNativeText(text: String, sourceTag: String?) {
+        thread(name = "jenny-native-text") {
+            var delivered = false
+            try {
+                val deadline = SystemClock.elapsedRealtime() + REPLY_DELIVERY_BUDGET_MS
+                var wait = 500L
+                var attempts = 0
+                while (true) {
+                    attempts++
+                    delivered = tryDeliverNativeText(text, sourceTag)
+                    if (delivered) {
+                        Log.i(TAG, "Reply delivered to the gateway (attempt $attempts)")
+                        break
+                    }
+                    if (SystemClock.elapsedRealtime() + wait >= deadline) {
+                        Log.i(TAG, "Reply not delivered within the budget ($attempts attempts)")
+                        break
+                    }
+                    Thread.sleep(wait)
+                    wait = minOf(wait * 2, 2_000L)
+                }
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                Log.i(TAG, "Reply delivery interrupted")
+            } catch (e: Exception) {
+                Log.e(TAG, "Reply delivery failed", e)
+            } finally {
+                // Sempre, e solo qui: da questo punto in poi è il foreground
+                // service a tenere in piedi il lavoro. Vedi
+                // PowerBridge.HANDOFF_LOCK_TAG.
+                PowerBridge.releaseHandoffLock()
+            }
+            if (!delivered) {
+                NotifierBridge.postReplyFailure(applicationContext, text, sourceTag)
+            }
+        }
+    }
+
+    /**
+     * Un tentativo di consegna. `false` se il gateway non è ancora agganciato.
+     *
+     * *sourceTag* è il tag della notifica da cui è partita la risposta e serve
+     * a una cosa sola: tornare indietro. Python lo rimette nei metadata del
+     * turno e il canale ci riporta sopra la risposta, così il discorso resta
+     * nella scheda in cui è cominciato.
+     *
+     * Non solleva: qualunque errore è un "non adesso", e chi chiama decide se
+     * riprovare. `Python.isStarted()` falso significa che `startGateway` sta
+     * alzando il runtime in questo momento — è la condizione che il retry
+     * esiste per aspettare, non un guasto.
+     */
+    private fun tryDeliverNativeText(text: String, sourceTag: String?): Boolean = try {
+        if (!Python.isStarted()) {
+            false
+        } else {
+            Python.getInstance()
+                .getModule("jenny.runtime.native_input")
+                .callAttr("on_native_text", text, "notification", sourceTag)
+                .toBoolean()
+        }
+    } catch (e: Exception) {
+        Log.i(TAG, "Reply delivery attempt failed: ${e.javaClass.simpleName}")
+        false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

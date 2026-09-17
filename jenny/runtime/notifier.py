@@ -94,15 +94,30 @@ def alert_fields(content: str, metadata: dict[str, Any] | None) -> tuple[str, st
     return title, body, tag
 
 
-async def post_alert(content: str, metadata: dict[str, Any] | None) -> bool:
+async def post_alert(
+    content: str,
+    metadata: dict[str, Any] | None,
+    *,
+    thread: str | None = None,
+) -> bool:
     """Posta l'alert via bridge. Ritorna False se soppresso (app in foreground),
     senza contesto Android, o su qualunque errore — mai un'eccezione: la
     consegna in chat è già avvenuta e non deve risentirne.
+
+    *thread* scavalca il tag derivato da ``alert_fields``. Serve a un caso solo,
+    ed è il canale della tendina (``channels/notification.py``): le risposte
+    dell'agente devono coalizzare tutte su un thread unico invece di impilarsi
+    una per messaggio, mentre gli avvisi proattivi tengono i loro tag distinti
+    (``cron:<label>``, ``heartbeat``, ``update``) perché sono avvisi diversi. Il
+    titolo resta quello che ``alert_fields`` deriva dai metadata: il tag dice
+    *dove* va la notifica, il titolo dice *di cosa parla*.
     """
     context = get_android_context()
     if context is None:
         return False
     title, body, tag = alert_fields(content, metadata)
+    if thread:
+        tag = thread
     try:
         bridge = await _get_bridge(context)
         posted = await asyncio.wait_for(

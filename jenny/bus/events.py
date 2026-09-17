@@ -35,6 +35,14 @@ OUTBOUND_META_SUBAGENT_ACTIVITY = "_subagent_activity"
 # without depending on the gateway entry-point.
 INTERNAL_CHANNEL = "internal"
 
+# Channel name della tendina delle notifiche Android: la superficie da cui si
+# risponde a un alert senza aprire l'app. Sta qui, accanto a
+# ``INTERNAL_CHANNEL`` e per lo stesso motivo, perché lo importano i due lati
+# opposti del giro — l'ingresso (``runtime/native_input.py``) e l'uscita
+# (``channels/notification.py``) — e una stringa di protocollo scritta due
+# volte è una stringa che prima o poi diverge.
+NOTIFICATION_CHANNEL = "notification"
+
 # Flag di metadata che marcano un outbound come coordinamento/streaming: tutto
 # ciò che NON è un messaggio finale user-visible. Sorgente unica condivisa dal
 # dispatcher (che vi aggiunge ``_mirror``) e dal canale Telegram (webui-only),

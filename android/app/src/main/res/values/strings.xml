@@ -13,6 +13,17 @@
          Python; only the channel is described here). -->
     <string name="alerts_channel_name">Alerts</string>
     <string name="alerts_channel_description">Reminders and messages Jenny sends on her own initiative</string>
+    <!-- Risposta rapida dalla tendina (RemoteInput): etichetta dell'azione,
+         segnaposto della casella, e i due esiti della consegna. -->
+    <string name="reply_action_label">Reply</string>
+    <string name="reply_input_hint">Write to Jenny…</string>
+    <string name="reply_failed_title">Jenny didn\'t get your message</string>
+    <string name="reply_failed_text">She wasn\'t running. Tap to send it again.</string>
+    <string name="reply_retry_label">Send again</string>
+    <!-- I due interlocutori nella conversazione della tendina. Il nome di Jenny
+         non si traduce; quello dell'utente sì. -->
+    <string name="reply_bot_name">Jenny</string>
+    <string name="reply_user_name">You</string>
 
     <!-- App update waiting for the user to confirm it in the system installer
          (UpdateBridge). Its own channel, not the agent's: silencing Jenny's

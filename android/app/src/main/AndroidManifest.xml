@@ -210,6 +210,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Risposta rapida dalla tendina. Nessun intent-filter, e non è una
+             dimenticanza: l'unica cosa che lo raggiunge è il PendingIntent che
+             NotifierBridge appende all'alert, e quello porta già la nostra
+             identita. exported="false" per la stessa ragione di WakeReceiver,
+             qui anche piu netta: questo receiver consegna testo a un turno
+             dell'agente, quindi un'app qualunque che potesse mandargli un
+             broadcast potrebbe far dire a Jenny quello che vuole. -->
+        <receiver
+            android:name=".ReplyReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>
