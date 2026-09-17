@@ -24,6 +24,7 @@ from jenny.agent.memory import (
     MemoryStore,
     iter_fact_lines,
 )
+from jenny.providers.opencode import conversation_scope
 from jenny.security.workspace_access import WorkspaceScopeResolver
 from jenny.session.keys import PROJECT_SESSION_PREFIX, is_project_session_key
 from jenny.session.manager import Session
@@ -385,15 +386,19 @@ class Consolidator:
             formatted = self._truncate_to_token_budget(
                 formatted, reserved_tokens=_estimate_tokens(known),
             )
-            response = await self.provider.chat_with_retry(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": formatted},
-                ],
-                tools=None,
-                tool_choice=None,
-            )
+            # Chiamata ausiliaria, fuori dal turno: senza questo scope
+            # partirebbe senza dire a quale conversazione appartiene, ed è
+            # proprio la compattazione a riassumere *quella* conversazione.
+            with conversation_scope(session_key):
+                response = await self.provider.chat_with_retry(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": formatted},
+                    ],
+                    tools=None,
+                    tool_choice=None,
+                )
             if response.finish_reason == "error":
                 raise RuntimeError(f"LLM returned error: {response.content}")
             summary = response.content or "[no summary]"

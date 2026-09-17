@@ -22,6 +22,7 @@ from jenny.channels.http_utils import FALSY_VALUES, TRUTHY_VALUES, parse_flag
 from jenny.config import store
 from jenny.config.loader import get_config_path, load_config
 from jenny.config.schema import KEEP_AWAKE_MODES, Config
+from jenny.providers.opencode import catalog_headers
 from jenny.providers.tls import CaBundleError, build_ssl_context
 from jenny.security.workspace_access import workspace_sandbox_status
 from jenny.security.workspace_policy import _safe_expanduser
@@ -586,7 +587,11 @@ def provider_models_payload(query: QueryParams) -> dict[str, Any]:
     except CaBundleError as exc:
         return {**base_payload, "status": "error", "message": str(exc)}
 
-    headers = {"Accept": "application/json"}
+    # Identificazione, non sessione: la lista dei modelli non è una
+    # conversazione, quindi niente ``x-opencode-session`` (v.
+    # ``providers/opencode.py``). Fuori da OpenCode il dict è vuoto e questi
+    # header restano quelli di prima.
+    headers = {"Accept": "application/json", **catalog_headers(api_base)}
     if provider_config.format == "anthropic":
         # Messages API: auth via x-api-key e /v1/models (la base non include /v1).
         headers["x-api-key"] = api_key

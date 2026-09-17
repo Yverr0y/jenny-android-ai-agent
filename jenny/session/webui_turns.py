@@ -251,7 +251,8 @@ class WebuiTurnCoordinator:
                 return
             model = resolve_mood_model(config, turtime.model)
             mood, response = await classify_mood(
-                turtime.provider, model, inputs, bot_name=defaults.bot_name
+                turtime.provider, model, inputs, bot_name=defaults.bot_name,
+                session_key=session.key,
             )
             if response is not None:
                 # Import qui e non in testa: ``jenny.agent`` carica il loop intero

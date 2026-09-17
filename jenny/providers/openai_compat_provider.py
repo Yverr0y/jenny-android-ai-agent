@@ -58,6 +58,8 @@ from jenny.providers.openai_responses import (
     convert_tools,
     parse_response_output,
 )
+from jenny.providers.opencode import message_keys as opencode_message_keys
+from jenny.providers.opencode import session_headers
 from jenny.providers.tool_ids import unique_tool_ids_in_history
 
 
@@ -85,7 +87,11 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
 
         effective_base = api_base or None
         self._effective_base = effective_base
-        self._default_headers = {"x-session-affinity": uuid.uuid4().hex}
+        # Tenuto anche come attributo perché è il ripiego di ``x-opencode-session``
+        # quando una richiesta parte senza scope di conversazione: un ID stabile
+        # per istanza vale più di un header assente (v. ``providers/opencode.py``).
+        self._session_affinity_id = uuid.uuid4().hex
+        self._default_headers = {"x-session-affinity": self._session_affinity_id}
         if _uses_openrouter_attribution(effective_base):
             self._default_headers.update(_DEFAULT_OPENROUTER_HEADERS)
         if extra_headers:
@@ -145,6 +151,17 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         headers = dict(self._default_headers)
         headers.setdefault("Authorization", f"Bearer {self._api_key_for_client}")
         headers.setdefault("Content-Type", "application/json")
+        # Gli header di OpenCode si calcolano **qui** e non in ``__init__``: la
+        # conversazione attiva non esiste ancora quando il provider nasce, e
+        # ``_effective_base`` può cambiare a metà vita (v.
+        # ``_retry_on_versioned_base``), quindi anche il gate va rivalutato a
+        # ogni richiesta. Fuori da OpenCode il dict è vuoto e questo ciclo non
+        # fa nulla. ``setdefault`` perché l'``extraHeaders`` dell'utente è già
+        # dentro ``_default_headers`` e deve restare l'ultima parola.
+        for key, value in session_headers(
+            self._effective_base, fallback_id=self._session_affinity_id,
+        ).items():
+            headers.setdefault(key, value)
         return headers
 
     def _merge_extra_body(self, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -322,7 +339,14 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
 
     def _sanitize_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Strip non-standard keys, disambiguate colliding tool_call IDs."""
-        sanitized = LLMProvider._sanitize_request_messages(messages, _ALLOWABLE_MSG_KEYS)
+        sanitized = LLMProvider._sanitize_request_messages(
+            messages,
+            # Go rifiuta ``name`` sui messaggi invece di ignorarlo, quindi il
+            # set ammesso si stringe lì e solo lì (v. ``providers/opencode.py``).
+            opencode_message_keys(
+                self._effective_base or self.api_base, _ALLOWABLE_MSG_KEYS
+            ),
+        )
         # Unicità/riaccoppiamento degli id: regola condivisa con l'Anthropic
         # provider, vedi ``providers/tool_ids.py``. Il resto del loop qui sotto è
         # wire-specifico e resta dove sta.

@@ -110,6 +110,8 @@ When both hold, Jenny tries the Responses API — and if it starts failing, a sm
 
 For every other endpoint — Groq, DeepSeek, Ollama, OpenRouter, a self-hosted server, anything that isn't `api.openai.com` directly — `auto` always means Chat Completions; the Responses API is never attempted.
 
+That last sentence is about `auto` only. Setting `apiType: "responses"` **explicitly** forces the Responses API on any `openai_compat` base URL, auto-detection included — which is what makes gateways that serve a Responses-shaped endpoint of their own reachable (see [OpenCode Go](#opencode-go) below).
+
 ## Prompt caching: what's actually happening
 
 Be precise about this, because it differs a lot by format:
@@ -123,6 +125,35 @@ In short: don't expect Jenny-driven prompt caching outside of Anthropic-format r
 
 When the configured base URL contains `openrouter` (case-insensitive), Jenny automatically attaches attribution headers to every request: an `HTTP-Referer` pointing at the project's GitHub repository and an `X-OpenRouter-Title` of "Jenny" (plus a categories header). This is fixed behavior tied to detecting an OpenRouter base URL — there's no setting to suppress it, and it has no effect on non-OpenRouter endpoints.
 
+## OpenCode Go
+
+[OpenCode Go](https://opencode.ai/docs/go/) is a subscription that fronts a curated set of open coding models behind one API key. Its docs ask third-party clients to identify themselves with their own user agent and to send a stable per-conversation ID in `x-opencode-session`, which the gateway uses for routing and prompt-cache affinity. Jenny does both automatically whenever the configured base URL contains `opencode.ai` — there's no setting to flip, and no effect on any other endpoint.
+
+The conversation ID is a SHA-256 hash of Jenny's internal session key, truncated to 32 characters: opaque, stable for the life of a conversation, and distinct across conversations. The raw session key names a channel and a chat (`telegram:123456789`), so it is never sent as-is. Internal sessions — cron, Dream, heartbeat — each get their own ID, as does the unified user conversation. The model-catalog probe sends the user agent but no session header: a catalog listing is not a conversation.
+
+### One base URL, three provider entries
+
+Go serves the same base URL in three different wire formats, and a provider entry in Jenny picks exactly one. So reaching every model means up to three entries, all sharing `apiBase` and `apiKey`:
+
+| `format` | `apiType` | Endpoint | Models |
+|---|---|---|---|
+| `openai_compat` | `chat_completions` | `/chat/completions` | GLM-5.x, Kimi, LongCat, DeepSeek, MiMo, Hy3/Hy4 |
+| `openai_compat` | `responses` | `/responses` | Grok 4.6, GPT 5.6 Luna, Muse Spark |
+| `anthropic` | — | `/messages` | MiniMax, Qwen3.x, Union Alpha |
+
+Set `apiBase` to `https://opencode.ai/zen/go/v1` in all three: the `anthropic` format strips a trailing `/v1` before appending its own path, so one string works everywhere. Switching between model families means switching the active provider, not just the model field — a Go model ID sent to the wrong entry fails the way described under "Model IDs must match the endpoint exactly" below.
+
+Settings only exposes name/format/API key/base URL, so `apiType: "responses"` has to be written into `workspace/config.json` by hand. Editing that provider from Settings afterwards preserves it.
+
+### `name` is stripped from messages
+
+The `/chat/completions` endpoint rejects the optional `name` key on a message instead of ignoring it, answering `messages[N]: "name" is not supported by this endpoint`. Jenny puts that key on tool-result messages, so the failure is late and looks worse than it is: the first request of a turn goes through, and the turn dies as soon as the model calls a tool. Jenny therefore drops `name` from outgoing messages when the base URL is OpenCode, and only then — every other endpoint still receives it. Nothing is lost: `tool_call_id` is what correlates a result with its call, and the local history keeps the name.
+
+### Two things to know before subscribing
+
+- **Privacy.** Most Go models are zero-retention, but `Muse Spark 1.2/1.3 Contributor` are not: their discounted pricing is explicitly in exchange for using your prompts and completions to train future models. For an agent with access to your files and messages, avoid them. `Grok 4.6` and `GPT 5.6 Luna` retain abuse-monitoring logs for 30 days.
+- **Traffic shape.** Go is meant for coding agents and comparable clients, and the docs say traffic is monitored for abuse. Jenny's own validated-client peers include general-purpose agents, so its shape is fine, but the terms are OpenCode's to enforce and to change.
+
 ## Model IDs must match the endpoint exactly
 
 Jenny sends whatever string you put in the model field straight to the provider. There's no translation or aliasing layer. The most common way a working provider config produces "model not found" is pointing a preset or the onboarding model field at a model ID that belongs to a different service than the one `apiBase`/`apiKey` are configured for — e.g. an OpenRouter-style `anthropic/claude-...` slug sent to a direct Anthropic endpoint, which expects a plain `claude-...` name (or vice versa).
@@ -132,6 +163,7 @@ Jenny sends whatever string you put in the model field straight to the provider.
 | Symptom | Likely cause |
 |---|---|
 | `Provider '<name>': api_key is required.` | The active provider entry has no `apiKey`. Local/self-hosted servers that ignore auth still need a placeholder value. |
+| `messages[N]: "name" is not supported by this endpoint` (HTTP 400, after the first tool call) | An OpenCode base URL reached by a code path that skips the provider's message sanitiser. See [OpenCode Go](#name-is-stripped-from-messages). |
 | `No provider configured. Add a provider in Settings or edit workspace/config.json...` | `providers.providers` is empty. Add one from Settings → Model → API keys, or by hand-editing `config.json`. |
 | 401 / unauthorized | The key is missing, expired, has stray whitespace, or belongs to a different service than the configured base URL. |
 | Model not found | The model ID doesn't exist on the endpoint you configured — check it's the exact ID that endpoint serves, not a name copied from a different provider's docs. |
