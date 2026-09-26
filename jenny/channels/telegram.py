@@ -234,6 +234,22 @@ class _TypingHeartbeat:
         logger.debug("Telegram: typing heartbeat expired on its own cap")
 
 
+def _secret_matches(supplied: str, secret: str) -> bool:
+    """Confronto a tempo costante di due testi, che non solleva mai.
+
+    ``hmac.compare_digest`` su due ``str`` solleva ``TypeError`` appena uno dei
+    due non è ASCII: un messaggio qualunque («ciao è») scritto durante la
+    finestra di pairing abbatteva la gestione dell'update. Il confronto si fa
+    sui byte UTF-8, con ``surrogatepass`` perché un surrogato solitario non
+    faccia sollevare nemmeno la codifica. All'unione dei rami si può usare
+    ``jenny.channels.http_utils.secret_matches``, che fa la stessa cosa.
+    """
+    return hmac.compare_digest(
+        supplied.encode("utf-8", errors="surrogatepass"),
+        secret.encode("utf-8", errors="surrogatepass"),
+    )
+
+
 class TelegramChannel(NonStreamingChannelMixin):
     """Canale bot Telegram con pairing a codice singolo owner."""
 
@@ -411,12 +427,29 @@ class TelegramChannel(NonStreamingChannelMixin):
         text = message.get("text")
 
         if not self._paired_chat_id:
+            if chat.get("type") != "private":
+                # Solo da una chat privata. Abbinato a un gruppo, ogni membro
+                # avrebbe pilotato l'agente col solo fatto di scriverci. Niente
+                # risposta: il gruppo non deve sapere che la finestra è aperta.
+                logger.info("Telegram: ignoring pairing attempt from non-private chat {}", chat_id)
+                return
             await self._maybe_pair(chat_id, sender, text)
             return
         if chat_id != str(self._paired_chat_id):
             # Mittente estraneo: silenzio totale, nessun oracle sull'esistenza
             # del bot o dello stato di pairing.
             logger.info("Telegram: ignoring message from unpaired chat {}", chat_id)
+            return
+        if str(sender.get("id", "")) != str(self._paired_chat_id):
+            # In una chat privata l'id della chat è l'id della persona: chi
+            # scrive deve essere lei. Copre un abbinamento fatto a un gruppo
+            # prima che il pairing li rifiutasse — lì parlava ogni membro — e
+            # i messaggi senza mittente (post di un canale).
+            logger.warning(
+                "Telegram: ignoring message in paired chat {} from another sender; "
+                "a group pairing must be redone from a private chat",
+                chat_id,
+            )
             return
         if isinstance(text, str) and text.strip() and self._parse_start(text) is not None:
             # /start dal proprietario: guida rapida di servizio, non un turno
@@ -698,7 +731,7 @@ class TelegramChannel(NonStreamingChannelMixin):
             logger.warning("Telegram: pairing attempt table full, ignoring chat {}", chat_id)
             return
 
-        if candidate and hmac.compare_digest(candidate, self._pairing_code):
+        if candidate and _secret_matches(candidate, self._pairing_code):
             username = sender.get("username")
             self._paired_chat_id = chat_id
             self._pairing_code = None

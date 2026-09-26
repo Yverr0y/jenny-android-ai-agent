@@ -80,15 +80,74 @@ def _channel(
     return ch, api, bus
 
 
-def _update(chat_id: str, *, text: str | None = None, **extra) -> dict[str, Any]:
+def _update(
+    chat_id: str,
+    *,
+    text: str | None = None,
+    chat_type: str = "private",
+    sender_id: str | None = None,
+    **extra,
+) -> dict[str, Any]:
+    # Una chat privata, come quelle da cui arriva il pairing: in una privata
+    # l'id della chat è l'id della persona.
     message: dict[str, Any] = {
-        "chat": {"id": chat_id},
-        "from": {"id": chat_id, "username": "utente"},
+        "chat": {"id": chat_id, "type": chat_type},
+        "from": {"id": sender_id or chat_id, "username": "utente"},
         **extra,
     }
     if text is not None:
         message["text"] = text
     return {"update_id": 1, "message": message}
+
+
+# --- pairing: solo da una chat privata, e poi solo da quella persona (PC16) -----
+
+
+async def test_a_group_cannot_pair_even_with_the_right_code() -> None:
+    """Abbinato a un gruppo, ogni membro avrebbe pilotato l'agente."""
+    ch, api, bus = _channel(pairing_code="123456")
+    await ch._handle_update(_update("-100777", text="123456", chat_type="supergroup"))
+    await ch._handle_update(_update("-555", text="/start 123456", chat_type="group"))
+    assert ch.paired_chat_id is None
+    assert api.sent == []  # nessun oracle verso il gruppo
+    # La finestra resta aperta per la chat privata vera.
+    await ch._handle_update(_update("42", text="123456"))
+    assert ch.paired_chat_id == "42"
+
+
+async def test_a_message_without_chat_type_cannot_pair() -> None:
+    ch, api, bus = _channel(pairing_code="123456")
+    update = _update("42", text="123456")
+    del update["message"]["chat"]["type"]
+    await ch._handle_update(update)
+    assert ch.paired_chat_id is None
+
+
+async def test_after_pairing_only_the_paired_person_is_heard() -> None:
+    """Il filtro guarda anche ``from.id``: una chat abbinata prima della
+    correzione a un gruppo non fa più parlare ogni membro."""
+    ch, api, bus = _channel(paired="-100777")
+    await ch._handle_update(
+        _update("-100777", text="fai qualcosa", chat_type="supergroup", sender_id="999"),
+    )
+    assert bus.inbound.empty()
+
+    ch, api, bus = _channel(paired="42")
+    await ch._handle_update(_update("42", text="ciao"))
+    assert not bus.inbound.empty()
+
+
+async def test_a_non_ascii_pairing_attempt_does_not_crash() -> None:
+    """``hmac.compare_digest`` su due ``str`` solleva ``TypeError`` se una non
+    è ASCII: un «ciao è» durante l'abbinamento abbatteva la gestione
+    dell'update invece di contare un tentativo sbagliato."""
+    ch, api, bus = _channel(pairing_code="123456")
+    await ch._handle_update(_update("42", text="ciao è"))
+    await ch._handle_update(_update("42", text="\ud800"))  # surrogato solitario
+    assert ch.paired_chat_id is None
+    assert "Invalid code" in api.sent[0][1]
+    await ch._handle_update(_update("42", text="123456"))
+    assert ch.paired_chat_id == "42"
 
 
 # --- pairing -------------------------------------------------------------------
