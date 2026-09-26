@@ -760,6 +760,7 @@ class ReadFileTool(_FsTool):
             numbered = [f"{start + i + 1}| {line}" for i, line in enumerate(all_lines[start:end])]
             result = "\n".join(numbered)
 
+            long_line_note = ""
             if len(result) > self._MAX_CHARS:
                 trimmed, chars = [], 0
                 for line in numbered:
@@ -769,7 +770,22 @@ class ReadFileTool(_FsTool):
                     trimmed.append(line)
                 end = start + len(trimmed)
                 result = "\n".join(trimmed)
+                if not trimmed:
+                    # La prima riga della finestra da sola sfonda il tetto (un JS
+                    # minificato): senza questo ramo non restava nessuna riga e
+                    # l'invito era «Use offset=<la stessa>», all'infinito (TL6).
+                    # Se ne mostra la testa e l'offset successivo la scavalca.
+                    end = start + 1
+                    result = numbered[0][: self._MAX_CHARS]
+                    long_line_note = (
+                        f"(Line {end} is {len(all_lines[start]):,} characters long; only "
+                        f"its first ~{self._MAX_CHARS:,} are shown. read_file cannot page "
+                        "inside a line: slice it with python_exec, or ask a subagent that "
+                        "has it.)"
+                    )
 
+            if long_line_note:
+                result += f"\n\n{long_line_note}"
             if end < total:
                 result += f"\n\n(Showing lines {offset}-{end} of {total}. Use offset={end + 1} to continue.)"
             else:
