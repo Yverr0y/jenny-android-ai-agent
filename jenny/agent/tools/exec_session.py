@@ -511,7 +511,10 @@ class _ExecSessionTool(PythonExecGateMixin, Tool):
             nullable=True,
         ),
         max_output_chars=IntegerSchema(
-            description="Maximum output characters to return from this poll (default 10000, max 50000).",
+            description=(
+                "Maximum output characters to return from this poll "
+                "(default: the python_exec output limit, max 50000)."
+            ),
             minimum=1000,
             maximum=MAX_OUTPUT_CHARS,
         ),
@@ -519,7 +522,33 @@ class _ExecSessionTool(PythonExecGateMixin, Tool):
     )
 )
 class WriteStdinTool(_ExecSessionTool):
-    """Poll, wait for output, or terminate a running Python exec session."""
+    """Poll, wait for output, or terminate a running Python exec session.
+
+    Senza ``max_output_chars`` il tetto è quello di ``python_exec``
+    (``tools.pythonExec.maxOutputChars``), non la costante da 10.000: la
+    sessione nasce da ``python_exec`` con quel tetto, e un poll che ne usasse
+    un altro tagliava l'output di una sessione che la sua prima risposta
+    mostrava intero.
+    """
+
+    def __init__(
+        self,
+        *,
+        manager: ExecSessionManager | None = None,
+        default_max_output_chars: int | None = None,
+    ) -> None:
+        super().__init__(manager=manager)
+        self._default_max_output_chars = clamp_session_int(
+            default_max_output_chars, DEFAULT_MAX_OUTPUT_CHARS, 1000, MAX_OUTPUT_CHARS,
+        )
+
+    @classmethod
+    def create(cls, ctx: Any) -> Tool:
+        cfg = getattr(ctx.config, "python_exec", None)
+        value = getattr(cfg, "max_output_chars", None)
+        if not isinstance(value, int) or isinstance(value, bool):
+            value = None
+        return cls(default_max_output_chars=value)
 
     @property
     def exclusive(self) -> bool:
@@ -552,7 +581,7 @@ class WriteStdinTool(_ExecSessionTool):
         try:
             output_limit = clamp_session_int(
                 max_output_chars,
-                DEFAULT_MAX_OUTPUT_CHARS,
+                self._default_max_output_chars,
                 1000,
                 MAX_OUTPUT_CHARS,
             )

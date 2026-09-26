@@ -34,6 +34,34 @@ async def test_an_explicit_argument_still_wins(tmp_path) -> None:
     assert out.count("x") == 1_000
 
 
+async def test_write_stdin_defaults_to_the_configured_ceiling(tmp_path) -> None:
+    """Un poll senza ``max_output_chars`` usa il tetto di config, come ``python_exec``."""
+    from jenny.agent.tools.exec_session import ExecSessionManager, WriteStdinTool
+
+    cfg = PythonExecConfig(max_output_chars=50_000)
+    ctx = SimpleNamespace(
+        config=SimpleNamespace(python_exec=cfg, restrict_to_workspace=True),
+        workspace=tmp_path,
+    )
+    manager = ExecSessionManager()
+    tool = PythonExecTool(
+        working_dir=str(tmp_path), workspace=str(tmp_path), max_output_chars=50_000,
+        restrict_to_workspace=True, session_manager=manager,
+    )
+    stdin = WriteStdinTool.create(ctx)
+    stdin._manager = manager
+    try:
+        started = await tool.execute(
+            code="import time\ntime.sleep(0.3)\nprint('x' * 30000)", yield_time_ms=0,
+        )
+        session_id = started.split("session_id: ")[1].split()[0]
+        out = await stdin.execute(session_id=session_id, yield_time_ms=5000)
+        assert "truncated" not in out, out[-200:]
+        assert "x" * 30_000 in out, len(out)
+    finally:
+        manager.shutdown()
+
+
 def test_create_wires_the_config_and_the_description_tells_it(tmp_path) -> None:
     cfg = PythonExecConfig(max_output_chars=25_000)
     ctx = SimpleNamespace(
