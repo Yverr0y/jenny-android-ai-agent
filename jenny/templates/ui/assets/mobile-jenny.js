@@ -1,8 +1,10 @@
 /** Jenny companion — la mascotte che vive sul bordo di ogni vista.
  *
- * A riposo sporge dal bordo dove l'hai lasciata (sinistro finché non la
- * lanci da qualche parte, v. settle()). Richiamata (swipe verso l'interno o tap)
- * esce in overlay con una minichat a un turno: campo "Chiedi qui" in basso,
+ * A riposo sporge dal bordo destro, e ci torna anche quando la si lancia
+ * altrove: il lato non si sceglie più (le sue chiavi sono fra quelle ritirate
+ * in `shared/mascot.js`), e l'arrivo del volo lo decide `settle()` in
+ * `shared/mascot-drag.js`. Richiamata (swipe verso l'interno o tap) esce in
+ * overlay con una minichat a un turno: campo "Chiedi qui" in basso,
  * pensa, risponde con un fumetto sopra la testa. In chat niente minichat:
  * è solo presente all'angolo — la conversazione vera è già aperta.
  *

@@ -26,10 +26,16 @@ if TYPE_CHECKING:
 # `/dream budget` non sarebbe piu' un comando e finirebbe **al modello** come
 # messaggio — che e' il modo peggiore di dire "non esiste piu'".
 def _moved_to_settings(command: str, section: str, still: str) -> str:
-    """«Quell'argomento non c'e' piu', la manopola e' in Impostazioni → <sezione>»."""
+    """«Quell'argomento non c'e' piu', la manopola e' in Impostazioni → Officina → <cassetto>».
+
+    Le manopole di Dream e del giardiniere stanno nell'officina, nel cassetto
+    Memoria (gruppi *Dream* e *Gardener*): la pagina Impostazioni della casa le
+    raggiunge solo dalla riga Officina, quindi il percorso la nomina.
+    """
     return (
         f"`{command}` does not take arguments any more: those settings live in "
-        f"**Settings → {section}**, where they sit next to the numbers they act on.\n\n"
+        f"**Settings → Workshop → {section}**, where they sit next to the numbers they "
+        f"act on.\n\n"
         f"{still}"
     )
 
@@ -497,7 +503,8 @@ def _format_dream_refusals(outcome: "ReviewOutcome") -> str:
         return ""
     return (
         f"{refused} write(s) were refused by their size budget and never landed — "
-        "**Settings → Memory** shows which file is full, as a gauge against its cap: "
+        "**Settings → Workshop → Memory** shows which file is full, as a gauge against "
+        "its cap: "
         "raise it or prune the file, then run `/dream` again."
     )
 
@@ -570,7 +577,7 @@ async def cmd_gardener(ctx: CommandContext) -> OutboundMessage:
     if ctx.args.strip():
         return _reply(msg, _moved_to_settings(
             "/gardener",
-            "Wiki and projects",
+            "Memory",
             "A pass runs on the project you are in: open it and send `/gardener` there.",
         ))
     if not is_project_session_key(ctx.key):

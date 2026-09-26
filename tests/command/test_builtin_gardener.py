@@ -136,7 +136,7 @@ class TestPickingTheProject:
         """
         out = await cmd_gardener(_ctx("project:viaggio", args="settings"))
 
-        assert "Settings" in out.content and "Wiki and projects" in out.content
+        assert "Settings \u2192 Workshop \u2192 Memory" in out.content
         assert not no_background
 
 

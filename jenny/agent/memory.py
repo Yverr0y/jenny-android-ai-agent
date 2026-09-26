@@ -805,10 +805,10 @@ class MemoryStore:
         Gli ultimi due rami sono la stessa riga, perche' il secondo membro della
         condizione e' la whitelist e non "non e' interna": la differenza si vede
         solo su una voce di progetto, che con la negazione sarebbe entrata in ogni
-        prompt. Oggi nessuna voce di progetto puo' esistere — la scrittura e'
-        chiusa in ``append_history`` — e questo e' il secondo giro di chiave, non
-        una ridondanza inutile: chiude anche le voci scritte da una versione
-        precedente o a mano.
+        prompt. E le voci di progetto esistono: dall'08/09/2026 una sessione di
+        progetto scrive in ``append_history`` con la propria chiave (v. li'), e
+        a tenerle fuori dal prompt personale e' proprio questa whitelist — il
+        primo ramo le toglie al progetto stesso, questo a tutti gli altri.
 
         **Perche' il giardiniere e' l'eccezione fra gli interni** (T7.8, misurato
         il 23/08). Il ramo interno esiste perche' un job rilegga *i propri* run;

@@ -412,8 +412,11 @@ def _alert_stuck(stuck: int) -> None:
     from jenny.runtime.notifier import notify_delivery
     from jenny.webui.metadata import WEBUI_MESSAGE_SOURCE_METADATA_KEY
 
+    # «Workshop → Memory» e non «Settings → Workshop → Memory»: i numeri stanno
+    # nel cassetto Memoria dell'officina, e il notifier tronca a 200 caratteri —
+    # il percorso intero farebbe cadere proprio la coda azionabile.
     notify_delivery(
-        f"{format_stuck_alarm(stuck)} Settings \u2192 Memory shows the sizes.",
+        f"{format_stuck_alarm(stuck)} Workshop \u2192 Memory shows the sizes.",
         {WEBUI_MESSAGE_SOURCE_METADATA_KEY: {"kind": "cron", "label": "Dream"}},
     )
 

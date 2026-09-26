@@ -122,13 +122,14 @@ BUILTIN_COMMAND_SPECS: tuple[BuiltinCommandSpec, ...] = (
         "Run Dream",
         (
             "Manually trigger memory consolidation now. The budgets and the review cadence "
-            "live in Settings, under Memory."
+            "live in Settings → Workshop → Memory."
         ),
         "sparkles",
         scope="personal",
         scope_note=(
-            "It consolidates the personal memory, which a project conversation never "
-            "feeds: what is said in a project stays in that project's pages."
+            "It consolidates the personal memory. A project conversation feeds it only with "
+            "what it says about you, and only into USER.md: the rest stays in that "
+            "project's pages."
         ),
     ),
     BuiltinCommandSpec(
@@ -137,12 +138,12 @@ BUILTIN_COMMAND_SPECS: tuple[BuiltinCommandSpec, ...] = (
         (
             "Inside a project: turn its new journal lines into pages and update its map — or, "
             "with nothing new to promote, bring an oversized map back under its ceiling. The "
-            "periodic pass is set in Settings, under Wiki and projects."
+            "periodic pass is set in Settings → Workshop → Memory."
         ),
         "seeding",
         scope="project",
         scope_note=(
-            "The periodic pass is set in Settings, under Wiki and projects."
+            "The periodic pass is set in Settings → Workshop → Memory."
         ),
     ),
     BuiltinCommandSpec(

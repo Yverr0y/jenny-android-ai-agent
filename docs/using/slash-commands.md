@@ -254,7 +254,7 @@ In the personal chat:
 /model [preset] — Show or switch the active model preset.
 /history [n] — Print the last N persisted conversation messages.
 /goal <goal> — Tell the agent to treat the request as a long-running goal.
-/dream — Manually trigger memory consolidation now. The budgets and the review cadence live in Settings, under Memory.
+/dream — Manually trigger memory consolidation now. The budgets and the review cadence live in Settings → Workshop → Memory.
 /skill — List enabled skills and their descriptions.
 /help — List available slash commands.
 ```
