@@ -14,6 +14,7 @@ import com.jcraft.jsch.UIKeyboardInteractive
 import com.jcraft.jsch.UserInfo
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -293,7 +294,7 @@ object SshBridge {
         }
 
         val jsch = JSch()
-        jsch.setKnownHosts(knownHosts)
+        jsch.setKnownHosts(repaddedKnownHosts(File(knownHosts)))
         if (password == null) {
             jsch.addIdentity(keyPath)
         }
@@ -635,8 +636,11 @@ object SshBridge {
             ?: throw BridgeException("io", "$host:$port offered no host key")
 
         JSONObject()
-            .put("line", "${knownHostsName(host, port)} ${keyTypeOf(blob)} ${base64(blob)}")
-            .put("fingerprint", "SHA256:" + base64(MessageDigest.getInstance("SHA-256").digest(blob)))
+            .put("line", "${knownHostsName(host, port)} ${keyTypeOf(blob)} ${knownHostsBase64(blob)}")
+            .put(
+                "fingerprint",
+                "SHA256:" + fingerprintBase64(MessageDigest.getInstance("SHA-256").digest(blob))
+            )
     }
 
     /**
@@ -680,7 +684,48 @@ object SshBridge {
         return String(blob, 4, length, Charsets.US_ASCII)
     }
 
-    private fun base64(data: ByteArray): String =
+    /**
+     * La chiave come la vuole una riga di known_hosts: base64 **con** il
+     * padding, come la scrive `ssh-keyscan`. Il blob ed25519 (51 byte) non ne
+     * ha bisogno, ed e per questo che senza padding sembrava funzionare; quelli
+     * ECDSA e RSA≥3072 si', e jsch, che al padding ci tiene, rifiuta allora
+     * l'intero file — anche le righe degli host gia pinnati.
+     */
+    private fun knownHostsBase64(data: ByteArray): String =
+        Base64.encodeToString(data, Base64.NO_WRAP)
+
+    /**
+     * Il known_hosts come lo legge jsch, con il padding rimesso alle chiavi
+     * che ne sono prive.
+     *
+     * Fino al 26/09/2026 [probeHostKey] scriveva le righe senza padding: un
+     * telefono che ha pinnato un host ECDSA o RSA≥3072 ha un file che jsch
+     * rifiuta per intero. Il file su disco non si tocca — lo scrive Python —
+     * ma lo si legge riparato, cosi quei pin tornano validi senza rifarli.
+     * Una lunghezza con resto 1 non e base64 valido: resta com'e.
+     */
+    private fun repaddedKnownHosts(file: File): InputStream {
+        val repaired = file.readLines().joinToString("\n") { line ->
+            val fields = line.trim().split(Regex("\\s+"))
+            // [@marker] host tipo chiave [commento]
+            val keyAt = if (fields.firstOrNull()?.startsWith("@") == true) 3 else 2
+            val key = fields.getOrNull(keyAt)
+            val missing = if (key == null) 0 else (4 - key.length % 4) % 4
+            if (line.trimStart().startsWith("#") || key == null || missing !in 1..2) {
+                line
+            } else {
+                fields.toMutableList().also { it[keyAt] = key + "=".repeat(missing) }
+                    .joinToString(" ")
+            }
+        }
+        return ByteArrayInputStream(repaired.toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * L'impronta `SHA256:` va invece **senza** padding: e il formato di
+     * `ssh-keygen -l` e di quel che l'utente confronta a occhio.
+     */
+    private fun fingerprintBase64(data: ByteArray): String =
         Base64.encodeToString(data, Base64.NO_WRAP or Base64.NO_PADDING)
 
     /**
