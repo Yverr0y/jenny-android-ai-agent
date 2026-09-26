@@ -527,7 +527,11 @@ _GROUNDS = (("bg", "bg"), ("surface", "bg"), ("surface-2", "bg"))
 _TRACK = ("overlay", "surface")
 _TRACK_INKS = ("text", "heading", "text-muted")
 # Le coppie «parola su un riempimento».
-_FILLED = (("on-accent", "accent"), ("bubble-user-text", "bubble-user-bg"))
+_FILLED = (
+    ("on-accent", "accent"),
+    ("on-error", "error"),  # toast d'errore, «Installa» critico (CS12)
+    ("bubble-user-text", "bubble-user-bg"),
+)
 
 
 def test_every_text_token_reads_in_every_theme() -> None:

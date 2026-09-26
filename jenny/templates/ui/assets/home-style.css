@@ -2570,7 +2570,8 @@ body.home {
    il bottone era identico a quello di un aggiornamento qualunque. */
 .home-save.is-critical {
   background: var(--error);
-  color: #fff;
+  /* Non `#fff`: su `--error` il bianco sta a 3,6:1 nel tema di serie (CS12). */
+  color: var(--on-error);
 }
 
 /* ── «Backup» ────────────────────────────────────────────────────────────

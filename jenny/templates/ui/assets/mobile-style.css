@@ -45,6 +45,11 @@
   --ok:            #f4f1ea;
   --ok-rgb:        244, 241, 234;
   --error:         #f04b4b;
+  /* Il testo **su** un fondo `--error` (toast d'errore, «Installa» critico).
+     Non `#fff`: su #f04b4b il bianco sta a 3,6:1. `--bg` e' l'altra meta'
+     della coppia di contrasto della pagina, e `--error` arriva a 4,5:1 su
+     `--bg` in ogni tema (lo misura il banco): quindi anche il contrario. */
+  --on-error:      var(--bg);
   --warning:       #f59e0b;
   --hover:         rgba(255, 255, 255, 0.06);
   --active:        rgba(255, 255, 255, 0.09);
@@ -3287,9 +3292,23 @@ body {
   animation: toastIn 0.3s cubic-bezier(.34,1.56,.64,1);
   max-width: 90vw;
   word-break: break-word;
+  /* Uno sotto l'altro, non uno sopra l'altro: due toast di fila stavano
+     tutti e due a `top: 50px`, e il secondo copriva il primo (CS12). Ogni
+     toast e' un'ancora (`--toast`) e si mette sotto il **precedente** — il
+     browser sceglie come ancora l'ultimo toast venuto prima di lui, mai se'
+     stesso — con 8 px d'aria; il primo non ne ha e resta a 50 px. Quando uno
+     sparisce, quelli sotto risalgono da soli. Senza ancore (WebView vecchia)
+     resta il `top` fisso di sopra. */
+  anchor-name: --toast;
   box-shadow:
     0 8px 32px rgba(0,0,0,0.30),
     inset 0 0.5px 0 rgba(255,255,255,0.06);
+}
+@supports (anchor-name: --toast) {
+  .mobile-toast {
+    position-anchor: --toast;
+    top: calc(anchor(bottom, 42px) + 8px);
+  }
 }
 .mobile-toast.info {
   background: var(--surface-2);
@@ -3297,11 +3316,13 @@ body {
 }
 .mobile-toast.error {
   background: var(--error);
-  color: #fff;
+  color: var(--on-error);
   border-color: var(--error);
 }
+/* Opaco: al 10% d'alfa il successo era il colore di cio' che aveva sotto —
+   una bolla, un'immagine, lei — e la parola ci si perdeva sopra. */
 .mobile-toast.success {
-  background: rgba(var(--ok-rgb), 0.10);
+  background: var(--surface);
   color: var(--ok);
   border-color: var(--ok);
 }
