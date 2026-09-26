@@ -15,6 +15,7 @@ from jenny.providers.base import (
     LLMResponse,
     ToolCallRequest,
     parse_tool_arguments,
+    stream_error_response,
 )
 from jenny.providers.openai_compat_helpers import (
     _extract_tc_extras,
@@ -260,8 +261,16 @@ class ResponseParsingMixin:
             if fn_args:
                 buf["arguments"] += str(fn_args)
 
+        stream_error: Any = None
         for chunk in chunks:
             chunk_map = cls._maybe_mapping(chunk) or {}
+            if chunk_map.get("error"):
+                # ``{"error": ...}`` scritto dal gateway dentro uno stream a 200
+                # (OpenRouter, un proxy davanti a un modello sovraccarico), con o
+                # senza ``choices`` accanto. Ci si ferma qui, come fa il ciclo
+                # dello stream: ``partial_content`` è ciò che l'utente ha visto.
+                stream_error = chunk_map["error"]
+                break
             choices = chunk_map.get("choices") or []
             if not choices:
                 usage = cls._extract_usage(chunk_map) or usage
@@ -292,6 +301,13 @@ class ResponseParsingMixin:
                 _accum_tc(tc, idx)
             _accum_legacy_function_call(delta.get("function_call"))
             usage = cls._extract_usage(chunk_map) or usage
+
+        if stream_error is not None:
+            # Un errore non è una risposta: niente tool call da eseguire, e lo
+            # status ricavato dal corpo decide il retry (v. ``stream_error_response``).
+            return stream_error_response(
+                stream_error, partial_content="".join(content_parts) or None,
+            )
 
         # Some providers (e.g. Zhipu/GLM) reuse the same tool_call id for
         # parallel tool calls in streaming mode. Deduplicate before building

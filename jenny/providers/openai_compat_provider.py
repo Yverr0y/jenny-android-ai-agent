@@ -756,6 +756,11 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
                 chunks.append(chunk)
                 if not isinstance(chunk, dict):
                     continue
+                if chunk.get("error"):
+                    # Il gateway ha chiuso la risposta con un errore: quello che
+                    # segue (se segue) non fa parte di nessuna risposta buona.
+                    # ``_parse_chunks`` lo trasforma nell'errore da restituire.
+                    break
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
