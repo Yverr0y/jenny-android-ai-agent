@@ -313,6 +313,32 @@ def test_only_our_open_chat_clears_the_alerts() -> None:
         assert "MainActivity.openChatIntent(" in src
 
 
+def test_alerts_left_from_before_an_update_get_the_token_too() -> None:
+    """Un alert postato da una versione senza gettone, ancora in tendina dopo
+    l'aggiornamento, al tocco non portava in chat. Dopo ``MY_PACKAGE_REPLACED``
+    il ricevitore richiede il ``PendingIntent`` di ogni alert in tendina con lo
+    stesso codice, la stessa action e gli stessi flag: ``FLAG_UPDATE_CURRENT``
+    ne riscrive gli extra al suo posto, gettone compreso."""
+    notifier = read_source(NOTIFIER)
+    tap = _code_only(_until_blank_line(notifier, "alertTapIntent"))
+    assert "tag.hashCode()" in tap, "il codice di sempre: e' quello che identifica l'intent"
+    assert "MainActivity.openChatIntent(context)" in tap
+    assert "PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE" in tap
+    builder = _code_only(_fun_body(notifier, "baseBuilder"))
+    assert ".setContentIntent(alertTapIntent(context, tag))" in builder, (
+        "un alert nuovo e un alert rinfrescato devono chiedere lo stesso intent"
+    )
+    refresh = _code_only(_fun_body(notifier, "refreshAlertTapIntents"))
+    assert "activeNotifications" in refresh
+    assert "channelId == CHANNEL_ID" in refresh and "tag != FAILED_TAG" in refresh
+    assert "alertTapIntent(context, it)" in refresh
+    assert "catch (e: Exception)" in refresh, "non deve far cadere il ricevitore"
+    boot = _code_only(_fun_body(read_source(JAVA / "BootReceiver.kt"), "onReceive"))
+    guarded = boot[boot.index("action == Intent.ACTION_MY_PACKAGE_REPLACED") :]
+    assert "NotifierBridge.refreshAlertTapIntents(" in guarded
+    assert boot.index("refreshAlertTapIntents(") < boot.index("GatewayStarter.ensureUp(")
+
+
 def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
     """Il ramo deve smontare i livelli sopra la vista e *forzare* la chat — la
     vista "home" è una preferenza e può non esserlo, mentre il messaggio che

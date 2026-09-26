@@ -268,20 +268,58 @@ class NotifierBridge(context: Context) {
             // aveva niente da riconoscere e il tap riportava l'app dov'era,
             // mini-app aperta compresa, invece che in chat. Porta anche il
             // gettone che la distingue da un'action scritta da un'altra app.
-            val intent = MainActivity.openChatIntent(context)
-            val pending = PendingIntent.getActivity(
-                context,
-                tag.hashCode(),
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
             return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_jenny)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                .setContentIntent(pending)
+                .setContentIntent(alertTapIntent(context, tag))
                 .addAction(replyAction(context, tag))
+        }
+
+        /** Il tocco sull'alert di *tag*: l'intent che porta in chat, gettone
+         *  compreso. Lo stesso `requestCode` e gli stessi flag a ogni chiamata,
+         *  ed e' questo che lo rende riscrivibile: un `PendingIntent` si
+         *  riconosce da codice, intent (action e componente, non gli extra) e
+         *  flag, e con `FLAG_UPDATE_CURRENT` una seconda richiesta uguale
+         *  **aggiorna gli extra di quello che c'e'**, anche dentro una notifica
+         *  gia' in tendina (v. [refreshAlertTapIntents]). */
+        private fun alertTapIntent(context: Context, tag: String): PendingIntent =
+            PendingIntent.getActivity(
+                context,
+                tag.hashCode(),
+                MainActivity.openChatIntent(context),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+        /** Mette il gettone negli alert che sono gia' in tendina.
+         *
+         *  Il tocco su un alert porta in chat (e cancella gli avvisi) solo se
+         *  l'intent ha il gettone di `MainActivity.openChatIntent`. Un alert
+         *  postato da una versione che il gettone non lo metteva, e ancora in
+         *  tendina dopo l'aggiornamento, al tocco apriva l'app dov'era: non la
+         *  chat. Non si ripubblica niente — ne' suono ne' testo da ricostruire:
+         *  quella versione usava lo stesso `requestCode` (`tag.hashCode()`), la
+         *  stessa action e gli stessi flag, quindi chiedere di nuovo il
+         *  `PendingIntent` di ogni tag ne riscrive gli extra al suo posto (v.
+         *  [alertTapIntent]).
+         *
+         *  La notifica di mancata consegna non ha un tocco da riscrivere, e
+         *  si salta. La chiama `BootReceiver` dopo un aggiornamento. */
+        fun refreshAlertTapIntents(context: Context) {
+            try {
+                val manager = context.getSystemService(NotificationManager::class.java) ?: return
+                val tags = manager.activeNotifications
+                    .filter { it.notification.channelId == CHANNEL_ID && it.tag != FAILED_TAG }
+                    .mapNotNull { it.tag }
+                    .distinct()
+                tags.forEach { alertTapIntent(context, it) }
+                if (tags.isNotEmpty()) Log.i(TAG, "Alert tap intents refreshed: ${tags.size}")
+            } catch (e: Exception) {
+                // Un alert vecchio che al tocco non porta in chat non vale un
+                // crash del ricevitore che rimette in piedi il gateway.
+                Log.w(TAG, "Alert tap intents not refreshed (${e.javaClass.simpleName})")
+            }
         }
 
         /** Ripubblica la conversazione sullo stesso tag.
