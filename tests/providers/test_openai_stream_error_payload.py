@@ -104,6 +104,39 @@ async def test_a_permanent_error_is_not_retried() -> None:
     assert not is_transient_response(response)
 
 
+AFTER = (
+    _d({"choices": [{"delta": {"content": " e poi altro"}}]})
+    + _d({"choices": [{"delta": {}, "finish_reason": "stop"}]})
+    + "data: [DONE]\n\n"
+)
+
+
+async def test_the_stream_stops_at_the_error_chunk() -> None:
+    # Quello che il gateway scrive dopo il suo errore non fa parte di nessuna
+    # risposta buona: non va sullo schermo né nel testo parziale.
+    provider, _ = _provider(HALF + _d({"error": {"code": 502, "message": "x"}}) + AFTER)
+    shown: list[str] = []
+
+    async def collect(text: str) -> None:
+        shown.append(text)
+
+    response = await provider.chat_stream(messages=MESSAGES, on_content_delta=collect)
+    assert response.finish_reason == "error"
+    assert shown == ["Metà risposta"]
+    assert response.partial_content == "Metà risposta"
+
+
+def test_the_chunk_fold_stops_at_the_error_chunk() -> None:
+    chunks = [
+        {"choices": [{"delta": {"content": "Metà risposta"}}]},
+        {"error": {"code": 502, "message": "x"}},
+        {"choices": [{"delta": {"content": " e poi altro"}, "finish_reason": "stop"}]},
+    ]
+    response = OpenAICompatProvider._parse_chunks(chunks)
+    assert response.finish_reason == "error"
+    assert response.partial_content == "Metà risposta"
+
+
 # Lo stesso errore, fuori dallo stream: una risposta non-stream a 200 il cui
 # corpo è solo ``{"error": ...}``. Diventava «API returned empty choices», senza
 # status: il 502 di un gateway non si ritentava, e il suo messaggio si perdeva.

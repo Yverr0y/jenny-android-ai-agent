@@ -11,6 +11,7 @@ metà veniva eseguito con gli argomenti che c'erano.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -124,6 +125,28 @@ async def test_a_truncated_tool_use_is_never_executed() -> None:
     response = await provider.chat_stream(messages=MESSAGES)
     assert response.finish_reason == "error"
     assert not response.should_execute_tools
+
+
+async def test_an_overloaded_error_is_a_529_without_reading_the_text() -> None:
+    # Il messaggio non dice «overloaded»: a decidere il retry è lo status che
+    # il tipo d'errore porta con sé, non un marker trovato nel testo.
+    provider, _ = _provider(_sse(START, _error("overloaded_error", "please wait")))
+    response = await provider.chat_stream(messages=MESSAGES)
+    assert response.error_status_code == 529
+    assert is_transient_response(replace(response, content="Error: please wait"))
+
+
+@pytest.mark.parametrize("end", [
+    pytest.param([END[0], END[1]], id="stop_reason-without-message_stop"),
+    pytest.param([END[0], {"type": "message_stop"}], id="message_stop-without-stop_reason"),
+])
+async def test_either_end_signal_makes_the_stream_complete(end: list[dict]) -> None:
+    # Basta uno dei due: lo ``stop_reason`` di ``message_delta`` arriva dopo
+    # l'ultimo blocco, quindi il testo è già tutto; ``message_stop`` chiude.
+    provider, _ = _provider(_sse(START, TEXT_START, _text("Tutto"), *end))
+    response = await provider.chat_stream(messages=MESSAGES)
+    assert response.finish_reason == "stop"
+    assert response.content == "Tutto"
 
 
 async def test_a_complete_stream_is_unchanged() -> None:
