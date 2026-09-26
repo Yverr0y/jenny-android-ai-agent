@@ -18,6 +18,8 @@ valgono come specifica di riferimento di ciò che questo shim deve garantire.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import dataclasses
 import types
 from dataclasses import dataclass
@@ -37,6 +39,40 @@ from jenny.pydantic_compat.errors import ValidationError
 from jenny.pydantic_compat.fields import MISSING, AliasChoices, FieldInfo
 
 _RECOGNIZED_ORIGINS = (Union, types.UnionType)
+
+# Le ricadute raccolte da :func:`lenient_literals`, o None fuori dal blocco: fuori,
+# un Literal sconosciuto resta un errore di validazione come in Pydantic.
+_LITERAL_FALLBACKS: contextvars.ContextVar[list[tuple[str, str, Any]] | None] = (
+    contextvars.ContextVar("pydantic_compat_literal_fallbacks", default=None)
+)
+
+
+@contextlib.contextmanager
+def lenient_literals():
+    """Dentro il blocco un valore fuori da un ``Literal`` ricade sul default del campo.
+
+    Serve al caricamento di ``config.json``: un valore che questa versione non
+    conosce (scritto da una piu' nuova, o a mano) costava il file intero — e il
+    ``.bak``, che porta lo stesso valore — e il gateway ripartiva sui default.
+    Vale solo per i campi che *hanno* un default; un campo obbligatorio fallisce
+    come prima. Produce la lista ``(modello, campo, valore)`` delle ricadute, che
+    il chiamante deve dire nel log: correggere senza dirlo resta vietato.
+    """
+    fallbacks: list[tuple[str, str, Any]] = []
+    token = _LITERAL_FALLBACKS.set(fallbacks)
+    try:
+        yield fallbacks
+    finally:
+        _LITERAL_FALLBACKS.reset(token)
+
+
+def _is_literal_type(expected: Any) -> bool:
+    """True se *expected* e' un ``Literal`` (anche dentro un ``Optional``)."""
+    if get_origin(expected) is Literal:
+        return True
+    if get_origin(expected) in _RECOGNIZED_ORIGINS:
+        return any(_is_literal_type(arg) for arg in get_args(expected))
+    return False
 
 
 def _unwrap_function(fn: Any) -> Any:
@@ -527,7 +563,15 @@ def _validate_field_values(
             raise ValidationError(f"Field required: {field_name}")
 
         expected = finfo.resolved_type if finfo.resolved_type is not None else finfo.annotation
-        validated = _validate_single(value, expected, field_name)
+        try:
+            validated = _validate_single(value, expected, field_name)
+        except ValidationError:
+            fallbacks = _LITERAL_FALLBACKS.get()
+            default = finfo.get_default()
+            if fallbacks is None or default is MISSING or not _is_literal_type(expected):
+                raise
+            fallbacks.append((cls.__name__, field_name, value))
+            validated = default
         _apply_constraints(validated, finfo, field_name)
         validated = _run_field_validators(cls, validated, finfo)
         final[field_name] = validated

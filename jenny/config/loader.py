@@ -23,6 +23,7 @@ from jenny.pydantic_compat import (
     ValidationError,
     canonical_input_key,
     field_for_input_key,
+    lenient_literals,
 )
 from jenny.utils.path import atomic_write
 
@@ -100,7 +101,7 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
 
     try:
         raw = _read_raw(path)
-        return raw, Config.model_validate(raw)
+        return raw, _validate(raw, path)
     except (json.JSONDecodeError, ValueError, ValidationError) as primary_error:
         logger.error("Config at {} is unusable: {}", path, primary_error)
 
@@ -108,7 +109,7 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
     if backup.exists():
         try:
             raw = _read_raw(backup)
-            config = Config.model_validate(raw)
+            config = _validate(raw, backup)
         except (json.JSONDecodeError, ValueError, ValidationError) as backup_error:
             logger.error("Config backup at {} is unusable too: {}", backup, backup_error)
         else:
@@ -129,6 +130,24 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
         quarantined,
     )
     return {}, Config()
+
+
+def _validate(raw: dict[str, Any], path: Path) -> Config:
+    """Valida *raw*; un valore fuori da un ``Literal`` costa solo il suo campo.
+
+    Il campo ricade sul default e lo si dice a WARNING: il resto del file vale.
+    Prima quel valore faceva rifiutare il file intero, e con lui il ``.bak`` che
+    lo porta uguale — si ripartiva sui default di tutto.
+    """
+    with lenient_literals() as fallbacks:
+        config = Config.model_validate(raw)
+    for model, field, value in fallbacks:
+        logger.warning(
+            "Config at {}: {}.{} = {!r} is not a value this version knows; using the "
+            "default instead (the next write replaces it)",
+            path, model, field, value,
+        )
+    return config
 
 
 def _read_raw(path: Path) -> dict[str, Any]:

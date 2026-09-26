@@ -5,6 +5,7 @@ from jenny.pydantic_compat.core import (
     BaseSettings,
     canonical_input_key,
     field_for_input_key,
+    lenient_literals,
 )
 from jenny.pydantic_compat.errors import ValidationError
 from jenny.pydantic_compat.fields import (
@@ -27,6 +28,7 @@ __all__ = [
     "canonical_input_key",
     "field_for_input_key",
     "field_validator",
+    "lenient_literals",
     "model_validator",
     "to_camel",
 ]
