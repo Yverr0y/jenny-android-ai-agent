@@ -163,3 +163,34 @@ async def test_a_job_paused_and_resumed_meanwhile_waits_for_its_new_time(tmp_pat
         assert service.set_paused(job_id, False) == "resumed"
 
     assert await _second_job_changed_while_first_runs(tmp_path, pause_and_resume) == ["A"]
+
+
+# -- RC2: una pausa arrivata mentre il job stesso gira --------------------------
+
+
+async def test_a_pause_during_the_job_own_run_leaves_no_next_run(tmp_path) -> None:
+    path = tmp_path / "cron" / "jobs.json"
+    started = asyncio.Event()
+    gate = asyncio.Event()
+
+    async def on_job(job):
+        started.set()
+        await gate.wait()
+
+    service = CronService(path, on_job=on_job, max_sleep_ms=100)
+    await service.start()
+    try:
+        job = service.add_job("x", CronSchedule(kind="every", every_ms=_HOUR), "m", **_bound())
+        _make_due(service, job.id)
+        await asyncio.wait_for(started.wait(), 2)
+        assert service.set_paused(job.id, True) == "paused"
+        gate.set()
+        await _wait_until(lambda: not service._timer_active)
+
+        live = service.get_job(job.id)
+        assert live.enabled is False and live.paused_at_ms is not None
+        assert live.state.next_run_at_ms is None
+        assert live.state.last_status == "ok"
+    finally:
+        service.stop()
+    assert _disk_jobs(path)["x"]["state"]["nextRunAtMs"] is None

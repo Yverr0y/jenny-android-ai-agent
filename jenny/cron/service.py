@@ -1194,9 +1194,12 @@ class CronService:
             else:
                 job.enabled = False
                 job.state.next_run_at_ms = None
-        else:
+        elif job.paused_at_ms is None:
             # Compute next run
             job.state.next_run_at_ms = _compute_next_run(job.schedule, _now_ms())
+        # Altrimenti la pausa e' arrivata mentre il job stesso girava:
+        # ``set_paused`` ha gia' tolto la prossima esecuzione, e ricalcolarla qui
+        # lasciava un job «in pausa» con una scadenza armata nello store.
 
     def _append_action(self, action: Literal["add", "del"], params: dict):
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
