@@ -83,6 +83,30 @@ console.log('ok');
 """
 
 
+def test_a_taken_name_is_said_in_the_users_language() -> None:
+    """Rinomina e copia non sovrascrivono piu' (WA4): il rifiuto ``name_taken``
+    arriva all'utente tradotto, gli altri col perche' del server."""
+    import json
+
+    from support.js_harness import function, locale, run_js
+
+    source = (ASSETS / "mobile-workspace.js").read_text(encoding="utf-8")
+    script = f"""
+import assert from 'node:assert/strict';
+const T = {json.dumps(locale("it"))};
+const i18n = {{ t: (k) => k.split('.').reduce((o, p) => o?.[p], T) ?? k }};
+{function(source, "workspaceErrorText")}
+const taken = new Error('the destination already exists');
+taken.code = 'name_taken';
+assert.equal(workspaceErrorText(taken), T.workspace.nameTaken);
+const other = new Error('permission denied');
+other.code = 'forbidden';
+assert.equal(workspaceErrorText(other), T.workspace.error + 'permission denied');
+console.log('ok');
+"""
+    assert run_js(script).strip() == "ok"
+
+
 def test_the_file_manager_writes_are_rpc_commands(tmp_path: Path) -> None:
     for name in ("api-client.js", "rpc-client.js"):
         shutil.copy(ASSETS / "shared" / name, tmp_path / name)

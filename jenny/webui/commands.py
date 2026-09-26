@@ -52,8 +52,9 @@ class CommandError(Exception):
     WS) senza indovinare dal testo del messaggio, e un client può dire nella
     propria lingua i rifiuti che si aspetta.
 
-    ``name_taken``: il nome chiesto è già di qualcos'altro (oggi: il nome nuovo
-    di un quaderno è già di una cartella o di una conversazione).
+    ``name_taken``: il nome chiesto è già di qualcos'altro (il nome nuovo di un
+    quaderno è già di una cartella o di una conversazione; la destinazione di
+    ``workspace.rename``/``workspace.copy`` esiste già).
 
     ``conflict`` è l'unico che non parla della richiesta ma del *mondo*: la
     richiesta era buona, e il mondo si è mosso sotto — il file è cambiato da
@@ -224,6 +225,10 @@ def _fs_errors() -> Iterator[None]:
         raise CommandError("bad_request", str(exc)) from exc
     except FileNotFoundError as exc:
         raise CommandError("not_found", "path not found") from exc
+    except FileExistsError as exc:
+        # Rinomina e copia non sovrascrivono (``workspace_files``): il nome e'
+        # gia' di qualcos'altro, che e' esattamente ``name_taken``.
+        raise CommandError("name_taken", "the destination already exists") from exc
     except PermissionError as exc:
         raise CommandError("forbidden", "permission denied") from exc
     except OSError as exc:
@@ -258,27 +263,90 @@ def _delete_refusal(workspace_root: Path, target: Path) -> str | None:
     cancellavano tutti insieme, ognuno con la sua chat lasciata orfana. Poi il
     singolo progetto (:func:`_project_delete_refusal`).
     """
+    if target == workspace_root.resolve():
+        return "the workspace itself cannot be deleted from the file browser"
+    notebooks = _notebooks_inside(workspace_root, target)
+    if notebooks:
+        return (
+            f"this folder holds notebooks ({_names(notebooks)}): each has a conversation "
+            "that lives outside this tree. Delete them one at a time from Notebooks, "
+            "then the folder."
+        )
+    return _project_delete_refusal(workspace_root, target)
+
+
+def _rename_refusal(workspace_root: Path, source: Path) -> str | None:
+    """Il motivo per cui *source* non si rinomina dal file manager, o ``None``.
+
+    Stessa geografia della cancellazione, per la stessa ragione (terza
+    revisione, WA4): la chat di un quaderno sta fuori dal suo albero ed e'
+    legata al **nome** della cartella. Spostare la cartella — o una che la
+    contiene — lascia la chat sotto il nome vecchio: orfana, e pronta per il
+    primo quaderno che lo riprende. Il rinomino di un quaderno e'
+    ``project.rename``, che sposta anche la chat e le pagine in casa.
+    """
+    if source == workspace_root.resolve():
+        return "the workspace itself cannot be renamed"
+    notebooks = _notebooks_inside(workspace_root, source)
+    if notebooks:
+        return (
+            f"this folder holds notebooks ({_names(notebooks)}): moving it would leave "
+            "their conversations behind. Rename a notebook from Notebooks, which moves "
+            "its conversation too."
+        )
+    name = _notebook_at(workspace_root, source)
+    if name is not None:
+        return (
+            f"`{name}` is a notebook: its conversation is tied to this folder's name. "
+            "Rename it from Notebooks, which moves the conversation with it."
+        )
+    return None
+
+
+def _notebooks_inside(workspace_root: Path, target: Path) -> list[str]:
+    """I quaderni che *target* contiene, se e' la cartella dei quaderni o un suo
+    antenato; altrimenti nessuno."""
     from jenny.utils.wiki_paths import is_wiki_root
 
-    root = workspace_root.resolve()
-    if target == root:
-        return "the workspace itself cannot be deleted from the file browser"
     wikis_dir = _notebooks_dir(workspace_root)
-    if wikis_dir == target or target in wikis_dir.parents:
-        try:
-            notebooks = sorted(
-                child.name for child in wikis_dir.iterdir() if is_wiki_root(child)
-            )
-        except OSError:
-            notebooks = []
-        if notebooks:
-            shown = ", ".join(notebooks[:5]) + (", …" if len(notebooks) > 5 else "")
-            return (
-                f"this folder holds notebooks ({shown}): each has a conversation that "
-                "lives outside this tree. Delete them one at a time from Notebooks, "
-                "then the folder."
-            )
-    return _project_delete_refusal(workspace_root, target)
+    if wikis_dir != target and target not in wikis_dir.parents:
+        return []
+    try:
+        return sorted(child.name for child in wikis_dir.iterdir() if is_wiki_root(child))
+    except OSError:
+        return []
+
+
+def _names(names: list[str]) -> str:
+    return ", ".join(names[:5]) + (", …" if len(names) > 5 else "")
+
+
+def _notebook_at(workspace_root: Path, target: Path) -> str | None:
+    """Il nome del quaderno di cui *target* e' la radice o la ``wiki/``, o ``None``.
+
+    Solo i figli diretti di ``wikis_dir``: ``is_wiki_root`` da solo direbbe di si'
+    a qualunque cartella che contenga una ``wiki/``, e bloccherebbe operazioni
+    legittime altrove nel workspace. E solo i nomi che possono essere il nome di
+    una conversazione (``wikis/Ricerca ETF`` no, v. ``_collect_projects``): una
+    cartella che non ha una chat non ha niente da orfanare, e ``project.delete``/
+    ``project.rename`` la rifiuterebbero proprio per quel nome — rifiutarla anche
+    qui la renderebbe intoccabile da qualunque porta.
+    """
+    from jenny.session.keys import is_valid_project_name
+    from jenny.utils.wiki_paths import is_wiki_root
+
+    wikis_dir = _notebooks_dir(workspace_root)
+    if target.parent == wikis_dir and is_wiki_root(target):
+        name = target.name
+    elif (
+        target.name == "wiki"
+        and target.parent.parent == wikis_dir
+        and is_wiki_root(target.parent)
+    ):
+        name = target.parent.name
+    else:
+        return None
+    return name if is_valid_project_name(name) else None
 
 
 def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
@@ -303,32 +371,12 @@ def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
     cartella ``is_wiki_root`` diventa falso e il progetto sparisce dal picker
     **con la chat ancora attaccata al nome** — cioe' di nuovo l'orfano.
 
-    Solo i figli diretti di ``wikis_dir``: ``is_wiki_root`` da solo direbbe di si'
-    a qualunque cartella che contenga una ``wiki/``, e bloccherebbe
-    cancellazioni legittime altrove nel workspace.
+    Quali cartelle sono un progetto lo dice :func:`_notebook_at`.
 
     Era in ``webui/workspace_routes.py`` finche' la cancellazione era una GET.
     """
-    from jenny.session.keys import is_valid_project_name
-    from jenny.utils.wiki_paths import is_wiki_root
-
-    wikis_dir = _notebooks_dir(workspace_root)
-
-    if target.parent == wikis_dir and is_wiki_root(target):
-        name = target.name
-    elif (
-        target.name == "wiki"
-        and target.parent.parent == wikis_dir
-        and is_wiki_root(target.parent)
-    ):
-        name = target.parent.name
-    else:
-        return None
-    if not is_valid_project_name(name):
-        # Una cartella il cui nome non puo' essere il nome di una conversazione
-        # (``wikis/Ricerca ETF``, v. ``_collect_projects``) non ha una chat da
-        # orfanare, e ``project.delete`` la rifiuterebbe proprio per quel nome:
-        # rifiutare qui la renderebbe incancellabile da qualunque porta.
+    name = _notebook_at(workspace_root, target)
+    if name is None:
         return None
     return (
         f"`{name}` is a project, not just a folder: its conversation lives outside "
@@ -363,17 +411,27 @@ async def workspace_delete(ctx: CommandContext, params: Mapping[str, Any]) -> di
 
 
 async def workspace_rename(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
-    """Rinomina (o sposta) un file o una cartella del workspace."""
+    """Rinomina (o sposta) un file o una cartella del workspace.
+
+    Non un quaderno (:func:`_rename_refusal`, la strada e' ``project.rename``) e
+    mai sopra qualcosa che c'e' gia': la destinazione occupata e' ``name_taken``.
+    """
     from jenny.webui.workspace_files import rename_path, validate_path
 
     old_rel = _require_str(params, "old_path")
     new_rel = _require_str(params, "new_path")
     _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
+    # Rinominare cambia il disco quanto scrivere: la rotta di prima non lo
+    # chiedeva (terza revisione, WA4).
+    _require_workspace_flag("allow_write", "forbidden", "workspace writes are disabled")
 
     root = ctx.get_workspace_root()
     with _fs_errors():
         old_path = validate_path(root, old_rel)
         new_path = validate_path(root, new_rel)
+        refusal = _rename_refusal(root, old_path)
+        if refusal:
+            raise CommandError("forbidden", refusal)
         await asyncio.to_thread(rename_path, old_path, new_path)
     return {"success": True, "old_path": old_rel, "new_path": new_rel}
 
@@ -395,6 +453,7 @@ async def workspace_copy(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     if dest_rel is not None and (not isinstance(dest_rel, str) or not dest_rel.strip()):
         raise CommandError("bad_request", "dest must be a non-empty string")
     _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
+    _require_workspace_flag("allow_write", "forbidden", "workspace writes are disabled")
 
     root = ctx.get_workspace_root()
     with _fs_errors():

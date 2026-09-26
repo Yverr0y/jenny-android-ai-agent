@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -177,8 +178,31 @@ def create_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _refuse_taken(src: Path, dest: Path) -> None:
+    """``FileExistsError`` se *dest* c'e' gia' e non e' *src* stesso.
+
+    ``Path.rename`` su POSIX sostituisce in silenzio un file (e una cartella
+    vuota), ``shutil.copy2`` pure: dal file manager un nome gia' preso cancellava
+    quel che c'era sotto senza chiedere (terza revisione, WA4). Il controllo e la
+    mossa restano due passi, con la finestra di un ``lstat``. «E' lo stesso file»
+    serve al rinomino che cambia solo le maiuscole su un disco che non le
+    distingue: li' la destinazione «esiste», ed e' l'origine.
+    """
+    try:
+        dest_stat = dest.lstat()
+    except FileNotFoundError:
+        return
+    try:
+        if os.path.samestat(src.lstat(), dest_stat):
+            return
+    except OSError:
+        pass
+    raise FileExistsError(errno.EEXIST, "destination already exists")
+
+
 def rename_path(old_path: Path, new_path: Path) -> None:
-    """Rename a file or directory."""
+    """Rename a file or directory, never over an existing one."""
+    _refuse_taken(old_path, new_path)
     old_path.rename(new_path)
 
 
@@ -211,7 +235,8 @@ def free_copy_name(src: Path) -> Path:
 
 
 def copy_path(src: Path, dest: Path) -> None:
-    """Copy a file or directory."""
+    """Copy a file or directory, never over an existing one."""
+    _refuse_taken(src, dest)
     if src.is_dir():
         shutil.copytree(src, dest)
     else:

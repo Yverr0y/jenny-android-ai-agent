@@ -541,7 +541,8 @@
     "deleteProjectConfirmWithChat": "Eliminare il progetto “{name}”? Sparisce la cartella e con lei la conversazione: {count} messaggi.",
     "deleteProjectFailed": "Non ho potuto eliminare il progetto “{name}”. Non ho toccato niente.",
     "deleteProjectBusy": "Sto ancora lavorando nel progetto “{name}”: eliminalo quando ho finito.",
-    "deletedProject": "Progetto “{name}” eliminato, conversazione compresa"
+    "deletedProject": "Progetto “{name}” eliminato, conversazione compresa",
+    "nameTaken": "C’è già qualcosa con questo nome: scegline un altro."
   },
   "launcher": {
     "open": "Apri app",

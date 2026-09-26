@@ -278,3 +278,102 @@ async def test_delete_allows_a_notebooks_folder_without_notebooks(
     (workspace_root / "wikis" / "appunti-sparsi").mkdir(parents=True)
     await dispatch_command(ctx, "workspace.delete", {"path": "wikis"})
     assert not (workspace_root / "wikis").exists()
+
+
+# ---------------------------------------------------------------------------
+# WA4: rinomina e copia non spostano quaderni, non sovrascrivono, e rispettano
+# ``workspace.allow_write``
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("wikis/orto", "wikis/giardino"),
+        ("wikis/orto/wiki", "wikis/orto/pagine"),
+        ("wikis", "quaderni"),
+    ],
+)
+async def test_rename_refuses_to_move_a_notebook(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, old: str, new: str
+) -> None:
+    """Il rinomino dal file manager spostava la cartella e lasciava la chat sotto
+    il nome vecchio (terza revisione, WA4): si fa con ``project.rename``."""
+    pages = _notebook(workspace_root)
+    err = await _refused(ctx, "workspace.rename", {"old_path": old, "new_path": new})
+    assert err.code == "forbidden"
+    assert "Notebooks" in err.message
+    assert pages.is_dir()
+    assert not (workspace_root / new).exists()
+
+
+async def test_rename_refuses_the_workspace_root(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    err = await _refused(ctx, "workspace.rename", {"old_path": ".", "new_path": "altro"})
+    assert err.code == "forbidden"
+    assert workspace_root.is_dir()
+
+
+async def test_rename_does_not_overwrite_a_file(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """``Path.rename`` su POSIX sostituisce in silenzio la destinazione."""
+    (workspace_root / "a.txt").write_text("a", encoding="utf-8")
+    (workspace_root / "b.txt").write_text("b", encoding="utf-8")
+    err = await _refused(ctx, "workspace.rename", {"old_path": "a.txt", "new_path": "b.txt"})
+    assert err.code == "name_taken"
+    assert (workspace_root / "a.txt").read_text(encoding="utf-8") == "a"
+    assert (workspace_root / "b.txt").read_text(encoding="utf-8") == "b"
+
+
+async def test_rename_does_not_replace_an_empty_folder(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    (workspace_root / "a").mkdir()
+    (workspace_root / "a" / "f.txt").write_text("a", encoding="utf-8")
+    (workspace_root / "vuota").mkdir()
+    err = await _refused(ctx, "workspace.rename", {"old_path": "a", "new_path": "vuota"})
+    assert err.code == "name_taken"
+    assert (workspace_root / "a" / "f.txt").exists()
+
+
+async def test_rename_can_change_only_the_case(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """Su un disco che non distingue le maiuscole la destinazione «esiste»: e' lo
+    stesso file, e cambiargli il nome resta lecito."""
+    (workspace_root / "nota.txt").write_text("n", encoding="utf-8")
+    await dispatch_command(ctx, "workspace.rename", {"old_path": "nota.txt", "new_path": "Nota.txt"})
+    assert [p.name for p in workspace_root.iterdir()] == ["Nota.txt"]
+
+
+async def test_rename_requires_allow_write(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    _set_workspace_config(config_path, allow_write=False)
+    (workspace_root / "a.txt").write_text("a", encoding="utf-8")
+    err = await _refused(ctx, "workspace.rename", {"old_path": "a.txt", "new_path": "b.txt"})
+    assert err.code == "forbidden"
+    assert (workspace_root / "a.txt").exists()
+
+
+async def test_copy_requires_allow_write(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    _set_workspace_config(config_path, allow_write=False)
+    (workspace_root / "a.txt").write_text("a", encoding="utf-8")
+    err = await _refused(ctx, "workspace.copy", {"path": "a.txt", "dest": "b.txt"})
+    assert err.code == "forbidden"
+    assert not (workspace_root / "b.txt").exists()
+
+
+async def test_copy_does_not_overwrite_a_file(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """``shutil.copy2`` sostituisce in silenzio la destinazione."""
+    (workspace_root / "a.txt").write_text("a", encoding="utf-8")
+    (workspace_root / "b.txt").write_text("b", encoding="utf-8")
+    err = await _refused(ctx, "workspace.copy", {"path": "a.txt", "dest": "b.txt"})
+    assert err.code == "name_taken"
+    assert (workspace_root / "b.txt").read_text(encoding="utf-8") == "b"

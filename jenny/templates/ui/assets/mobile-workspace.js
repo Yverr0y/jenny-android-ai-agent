@@ -30,6 +30,15 @@ const FILE_HELP_KEYS = {
   'memory/MEMORY.md': 'workspace.fileHelp.memory',
 };
 
+/** Il toast di un comando del file manager fallito. Il rifiuto che l'utente
+ *  deve poter capire — il nome e' gia' preso: rinomina e copia non
+ *  sovrascrivono piu' — si dice nella sua lingua; gli altri portano il perche'
+ *  del server. */
+function workspaceErrorText(err) {
+  if (err?.code === 'name_taken') return i18n.t('workspace.nameTaken');
+  return i18n.t('workspace.error') + (err?.message || '');
+}
+
 /** Testo di aiuto per un path del workspace, o '' se quel file non ne ha. */
 function fileHelpText(path) {
   const key = FILE_HELP_KEYS[path];
@@ -717,7 +726,7 @@ export class WorkspaceController {
           }
           await this.navigateTo(this.currentDir);
         } catch (err) {
-          showToast(i18n.t('workspace.error') + err.message, 'error');
+          showToast(workspaceErrorText(err), 'error');
         }
         break;
       }
@@ -726,7 +735,7 @@ export class WorkspaceController {
           await api.copyWorkspace(path);
           await this.navigateTo(this.currentDir);
         } catch (err) {
-          showToast(i18n.t('workspace.error') + err.message, 'error');
+          showToast(workspaceErrorText(err), 'error');
         }
         break;
       }

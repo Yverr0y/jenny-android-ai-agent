@@ -541,7 +541,8 @@
     "deleteProjectConfirmWithChat": "Delete the project “{name}”? The folder goes, and the conversation with it: {count} messages.",
     "deleteProjectFailed": "I could not delete the project “{name}”. Nothing was changed.",
     "deleteProjectBusy": "I'm still working in the project “{name}”: delete it once I've finished.",
-    "deletedProject": "Project “{name}” deleted, conversation included"
+    "deletedProject": "Project “{name}” deleted, conversation included",
+    "nameTaken": "Something already has this name: pick another."
   },
   "launcher": {
     "open": "Open apps",
