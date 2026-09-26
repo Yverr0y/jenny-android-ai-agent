@@ -118,6 +118,9 @@ class JennyBrowserBridge(context: Context) {
         private val BLOCKED_V4 = listOf(
             "0.0.0.0" to 8, "10.0.0.0" to 8, "100.64.0.0" to 10, "127.0.0.0" to 8,
             "169.254.0.0" to 16, "172.16.0.0" to 12, "192.168.0.0" to 16,
+            // Il broadcast: non e' mai un server (`_NEVER_A_SERVER` in Python).
+            // Il multicast (224.0.0.0/4, ff00::/8) lo dice `isMulticastAddress`.
+            "255.255.255.255" to 32,
         )
 
         /**
@@ -214,9 +217,28 @@ class JennyBrowserBridge(context: Context) {
 
     // ------------------------------------------------------------------ guardia
 
+    /**
+     * L'IPv4 che un indirizzo IPv6 porta dentro, nelle forme che arrivano a un
+     * IPv4 vero: IPv4-mapped (`::ffff:a.b.c.d`), NAT64 (`64:ff9b::a.b.c.d`,
+     * che un DNS64 restituisce per un nome solo IPv4) e 6to4 (`2002:AABB:CCDD::`,
+     * l'IPv4 nei due gruppi dopo il prefisso). Per ognuna il verdetto e' quello
+     * dell'IPv4 incapsulato: `64:ff9b::7f00:1` e' il loopback, e `2002:c0a8:101::`
+     * la LAN. `null` se l'indirizzo non ne porta.
+     */
+    private fun embeddedIpv4(b: ByteArray): ByteArray? {
+        fun zero(range: IntRange) = range.all { b[it] == 0.toByte() }
+        return when {
+            zero(0..9) && b[10] == 0xFF.toByte() && b[11] == 0xFF.toByte() -> b.copyOfRange(12, 16)
+            b[0] == 0x00.toByte() && b[1] == 0x64.toByte() && b[2] == 0xFF.toByte() &&
+                b[3] == 0x9B.toByte() && zero(4..11) -> b.copyOfRange(12, 16)
+            b[0] == 0x20.toByte() && b[1] == 0x02.toByte() -> b.copyOfRange(2, 6)
+            else -> null
+        }
+    }
+
     private fun isBlockedAddress(addr: InetAddress): Boolean {
         if (addr.isLoopbackAddress || addr.isLinkLocalAddress ||
-            addr.isSiteLocalAddress || addr.isAnyLocalAddress) return true
+            addr.isSiteLocalAddress || addr.isAnyLocalAddress || addr.isMulticastAddress) return true
         when (addr) {
             is Inet4Address -> {
                 val b = addr.address
@@ -234,6 +256,12 @@ class JennyBrowserBridge(context: Context) {
                 val b = addr.address
                 // fc00::/7 (unique local) — fe80::/10 lo copre già isLinkLocalAddress
                 if ((b[0].toInt() and 0xFE) == 0xFC) return true
+                // ::/96: `::` e le IPv4-compatibili, deprecate. `::127.0.0.1` e'
+                // il loopback in una forma che `isLoopbackAddress` non riconosce
+                // (vale solo per `::1`); come in Python, l'intera /96 non e' mai
+                // un server.
+                if ((0..11).all { b[it] == 0.toByte() }) return true
+                embeddedIpv4(b)?.let { return isBlockedAddress(InetAddress.getByAddress(it)) }
             }
         }
         return false
