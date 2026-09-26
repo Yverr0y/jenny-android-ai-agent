@@ -608,7 +608,6 @@
     "send": "Invia",
     "workingReply": "Ci sto ancora lavorando... il resto lo trovi in chat ✿",
     "connectionError": "Non riesco a inviare: controlla la connessione.",
-    "genericError": "Qualcosa è andato storto.",
     "codeTag": "[codice]"
   },
   "themes": {

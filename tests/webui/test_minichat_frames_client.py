@@ -83,6 +83,7 @@ def _run(body: str) -> None:
         (root / "shared").mkdir()
         shutil.copy(ASSETS / "mobile-jenny.js", root / "mobile-jenny.js")
         shutil.copy(ASSETS / "shared" / "jenny-mascot.js", root / "shared" / "jenny-mascot.js")
+        shutil.copy(ASSETS / "shared" / "wire-error.js", root / "shared" / "wire-error.js")
         for name, text in _NEIGHBORS.items():
             (root / "shared" / name).write_text(text, encoding="utf-8")
         entry = root / "prova.mjs"
@@ -174,11 +175,14 @@ def test_turn_end_after_a_reply_keeps_the_reply() -> None:
 
 
 def test_error_shows_its_text_and_the_sad_face() -> None:
+    """Le parole del rifiuto sono quelle di ``describeWireError``, come in
+    chat (WJ13 della terza revisione): prima il fumetto mostrava ``detail`` o
+    ``reason`` grezzi, un testo per il log o un identificatore."""
     _run(
         """
         const j = minichat();
-        j._handleFrame({ event: 'error', detail: 'Il provider **non** risponde' });
-        assert.equal(j.bubble.textContent, 'Il provider non risponde');
+        j._handleFrame({ event: 'error', reason: 'size', detail: 'image_rejected' });
+        assert.equal(j.bubble.textContent, 'common.wireError.size');
         assert.equal(last(j), 'idle');
         assert.deepEqual(j.moods, ['sad']);
         assert.equal(j.awaiting, false);
@@ -186,7 +190,11 @@ def test_error_shows_its_text_and_the_sad_face() -> None:
 
         const k = minichat();
         k._handleFrame({ event: 'error' });
-        assert.equal(k.bubble.textContent, 'jenny.genericError');
+        assert.equal(k.bubble.textContent, 'common.wireError.unknown');
+
+        const u = minichat();
+        u._handleFrame({ event: 'error', reason: 'provider_down' });
+        assert.equal(u.bubble.textContent, 'common.wireError.unknown (provider_down)');
         """
     )
 

@@ -608,7 +608,6 @@
     "send": "Send",
     "workingReply": "I'm still working on it… you'll find the rest in chat ✿",
     "connectionError": "Cannot send: check your connection.",
-    "genericError": "Something went wrong.",
     "codeTag": "[code]"
   },
   "themes": {

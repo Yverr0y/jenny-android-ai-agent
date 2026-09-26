@@ -21,6 +21,7 @@ import { sessionManager } from './shared/session-manager.js';
 import { i18n } from './shared/i18n.js';
 import { mascotVisible } from './shared/mascot.js';
 import { JennyMascot } from './shared/jenny-mascot.js';
+import { describeWireError } from './shared/wire-error.js';
 
 const CONNECT_TIMEOUT_MS = 6000;
 const REPLY_TIMEOUT_MS = 90000;
@@ -367,7 +368,12 @@ export class JennyCompanion extends JennyMascot {
         break;
       case 'error':
         this.awaiting = false;
-        this._showReply(plainText(msg.detail || msg.reason || i18n.t('jenny.genericError')));
+        this._skipSegment = false;
+        /* Le parole di un rifiuto sono quelle della chat (WJ13 della terza
+           revisione): `detail` e' per il log, e `reason` e' un identificatore.
+           Prima il fumetto mostrava l'uno o l'altro com'erano. Niente
+           `plainText`: e' gia' testo, e toglierebbe i `_` dal codice. */
+        this._showReply(describeWireError(msg, (key) => i18n.t(key)).text);
         break;
     }
   }
