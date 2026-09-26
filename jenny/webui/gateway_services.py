@@ -123,6 +123,11 @@ def build_gateway_services(
                 session_manager.invalidate(key) if session_manager is not None else None
             ),
             busy_session_keys=get_busy_session_keys or (lambda: ()),
+            # I comandi delle impostazioni (chiave del provider, token Telegram)
+            # rimettono in servizio a caldo quello che hanno salvato, come
+            # facevano le rotte GET che hanno sostituito.
+            on_settings_changed=on_settings_changed,
+            on_telegram_changed=on_telegram_changed,
         ),
         session_manager=session_manager,
         get_subagent_manager=get_subagent_manager,
