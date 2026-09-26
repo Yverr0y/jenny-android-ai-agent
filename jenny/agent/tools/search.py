@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import os
 import re
@@ -285,6 +286,9 @@ class GrepTool(_SearchTool):
 
     _MAX_RESULT_CHARS = 128_000
     _MAX_FILE_BYTES = 2_000_000
+    # Sopra questa soglia la lettura esce dal loop; sotto, il salto di thread
+    # costerebbe più della lettura, e un grep attraversa migliaia di file.
+    _OFF_LOOP_BYTES = 256 * 1024
     # Tetto sui risultati in modalita indice. Un elenco di percorsi e piccolo,
     # ma "piccolo per risultato" moltiplicato per un pattern sfortunato non lo e
     # piu, e nella conversazione dell'orchestratore ci resta per sempre.
@@ -544,17 +548,25 @@ class GrepTool(_SearchTool):
                 if not _matches_type(file_path.name, type):
                     continue
 
-                raw = file_path.read_bytes()
-                if len(raw) > self._MAX_FILE_BYTES:
+                # Il tetto si controlla con `stat`, PRIMA di leggere (TL7): prima
+                # il file si leggeva per intero e solo dopo si guardava la
+                # lunghezza, cioè 600 MB di RSS per saltare un video.
+                try:
+                    st = file_path.stat()
+                except OSError:
+                    skipped_binary += 1
+                    continue
+                if st.st_size > self._MAX_FILE_BYTES:
                     skipped_large += 1
                     continue
+                if st.st_size > self._OFF_LOOP_BYTES:
+                    raw = await asyncio.to_thread(file_path.read_bytes)
+                else:
+                    raw = file_path.read_bytes()
                 if _is_binary(raw):
                     skipped_binary += 1
                     continue
-                try:
-                    mtime = file_path.stat().st_mtime
-                except OSError:
-                    mtime = 0.0
+                mtime = st.st_mtime
                 try:
                     content = raw.decode("utf-8")
                 except UnicodeDecodeError:

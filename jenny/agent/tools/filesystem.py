@@ -1,14 +1,15 @@
 """File system tools: read, write, edit, list."""
 
+import asyncio
 import difflib
+import hashlib
 import mimetypes
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from jenny.agent.tools.base import Tool, tool_parameters
-from jenny.agent.tools.file_state import FileStates, _hash_file, current_file_states
+from jenny.agent.tools.file_state import FileStates, current_file_states
 from jenny.agent.tools.filesystem_edit_match import (
     _best_window,
     _find_matches,
@@ -619,6 +620,9 @@ class ReadFileTool(_FsTool):
     _scopes = {"core", "orchestrator", "subagent"}
 
     _MAX_CHARS = 128_000
+    # Oltre questo il file non si carica in memoria (TL7): sul telefono un log
+    # da centinaia di MB, decodificato e spezzato in righe, vale il gateway.
+    _MAX_FILE_BYTES = 16 * 1024 * 1024
     _DEFAULT_LIMIT = 2000
     _MAX_PDF_PAGES = 20
 
@@ -674,7 +678,19 @@ class ReadFileTool(_FsTool):
             if fp.suffix.lower() == ".pdf":
                 return self._read_pdf(fp, pages)
 
-            raw = fp.read_bytes()
+            # La dimensione si chiede a `stat` PRIMA di leggere, e il contenuto
+            # si legge una volta sola, fuori dal loop (TL7): prima il file si
+            # leggeva due volte (tre con l'hash della deduplica), per intero e
+            # senza tetto, sul thread del gateway.
+            st = fp.stat()
+            if st.st_size > self._MAX_FILE_BYTES:
+                return (
+                    f"Error: {path} is too large for read_file ({st.st_size:,} bytes; the "
+                    f"limit is {self._MAX_FILE_BYTES:,}). grep skips it too. Read the part "
+                    "you need with python_exec (seek and read a slice), or ask a subagent "
+                    "that has it."
+                )
+            raw = await asyncio.to_thread(fp.read_bytes)
             if not raw:
                 return f"(Empty file: {path})"
 
@@ -682,13 +698,11 @@ class ReadFileTool(_FsTool):
             if mime and mime.startswith("image/"):
                 return build_image_content_blocks(raw, mime, str(fp), f"(Image file: {path})")
 
+            content_hash = hashlib.sha256(raw).hexdigest()
             # Read dedup: same path + offset + limit + unchanged mtime → stub
             # Always check for external modifications before dedup
             entry = self._file_states.get(fp)
-            try:
-                current_mtime = os.path.getmtime(fp)
-            except OSError:
-                current_mtime = 0.0
+            current_mtime = st.st_mtime
             if (
                 not force
                 and entry
@@ -703,8 +717,7 @@ class ReadFileTool(_FsTool):
                 else:
                     # File unchanged - return dedup message
                     # But only if content is actually unchanged (not just mtime)
-                    current_hash = _hash_file(str(fp))
-                    if current_hash == entry.content_hash:
+                    if content_hash == entry.content_hash:
                         return (
                             f"[File unchanged since last read: {path} \u2014 if this "
                             "conversation no longer contains its content, read it again "
@@ -719,8 +732,6 @@ class ReadFileTool(_FsTool):
                 if entry:
                     entry.can_dedup = False
 
-            # Read the file content after dedup check
-            raw = fp.read_bytes()
             try:
                 text_content = raw.decode("utf-8")
             except UnicodeDecodeError:
@@ -763,7 +774,9 @@ class ReadFileTool(_FsTool):
                 result += f"\n\n(Showing lines {offset}-{end} of {total}. Use offset={end + 1} to continue.)"
             else:
                 result += f"\n\n(End of file — {total} lines total)"
-            self._file_states.record_read(fp, offset=offset, limit=limit)
+            self._file_states.record_read(
+                fp, offset=offset, limit=limit, content_hash=content_hash,
+            )
             return result
         except PermissionError as e:
             return f"Error: {e}"
