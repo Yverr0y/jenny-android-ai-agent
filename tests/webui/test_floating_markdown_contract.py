@@ -76,6 +76,23 @@ class TestTheMarkdownIsItsOwn:
         )
         assert "markdownRenderer(ctx).setMarkdown(this, line.text)" in body
 
+    def test_a_render_that_throws_falls_back_to_the_text(self):
+        """La conversazione si ridisegna tutta a ogni risposta: un testo che fa
+        sollevare Markwon rompeva ogni render finché restava nella storia (voce
+        AN11 della terza revisione). Ora ``setMarkdown`` sta in un ``try`` e il
+        ripiego è il testo com'è scritto; ``Throwable``, perché un annidamento
+        profondo è uno ``StackOverflowError``."""
+        body = _fun(_read(), "private fun bubbleView(ctx: Context, line: Line): TextView")
+        guarded = re.search(
+            r"try \{\s*markdownRenderer\(ctx\)\.setMarkdown\(this, line\.text\)\s*\}"
+            r"\s*catch \(e: Throwable\) \{(.*?)\n\s*\}",
+            body,
+            re.S,
+        )
+        assert guarded, "setMarkdown non è più protetto: un testo storto rompe ogni render"
+        assert "text = line.text" in guarded.group(1)
+        assert "movementMethod = null" in guarded.group(1)
+
     def test_the_spa_does_the_same(self):
         """La cucitura fra i due lati: se un giorno la SPA renderizzasse anche
         le bolle utente, questa regola andrebbe rivista insieme."""

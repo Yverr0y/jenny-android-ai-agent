@@ -1984,10 +1984,24 @@ object FloatingOverlayController {
             //
             // Ultimo, dopo i colori: `setMarkdown` scrive il testo e attacca il
             // movement method dei link.
+            //
+            // **In un `try`.** La conversazione si ridisegna tutta a ogni
+            // risposta: un testo che fa sollevare Markwon (o un plugin) non
+            // romperebbe una bolla, ma ogni render da lì in poi, finché quella
+            // riga resta nella storia. Il ripiego è il testo com'è scritto —
+            // lo stesso che la bolla mostrava prima del markdown. `Throwable`
+            // perché il parser scende per ricorsione: un annidamento profondo
+            // (mille `>` di fila) è uno `StackOverflowError`, non un'eccezione.
             if (line.mine) {
                 text = line.text
             } else {
-                markdownRenderer(ctx).setMarkdown(this, line.text)
+                try {
+                    markdownRenderer(ctx).setMarkdown(this, line.text)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Markdown render failed (${e.javaClass.simpleName}), plain text")
+                    movementMethod = null
+                    text = line.text
+                }
             }
         }
     }
