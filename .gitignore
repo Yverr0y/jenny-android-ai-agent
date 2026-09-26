@@ -20,6 +20,7 @@ docs/plans/
 # di chi ci lavora e non si versionano. Il codice non le cita: la ragione che
 # serve sta nel commento stesso.
 /.agent/
+/plan.md
 
 # Python bytecode & caches
 *.pyc
