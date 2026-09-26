@@ -101,7 +101,12 @@ def measure_text(text: str, *, skip_user_rules: bool = False) -> int:
     if not ends:
         return len(text)
     start, end = ends
-    return len(text) - (end - start)
+    # Anche gli a capo con cui la proiezione separa il blocco dal testo prima
+    # (``soul_rules._project``, ``tail + "\n\n" + block``) sono suoi: contati,
+    # un salvataggio delle regole faceva crescere SOUL.md di due caratteri, e
+    # ``dream_cycle.consolidation_landed`` lo leggeva come un fatto atterrato
+    # (TD19 della terza revisione).
+    return len(text[:start].rstrip() + text[end:])
 
 
 def count_chars(path: Path, *, skip_user_rules: bool = False) -> int:

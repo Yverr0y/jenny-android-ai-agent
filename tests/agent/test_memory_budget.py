@@ -265,8 +265,9 @@ class TestUserRulesDoNotCountAgainstSoul:
         text = self._with_rules(store)
         soul = _report(store, soul=500)[2]
         assert len(text) > 1000
-        # Il testo di lei più gli a capo attorno al blocco: nessuna riga sua.
-        assert soul.chars == len("# Soul\n- Helpful\n\n\n"), soul
+        # Il testo di lei e l'a capo finale: nessuna riga del blocco, e nemmeno
+        # gli a capo con cui la proiezione lo separa (TD19 della terza revisione).
+        assert soul.chars == len("# Soul\n- Helpful\n"), soul
         assert soul.over is False
 
     def test_the_guard_does_not_refuse_dream_because_of_the_rules(self, store):
