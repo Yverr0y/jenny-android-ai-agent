@@ -17,6 +17,7 @@ I metodi si ritagliano da ``home-chat.js`` e girano in node su un filo finto.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from support.js_harness import member, requires_node, run_js
@@ -28,6 +29,7 @@ pytestmark = requires_node
 
 _METHODS = (
     "load",
+    "_read",
     "prependTurns",
     "_inBatch",
     "_buildTurns",
@@ -52,6 +54,9 @@ function makeNode() {
     appendChild(c) { node.children.push(c); return c; },
     insertBefore(c) { node.children.unshift(c); return c; },
     get firstChild() { return node.children[0] || null; },
+    /* Il filo vuoto: niente da buttare, nessun nodo vivo prima di cui entrare. */
+    querySelector: () => null,
+    querySelectorAll: () => [],
   };
   return node;
 }
@@ -68,8 +73,9 @@ globalThis.requestAnimationFrame = (fn) => { const id = nextFrame++; frames.set(
 globalThis.cancelAnimationFrame = (id) => { frames.delete(id); };
 const paint = () => { const due = [...frames.values()]; frames.clear(); due.forEach((fn) => fn()); };
 
-/* Costante di modulo di `home-chat.js`: il ritaglio del metodo non la porta. */
+/* Costanti di modulo di `home-chat.js`: il ritaglio del metodo non le porta. */
 const HISTORY_PAGE_SIZE = 50;
+__THREAD_NODES__
 let turns = [];
 const sessionManager = {
   currentKey: 'websocket:default',
@@ -84,6 +90,7 @@ function makeChat() {
     pager: { adopt() {}, ensureReach() {} },
     turnNode: null, blockNode: null, buffer: '', turnId: null,
     _empty: false, _seconds: null, _frame: null, _batching: false,
+    _shownKey: null, _reading: 0, _live: new WeakSet(), _anchor: null,
     syncEmpty() {}, scrollToBottom() {}, _follow() {}, _tailOf() {}, _register() {},
     _appendUser(text, origin, media, toTop = false) {
       const n = makeNode(); n.className = 'home-msg home-msg-user'; n.innerHTML = text;
@@ -111,7 +118,10 @@ const exchange = (n) => {
 def _run(script: str) -> None:
     src = HOME_CHAT_JS.read_text(encoding="utf-8")
     methods = ",\n    ".join(member(src, name) for name in _METHODS)
-    run_js(_HARNESS.replace("__METHODS__", methods) + "\n" + script)
+    nodes = re.search(r"(?m)^const THREAD_NODES = .*;$", src)
+    assert nodes, "const THREAD_NODES non trovata"
+    harness = _HARNESS.replace("__METHODS__", methods).replace("__THREAD_NODES__", nodes.group(0))
+    run_js(harness + "\n" + script)
 
 
 def test_a_history_page_measures_the_gap_once() -> None:

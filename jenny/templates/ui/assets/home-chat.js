@@ -69,6 +69,9 @@ const STICK_PX = 24;
    i record grezzi che il gateway rigioca a ogni apertura sulla CPU del telefono. */
 const HISTORY_PAGE_SIZE = 50;
 
+/* I nodi che fanno il filo: quel che una rilettura butta e ridisegna. */
+const THREAD_NODES = '.home-msg, .home-boundary';
+
 function mediaKind(entry) {
   if (entry.kind) return entry.kind;
   const name = (entry.name || entry.url || '').toLowerCase();
@@ -96,6 +99,22 @@ export class HomeChat {
        margine attorno a Jenny si ricalcola una volta alla fine invece che a
        ogni messaggio (v. `_append`). */
     this._batching = false;
+    /* **La storia arriva mentre il filo e' vivo.** Una lettura e' una fetch
+       che dura, e intanto il socket porta frame: la risposta che Jenny sta
+       scrivendo, un messaggio tuo. Quei nodi nascono *durante* la lettura e
+       vanno *sotto* la storia che arriva dopo di loro — prima la storia si
+       appendeva in fondo, e la bolla viva finiva sopra tutta la
+       conversazione (terza revisione, HJ1).
+
+       `_shownKey` e' la conversazione che il filo mostra: una rilettura della
+       stessa tiene quel che c'e' finche' la storia non e' pronta, una di
+       un'altra lo toglie subito. `_reading` conta le letture in volo, `_live`
+       sono i nodi nati mentre ce n'era una, `_anchor` il primo di loro: la
+       storia entra prima di lui. */
+    this._shownKey = null;
+    this._reading = 0;
+    this._live = new WeakSet();
+    this._anchor = null;
     /* Il markdown com'e' arrivato, per bolla. Si copia il sorgente e non il
        reso: le recinzioni dei blocchi di codice sono esattamente cio' che
        serve quando una risposta si incolla altrove. `WeakMap` perche' la
@@ -218,19 +237,65 @@ export class HomeChat {
 
   /* ── Storia ── */
 
-  /** Carica la conversazione e la disegna. Ritorna il numero di messaggi. */
+  /** Carica la conversazione e la disegna. Ritorna il numero di messaggi, o
+   *  `null` se la risposta non e' piu' di questo filo (la conversazione e'
+   *  cambiata nel frattempo). */
   async load() {
+    return this._read(false);
+  }
+
+  /* La lettura e il disegno, per `load` e `reload`. Con `fresh` quel che c'e'
+     a schermo se ne va: subito se la conversazione e' un'altra — i suoi
+     messaggi non sono di questa — e solo a storia arrivata se e' la stessa,
+     cosi' una rilettura non lascia il filo vuoto per il tempo di un giro.
+     Quel che e' nato dal vivo durante la lettura resta, sotto la storia. */
+  async _read(fresh) {
     const key = sessionManager.currentKey;
-    const { thread, stale } = await sessionManager.loadThread(key, HISTORY_PAGE_SIZE);
-    if (stale) return 0;
+    const switched = key !== this._shownKey;
+    this._shownKey = key;
+    let old = [];
+    if (fresh && switched) {
+      /* Tutto, compreso quel che era nato dal vivo: era dell'altra. */
+      this.el.querySelectorAll(THREAD_NODES).forEach((n) => n.remove());
+      this._live = new WeakSet();
+      this._empty = true;
+      /* Il cursore appartiene alla conversazione che se ne sta andando.
+         `adopt` lo riscrivera' a fetch riuscita — ma se la fetch fallisce lo
+         schermo resta vuoto e il cursore resta quello dell'altra: una scorsa
+         in su incollerebbe in cima la storia del quaderno sbagliato. Per
+         questo `reset()` esiste, e il suo commento dice proprio «si chiama al
+         cambio di conversazione». */
+      this.pager.reset();
+    } else if (fresh) {
+      old = [...this.el.querySelectorAll(THREAD_NODES)].filter((n) => !this._live.has(n));
+    }
+    this._reading += 1;
+    let res;
+    try {
+      res = await sessionManager.loadThread(key, HISTORY_PAGE_SIZE);
+    } finally {
+      this._reading -= 1;
+    }
+    if (res.stale) return null;
+    const { thread } = res;
+    old.forEach((n) => n.remove());
     const messages = thread?.messages || [];
-    this._inBatch(() => {
-      for (const turn of this._buildTurns(messages)) {
-        if (turn.boundary) this._appendBoundary();
-        else if (turn.user) this._appendUser(turn.text, turn.origin, turn.media);
-        else this._appendAssistant(turn.content, turn.media, false, turn.latencyMs);
-      }
-    });
+    /* Il primo nodo rimasto e' nato dal vivo: la storia va prima di lui. */
+    this._anchor = this.el.querySelector(THREAD_NODES);
+    try {
+      this._inBatch(() => {
+        for (const turn of this._buildTurns(messages)) {
+          if (turn.boundary) this._appendBoundary();
+          else if (turn.user) this._appendUser(turn.text, turn.origin, turn.media);
+          else this._appendAssistant(turn.content, turn.media, false, turn.latencyMs);
+        }
+      });
+    } finally {
+      this._anchor = null;
+    }
+    if (!this._reading) this._live = new WeakSet();
+    this._empty = !this.el.querySelector(THREAD_NODES);
+    this.syncEmpty();
     this.pager.adopt(thread?.page);
     this.scrollToBottom();
     /* Dopo il disegno e dopo l'aggancio al fondo: `ensureReach` misura se il
@@ -574,22 +639,12 @@ export class HomeChat {
    */
   async reload() {
     this._resetTurn();
-    this.el.querySelectorAll('.home-msg, .home-boundary').forEach((n) => n.remove());
-    this._empty = true;
     /* La bolla in sospeso muore col DOM che la conteneva. Senza azzerarla, un
        rifiuto in arrivo — che e' l'unico frame che la lascia in vita — la
        toglierebbe da un nodo staccato e rimetterebbe quel testo nel campo di
        un'altra conversazione. */
     this._pendingSend = null;
-    /* Il cursore appartiene alla conversazione che se ne sta andando. `adopt`
-       lo riscrivera' a fetch riuscita — ma se la fetch fallisce lo schermo
-       resta vuoto e il cursore resta quello dell'altra: una scorsa in su
-       incollerebbe in cima la storia del quaderno sbagliato. Per questo
-       `reset()` esiste, e il suo commento dice proprio «si chiama al cambio di
-       conversazione». */
-    this.pager.reset();
-    await this.load();
-    this.syncEmpty();
+    return this._read(true);
   }
 
   /* ── Disegno ── */
@@ -777,7 +832,12 @@ export class HomeChat {
 
   _append(node, toTop = false) {
     if (toTop) this.el.insertBefore(node, this.el.firstChild);
+    else if (this._anchor?.parentNode === this.el) this.el.insertBefore(node, this._anchor);
     else this.el.appendChild(node);
+    /* Nato mentre una lettura era in volo: e' del presente, e la storia che
+       arriva non lo butta (v. `_read`). La storia entra sempre in blocco
+       (`_inBatch`), un frame vivo mai. */
+    if (this._reading && !this._batching) this._live.add(node);
     if (this._empty) {
       this._empty = false;
       this.syncEmpty();

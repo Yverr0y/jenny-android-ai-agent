@@ -257,7 +257,7 @@ def test_the_first_page_is_drawn_before_the_button_is_measured() -> None:
     """`ensureReach` chiede se il filo trabocca: prima del disegno la risposta è
     sempre no, e il bottone comparirebbe su ogni apertura."""
     src = HOME_CHAT_JS.read_text(encoding="utf-8")
-    load = member(src, "load")
+    load = member(src, "_read")
     order = [
         load.index("this._buildTurns(messages)"),
         load.index("this.pager.adopt("),
