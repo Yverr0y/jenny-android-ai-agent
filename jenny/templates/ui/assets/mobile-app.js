@@ -707,10 +707,9 @@ class MobileApp {
     this.switchMode('chat');
     const chat = this.controllers?.chat;
     if (!chat?.input) return;
-    chat.input.value = text;
-    chat._autoResize?.();
-    chat._updateSendState?.();
-    chat.input.focus();
+    /* Da `prefillComposer`: la bozza che c'era non si butta, torna appena la
+       richiesta parte (WJ9 della terza revisione). */
+    chat.prefillComposer(text);
   }
 
   /** Blocco del dock durante il primo avvio, in un interruttore solo.

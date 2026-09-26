@@ -213,6 +213,8 @@ export class ChatController {
     /* L'ultimo invio, finché il gateway non ha dimostrato di averlo preso.
        `null` = non c'è niente da riprendere. */
     this._pendingSend = null;
+    // La bozza che un testo precompilato ha messo da parte (`prefillComposer`).
+    this._draftAfterSend = null;
     this._pager = new HistoryPager({
       // Lo scroller e' il documento, ma l'evento `scroll` arriva a `window`:
       // qui le due cose non coincidono (v. il getter `_scroller`).
@@ -3424,18 +3426,36 @@ export class ChatController {
       return;
     }
     if (spec.arg_hint) {
-      this.input.value = `${command} `;
-      this.input.focus();
-      // Il cursore in fondo: `focus()` da solo lo mette dove capita quando il
-      // valore è stato appena riscritto.
-      const end = this.input.value.length;
-      this.input.setSelectionRange(end, end);
-      this._autoResize();
-      this._updateSendState();
-      this._updateActions();
+      this.prefillComposer(`${command} `);
       return;
     }
     this._sendCommandLine(command);
+  }
+
+  /* Scrive *text* nel composer **senza mandarlo** e senza buttare quel che
+   * c'era (WJ9 della terza revisione).
+   *
+   * Lo usano i comandi con un argomento (`/model `) e «Chiedi a Jenny» delle
+   * altre viste (`MobileApp.sendInChat`). Prima riscrivevano il campo, e la
+   * domanda che stavi scrivendo spariva. Qui la bozza si mette da parte e
+   * torna nel campo appena il testo precompilato parte (v. `sendMessage`):
+   * la stessa promessa di `_sendCommandLine`, che la mantiene per i comandi
+   * che partono subito. Una bozza gia' da parte non si sovrascrive con un
+   * precompilato che nessuno ha mandato. */
+  prefillComposer(text) {
+    const draft = this.input.value;
+    if (draft.trim() && !this._draftAfterSend && draft.trim() !== String(text).trim()) {
+      this._draftAfterSend = draft;
+    }
+    this.input.value = text;
+    this.input.focus();
+    // Il cursore in fondo: `focus()` da solo lo mette dove capita quando il
+    // valore è stato appena riscritto.
+    const end = this.input.value.length;
+    this.input.setSelectionRange?.(end, end);
+    this._autoResize();
+    this._updateSendState();
+    this._updateActions();
   }
 
   /* Una riga di comando, senza portarsi via quel che c'era nel composer.
@@ -3527,6 +3547,14 @@ export class ChatController {
     if (attachments) this.imageHandler.clear();
     this.input.value = '';
     this.input.style.height = 'auto';
+    /* La bozza messa da parte da `prefillComposer` torna adesso: il testo
+       precompilato e' partito. Non sulla strada dei comandi, che rimette gia'
+       la sua (`_sendCommandLine`) e la scriverebbe sopra. */
+    if (attachments && this._draftAfterSend) {
+      this.input.value = this._draftAfterSend;
+      this._draftAfterSend = null;
+      this._autoResize();
+    }
     this._updateSendState();
     this._updateActions();
     this.input.focus();
