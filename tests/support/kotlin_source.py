@@ -53,6 +53,12 @@ def _string_end(src: str, i: int) -> int:
                 if src[j] == '"':
                     j = _string_end(src, j)
                     continue
+                # Un carattere letterale dentro il template (``'"'``, ``'{'``):
+                # la sua virgoletta aprirebbe una stringa che non c'e', la sua
+                # graffa sposterebbe il conto.
+                if src[j] == "'" and (m := _CHAR_LITERAL.match(src, j)):
+                    j = m.end()
+                    continue
                 depth += {"{": 1, "}": -1}.get(src[j], 0)
                 j += 1
             continue
