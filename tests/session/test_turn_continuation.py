@@ -89,6 +89,46 @@ async def test_maybe_continue_turn_queues_internal_message():
 
 
 @pytest.mark.asyncio
+async def test_a_full_pending_queue_skips_the_continuation_instead_of_blocking():
+    """AC10 della terza revisione: niente ``await put()`` su una coda che nessuno svuota.
+
+    La coda la drena il turno stesso, che qui e' fermo ad aspettare: con la coda
+    piena (20 messaggi arrivati durante un goal lungo) ``put`` restava sospeso
+    per sempre, e con lui il turno e la sessione. Ora la continuazione si salta,
+    e il turno finisce con la risposta che aveva: il goal riparte al prossimo
+    messaggio, e i messaggi in coda non si perdono.
+    """
+    meta = {GOAL_STATE_KEY: {"status": "active", "objective": "x"}}
+    full: asyncio.Queue[InboundMessage] = asyncio.Queue(maxsize=2)
+    for i in range(2):
+        full.put_nowait(InboundMessage(channel="websocket", sender_id="u1",
+                                       chat_id="c1", content=f"m{i}"))
+    messages = [{"role": "user", "content": "start"}, {"role": "assistant", "content": "a meta'"}]
+    ctx = SimpleNamespace(
+        session=SimpleNamespace(metadata=meta),
+        msg=InboundMessage(channel="websocket", sender_id="u1", chat_id="c1", content="start",
+                           metadata={}),
+        session_key="websocket:c1",
+        pending_queue=full,
+        stop_reason="max_iterations",
+        final_content="a meta'",
+        all_messages=messages,
+        suppress_response=False,
+        visible_run_started_at=None,
+    )
+
+    assert await asyncio.wait_for(maybe_continue_turn(ctx), timeout=1.0) is False
+
+    # Il turno non e' stato toccato: la risposta resta quella che aveva.
+    assert ctx.final_content == "a meta'"
+    assert ctx.all_messages == messages
+    assert ctx.suppress_response is False
+    assert not internal_continuation_pending(ctx.msg.metadata)
+    assert "_sustained_goal_continuation_rounds" not in meta
+    assert full.qsize() == 2
+
+
+@pytest.mark.asyncio
 async def test_internal_continuation_respects_round_limit():
     meta = {
         GOAL_STATE_KEY: {"status": "active", "objective": "x"},

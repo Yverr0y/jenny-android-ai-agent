@@ -7,6 +7,7 @@ continuation is allowed and, when it is, queue the next turn directly.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from typing import Any, Mapping, MutableMapping
 
@@ -119,6 +120,29 @@ async def maybe_continue_turn(ctx: Any) -> bool:
         run_started_at=getattr(ctx, "visible_run_started_at", None),
     )
     content = _goal_continuation_prompt(ctx.session.metadata)
+    continuation = dataclasses.replace(
+        ctx.msg,
+        sender_id=_GOAL_CONTINUATION_SENDER,
+        content=content,
+        media=[],
+        metadata=metadata,
+        session_key_override=ctx.session_key,
+    )
+    # ``put_nowait`` e **prima** di toccare il turno (AC10 della terza revisione).
+    # Questa coda la drena il turno stesso, che qui e' fermo: un ``await put()``
+    # su una coda piena — i messaggi arrivati durante un goal lungo — restava
+    # sospeso per sempre, e con lui la sessione. Con la coda piena la
+    # continuazione si salta e il turno finisce con la risposta che aveva; il goal
+    # riprende al prossimo messaggio, e quelli in coda arrivano come sempre.
+    try:
+        ctx.pending_queue.put_nowait(continuation)
+    except asyncio.QueueFull:
+        logger.warning(
+            "Turn budget reached but the pending queue of {} is full; "
+            "skipping the internal continuation",
+            ctx.session_key,
+        )
+        return False
     messages = _strip_terminal_assistant(ctx.all_messages, ctx.final_content)
     _increment_goal_continuation_round(ctx.session.metadata)
 
@@ -127,16 +151,6 @@ async def maybe_continue_turn(ctx: Any) -> bool:
     ctx.final_content = ""
     ctx.all_messages = messages
     ctx.suppress_response = True
-    await ctx.pending_queue.put(
-        dataclasses.replace(
-            ctx.msg,
-            sender_id=_GOAL_CONTINUATION_SENDER,
-            content=content,
-            media=[],
-            metadata=metadata,
-            session_key_override=ctx.session_key,
-        )
-    )
     return True
 
 
