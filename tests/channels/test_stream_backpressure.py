@@ -136,3 +136,76 @@ async def test_the_webui_receives_the_whole_text_after_drops() -> None:
     assert len(shown) < len(FULL)  # i delta sono davvero stati scartati
     end = next(f for f in frames if f["event"] == "stream_end")
     assert end["text"] == FULL
+
+
+def _seg(text: str, stream_id: str) -> OutboundMessage:
+    return OutboundMessage(channel="websocket", chat_id="default", content=text,
+                           metadata={"_stream_delta": True, "_stream_id": stream_id})
+
+
+def _seg_end(stream_id: str) -> OutboundMessage:
+    return OutboundMessage(channel="websocket", chat_id="default", content="",
+                           metadata={"_stream_end": True, "_stream_id": stream_id})
+
+
+def _shape(msg: OutboundMessage) -> tuple[str | None, str]:
+    meta = msg.metadata
+    kind = "end" if meta.get("_stream_end") else ("delta" if meta.get("_stream_delta") else "final")
+    return meta.get("_stream_id"), kind
+
+
+async def test_a_held_end_leaves_before_the_next_segment() -> None:
+    # Lo ``stream_end`` respinto di un segmento aspettava il prossimo messaggio
+    # bloccante, e intanto passavano delta ed end del segmento dopo: la bolla
+    # del primo si chiudeva dopo il secondo, e col testo intero lo duplicava.
+    bus = MessageBus(outbound_maxsize=4)
+    for word in ["A1 ", "A2 ", "A3 ", "A4 ", "A5 ", "A6 "]:
+        bus.try_publish_outbound(_seg(word, "s0"))
+    assert not bus.try_publish_outbound(_seg_end("s0"))
+    got = [bus.outbound.get_nowait() for _ in range(4)]  # il dispatcher smaltisce
+    for word in ["B1 ", "B2 "]:
+        assert bus.try_publish_outbound(_seg(word, "s1"))
+    assert bus.try_publish_outbound(_seg_end("s1"))
+    publishing = asyncio.create_task(bus.publish_outbound(OutboundMessage(
+        channel="websocket", chat_id="default", content="final", metadata={"_streamed": True},
+    )))
+    while not publishing.done() or bus.outbound_size:
+        got.append(await asyncio.wait_for(bus.consume_outbound(), timeout=1))
+    await publishing
+
+    assert [_shape(m) for m in got] == (
+        [("s0", "delta")] * 4
+        + [("s0", "end"), ("s1", "delta"), ("s1", "delta"), ("s1", "end"), (None, "final")]
+    )
+    ends = {m.metadata["_stream_id"]: m for m in got if m.metadata.get("_stream_end")}
+    assert ends["s0"].metadata["_stream_full_text"] == "A1 A2 A3 A4 A5 A6 "
+    assert "_stream_full_text" not in ends["s1"].metadata
+
+
+async def test_a_held_end_of_an_intact_stream_carries_no_full_text() -> None:
+    # Se l'end è l'unico frame respinto, il canale ha già tutti i delta: il
+    # testo intero non serve, e con un ordine sbagliato sarebbe un duplicato.
+    bus = MessageBus(outbound_maxsize=2)
+    assert bus.try_publish_outbound(_seg("A1 ", "s0"))
+    assert bus.try_publish_outbound(_seg("A2 ", "s0"))
+    assert not bus.try_publish_outbound(_seg_end("s0"))
+    got = [bus.outbound.get_nowait() for _ in range(2)]
+    await bus.publish_outbound(_final())
+    got += [bus.outbound.get_nowait() for _ in range(bus.outbound_size)]
+    end = next(m for m in got if m.metadata.get("_stream_end"))
+    assert "_stream_full_text" not in end.metadata
+
+
+def test_a_held_end_is_not_overtaken_while_the_queue_stays_full() -> None:
+    # Un solo posto libero va all'end trattenuto, non al frame nuovo: questo è
+    # scartato come ogni transient, e il suo stream recupera sull'end.
+    bus = MessageBus(outbound_maxsize=2)
+    bus.try_publish_outbound(_seg("A1 ", "s0"))
+    bus.try_publish_outbound(_seg("A2 ", "s0"))
+    assert not bus.try_publish_outbound(_seg_end("s0"))
+    bus.outbound.get_nowait()
+    assert not bus.try_publish_outbound(_seg("B1 ", "s1"))
+    queued = [bus.outbound.get_nowait() for _ in range(bus.outbound_size)]
+    assert [_shape(m) for m in queued] == [("s0", "delta"), ("s0", "end")]
+    assert bus.try_publish_outbound(_seg_end("s1"))
+    assert bus.outbound.get_nowait().metadata["_stream_full_text"] == "B1 "

@@ -30,7 +30,7 @@ class MessageBus:
         # Stato degli stream sotto backpressure (solo su coda limitata, v.
         # ``try_publish_outbound``): il testo visto per ogni stream aperto, gli
         # stream che hanno perso almeno un delta, e gli ``stream_end`` che non
-        # sono entrati in coda e aspettano il prossimo messaggio bloccante.
+        # sono entrati in coda e aspettano il prossimo messaggio della chat.
         self._stream_texts: dict[tuple[str, str, str], list[str]] = {}
         self._degraded_streams: set[tuple[str, str, str]] = set()
         self._pending_stream_ends: dict[tuple[str, str], list[OutboundMessage]] = {}
@@ -53,8 +53,8 @@ class MessageBus:
         turn_end). Per i messaggi transient usare ``try_publish_outbound``.
 
         Prima del messaggio passano gli ``stream_end`` della stessa chat che la
-        coda piena aveva respinto (v. ``try_publish_outbound``): chiudono lo
-        stream col testo intero, e vanno davanti al finale del turno."""
+        coda piena aveva respinto (v. ``try_publish_outbound``): chiudono il
+        loro stream, e vanno davanti al finale del turno."""
         for end in self._pending_stream_ends.pop((msg.channel, msg.chat_id), ()):
             await self.outbound.put(end)
         if msg.metadata.get("_turn_end") and self._stream_texts:
@@ -84,9 +84,11 @@ class MessageBus:
         ``stream_end`` di quello stream parte con il testo intero del segmento
         in ``_stream_full_text``, che il canale usa al posto dei delta (il
         client sostituisce il blocco, il transcript riscrive la riga). E se è lo
-        ``stream_end`` stesso a non entrare in coda, lo si tiene da parte e lo
-        consegna il prossimo ``publish_outbound`` della stessa chat — il finale
-        o il ``turn_end``, che arrivano sempre.
+        ``stream_end`` stesso a non entrare in coda, lo si tiene da parte: esce
+        prima del prossimo messaggio della stessa chat, transient o bloccante
+        (il finale o il ``turn_end`` arrivano sempre). Mai dopo: i frame del
+        segmento successivo che lo scavalcassero chiuderebbero la bolla
+        sbagliata, e il testo intero dell'end in ritardo la duplicherebbe.
         """
         key = self._stream_key(msg)
         is_end = bool(key and msg.metadata.get("_stream_end"))
@@ -96,6 +98,9 @@ class MessageBus:
             if is_end and key in self._degraded_streams:
                 msg = self._authoritative_end(msg, key)
         try:
+            # Un end trattenuto che non entra vuol dire coda piena: *msg* non
+            # entrerebbe comunque, e così non lo scavalca.
+            self._flush_pending_ends_nowait(msg.channel, msg.chat_id)
             self.outbound.put_nowait(msg)
         except asyncio.QueueFull:
             self._dropped_outbound += 1
@@ -106,8 +111,9 @@ class MessageBus:
                 )
             if key is not None:
                 if is_end:
-                    if "_stream_full_text" not in msg.metadata:
-                        msg = self._authoritative_end(msg, key)
+                    # Il testo intero viaggia solo se lo stream ha perso delta
+                    # (già allegato sopra): se manca solo l'end, il canale ha
+                    # già tutto il testo nel suo buffer.
                     self._pending_stream_ends.setdefault(
                         (msg.channel, msg.chat_id), [],
                     ).append(msg)
@@ -118,6 +124,17 @@ class MessageBus:
         if is_end and key is not None:
             self._forget_stream(key)
         return True
+
+    def _flush_pending_ends_nowait(self, channel: str, chat_id: str) -> None:
+        """Accoda gli end trattenuti della chat, in ordine; ``QueueFull`` se non entrano.
+
+        Quelli che non entrano restano trattenuti, davanti a tutto il resto.
+        """
+        pending = self._pending_stream_ends.get((channel, chat_id))
+        while pending:
+            self.outbound.put_nowait(pending[0])
+            pending.pop(0)
+        self._pending_stream_ends.pop((channel, chat_id), None)
 
     def _stream_key(self, msg: OutboundMessage) -> tuple[str, str, str] | None:
         """Chiave dello stream di *msg*, o ``None`` se non è un delta/end da seguire.

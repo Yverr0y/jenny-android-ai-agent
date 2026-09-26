@@ -514,12 +514,6 @@ class WebSocketDispatcher:
                 combined_content += next_msg.content
                 if is_end:
                     final_metadata["_stream_end"] = True
-                    # Il testo intero di uno stream degradato viaggia sull'end:
-                    # la fusione non deve perderlo (v. ``MessageBus``).
-                    if "_stream_full_text" in next_msg.metadata:
-                        final_metadata["_stream_full_text"] = next_msg.metadata[
-                            "_stream_full_text"
-                        ]
                     break
             else:
                 non_matching.append(next_msg)
