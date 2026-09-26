@@ -34,6 +34,14 @@
      su quelli chiari. Il riempimento resta `--accent`, con `--on-accent` sopra
      (CS4 della terza revisione; il banco e' in `test_home_you_contract.py`). */
   --text-accent: var(--accent);
+  /* L'anello del fuoco da tastiera (la tastiera fisica del Titan 2). Non
+     `--accent`: in Y2K il riempimento sta a 2,2:1 sul fondo, e in Fumetto
+     accento, bordo e bordo forte sono lo stesso nero — un fuoco detto dal
+     solo colore del bordo li' non cambia niente. `--text-accent` arriva a
+     4,5:1 su ogni fondo per costruzione (lo misura il banco), e i campi lo
+     portano **piu' spesso** del bordo, cosi' si vede anche dove il colore
+     coincide (CS5 della terza revisione). */
+  --focus-ring: var(--text-accent);
   --ok:            #f4f1ea;
   --ok-rgb:        244, 241, 234;
   --error:         #f04b4b;
@@ -315,6 +323,16 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Il fuoco da tastiera, di serie: un anello del colore di `--focus-ring`.
+   `:where()` non pesa niente, quindi ogni regola che veste il suo fuoco in un
+   altro modo (una riga che si accende, un campo che ispessisce il bordo)
+   continua a vincere; questa copre chi non ne ha una. */
+:where(a, button, select, summary, [role="button"], [role="tab"], [role="switch"],
+       [role="radio"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 html {
   overflow: hidden;
   overscroll-behavior: none;
@@ -563,7 +581,7 @@ body {
 }
 .scope-chip:hover, .write-switch:hover, .commands-chip:hover { background: var(--overlay-strong); }
 .scope-chip:focus-visible, .write-switch:focus-visible, .commands-chip:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .scope-chip:active, .write-switch:active, .commands-chip:active { transform: scale(0.98); }
@@ -869,7 +887,8 @@ body {
   transition: border-color 0.3s cubic-bezier(.25,.1,.25,1);
 }
 .compose-pill:focus-within {
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 /* ── Chat Input ── */
@@ -2251,7 +2270,7 @@ body {
    stato e cambiarlo al tocco farebbe sembrare che il job sia cambiato. */
 .sa-row:active { background: var(--active); }
 .sa-row:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .sa-row.state-running { border-left-color: var(--ok); }
@@ -3052,7 +3071,7 @@ body {
   transition: border-color .2s cubic-bezier(.25,.1,.25,1);
 }
 .launcher-search::placeholder { color: var(--text-faint); }
-.launcher-search:focus { border-color: rgba(var(--accent-rgb), 0.55); }
+.launcher-search:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 /* La ✕ compare solo quando c'è qualcosa da pulire: un pulsante sempre visibile
    che a volte non fa niente insegna a non fidarsi dei pulsanti. Nascosta con
    `visibility`, non `display`, così il campo non cambia larghezza sotto il dito
@@ -3385,7 +3404,7 @@ body {
   border: 0.5px solid var(--border-strong);
   border-radius: var(--radius-sm);
 }
-.oc-dialog-input:focus { outline: none; border-color: var(--accent); }
+.oc-dialog-input:focus { outline: none; border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 .oc-dialog-buttons {
   display: flex;
   justify-content: flex-end;
@@ -4680,8 +4699,8 @@ body {
 
 .settings-input:focus,
 .settings-select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.06), 0 0 12px rgba(var(--accent-rgb), 0.10);
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring), 0 0 12px rgba(var(--accent-rgb), 0.10);
   background: var(--overlay);
 }
 
@@ -5520,10 +5539,10 @@ body {
 }
 
 .onboarding-input:focus {
-  border-color: rgba(var(--accent-rgb), 0.4);
+  border-color: var(--focus-ring);
   box-shadow:
     inset 0 1px 2px rgba(0,0,0,0.04),
-    0 0 0 3px rgba(var(--accent-rgb), 0.10),
+    0 0 0 1px var(--focus-ring),
     0 4px 20px rgba(0,0,0,0.12);
   background: var(--overlay-strong);
 }
