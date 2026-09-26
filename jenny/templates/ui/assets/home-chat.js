@@ -113,6 +113,12 @@ export class HomeChat {
        storia entra prima di lui. */
     this._shownKey = null;
     this._reading = 0;
+    /* **Una lettura sola disegna: l'ultima.** Due riletture della stessa
+       conversazione insieme — un resync durante un cambio, un
+       `session_boundary` durante un resync — disegnavano ognuna la sua
+       storia, e il filo usciva doppio (HJ7). Chi parte dopo sa di piu', e
+       quella partita prima si scarta da se' quando torna. */
+    this._readGen = 0;
     this._live = new WeakSet();
     this._anchor = null;
     /* Il markdown com'e' arrivato, per bolla. Si copia il sorgente e non il
@@ -238,8 +244,9 @@ export class HomeChat {
   /* ── Storia ── */
 
   /** Carica la conversazione e la disegna. Ritorna il numero di messaggi, o
-   *  `null` se la risposta non e' piu' di questo filo (la conversazione e'
-   *  cambiata nel frattempo). */
+   *  `null` se la risposta non e' piu' di questo filo: la conversazione e'
+   *  cambiata nel frattempo, o una lettura partita dopo ne ha preso il posto.
+   *  Anche un errore di una lettura scavalcata si scarta: decide l'ultima. */
   async load() {
     return this._read(false);
   }
@@ -250,6 +257,7 @@ export class HomeChat {
      cosi' una rilettura non lascia il filo vuoto per il tempo di un giro.
      Quel che e' nato dal vivo durante la lettura resta, sotto la storia. */
   async _read(fresh) {
+    const gen = ++this._readGen;
     const key = sessionManager.currentKey;
     const switched = key !== this._shownKey;
     this._shownKey = key;
@@ -273,10 +281,13 @@ export class HomeChat {
     let res;
     try {
       res = await sessionManager.loadThread(key, HISTORY_PAGE_SIZE);
+    } catch (err) {
+      if (gen !== this._readGen) return null;
+      throw err;
     } finally {
       this._reading -= 1;
     }
-    if (res.stale) return null;
+    if (gen !== this._readGen || res.stale) return null;
     const { thread } = res;
     old.forEach((n) => n.remove());
     const messages = thread?.messages || [];

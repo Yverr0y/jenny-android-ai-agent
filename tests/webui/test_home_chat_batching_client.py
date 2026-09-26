@@ -90,7 +90,7 @@ function makeChat() {
     pager: { adopt() {}, ensureReach() {} },
     turnNode: null, blockNode: null, buffer: '', turnId: null,
     _empty: false, _seconds: null, _frame: null, _batching: false,
-    _shownKey: null, _reading: 0, _live: new WeakSet(), _anchor: null,
+    _shownKey: null, _reading: 0, _readGen: 0, _live: new WeakSet(), _anchor: null,
     syncEmpty() {}, scrollToBottom() {}, _follow() {}, _tailOf() {}, _register() {},
     _appendUser(text, origin, media, toTop = false) {
       const n = makeNode(); n.className = 'home-msg home-msg-user'; n.innerHTML = text;

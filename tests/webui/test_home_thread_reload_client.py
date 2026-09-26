@@ -91,3 +91,30 @@ frame({ event: 'delta', chat_id: 'default', turn_id: 'n', text: 'now this' });
 await tick(200);
 assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you', 'you: and now?', 'jenny: now this']);
 """)
+
+
+def test_two_reloads_of_the_same_conversation_draw_it_once() -> None:
+    """HJ7: due riletture insieme, e il filo resta uno."""
+    _run("""
+const app = await boot();
+slowThread(40);
+await Promise.all([app.chat.reload(), app.chat.reload()]);
+assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+""")
+
+
+def test_a_reconnect_during_a_switch_does_not_duplicate_the_thread() -> None:
+    """HJ7, la forma che capita davvero: si cambia conversazione e il socket
+    si riapre mentre la lettura e' in volo."""
+    _run("""
+const app = await boot();
+await app.showConversation('project:orto');
+await tick(20);
+slowThread(120);
+const back = app.showConversation('websocket:default');
+await tick(20);
+await reconnect();
+await back;
+await tick(300);
+assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+""")
