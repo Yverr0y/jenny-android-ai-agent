@@ -31,6 +31,7 @@ from loguru import logger
 
 from jenny.security.workspace_policy import is_path_within
 from jenny.utils.wiki_paths import WIKI_INDEX_FILENAME, safe_wiki_page_path
+from jenny.webui.workspace_files import os_error_text
 
 # Tetto sul contenuto di una singola scrittura. Allineato al ``max_size`` di
 # ``workspace_files.read_file``: ciò che l'editor non può aprire non deve
@@ -195,7 +196,7 @@ async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dic
     except PermissionError as exc:
         raise CommandError("forbidden", "permission denied") from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
     return {"path": rel_path, "bytes": size}
 
 
@@ -232,7 +233,7 @@ def _fs_errors() -> Iterator[None]:
     except PermissionError as exc:
         raise CommandError("forbidden", "permission denied") from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
 
 
 def _notebooks_dir(workspace_root: Path) -> Path:
@@ -514,7 +515,7 @@ async def soul_rules_write(ctx: CommandContext, params: Mapping[str, Any]) -> di
     except PermissionError as exc:
         raise CommandError("forbidden", "permission denied") from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
     return {"chars": len(saved)}
 
 
@@ -636,7 +637,7 @@ async def page_write(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str
     except PermissionError as exc:
         raise CommandError("forbidden", "permission denied") from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
     return {"wiki": wiki_name, "page": page_path, "bytes": size}
 
 
@@ -783,7 +784,7 @@ async def project_create(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     except ProjectCreateError as exc:
         raise CommandError("bad_request", str(exc)) from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
 
 
 async def project_delete(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -830,7 +831,7 @@ async def project_delete(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     except ProjectDeleteError as exc:
         raise CommandError("bad_request", str(exc)) from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
     # La sua pagina in casa, se ne aveva una: se ne va con lui. **Dopo** la
     # cancellazione, fuori dal thread — e se non ci riesce il quaderno resta
     # cancellato: la pagina verso il nulla la toglie l'utente.
@@ -885,7 +886,7 @@ async def project_rename(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     except ProjectRenameError as exc:
         raise CommandError(exc.code, str(exc)) from exc
     except OSError as exc:
-        raise CommandError("bad_request", str(exc)) from exc
+        raise CommandError("bad_request", os_error_text(exc)) from exc
 
     from jenny.webui.home_pages import rename_pages_of
 

@@ -37,7 +37,7 @@ from jenny.channels.http_utils import (
 
 # A livello di modulo perché ora la traduce ``dispatch``; il resto di
 # ``workspace_files`` resta importato dentro gli handler.
-from jenny.webui.workspace_files import WorkspaceBinaryFileError
+from jenny.webui.workspace_files import WorkspaceBinaryFileError, os_error_text
 
 
 class WorkspaceRoutes:
@@ -115,7 +115,9 @@ class WorkspaceRoutes:
         except PermissionError:
             return http_error(403, "permission denied")
         except OSError as e:
-            return http_error(400, str(e))
+            # Il perche', non il dove: ``str(e)`` porta il percorso assoluto
+            # della cartella privata dell'app (terza revisione, WA16).
+            return http_error(400, os_error_text(e))
 
     async def _list(self, request: WsRequest) -> Response:
         from jenny.webui.workspace_files import list_directory, validate_path

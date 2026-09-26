@@ -162,6 +162,22 @@ def list_directory(path: Path, *, workspace_root: Path | None = None) -> list[di
     return items
 
 
+def os_error_text(exc: OSError) -> str:
+    """Il perche' di un ``OSError``, senza il dove: il testo per un client.
+
+    ``str(exc)`` e' ``[Errno 21] Is a directory: '/data/user/0/…/workspace/x'``:
+    il percorso assoluto della cartella privata dell'app finiva nel corpo dei
+    400 e nei toast (terza revisione, WA16). Resta ``strerror`` («Is a
+    directory»); un ``OSError`` alzato con un messaggio solo, senza file, e'
+    gia' scritto per chi legge e passa com'e'.
+    """
+    if exc.strerror:
+        return exc.strerror
+    if exc.filename is None and exc.filename2 is None and str(exc):
+        return str(exc)
+    return "filesystem error"
+
+
 class WorkspaceBinaryFileError(ValueError):
     """Il file richiesto è binario e non può essere letto come testo."""
 

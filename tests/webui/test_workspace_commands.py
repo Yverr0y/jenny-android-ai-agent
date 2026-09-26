@@ -166,6 +166,19 @@ async def test_the_tree_work_runs_off_the_event_loop(
     assert seen and all(ident != loop_thread for ident in seen)
 
 
+async def test_a_filesystem_error_does_not_leak_the_absolute_path(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """``str(OSError)`` porta il percorso assoluto della cartella privata
+    dell'app fino al toast (terza revisione, WA16)."""
+    (workspace_root / "a").mkdir()
+    err = await _refused(ctx, "workspace.rename", {"old_path": "a", "new_path": "a/dentro"})
+    assert err.code == "bad_request"
+    assert str(workspace_root.resolve()) not in err.message
+    assert str(workspace_root) not in err.message
+    assert "Errno" not in err.message and err.message
+
+
 # ---------------------------------------------------------------------------
 # workspace.rename
 # ---------------------------------------------------------------------------

@@ -562,6 +562,25 @@ async def test_download_names_any_file_safely(
     assert disposition.isascii() and "\r" not in disposition and "\n" not in disposition
 
 
+@pytest.mark.parametrize("url", ["/api/workspace/read?path=adir", "/api/workspace/list?path=ciclo"])
+async def test_a_filesystem_error_does_not_leak_the_absolute_path(
+    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path, url: str
+) -> None:
+    """Il 400 portava ``str(OSError)`` — ``[Errno 21] Is a directory:
+    '/data/user/0/…/workspace/adir'`` —, cioe' il percorso assoluto della cartella
+    privata dell'app (terza revisione, WA16). Resta il perche', senza il dove."""
+    import os
+
+    (workspace_root / "adir").mkdir()
+    os.symlink("ciclo", workspace_root / "ciclo")
+    response = await routes.dispatch(_request(url), url.split("?")[0])
+    assert response.status_code == 400
+    body = response.body.decode("utf-8")
+    assert str(workspace_root) not in body and str(workspace_root.resolve()) not in body
+    assert "Errno" not in body
+    assert body.strip()
+
+
 # ---------------------------------------------------------------------------
 # WA10: il disco fuori dall'event loop
 # ---------------------------------------------------------------------------
