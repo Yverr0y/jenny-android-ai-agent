@@ -1695,13 +1695,16 @@ body.home {
    scende mai sotto 101; `--accent` e `--ok` addirittura coincidono (distanza 0)
    in chanel e fumetto.
 
-   Quindi qui `concepts` prende `--ok`. Non e' una tavolozza rubata a nessuno:
-   nel grafo `--ok` e' assegnato a `summaries`, che non viene mai disegnato. Il
+   Quindi qui `concepts` prendeva `--ok`, e `entities` restava `--error`.
+   Dal 26/09/2026 nessuno dei due: un'entita' non e' un errore, e in Y2K il
+   verde di `--ok` stava a 1,7:1 sul fondo (CS14 della terza revisione). La
+   coppia e' `--group-concepts`/`--group-entities` (in `mobile-style.css`),
+   scelta per separarsi in tutti e sette i temi — lo misura il banco. Il
    grafo dell'officina ha lo stesso scontro e non l'ho toccato — la' la legenda
    mette la pastiglia accanto alla parola, quindi si decodifica lo stesso, e
    cambiare i colori di un altro guscio non e' lavoro di questo giro. */
-.home-group-concepts { background: var(--ok); }
-.home-group-entities { background: var(--error); }
+.home-group-concepts { background: var(--group-concepts); }
+.home-group-entities { background: var(--group-entities); }
 .home-group-other { background: var(--text-faint); }
 
 .home-notebook-pages-note,
@@ -1750,8 +1753,8 @@ body.home {
    tema scuro. Le tre regole sotto vincono per specificita'. */
 .home-map-node { cursor: pointer; fill: var(--text-faint); }
 
-.home-map-nodes .home-group-concepts { fill: var(--ok); }
-.home-map-nodes .home-group-entities { fill: var(--error); }
+.home-map-nodes .home-group-concepts { fill: var(--group-concepts); }
+.home-map-nodes .home-group-entities { fill: var(--group-entities); }
 .home-map-nodes .home-group-other { fill: var(--text-faint); }
 
 .home-map-labels text {
