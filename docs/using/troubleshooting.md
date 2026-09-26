@@ -30,46 +30,50 @@ there's usually nothing to actively fix: the WebUI retries forever, with a backo
 
 ## Chat looks fine but nothing happens after onboarding
 
-If the app loads, the input works, but sending a message never produces a reply (or immediately errors), the most common cause is a provider problem: go to **Settings → Model → API keys** and confirm a provider is actually configured with a valid key.
+If the app loads, the input works, but sending a message never produces a reply (or immediately errors), the most common cause is a provider problem: go to **Settings → Who answers** and confirm a provider is actually configured with a valid key. Providers are added and removed in the workshop, under **Brain → Brands**.
 
 Exact errors you might see appended after "Error: " in the chat, and what they mean:
 
 | Error | Meaning |
 |---|---|
-| `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` | Onboarding was interrupted before "Start", or the provider list was later emptied. Add one in Settings → Model → API keys → Add provider. |
-| `Provider '<name>': api_key is required.` | A provider entry exists but its API key field is empty. Edit it in Settings and paste the key again. |
-| `401` / Unauthorized | The API key is wrong, expired, or was pasted with extra whitespace. Regenerate it on the provider's dashboard and update it in Settings. |
-| `429` / rate limit | You've hit the provider's rate limit. Wait and retry, or switch to a different model in Settings → Model. |
-| `404` / model not found | The model ID doesn't exist for that provider — a display name was used instead of the API model ID, or the model was deprecated. Pick a different one from the catalog in Settings → Model → Change model. |
-| Connection refused | Only relevant if you pointed the provider at a self-hosted endpoint (Ollama, LM Studio, vLLM) — the server isn't reachable from the phone, or it isn't HTTPS (cleartext HTTP is only allowed to `127.0.0.1`). See [Local models](../reference/local-models.md). |
+| `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` | Onboarding was interrupted before "Start", or the provider list was later emptied. Add one in the workshop under **Brain → Brands**. |
+| `Provider '<name>': api_key is required.` | A provider entry exists but its API key field is empty. Edit it in Settings → Who answers and paste the key again. |
+| `401` / Unauthorized | The API key is wrong, expired, or was pasted with extra whitespace. Regenerate it on the provider's dashboard and update it in Settings → Who answers. |
+| `429` / rate limit | You've hit the provider's rate limit. Wait and retry, or switch to a different model in Settings → Who answers. |
+| `404` / model not found | The model ID doesn't exist for that provider — a display name was used instead of the API model ID, or the model was deprecated. Pick a different one in Settings → Who answers. |
+| Connection refused | Only relevant if you pointed the provider at a self-hosted endpoint (Ollama, LM Studio, vLLM) — the server isn't reachable from the phone, or it isn't HTTPS (cleartext HTTP is only allowed to `127.0.0.1` and `localhost`). See [Local models](../reference/local-models.md). |
 
 Changing the model or provider in Settings applies immediately — there's no restart required to try again.
 
 <!-- TODO: verify on-device (O-10): does the location toggle in Settings show a consistent state when the Android permission is denied? -->
 
-## An attachment silently doesn't show up, or you see "Error: image_rejected"
+## An attachment is refused
 
-Two different failure modes here, both currently silent or unhelpful:
+Attachments are checked twice, and both checks tell you why in plain words rather than dropping the file silently:
 
-- If a file you tried to attach simply **never appears** in the composer preview, it was rejected client-side for being over a limit (more than 4 images, more than 4 other files, or over the per-file size cap) — there's no toast or error, it's just dropped. Try attaching fewer files, or smaller ones, one batch at a time.
-- If you do send an attachment and the server rejects it, the chat currently shows the raw, non-localized error `Error: image_rejected` rather than an explained message — this means one of the same limits was hit (too many images/files/videos, a file too large, or a file the server couldn't decode). See [Files and attachments](./attachments.md) for the exact limits.
+- **In the composer**, before anything is sent: more than 4 images, more than 1 video or more than 4 other files in one message, a file over its size cap, or a file the phone couldn't read. The file is not added and the chat says which limit it hit ("Too many images in one message", "The file is too large", "I couldn't open this file", …). Attach fewer files, or smaller ones.
+- **On the gateway**, after sending: the same limits, plus files it couldn't decode. The chat shows the same kind of explanation, and the message is treated as not sent.
+
+See [Files and attachments](./attachments.md) for the exact limits.
 
 ## Reminders and periodic checks aren't firing
 
 If you asked Jenny to remind you about something and nothing arrived, this is almost always about the app being killed, not a bug in the reminder itself:
 
-- **Reminders only fire while the app (and its background service) is alive.** If Android kills the app before a one-time reminder's scheduled time, that reminder is lost **permanently and silently** — there is currently no catch-up or notification that it was missed.
-- Recurring reminders (e.g. "every 2 hours") fare better: since 0.6.0 they keep their deadline across a restart, so one that came due while the app was dead fires shortly after it comes back rather than waiting a full interval. What you don't get is a replay — the cycles that fell inside the dead window are gone, not queued up one by one.
-- The built-in periodic "heartbeat" check (which reads `workspace/HEARTBEAT.md` every 30 minutes) behaves the same way: the cycles that were due while the app was dead are not replayed, they just don't happen.
+- **Reminders only fire while the app (and its background service) is alive.** Nothing fires while Android has the app killed. What happens when it comes back depends on the kind of reminder — the reminder list is saved to disk after every job that runs, so none of this depends on the app having shut down cleanly:
+- A **one-time reminder** whose time passed while the app was dead is not lost: it fires late, as soon as the app is running again (the device log records how overdue it was). Late is still late — a "remind me at 3pm" can arrive at 5pm if that's when Jenny came back.
+- A **recurring reminder on an interval** (e.g. "every 2 hours") keeps its deadline across a restart, so one that came due while the app was dead fires shortly after it comes back rather than waiting a full interval. What you don't get is a replay — the cycles that fell inside the dead window are gone, not queued up one by one.
+- A **recurring reminder on a clock time** (e.g. "every day at 8:00") is recomputed from the clock at startup: an occurrence missed while the app was dead is skipped, and the next one arrives on time.
+- The built-in periodic "heartbeat" check (which reads `workspace/HEARTBEAT.md` every 30 minutes by default) is an interval job, so it behaves like the interval reminders: one overdue check runs shortly after the app is back, the rest are not replayed.
 - Doze can stretch things even while the app is alive — treat every interval as a floor, not a promise. Since 0.6.6 Jenny asks Android to wake the phone at each job's real deadline and holds the CPU awake for the length of the run, which is aimed exactly at that stretching; it doesn't make an interval a guarantee.
 
-**Start at Settings → Background activity.** This is the page that tells you which of the two problems you have — an app that was killed, or an app that was merely slowed down — instead of leaving you to guess:
+**Start at the workshop's Brain → Background activity.** This is the page that tells you which of the two problems you have — an app that was killed, or an app that was merely slowed down — instead of leaving you to guess:
 
 - **Recorded outages** lists every stretch of at least an hour (`power.gapWarningMin`) when Jenny was not running at all. Reminders and scheduled jobs due inside one of those windows did not fire. Several outages, especially recurring ones overnight, are the signature of the phone's own battery manager shutting Jenny down.
 - **Current state** shows three plain yes/no lines: whether the battery-optimization exemption is in force, whether exact alarms are permitted, and whether the CPU is being kept awake right now. A "no" on the first is the single most useful thing to fix, and the **Exempt from battery** button is on that same page (it's also offered during first-run setup, and re-offered after a system update quietly resets it).
 - When an outage has been recorded, the page adds a card saying plainly that this is the phone's battery manager rather than a Jenny fault, with a link to the [dontkillmyapp.com](https://dontkillmyapp.com/) page for your manufacturer and, where the phone allows it, a button that opens the manufacturer's own battery screen. That restriction can only be lifted by hand, there — no amount of app code can work around it.
 
-An empty outage list is genuinely good news: it means Jenny stayed up, and a missed reminder needs a different explanation (a one-shot whose time passed while the app was dead, or a monitor that ran and chose to stay quiet — see below).
+An empty outage list is genuinely good news: it means Jenny stayed up, and a missed reminder needs a different explanation (for example a monitor that ran and chose to stay quiet — see below).
 
 See [Scheduling and proactivity](./scheduling.md) for the full model, and [Configuration](../reference/configuration.md#power) for the `power.*` keys behind that page.
 
@@ -82,7 +86,7 @@ Ask Jenny to **list your reminders** and look at the job's `Last run:` line:
 | What you see | What it means | What to do |
 |---|---|---|
 | `Last run: <recent time> — silenced` | It ran, it looked, there was nothing worth reporting. This is the normal outcome of a healthy monitor, exactly like Heartbeat's "I set a task and never hear anything". | Nothing. If you'd rather hear from it every time, ask for a plain reminder instead ("tell me the result every hour, even if nothing changed"). |
-| `Last run:` far in the past, or no `Last run:` at all | The app was killed and the cycles in that window simply didn't run — there's no catch-up replay, same as for Heartbeat above. | Check **Settings → Background activity**: if the window shows up under "Recorded outages", the phone shut Jenny down. Exempt her from battery optimization from that same page and keep the app from being swiped away. |
+| `Last run:` far in the past, or no `Last run:` at all | The app was killed and the cycles in that window simply didn't run — there's no catch-up replay, same as for Heartbeat above. | Check the workshop's **Brain → Background activity**: if the window shows up under "Recorded outages", the phone shut Jenny down. Exempt her from battery optimization from that same page and keep the app from being swiped away. |
 | `Last run: <time> — could_not_check` (usually with the reason in parentheses), plus a `Could not check: N consecutive run(s), since …` line | The cycle ran, but the check itself never happened — a helper script is missing, a device or host is unreachable, a tool broke. This is the case that used to be invisible: it produced the same silence as a healthy run. | Nothing for the first two cycles; a blip is normal. After three in a row Jenny writes to you once by herself. The reason in parentheses is the fix to chase — most often a script that was moved or a device that is off. |
 | `Last run: <time> — error` (usually with the reason in parentheses) | The job genuinely failed — a provider error, a tool that couldn't reach the target. | Ask Jenny to check her logs (first section of this page); fix the underlying cause, or recreate the job. |
 
@@ -97,11 +101,12 @@ If you wanted a one-off check ("at 6pm see whether the deploy finished"), it can
 
 Telegram only works while your phone (running the app) is alive — the phone *is* the server, there's no cloud component. Check, in order:
 
-1. **Is the app actually running?** If Android killed it, or the screen has been off long enough for aggressive Doze to suspend background work, the bot goes silent. Reopening the app resumes polling immediately. **Settings → Background activity** answers this properly: "Recorded outages" tells you whether Jenny was down and for how long, "Current state" tells you whether the battery-optimization exemption is in force, and the **Exempt from battery** button is right there. If an outage matches the silence, see the OEM guidance in [Reminders and periodic checks aren't firing](#reminders-and-periodic-checks-arent-firing) above — the phone's battery manager is the cause, and it has to be told to stop by hand. One case is *not* a fault at all: with the screen off and the phone suspended, an inbound Telegram message can simply sit in the queue until the device wakes, because the long-poll deliberately doesn't hold the CPU awake while it waits. Nothing is lost, but the reply isn't instant — see [Telegram bridge](./telegram.md#battery-exemption).
-2. **Did you burn your 5 pairing attempts?** Pairing a new bot requires sending a 6-digit code, and it's capped at 5 attempts per chat as an anti-brute-force measure — this cap also applies to you if you mistype the code repeatedly. Once it's hit, that chat can no longer pair even with the *correct* code. The fix is to go back to Settings → Telegram and either unpair or save a new token, which resets the counter.
-3. **Is the bot actually paired?** "Disable" keeps the token but turns the channel off; "Unpair" clears the pairing and generates a new code. Both are visible in Settings → Telegram.
+1. **Is the app actually running?** If Android killed it, or the screen has been off long enough for aggressive Doze to suspend background work, the bot goes silent. Reopening the app resumes polling immediately. The workshop's **Brain → Background activity** answers this properly: "Recorded outages" tells you whether Jenny was down and for how long, "Current state" tells you whether the battery-optimization exemption is in force, and the **Exempt from battery** button is right there. If an outage matches the silence, see the OEM guidance in [Reminders and periodic checks aren't firing](#reminders-and-periodic-checks-arent-firing) above — the phone's battery manager is the cause, and it has to be told to stop by hand. One case is *not* a fault at all: with the screen off and the phone suspended, an inbound Telegram message can simply sit in the queue until the device wakes, because the long-poll deliberately doesn't hold the CPU awake while it waits. Nothing is lost, but the reply isn't instant — see [Telegram bridge](./telegram.md#battery-exemption).
+2. **Was it paired with a group?** Pairing is now accepted only from a private chat, and in the paired chat Jenny answers only messages whose sender is the paired person. A bot paired with a group by an older version therefore stops answering there, silently. Unpair in the workshop's **Hands → Telegram** and pair again from a private chat with the bot — see [Telegram bridge](./telegram.md#a-pairing-made-with-a-group-has-to-be-redone).
+3. **Did you burn your 5 pairing attempts?** Pairing a new bot requires sending a 6-digit code, and it's capped at 5 attempts per chat as an anti-brute-force measure — this cap also applies to you if you mistype the code repeatedly. Once it's hit, that chat can no longer pair even with the *correct* code. The fix is to go back to **Hands → Telegram** in the workshop and either unpair or save a new token, which resets the counter.
+4. **Is the channel on, and is the bot paired?** The **Channel active** switch keeps the token and the pairing but turns the channel off; **Unpair** clears the pairing and generates a new code. Both are in the workshop's **Hands → Telegram** panel, and a channel that is off says so there.
 
-Messages sent while the app was closed are not lost outright — they queue up on Telegram's side and get processed in order once the app is back, though very old backlogs may eventually fall out of Telegram's own retention window.
+Messages sent while the app was closed are **not** all answered when it comes back. Of the messages Telegram still holds, Jenny answers only those less than five minutes old; older ones are dropped (with a warning in the device log). A restart a few seconds after you wrote doesn't lose your message; a message sent an hour before the app came back is never answered — send it again.
 
 ## Web search shows a CAPTCHA / verification page
 
@@ -121,14 +126,14 @@ Note that this whitelist only affects the agent's *tools*. It does not affect ca
 
 ## A notebook's pages show an error (503)
 
-If opening a notebook's pages says the wiki is switched off, the feature has been disabled in configuration (`wiki.enabled: false` in `config.json`). Re-enable it there and restart the app. The notebook list itself still shows what is on disk — it reads the folders, not the wiki API.
+If opening a notebook's pages says the wiki is switched off, the feature has been disabled in configuration (`wiki.enabled: false` in `config.json`). Re-enable it there; the setting is read on every request, so the pages come back without restarting the app. The notebook list itself still shows what is on disk — it reads the folders, not the wiki API.
 
 ## Collecting information before asking for help
 
 If none of the above resolves it, gather this before reporting the problem:
 
 - What Jenny told you after you asked her to check her logs (see the first section above).
-- The app version, shown in **Settings → System**.
+- The app version, shown in the workshop under **Brain → System**.
 - Your Android version and device model.
 - A description of what you did right before the problem appeared, and whether it happens every time.
 - Never share your API key — if you need to show a config snippet, redact it first.
