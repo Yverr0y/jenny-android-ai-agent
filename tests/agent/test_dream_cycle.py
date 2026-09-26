@@ -60,7 +60,9 @@ from jenny.webui.metadata import WEBUI_MESSAGE_SOURCE_METADATA_KEY
 
 _REVIEW_TARGET = "jenny.agent.dream_review.run_dream_review"
 
-_DREAM_JOB = SimpleNamespace(name="dream", id="job-dream")
+_DREAM_JOB = SimpleNamespace(
+    name="dream", id="dream", payload=SimpleNamespace(kind="system_event")
+)
 
 # Scrittura enorme con cui si interroga il guard montato su un run: serve solo a
 # sapere se l'enforcement è acceso, senza dover ispezionare l'oggetto.

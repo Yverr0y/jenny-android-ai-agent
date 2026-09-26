@@ -26,7 +26,9 @@ from jenny.runtime.update_check import UpdateInfo
 from jenny.session.turn_visibility import TurnVisibility
 from jenny.webui.metadata import WEBUI_MESSAGE_SOURCE_METADATA_KEY
 
-_UPDATE_JOB = SimpleNamespace(name="update_check", id="update_check")
+_UPDATE_JOB = SimpleNamespace(
+    name="update_check", id="update_check", payload=SimpleNamespace(kind="system_event")
+)
 
 _INFO = UpdateInfo(
     version_code=9,

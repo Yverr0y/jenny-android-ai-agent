@@ -385,15 +385,22 @@ class CronDispatcher:
             logger.warning("Cron: skipped job '{}' - no provider configured", job.name)
             raise CronJobSkippedError("no provider configured")
 
-        if job.name == "dream":
-            return await self._run_dream(agent)
-        if job.name == "gardener":
-            return await self._run_gardener(agent)
-        if job.name == "heartbeat":
-            return await self._run_heartbeat(agent, job)
-        if job.name == "update_check":
-            return await self._run_update_check(agent)
-        if is_bound_cron_job(job):
+        # Per id e solo sui ``system_event``, mai per nome: il nome di un job
+        # dell'utente lo sceglie lui (o il modello), e un promemoria chiamato
+        # «dream» faceva partire un ciclo di Dream al posto del promemoria. I job
+        # di sistema nascono con l'id del lavoratore (``GatewayContainer.build``,
+        # ``refresh_system_job``); quelli dell'utente hanno un uuid troncato e
+        # sono ``agent_turn``.
+        if job.payload.kind == "system_event":
+            if job.id == "dream":
+                return await self._run_dream(agent)
+            if job.id == "gardener":
+                return await self._run_gardener(agent)
+            if job.id == "heartbeat":
+                return await self._run_heartbeat(agent, job)
+            if job.id == "update_check":
+                return await self._run_update_check(agent)
+        elif is_bound_cron_job(job):
             return await run_bound_cron_job(job, agent=agent, cron=self._cron)
 
         reason = "unbound agent cron job must be recreated from a chat session"

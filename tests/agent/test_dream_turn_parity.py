@@ -28,7 +28,9 @@ from jenny.command.router import CommandContext
 from jenny.config.schema import Config
 from jenny.runtime.cron_dispatch import CronDispatcher
 
-_DREAM_JOB = SimpleNamespace(name="dream", id="job-dream")
+_DREAM_JOB = SimpleNamespace(
+    name="dream", id="dream", payload=SimpleNamespace(kind="system_event")
+)
 
 _BATCH_WITH_FACTS = (
     "template di Dream"

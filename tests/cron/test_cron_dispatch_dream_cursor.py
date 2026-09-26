@@ -17,7 +17,9 @@ from jenny.agent.tools.file_state import FileStates
 from jenny.config.schema import Config
 from jenny.runtime.cron_dispatch import CronDispatcher
 
-_DREAM_JOB = SimpleNamespace(name="dream", id="job-dream")
+_DREAM_JOB = SimpleNamespace(
+    name="dream", id="dream", payload=SimpleNamespace(kind="system_event")
+)
 
 
 class _FakeMemory:
