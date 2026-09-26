@@ -48,6 +48,9 @@ WITHOUT_LISTENER = {
     # ha niente da farci.
     "ready": "conferma di protocollo",
     "attached": "conferma di protocollo",
+    # L'eco di ``{"type": "detach"}`` (HJ17): il client ha già tolto la chat
+    # dalle sue prima di mandarlo, e non aspetta la risposta.
+    "detached": "conferma di protocollo",
 }
 
 # I due gusci e il modulo da cui parte ognuno (lo ``<script type="module">``

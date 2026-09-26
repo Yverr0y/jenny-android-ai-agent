@@ -237,6 +237,17 @@ class WebSocketChannel(OutboundSenderMixin):
         self._subs.setdefault(chat_id, set()).add(connection)
         self._conn_chats.setdefault(connection, set()).add(chat_id)
 
+    def _detach(self, connection: Any, chat_id: str) -> None:
+        """Idempotently unsubscribe *connection* from *chat_id*."""
+        subs = self._subs.get(chat_id)
+        if subs is not None:
+            subs.discard(connection)
+            if not subs:
+                self._subs.pop(chat_id, None)
+        chats = self._conn_chats.get(connection)
+        if chats is not None:
+            chats.discard(chat_id)
+
     def _cleanup_connection(self, connection: Any) -> None:
         """Remove *connection* from every subscription set; safe to call multiple times."""
         # Punto di uscita unico: ci passano la disconnessione pulita (il
@@ -632,7 +643,7 @@ class WebSocketChannel(OutboundSenderMixin):
         client_id: str,
         envelope: dict[str, Any],
     ) -> None:
-        """Route one typed inbound envelope (``attach`` / ``message`` / ...)."""
+        """Route one typed inbound envelope (``attach`` / ``detach`` / ``message`` / ...)."""
         t = envelope.get("type")
         if t == "attach":
             cid = self._envelope_chat_id(envelope)
@@ -644,6 +655,23 @@ class WebSocketChannel(OutboundSenderMixin):
             self._attach(connection, cid)
             await self._send_event(connection, "attached", chat_id=cid)
             await self._hydrate_after_subscribe(cid)
+            return
+        if t == "detach":
+            # ``{"type": "detach", "chat_id": "project:<nome>"}``: il client ha
+            # lasciato il quaderno, e da qui in poi i suoi frame non gli
+            # arrivano più (prima ``detachChat`` era solo lato client e la
+            # connessione restava iscritta a ogni quaderno mai aperto).
+            # La chat personale non si lascia: ogni connessione ci nasce
+            # iscritta, e ci passano gli avvisi proattivi e la mascotte. Una
+            # chiave che ci ricade (assente, spazzatura) o un nome di progetto
+            # impossibile (l'``attach`` l'aveva già rifiutato) non hanno niente
+            # da staccare: nessuna risposta, e nessun ``error`` che il client
+            # mostrerebbe all'utente per una cosa che non ha chiesto.
+            cid = self._envelope_chat_id(envelope)
+            if cid is None or not is_project_session_key(cid):
+                return
+            self._detach(connection, cid)
+            await self._send_event(connection, "detached", chat_id=cid)
             return
         if t == "message":
             cid = self._envelope_chat_id(envelope)
