@@ -37,6 +37,22 @@ dependencies = [
     "tzdata>=2025.1",
 ]
 
+[project.optional-dependencies]
+# Solo sviluppo e CI (`pip install -e ".[dev]"`), mai nell'APK: Chaquopy installa
+# `requirements-android.lock.txt`, non questo elenco. Versioni esatte perche' un
+# rilascio nuovo di ruff o pytest non cambi l'esito della CI senza un commit.
+# `asyncssh` alza il server SSH in-process dei test (su Android c'e' jsch),
+# `cryptography` fa da backend ai test del backup cifrato (su Android
+# javax.crypto), `pillow` serve a tests/webui/test_mascot_layer_sources.py.
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.15.18",
+    "asyncssh==2.24.0",
+    "cryptography==50.0.1",
+    "pillow==12.2.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

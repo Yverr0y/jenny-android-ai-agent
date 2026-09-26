@@ -166,11 +166,11 @@ Run the full check from [Code style](code-style.md):
 
 ```bash
 ruff check jenny/ tests/
-npx pyright jenny/bus jenny/command jenny/runtime jenny/session
+npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py
 pytest -q
 ```
 
-A new tool module isn't in the blocking pyright subset (`jenny/bus`, `jenny/command`, `jenny/runtime`, `jenny/session`) unless you're touching one of those packages directly, but run the full, non-blocking `npx pyright || true` too and don't introduce new errors in `jenny/agent/tools/`.
+A new tool module isn't in the blocking pyright subset (`jenny/bus`, `jenny/command`, `jenny/runtime`, `jenny/session`, `jenny/snapshot`, `jenny/gateway_runtime.py`) unless you're touching one of those packages directly, but run the full, non-blocking `npx pyright || true` too and don't introduce new errors in `jenny/agent/tools/`.
 
 ## See also
 

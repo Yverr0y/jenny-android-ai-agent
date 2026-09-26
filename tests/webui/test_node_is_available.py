@@ -34,3 +34,30 @@ def test_node_is_installed_in_ci() -> None:
         "in silenzio. Manca il passo `actions/setup-node` nel job `test` di "
         ".github/workflows/ci.yml."
     )
+
+
+@pytest.mark.skipif(not _IN_CI, reason="guard di CI: in locale jsdom è opzionale")
+def test_jsdom_is_installed_in_ci() -> None:
+    """Stesso ragionamento per jsdom: non è una dipendenza del repo, e senza le
+    suite che montano la casa intera (``support.home_dom``) e il contratto del
+    grafo si saltano in verde. La CI lo installa con ``npm install --no-save
+    jsdom`` e lo rende visibile con ``NODE_PATH``."""
+    from support.home_dom import _has_jsdom
+
+    assert _has_jsdom(), (
+        "jsdom non si risolve da node: le suite `requires_jsdom` si salterebbero "
+        "in silenzio. Mancano `npm install --no-save jsdom` o `NODE_PATH` nel job "
+        "`test` di .github/workflows/ci.yml."
+    )
+
+
+@pytest.mark.skipif(not _IN_CI, reason="guard di CI: in locale Pillow è opzionale")
+def test_pillow_is_installed_in_ci() -> None:
+    """``test_mascot_layer_sources.py`` si salta per intero senza Pillow, che
+    arriva con l'extra ``dev`` di ``pyproject.toml``."""
+    import importlib.util
+
+    assert importlib.util.find_spec("PIL") is not None, (
+        "Pillow manca: tests/webui/test_mascot_layer_sources.py si salterebbe per "
+        'intero. Il job `test` deve installare `pip install -e ".[dev]"`.'
+    )

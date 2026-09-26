@@ -33,13 +33,13 @@ Pyright runs in `basic` mode (`pyrightconfig.json`, `include: ["jenny"]`, exclud
 
 ```bash
 # BLOCKING subset — must stay error-clean:
-npx pyright jenny/bus jenny/command jenny/runtime jenny/session
+npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py
 
 # Full perimeter — informational, never fails the build:
 npx pyright || true
 ```
 
-`jenny/bus`, `jenny/command`, `jenny/runtime` and `jenny/session` are at zero errors today and CI fails if a PR reintroduces one. The full-perimeter run surfaces the residual errors elsewhere, which are being tightened directory by directory rather than declared clean prematurely — don't add to that pile, but don't be surprised by it either.
+`jenny/bus`, `jenny/command`, `jenny/runtime`, `jenny/session`, `jenny/snapshot` and `jenny/gateway_runtime.py` are at zero errors today and CI fails if a PR reintroduces one. The full-perimeter run surfaces the residual errors elsewhere, which are being tightened directory by directory rather than declared clean prematurely — don't add to that pile, but don't be surprised by it either.
 
 Two config carve-outs are worth knowing:
 
@@ -57,7 +57,7 @@ CI pins the checker version (`npx --yes pyright@1.1.411`); a bare `npx pyright` 
 ## The full check before a PR
 
 ```bash
-ruff check jenny/ tests/ && npx pyright jenny/bus jenny/command jenny/runtime jenny/session && pytest -q
+ruff check jenny/ tests/ && npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py && pytest -q
 ```
 
 Lint, blocking type check, tests — the same sequence CI gates on. Commits also need a DCO `Signed-off-by:` line; see [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
