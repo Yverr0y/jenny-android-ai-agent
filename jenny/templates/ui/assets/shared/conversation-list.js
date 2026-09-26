@@ -85,6 +85,27 @@ export function projectNameOf(key) {
     : null;
 }
 
+/** Un percorso scritto in una conversazione, dalla radice del workspace.
+ *
+ *  Nella chat di un quaderno i percorsi — quelli dei file che Jenny ha
+ *  modificato, per esempio — sono relativi al quaderno (`<dir>/<nome>/`), e
+ *  l'editor dell'officina li apre dalla radice del workspace: aperti com'erano
+ *  davano 404 (WJ8 della terza revisione). Nella personale, o con un percorso
+ *  assoluto, si torna com'e'.
+ *
+ *  @param {string} key   la chiave della conversazione
+ *  @param {string} path  il percorso com'e' scritto
+ *  @param {string} [dir] la cartella dei quaderni (`config.wiki.wikis_dir`)
+ */
+export function workspacePathIn(key, path, dir = DEFAULT_PROJECTS_DIR) {
+  const name = projectNameOf(key);
+  const clean = String(path || '');
+  if (!name || !clean || clean.startsWith('/')) return clean;
+  const rel = clean.replace(/^\.\//, '');
+  const root = `${dir || DEFAULT_PROJECTS_DIR}/${name}/`;
+  return rel.startsWith(root) ? rel : root + rel;
+}
+
 /** Dal piu' recente, e a parita' per nome.
  *
  *  L'ordine alfabetico del backend mette in cima la wiki con la lettera piu'

@@ -116,6 +116,11 @@ export class ScopeChip {
     return this._list.dir;
   }
 
+  /** La cartella dei quaderni, come l'ha detta il server (o il default). */
+  get projectsDir() {
+    return this._list.dir;
+  }
+
   /** Scope attivo secondo il backend. ``null``/radice ⇒ sessione personale. */
   syncFromSession(workspaceScope) {
     if (!this.enabled) return;

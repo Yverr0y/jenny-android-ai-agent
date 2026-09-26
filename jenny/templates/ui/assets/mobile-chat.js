@@ -34,6 +34,7 @@ import {
  *  garantiva un involucro, ora `test_chat_rich_has_no_inline_dollar.py`.
  */
 import { renderRich } from './shared/rich-content.js';
+import { workspacePathIn } from './shared/conversation-list.js';
 import { MARKED_OPTIONS, renderMarkdown as renderSafeMarkdown } from './shared/markdown.js';
 import { i18n } from './shared/i18n.js';
 import { getProviderBrand } from './shared/provider-brand.js';
@@ -2167,7 +2168,10 @@ export class ChatController {
       item.innerHTML = `<i class="ti ti-file-code"></i><span class="chat-file-edit-name">${escapeHtml(path)}</span>${diffHtml}`;
       item.addEventListener('click', async (e) => {
         e.stopPropagation();
-        await this._openFileInWorkspace(path);
+        // Relativo al quaderno, in un quaderno: l'editor apre dalla radice (WJ8).
+        await this._openFileInWorkspace(
+          workspacePathIn(sessionManager.currentKey, path, scopeChip.projectsDir),
+        );
       });
       body.appendChild(item);
     }
