@@ -30,7 +30,7 @@ from jenny.agent.memory import (
 from jenny.providers.opencode import conversation_scope
 from jenny.security.workspace_access import WorkspaceScopeResolver
 from jenny.session.keys import PROJECT_SESSION_PREFIX, is_project_session_key
-from jenny.session.manager import Session
+from jenny.session.manager import DIARY_HARVEST_METADATA_KEY, Session
 from jenny.utils.helpers import (
     CHARS_PER_TOKEN,
     channel_delivery_aware_user_start,
@@ -827,6 +827,26 @@ class Consolidator:
                     "text": summary,
                     "last_active": last_active.isoformat(),
                 }
+
+            # L'indice della raccolta del diario di un progetto conta i messaggi
+            # della sessione: dopo la troncatura va riportato sui messaggi
+            # tenuti, come fa ``Session.retain_recent_legal_suffix``. Rimasto
+            # com'era puntava oltre la fine, e la raccolta saltava i messaggi
+            # nuovi finché la sessione non tornava lunga come prima. Con un
+            # riassunto riuscito la coda tenuta è già dentro (il riassunto copre
+            # anche lei, v. ``summary_messages``); senza, restano raccolti solo
+            # i tenuti che lo erano già.
+            harvested = session.metadata.get(DIARY_HARVEST_METADATA_KEY)
+            if isinstance(harvested, int) and not isinstance(harvested, bool):
+                if messages_to_remove and summary:
+                    harvested = len(messages_to_keep)
+                else:
+                    kept = {id(m) for m in messages_to_keep}
+                    harvested = sum(
+                        1 for i, m in enumerate(session.messages)
+                        if i < harvested and id(m) in kept
+                    )
+                session.metadata[DIARY_HARVEST_METADATA_KEY] = harvested
 
             session.messages = messages_to_keep
             session.last_consolidated = 0

@@ -670,6 +670,61 @@ class TestCompactIdleSession:
         entries = store.read_unprocessed_history(since_cursor=0)
         assert entries[0]["session_key"] == "internal:test"
 
+    async def test_a_summarized_compaction_marks_the_kept_suffix_harvested(
+        self, real_consolidator, mock_provider,
+    ):
+        """L'indice della raccolta del diario non resta sui messaggi di prima.
+
+        Rimasto al valore vecchio dopo la troncatura, puntava oltre la fine della
+        sessione accorciata: la raccolta ripartiva da ``min(indice, len)`` e
+        saltava i messaggi nuovi finché la sessione non tornava lunga come prima.
+        Il riassunto della compattazione copre anche la coda tenuta, quindi
+        quella coda è già nella coda del diario.
+        """
+        from jenny.session.manager import DIARY_HARVEST_METADATA_KEY
+
+        mock_provider.chat_with_retry.return_value = MagicMock(
+            content="- [durable] riassunto", finish_reason="stop"
+        )
+        sessions = real_consolidator.sessions
+        session = sessions.get_or_create("project:esempio")
+        for i in range(20):
+            session.add_message("user", f"u{i}")
+            session.add_message("assistant", f"a{i}")
+        session.metadata[DIARY_HARVEST_METADATA_KEY] = 30
+        sessions.save(session)
+
+        await real_consolidator.compact_idle_session("project:esempio", max_suffix=8)
+
+        sessions.invalidate("project:esempio")
+        after = sessions.get_or_create("project:esempio")
+        assert len(after.messages) == 8
+        assert after.metadata[DIARY_HARVEST_METADATA_KEY] == 8
+
+    async def test_a_compaction_without_summary_slides_the_harvest_mark(
+        self, real_consolidator, mock_provider,
+    ):
+        """Niente da riassumere, ma il prefisso consolidato esce: l'indice scorre."""
+        from jenny.session.manager import DIARY_HARVEST_METADATA_KEY
+
+        sessions = real_consolidator.sessions
+        session = sessions.get_or_create("project:esempio")
+        for i in range(10):
+            session.add_message("user", f"u{i}")
+            session.add_message("assistant", f"a{i}")
+        session.last_consolidated = 16
+        session.metadata[DIARY_HARVEST_METADATA_KEY] = 18
+        sessions.save(session)
+
+        await real_consolidator.compact_idle_session("project:esempio", max_suffix=8)
+
+        mock_provider.chat_with_retry.assert_not_awaited()
+        sessions.invalidate("project:esempio")
+        after = sessions.get_or_create("project:esempio")
+        assert [m["content"] for m in after.messages] == ["u8", "a8", "u9", "a9"]
+        # u8 e a8 erano gia' raccolti (indici 16 e 17), u9 e a9 no.
+        assert after.metadata[DIARY_HARVEST_METADATA_KEY] == 2
+
     @pytest.mark.asyncio
     async def test_empty_session_refreshes_timestamp(self, real_consolidator):
         """Empty session with old updated_at → refreshed after call, returns ''."""
