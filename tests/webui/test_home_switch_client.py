@@ -367,6 +367,7 @@ class App {
   __APPLY_PATH__
   __APPLY_PILL__
   __PAINT_PAGE_COUNT__
+  __LABEL_PAGES_BUTTON__
   __PAGE_COUNT_OF__
   __PAINT_DOT__
   __GO_TO_PATH_ROOT__
@@ -450,6 +451,7 @@ def _harness() -> str:
         .replace("__APPLY_PATH__", member(src, "_applyPath"))
         .replace("__APPLY_PILL__", member(src, "_applyPill"))
         .replace("__PAINT_PAGE_COUNT__", member(src, "_paintPageCount"))
+        .replace("__LABEL_PAGES_BUTTON__", member(src, "_labelPagesButton"))
         .replace("__PAGE_COUNT_OF__", member(src, "pageCountOf"))
         .replace("__PAINT_DOT__", member(src, "_paintDot"))
         .replace("__GO_TO_PATH_ROOT__", member(src, "goToPathRoot"))

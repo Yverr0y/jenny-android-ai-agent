@@ -1370,13 +1370,22 @@ class HomeApp {
     const known = count !== null;
     if (this.pagesCount) this.pagesCount.textContent = known ? `· ${count}` : '';
     if (this.viewPagesCount) this.viewPagesCount.textContent = known ? String(count) : '';
-    if (notebook) {
-      const words = known
-        ? `, ${i18n.t(count === 1 ? 'home.notebookPages.countOne' : 'home.notebookPages.countMany', { count })}`
-        : '';
-      this.pagesBtn?.setAttribute('aria-label', `${i18n.t('home.notebookPages.open')}: ${notebook}${words}`);
-    }
+    this._labelPagesButton();
     this.strip?.draw();
+  }
+
+  /* L'etichetta del bottone delle pagine, per chi non vede il libro: il
+     quaderno e quante pagine ha. La rifa' anche `_applyTranslations`: scritta
+     solo dal conteggio, dopo un cambio di lingua restava nella precedente
+     (terza revisione, RC9). */
+  _labelPagesButton() {
+    const notebook = this._pageCount?.notebook || null;
+    if (!notebook) return;
+    const count = this.pageCountOf(notebook);
+    const words = count !== null
+      ? `, ${i18n.t(count === 1 ? 'home.notebookPages.countOne' : 'home.notebookPages.countMany', { count })}`
+      : '';
+    this.pagesBtn?.setAttribute('aria-label', `${i18n.t('home.notebookPages.open')}: ${notebook}${words}`);
   }
 
   /* Il turno che stava girando nella conversazione lasciata non si chiudera'
@@ -2018,6 +2027,7 @@ class HomeApp {
     if (this.viewChatLabel) this.viewChatLabel.textContent = i18n.t('home.notebookPages.chat');
     if (this.viewPagesLabel) this.viewPagesLabel.textContent = i18n.t('home.notebookPages.tabList');
     this.viewSwitch?.setAttribute('aria-label', i18n.t('home.notebookPages.view'));
+    this._labelPagesButton();
     this.pathEl?.setAttribute('aria-label', i18n.t('home.path.label'));
     if (this.editLabel) this.editLabel.textContent = i18n.t('home.reader.edit');
     this.reader?.applyTranslations();
