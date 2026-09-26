@@ -84,6 +84,19 @@ def _check_size(path: Path, max_bytes: int) -> None:
         )
 
 
+def _ends_without_newline(path: Path) -> bool:
+    """Il file esiste, non e' vuoto e l'ultimo byte non e' un a capo."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            if f.tell() == 0:
+                return False
+            f.seek(-1, 2)
+            return f.read(1) != b"\n"
+    except FileNotFoundError:
+        return False
+
+
 def _new_record(params: dict) -> dict:
     record = {k: v for k, v in params.items() if k != "id"}
     return {
@@ -208,8 +221,13 @@ async def execute_storage_action(
             _check_size(path, max_bytes)
             record = _new_record(params)
             path.parent.mkdir(parents=True, exist_ok=True)
+            # Un append interrotto (processo ucciso) lascia l'ultima riga senza a
+            # capo, e il record nuovo le si attaccava: la riga unita non si legge
+            # piu', e spariva anche lui. L'a capo la chiude; resta una riga rotta
+            # che la lettura salta e segnala, come prima.
+            lead = "\n" if _ends_without_newline(path) else ""
             with open(path, "a", encoding="utf-8") as f:
-                f.write(_dump(record) + "\n")
+                f.write(lead + _dump(record) + "\n")
                 f.flush()
             return {"ok": True, "record": record}
 
