@@ -83,6 +83,7 @@ from jenny.session.history_meta import (
     SUBAGENT_RESULT_EVENT,
 )
 from jenny.session.keys import (
+    CRON_SESSION_PREFIX,
     PROJECT_SESSION_PREFIX,
     is_project_session_key,
     is_valid_project_name,
@@ -1949,6 +1950,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                         await self._cron_turns.publish_next_deferred(session_key)
         finally:
             reset_turn_id(turn_id_token)
+            self._release_job_python_globals(session_key)
             if current_task is not None:
                 self._turn_tokens_by_task.pop(current_task, None)
             if pending is None and self._turn_epochs.is_current(turn_token):
@@ -2413,6 +2415,26 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             self._record_channel_delivery_locked(session_key, content, media)
         )
 
+    def _release_job_python_globals(self, session_key: str) -> None:
+        """Libera i globali ``python_exec`` di un job a fine turno.
+
+        La sessione di un monitor (``cron:<id>``) è una per job, e un run non
+        deve ritrovare le variabili del run prima: il job ricorda i propri run
+        dalla storia, non da uno stato nascosto in memoria. Senza, i globali di
+        ogni job mai girato restavano fino al riavvio. Sincrona di proposito: si
+        chiama prima di ogni ``await`` del ``finally``, così il turno dopo della
+        stessa sessione, in coda sul lock, non è ancora partito.
+        """
+        if not session_key.startswith(CRON_SESSION_PREFIX):
+            return
+        tool = self.tools.get("python_exec") if self.tools is not None else None
+        forget = getattr(tool, "forget_session", None)
+        if callable(forget):
+            try:
+                forget(session_key)
+            except Exception:  # noqa: BLE001 — la pulizia non deve rompere la chiusura del turno
+                logger.debug("python_exec globals of {} not released", session_key, exc_info=True)
+
     def forget_file_reads(self, session_key: str) -> None:
         """Dichiara che *session_key* non contiene piu' il contenuto di nessun file.
 
@@ -2578,5 +2600,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 )
         finally:
             reset_turn_id(turn_id_token)
+            self._release_job_python_globals(session_key)
             await self._runtime_events().run_status_changed(msg, session_key, "idle")
             self._runtime_events().clear_turn(session_key)

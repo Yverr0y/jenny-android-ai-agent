@@ -12,6 +12,7 @@ import io
 import logging
 import os  # solo per os.fsdecode / os.sep / os.path.* — helper puri, mai patchati
 import shutil
+import stat
 import sys
 import threading
 import traceback
@@ -19,6 +20,7 @@ import types
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from pathlib import Path
 from typing import Any
 
 from jenny.agent.tools.base import Tool, tool_parameters
@@ -1235,6 +1237,11 @@ class PythonNamespace:
         self._ns: dict[str, Any] = self._fresh_globals()
         self._session_ns: dict[str | None, dict[str, Any]] = {None: self._ns}
         self._session_ns_lock = threading.Lock()
+        # Di quale progetto sono i globali di una chiave ``project:``: l'identità
+        # della cartella quando la sessione è nata (v.
+        # ``PythonExecTool._release_stale_projects``). Un progetto cancellato e
+        # ricreato con lo stesso nome ha la stessa chiave e un'identità diversa.
+        self._session_owner: dict[str, Any] = {}
 
     # Dunder dei builtins che il namespace guardato deve comunque avere.
     # Il filtro `name.startswith("_")` qui sotto è ereditato e cieco: toglie in
@@ -1273,6 +1280,32 @@ class PythonNamespace:
             if ns is None:
                 ns = self._session_ns[session_key] = self._fresh_globals()
             return ns
+
+    def forget_session(self, session_key: str) -> bool:
+        """Libera i globali di *session_key*. ``True`` se c'erano.
+
+        La prossima chiamata della stessa chiave riparte da globali nuovi. I
+        globali senza chiave (``None``) non si liberano: sono quelli dell'host.
+        """
+        if session_key is None:
+            return False
+        with self._session_ns_lock:
+            self._session_owner.pop(session_key, None)
+            return self._session_ns.pop(session_key, None) is not None
+
+    def session_keys(self) -> list[str]:
+        """Le session key che hanno globali propri, adesso."""
+        with self._session_ns_lock:
+            return [key for key in self._session_ns if key is not None]
+
+    def session_owner(self, session_key: str) -> Any:
+        with self._session_ns_lock:
+            return self._session_owner.get(session_key)
+
+    def claim_session(self, session_key: str, owner: Any) -> None:
+        """Registra di chi sono i globali di *session_key*, se non lo si sa già."""
+        with self._session_ns_lock:
+            self._session_owner.setdefault(session_key, owner)
 
     @staticmethod
     def _compile(code: str, mode: str) -> types.CodeType:
@@ -2982,6 +3015,24 @@ def _interrupt_thread(ident: int | None) -> None:
         logger.debug("Could not interrupt python_exec thread %s", ident, exc_info=True)
 
 
+def _project_identity(root: Path) -> tuple[str | None, int] | None:
+    """L'identità della cartella di un progetto, o ``None`` se non c'è.
+
+    L'id della wiki distingue un progetto ricreato con lo stesso nome (lo
+    scaffolder ne scrive uno nuovo); l'inode copre le wiki fatte a mano, che
+    un id non l'hanno.
+    """
+    from jenny.utils.wiki_paths import wiki_id
+
+    try:
+        info = root.stat()
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode):
+        return None
+    return wiki_id(root), info.st_ino
+
+
 class _ContextBoundNamespace:
     """Il namespace, portato oltre il thread grezzo della sessione.
 
@@ -3300,10 +3351,54 @@ class PythonExecTool(PythonExecGateMixin, Tool):
             workspace=workspace,
         )
         self._session_manager = session_manager or DEFAULT_EXEC_SESSION_MANAGER
+        # La cartella dei progetti, imparata dallo scope dell'ultimo turno di
+        # progetto: è ``config.wiki.wikis_dir``, che questo tool non riceve.
+        self._projects_dir: Path | None = None
 
     @property
     def name(self) -> str:
         return "python_exec"
+
+    def forget_session(self, session_key: str) -> bool:
+        """Libera i globali di *session_key* (v. ``PythonNamespace.forget_session``)."""
+        return self.namespace.forget_session(session_key)
+
+    def _release_stale_projects(self, session_key: str | None) -> None:
+        """Libera i globali dei progetti che non ci sono più, o non sono più loro.
+
+        I globali di una sessione vivevano fino al riavvio: un progetto
+        cancellato e ricreato con lo stesso nome ritrovava le variabili del
+        vecchio, e quelli cancellati o rinominati restavano in memoria. Nessuno
+        avvisa questo tool di una cancellazione, quindi lo si misura a ogni
+        chiamata: l'identità della cartella (id della wiki e inode) presa quando
+        la sessione è nata si confronta con quella di adesso, e una cartella
+        sparita o diversa libera i globali. Costa uno ``stat`` e la lettura di
+        un file piccolo per progetto aperto in questo processo.
+        """
+        from jenny.security.workspace_access import current_workspace_scope
+        from jenny.session.keys import PROJECT_SESSION_PREFIX, is_project_session_key
+
+        current = (
+            session_key[len(PROJECT_SESSION_PREFIX):]
+            if session_key and is_project_session_key(session_key) else None
+        )
+        scope = current_workspace_scope()
+        if current and scope is not None and scope.project_path.name == current:
+            self._projects_dir = scope.project_path.parent
+        projects_dir = self._projects_dir
+        if projects_dir is None:
+            return
+        for key in self.namespace.session_keys():
+            if not is_project_session_key(key):
+                continue
+            owner = self.namespace.session_owner(key)
+            identity = _project_identity(projects_dir / key[len(PROJECT_SESSION_PREFIX):])
+            if identity is None or (owner is not None and owner != identity):
+                self.namespace.forget_session(key)
+        if current and session_key:
+            identity = _project_identity(projects_dir / current)
+            if identity is not None:
+                self.namespace.claim_session(session_key, identity)
 
     @property
     def description(self) -> str:
@@ -3362,6 +3457,10 @@ class PythonExecTool(PythonExecGateMixin, Tool):
         # I globali sono della sessione del turno (TL8): letta qui, sul thread
         # del loop, e portata per argomento.
         session_key = current_request_session_key()
+        try:
+            self._release_stale_projects(session_key)
+        except Exception:  # noqa: BLE001 — una pulizia mancata non ferma la chiamata
+            logger.debug("python_exec: stale project globals not released", exc_info=True)
 
         effective_timeout = self._resolve_timeout(timeout)
         effective_max = clamp_session_int(

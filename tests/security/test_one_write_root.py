@@ -295,6 +295,10 @@ _NOT_A_WRITE_ROOT = {
     ),
     ("message.py", "project_path"): "risolve gli allegati in uscita: è una lettura",
     ("message.py", "allowed_root"): "idem — l'alias storico, non una seconda risposta",
+    ("python_exec.py", "project_path"): (
+        "impara dove stanno i progetti per accorgersi di uno cancellato, rinominato o "
+        "ricreato e liberarne i globali: identità della cartella, non un confine"
+    ),
     ("memory_recall.py", "project_path"): (
         "domanda opposta: non dove si scrive, ma **se** questo turno è dentro un "
         "progetto. recall_history legge solo la radice e tace altrove, e il "

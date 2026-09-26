@@ -86,6 +86,73 @@ async def test_redefining_a_builtin_breaks_only_its_own_session(tmp_path) -> Non
         manager.shutdown()
 
 
+def _make_project(ws, name: str, wiki_id: str):
+    root = ws / "wikis" / name
+    (root / "wiki").mkdir(parents=True)
+    (root / "AGENTS.md").write_text(f"---\nid: {wiki_id}\n---\n", encoding="utf-8")
+    return root
+
+
+async def _run_in_project(name: str, tool: PythonExecTool, ws, **kwargs) -> str:
+    from jenny.security.workspace_access import (
+        bind_workspace_scope,
+        build_workspace_scope,
+        reset_workspace_scope,
+    )
+
+    scope = bind_workspace_scope(build_workspace_scope(ws / "wikis" / name, "restricted"))
+    try:
+        return await _run(f"project:{name}", tool, **kwargs)
+    finally:
+        reset_workspace_scope(scope)
+
+
+async def test_a_recreated_project_does_not_find_the_old_globals(tmp_path) -> None:
+    """Cancellato e ricreato con lo stesso nome, un progetto è un progetto nuovo."""
+    import shutil
+
+    ws = tmp_path.resolve()
+    manager = ExecSessionManager()
+    tool = _tool(ws, manager)
+    try:
+        root = _make_project(ws, "acme", "aaaaaaaaaaaa")
+        await _run_in_project("acme", tool, ws, code="client_notes = 'del vecchio'")
+        assert "del vecchio" in await _run_in_project("acme", tool, ws, code="client_notes")
+
+        shutil.rmtree(root)
+        _make_project(ws, "acme", "bbbbbbbbbbbb")
+
+        out = await _run_in_project("acme", tool, ws, code="client_notes")
+        assert "del vecchio" not in out and "NameError" in out, out
+    finally:
+        manager.shutdown()
+
+
+async def test_deleted_and_renamed_projects_release_their_globals(tmp_path) -> None:
+    import shutil
+
+    ws = tmp_path.resolve()
+    manager = ExecSessionManager()
+    tool = _tool(ws, manager)
+    try:
+        gone = _make_project(ws, "via", "aaaaaaaaaaaa")
+        moved = _make_project(ws, "vecchio", "bbbbbbbbbbbb")
+        await _run_in_project("via", tool, ws, code="x = 1")
+        await _run_in_project("vecchio", tool, ws, code="y = 2")
+        assert {"project:via", "project:vecchio"} <= set(tool.namespace.session_keys())
+
+        shutil.rmtree(gone)
+        moved.rename(ws / "wikis" / "nuovo")
+        # Una chiamata qualunque, anche dalla chat personale, fa la pulizia.
+        await _run("unified:default", tool, code="1")
+
+        keys = set(tool.namespace.session_keys())
+        assert "project:via" not in keys and "project:vecchio" not in keys, keys
+        assert "unified:default" in keys
+    finally:
+        manager.shutdown()
+
+
 async def test_a_function_registered_later_reaches_every_session(tmp_path) -> None:
     ws = tmp_path.resolve()
     manager = ExecSessionManager()
@@ -97,3 +164,46 @@ async def test_a_function_registered_later_reaches_every_session(tmp_path) -> No
         assert "arrivato" in await _run("unified:default", tool, code="late_helper()")
     finally:
         manager.shutdown()
+
+
+async def test_a_monitor_job_run_leaves_no_python_globals(tmp_path) -> None:
+    """La sessione ``cron:<id>`` di un monitor non porta variabili da un run all'altro."""
+    from jenny.bus.events import InboundMessage
+    from jenny.providers.base import LLMResponse, ToolCallRequest
+    from tests.support.agent import make_loop, make_provider
+
+    provider = make_provider()
+    step = {"n": 0}
+
+    async def chat(**_kw):
+        step["n"] += 1
+        if step["n"] % 2 == 1:
+            return LLMResponse(content="", finish_reason="tool_calls", tool_calls=[
+                ToolCallRequest(id=f"c{step['n']}", name="python_exec",
+                                arguments={"code": "z = 5"}),
+            ])
+        return LLMResponse(content="fatto")
+
+    provider.chat_with_retry = chat
+    provider.chat_stream_with_retry = chat
+    # Col modo orchestratore (il default) il loop principale non ha
+    # ``python_exec``, e i subagent si fanno un registro nuovo a ogni run.
+    loop = make_loop(tmp_path, provider=provider, orchestrator_mode=False)
+    tool = loop.tools.get("python_exec")
+    assert tool is not None
+
+    await loop.process_direct("controlla", session_key="cron:job-1")
+    assert step["n"] == 2
+    assert "cron:job-1" not in tool.namespace.session_keys()
+
+    await loop._dispatch(InboundMessage(
+        channel="websocket", sender_id="u", chat_id="default", content="controlla",
+        session_key_override="cron:job-2",
+    ))
+    assert step["n"] == 4
+    assert "cron:job-2" not in tool.namespace.session_keys()
+
+    # La chat personale invece tiene i suoi.
+    await loop.process_direct("calcola", session_key="unified:default")
+    assert step["n"] == 6
+    assert "unified:default" in tool.namespace.session_keys()
