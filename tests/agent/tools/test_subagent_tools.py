@@ -306,9 +306,12 @@ async def test_drain_pending_blocks_while_subagents_running(tmp_path):
     injection_callback = None
 
     # Capture the injection_callback that _run_agent_loop creates
+    spawned_in_turn: dict = {}
+
     async def fake_runner_run(spec):
         nonlocal injection_callback
         injection_callback = spec.injection_callback
+        spawned_in_turn["register"]()
 
         # Simulate: first call to injection_callback should block because
         # sub-agents are running and no messages are in the queue yet.
@@ -333,8 +336,12 @@ async def test_drain_pending_blocks_while_subagents_running(tmp_path):
         await asyncio.Event().wait()
 
     hang_task = asyncio.create_task(_hang_forever())
-    loop.subagents._session_tasks.setdefault(session.key, set()).add("sub-drain-1")
-    loop.subagents._running_tasks["sub-drain-1"] = hang_task
+    # Il subagent nasce **dentro** il turno (AC4 della terza revisione): uno gia'
+    # vivo all'inizio del dispatch e' di un turno precedente, e non si aspetta.
+    spawned_in_turn["register"] = lambda: (
+        loop.subagents._session_tasks.setdefault(session.key, set()).add("sub-drain-1"),
+        loop.subagents._running_tasks.__setitem__("sub-drain-1", hang_task),
+    )
 
     # Run _run_agent_loop — this defines the _drain_pending closure
     await loop._run_agent_loop(
@@ -446,9 +453,12 @@ async def test_drain_pending_timeout(tmp_path):
     session = Session(key="test:drain-timeout")
     injection_callback = None
 
+    spawned_in_turn: dict = {}
+
     async def fake_runner_run(spec):
         nonlocal injection_callback
         injection_callback = spec.injection_callback
+        spawned_in_turn["register"]()
         return SimpleNamespace(
             stop_reason="done",
             final_content="done",
@@ -469,8 +479,12 @@ async def test_drain_pending_timeout(tmp_path):
         await asyncio.Event().wait()
 
     hang_task = asyncio.create_task(_hang_forever())
-    loop.subagents._session_tasks.setdefault(session.key, set()).add("sub-timeout-1")
-    loop.subagents._running_tasks["sub-timeout-1"] = hang_task
+    # Il subagent nasce **dentro** il turno (AC4 della terza revisione): uno gia'
+    # vivo all'inizio del dispatch e' di un turno precedente, e non si aspetta.
+    spawned_in_turn["register"] = lambda: (
+        loop.subagents._session_tasks.setdefault(session.key, set()).add("sub-timeout-1"),
+        loop.subagents._running_tasks.__setitem__("sub-timeout-1", hang_task),
+    )
 
     await loop._run_agent_loop(
         [{"role": "user", "content": "test"}],
