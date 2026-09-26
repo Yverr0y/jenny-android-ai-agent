@@ -1470,8 +1470,7 @@ body {
    ritaglio del viewport: il testo scrollato fuori da uno scroller INTERNO è
    irraggiungibile, e la selezione saltava sul composer prendendosi tutto.
    Quindi in chat scorre `html`, e nessun antenato del testo ritaglia.
-   Solo in chat: senza `mode-chat` il guscio è quello fisso di sempre.
-   Ragionamento e misure: .agent/chat-selection-root-plan.md. */
+   Solo in chat: senza `mode-chat` il guscio è quello fisso di sempre. */
 #view-chat { position: relative; flex-direction: column; height: 100%; }
 
 :root.mode-chat { overflow-y: auto; overflow-x: hidden; }
@@ -1527,7 +1526,7 @@ body {
 
 /* Finché c'è una selezione la chrome non partecipa al hit-test: è la
    condizione perché il motore ritrovi il testo sotto il composer o il dock
-   (misurato: .agent/selection-rig, pagina C). Il tap che così finirebbe sotto
+   (misurato sul telefono con un banco di gesti adb). Il tap che così finirebbe sotto
    lo riconsegna forwardTapsThroughChrome() in shared/selection.js. */
 :root.has-selection .chat-bottom,
 :root.has-selection .dock,
@@ -5946,7 +5945,7 @@ body {
 :root[data-mascot-hidden] .jenny-scrim,
 :root[data-mascot-hidden] .jenny-mc { display: none; }
 
-/* Arte a due livelli (v. .agent/mascot-faces-plan.md): a mascotte intera il
+/* Arte a due livelli: a mascotte intera il
    corpo (senza faccia) e la faccia sono due img impilate sullo stesso quadrato.
    Il corpo resta in flusso e dà l'altezza al duo, la faccia gli sta sopra in
    absolute. Da docked l'arte è cotta e la faccia si spegne (.off).
