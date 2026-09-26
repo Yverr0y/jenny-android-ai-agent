@@ -2366,6 +2366,19 @@ class SubagentManager:
             if self.get_running_count_by_session(key) > 0
         )
 
+    def get_running_ids_by_session(self, session_key: str) -> frozenset[str]:
+        """Gli id dei subagent vivi di una sessione, adesso.
+
+        Serve a chi deve distinguere i subagent nati **dopo** un certo momento da
+        quelli che c'erano gia': ``AgentLoop`` se li fotografa all'inizio del
+        turno, e aspetta solo quelli nuovi (AC4 della terza revisione).
+        """
+        tids = self._session_tasks.get(session_key, set())
+        return frozenset(
+            tid for tid in tids
+            if tid in self._running_tasks and not self._running_tasks[tid].done()
+        )
+
     def get_running_count_by_session(self, session_key: str) -> int:
         """Return the number of currently running subagents for a session."""
         tids = self._session_tasks.get(session_key, set())

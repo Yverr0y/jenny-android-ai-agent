@@ -1334,6 +1334,18 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 return
             self._set_runtime_checkpoint(session, payload)
 
+        # I subagent gia' vivi quando il turno comincia: sono di un turno
+        # precedente, e ``_drain_pending`` non li aspetta (AC4 della terza
+        # revisione). Prima l'attesa scattava per **qualunque** subagent vivo della
+        # sessione, e un «ciao» con un subagent di prima in giro teneva il turno
+        # aperto fino a 300 secondi. Il loro risultato non si perde: rientra dalla
+        # coda quando arriva, nel turno in corso se ne sta drenando, o come
+        # messaggio suo.
+        subagents_before = (
+            frozenset(self.subagents.get_running_ids_by_session(session.key))
+            if session is not None else frozenset()
+        )
+
         async def _drain_pending(*, limit: int = _MAX_INJECTIONS_PER_TURN) -> list[dict[str, Any]]:
             """Drain follow-up messages from the pending queue.
 
@@ -1341,7 +1353,8 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             spawned in this dispatch are still running, blocks until at
             least one result arrives (or timeout).  This keeps the runner
             loop alive so subsequent sub-agent completions are consumed
-            in-order rather than dispatched separately.
+            in-order rather than dispatched separately.  Sub-agents that
+            were already running when the dispatch began are not waited for.
             """
             if pending_queue is None:
                 return []
@@ -1384,7 +1397,8 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # completions are injected in-order rather than dispatched separately.
             if (not items
                     and session is not None
-                    and self.subagents.get_running_count_by_session(session.key) > 0):
+                    and frozenset(self.subagents.get_running_ids_by_session(session.key))
+                    - subagents_before):
                 try:
                     msg = await asyncio.wait_for(pending_queue.get(), timeout=300)
                 except asyncio.TimeoutError:
