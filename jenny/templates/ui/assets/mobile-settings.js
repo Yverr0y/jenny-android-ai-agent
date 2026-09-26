@@ -2603,7 +2603,14 @@ export class SettingsController {
       showToast(i18n.t(`cron.action.done.${action}`), 'success');
     } catch (err) {
       console.warn('cron action failed', action, err);
-      showToast(i18n.t(err?.status === 409 ? 'cron.action.expired' : 'cron.action.failed'), 'error');
+      /* 409 non e' solo «scaduto»: il gateway ci risponde anche `protected`
+         (un job di sistema), e il corpo dice quale dei due (`cron_routes.py`,
+         `http_error(status, result)`). «L'ora e' passata, si puo' solo
+         eliminare» detto a un rifiuto per protezione manda a cercare un
+         promemoria che non c'e'. */
+      const reason = String(err?.message || '').trim();
+      const expired = err?.status === 409 && reason !== 'protected';
+      showToast(i18n.t(expired ? 'cron.action.expired' : 'cron.action.failed'), 'error');
     }
     await this._loadCron();
   }
