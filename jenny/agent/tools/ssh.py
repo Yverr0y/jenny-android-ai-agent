@@ -621,9 +621,13 @@ class SshTransferTool(_SshToolMixin, Tool):
                 return f"Uploaded {local_path} to {host}:{remote_path} ({sent} bytes)."
 
             local.parent.mkdir(parents=True, exist_ok=True)
-            # Il cap sul download lo verifica il backend con uno stat PRIMA di
-            # aprire il file locale: applicarlo mentre si scrive lascerebbe sul
-            # telefono un file troncato indistinguibile da uno buono.
+            # Il cap sul download lo applica il backend, due volte: sulla
+            # dimensione dichiarata dal server, prima di cominciare, e sui byte
+            # che arrivano davvero, perché quella dimensione la dice il server.
+            # Scrive su un `.part` e rinomina solo a copia completa, così un
+            # download fermato dal tetto non lascia un file troncato (v.
+            # `SshBackend.get`). Applicarlo qui, a trasferimento finito, sarebbe
+            # troppo tardi per entrambe le cose.
             got = await backend.get(target, remote_path, local, max_bytes=cap)
             logger.info("ssh_transfer down {}:{} -> {}", host, remote_path, local_path)
             return f"Downloaded {host}:{remote_path} to {local_path} ({got} bytes)."
