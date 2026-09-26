@@ -18,7 +18,9 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import java.io.IOException
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.net.SocketTimeoutException
 import java.security.MessageDigest
 import java.security.Security
@@ -29,6 +31,46 @@ import javax.crypto.Cipher
  * passare dall'euristica sui messaggi di jsch.
  */
 private class BridgeException(val category: String, message: String) : Exception(message)
+
+/**
+ * Stream di scrittura che conta i byte e si interrompe oltre [limit].
+ *
+ * Il tetto di [SshBridge.get] si controlla sulla dimensione remota prima di
+ * cominciare, ma quella e una dichiarazione del server: un file che cresce
+ * durante il trasferimento (un log), o un server che mente, scriverebbe
+ * comunque oltre. Qui il tetto si applica ai byte che arrivano davvero.
+ */
+private class CappedOutputStream(
+    private val inner: OutputStream,
+    private val limit: Long,
+) : OutputStream() {
+    var count: Long = 0
+        private set
+    var overflowed = false
+        private set
+
+    override fun write(b: Int) {
+        admit(1)
+        inner.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        admit(len)
+        inner.write(b, off, len)
+    }
+
+    private fun admit(n: Int) {
+        if (count + n > limit) {
+            overflowed = true
+            throw IOException("download over the $limit byte limit")
+        }
+        count += n
+    }
+
+    override fun flush() = inner.flush()
+
+    override fun close() = inner.close()
+}
 
 /**
  * Legge uno stream fino a EOF tenendo solo i primi [limit] CARATTERI.
@@ -547,23 +589,42 @@ object SshBridge {
     /**
      * Scarica un file remoto via SFTP.
      *
-     * La dimensione si verifica PRIMA di iniziare: un cap applicato mentre si
-     * scrive lascerebbe sul telefono un file troncato a meta, indistinguibile
-     * da uno buono.
+     * La dimensione si verifica PRIMA di iniziare, cosi un file troppo grande
+     * si rifiuta senza trasferirne un byte. Ma e la dimensione che dichiara il
+     * server: il tetto vale anche per i byte che arrivano davvero
+     * ([CappedOutputStream]). Si scrive su un `.part` accanto alla
+     * destinazione e si rinomina solo a trasferimento completo: un download
+     * interrotto — dal tetto o dalla rete — non lascia un file troncato a
+     * meta, indistinguibile da uno buono.
      */
     @JvmStatic
     fun get(request: String): String = respond {
         val req = parseRequest(request)
         val remote = req.getString("remotePath")
-        val local = req.getString("localPath")
+        val target = File(req.getString("localPath")).absoluteFile
         val maxBytes = req.getLong("maxBytes")
         val written = withSftp(req) { sftp ->
             val size = sftp.stat(remote).size
             if (size > maxBytes) {
                 throw BridgeException("io", "$remote is $size bytes, over the $maxBytes byte limit")
             }
-            sftp.get(remote, local)
-            size
+            val part = File(target.parentFile, "${target.name}.part")
+            val out = CappedOutputStream(part.outputStream(), maxBytes)
+            try {
+                out.use { sftp.get(remote, it) }
+                if (!part.renameTo(target)) {
+                    throw BridgeException("io", "could not move the download into place")
+                }
+            } catch (e: Throwable) {
+                part.delete()
+                // jsch avvolge l'IOException dello stream in una SftpException:
+                // il motivo vero si legge dal contatore, non dal messaggio.
+                if (out.overflowed) {
+                    throw BridgeException("io", "$remote grew past the $maxBytes byte limit")
+                }
+                throw e
+            }
+            out.count
         }
         JSONObject().put("bytes", written)
     }
