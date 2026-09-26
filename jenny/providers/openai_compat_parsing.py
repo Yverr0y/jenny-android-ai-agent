@@ -216,13 +216,46 @@ class ResponseParsingMixin:
     def _parse_chunks(cls, chunks: list[Any]) -> LLMResponse:
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
-        tc_bufs: dict[int, dict[str, Any]] = {}
+        tc_bufs: dict[Any, dict[str, Any]] = {}
         finish_reason = "stop"
         usage: dict[str, int] = {}
+        # Solo per i delta senza ``index``: a quale buffer va un id già visto, e
+        # quale buffer ha ricevuto l'ultimo frammento.
+        key_by_id: dict[str, Any] = {}
+        last_key: list[Any] = []
+
+        def _key_for(tc: Any, idx_hint: int) -> Any:
+            """Il buffer di un delta. ``index`` se c'è; altrimenti l'id decide.
+
+            Il ripiego sulla posizione nel chunk (*idx_hint*) dava 0 a ogni
+            chiamata parallela mandata una per chunk, e le fondeva in una. Senza
+            ``index``: un id nuovo apre un buffer nuovo, un id noto torna al suo,
+            un frammento senza id continua l'ultimo aperto.
+            """
+            raw_index = _get(tc, "index")
+            if raw_index is not None:
+                return raw_index
+            tc_id = _get(tc, "id")
+            if tc_id:
+                key = key_by_id.get(str(tc_id))
+                if key is None:
+                    if last_key and not tc_bufs[last_key[-1]]["id"]:
+                        # L'ultimo buffer è nato da un frammento senza id: è
+                        # questa chiamata, che si presenta adesso.
+                        key = last_key[-1]
+                    else:
+                        key = ("id", str(tc_id)) if tc_bufs else idx_hint
+                    key_by_id[str(tc_id)] = key
+                return key
+            # Più chiamate senza id nello stesso chunk restano distinte per
+            # posizione, come prima; il primo frammento di un chunk continua
+            # la chiamata dell'ultimo.
+            return last_key[-1] if last_key and idx_hint == 0 else idx_hint
 
         def _accum_tc(tc: Any, idx_hint: int) -> None:
             """Accumulate one streaming tool-call delta into *tc_bufs*."""
-            tc_index: int = _get(tc, "index") if _get(tc, "index") is not None else idx_hint
+            tc_index = _key_for(tc, idx_hint)
+            last_key[:] = [tc_index]
             buf = tc_bufs.setdefault(tc_index, {
                 "id": "", "name": "", "arguments": "",
                 "extra_content": None, "prov": None, "fn_prov": None,
