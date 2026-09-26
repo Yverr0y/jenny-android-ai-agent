@@ -565,6 +565,10 @@ object FloatingOverlayController {
     /** Il volo in corso, o `null` se sta ferma. */
     private var flight: FloatingFlight? = null
 
+    /** La taglia è cambiata durante un volo: la applica l'atterraggio (v.
+     *  [applyMascotSize], [endFlight]). */
+    private var sizePendingAfterFlight = false
+
     /** Dove sta la maniglia da ferma: segue il riquadro (v. `placeColumn`). */
     private var gripX = 0
     private var gripY = 0
@@ -621,10 +625,11 @@ object FloatingOverlayController {
      *
      * **L'attesa però finisce lo stesso**, e questo va fatto *prima* del
      * `return`: la risposta è arrivata, che ci sia o no un posto dove
-     * disegnarla. Tenendolo dopo, un volo preso mentre aspettava (che annulla
-     * il timeout ma non lo stato) lasciava [waitingForReply] acceso per
-     * sempre — faccia che pensa a ogni riapertura, e [armHold] che non arma
-     * più niente perché il suo primo guardiano è proprio quello.
+     * disegnarla. Tenendolo dopo, un volo preso mentre aspettava (che allora
+     * annullava il timeout ma non lo stato; oggi spegne anche quello, v.
+     * [startFlight]) lasciava [waitingForReply] acceso per sempre — faccia che
+     * pensa a ogni riapertura, e [armHold] che non arma più niente perché il
+     * suo primo guardiano è proprio quello.
      */
     fun showReply(text: String): Boolean {
         cancelTimeout()
@@ -802,10 +807,17 @@ object FloatingOverlayController {
      *
      * In volo non si tocca niente: la fisica è stata costruita con il lato di
      * partenza, e cambiarlo a metà caduta la farebbe saltare. La taglia nuova
-     * è già memorizzata, e il volo successivo nasce con quella.
+     * è già memorizzata e si segna come in sospeso: la applica [endFlight]
+     * all'atterraggio — riquadro, finestra e maniglia insieme. Prima non la
+     * applicava nessuno: la finestra restava della taglia vecchia, e la
+     * maniglia, che si misura su quella nuova, non combaciava più con lei.
      */
     private fun applyMascotSize(ctx: Context) {
-        if (flight != null) return
+        if (flight != null) {
+            sizePendingAfterFlight = true
+            return
+        }
+        sizePendingAfterFlight = false
         if (column == null) return
         val size = mascotSize(ctx)
         for (layer in listOfNotNull(mascotBody, mascotFace, flightArt)) {
@@ -911,6 +923,7 @@ object FloatingOverlayController {
         // che guarda `flight != null`, e la spegnerebbe appena riaccesa.
         flight?.cancel()
         flight = null
+        sizePendingAfterFlight = false  // il montaggio dopo nasce già alla taglia giusta
         // Gli animator prima delle viste. Il respiro è `INFINITE` e resta
         // registrato presso l'AnimationHandler del main anche con la vista
         // staccata: senza `cancel` chiede un fotogramma a ogni vsync finché il
@@ -2274,7 +2287,14 @@ object FloatingOverlayController {
         mascot.animate().cancel()
         cancelTimeout()
         main.removeCallbacks(holdRunnable)
-        // Lanciarla via è una chiusura come le altre.
+        // Lanciarla via è una chiusura come le altre, attesa compresa (come in
+        // [collapse]). Il timeout qui sopra era l'unico che l'avrebbe spenta:
+        // senza questa riga, un volo preso mentre aspettava una risposta che
+        // poi non arriva lasciava [waitingForReply] acceso per sempre — faccia
+        // che pensa a ogni riapertura, e [armHold] che non arma più niente.
+        // Se la risposta arriva dopo, [showReply] la trova chiusa e la lascia
+        // alla conversazione dell'app.
+        waitingForReply = false
         clearHistory()
         // Si può prenderla anche a chat aperta: allora il campo e il velo se
         // ne vanno, perché mentre vola non c'è niente a cui scrivere. La
@@ -2358,9 +2378,15 @@ object FloatingOverlayController {
         saveParkPosition(ctx)
         syncFace()
         // La camminata finisce esattamente sull'ancoraggio docked: la maniglia
-        // ci si rimette sopra e torna piccola, e lei riappare lì dentro.
-        placeColumn(ctx, parkX(ctx), parkTop(ctx))
-        setGrip(ctx, arena = false)
+        // ci si rimette sopra e torna piccola, e lei riappare lì dentro. Con
+        // una taglia cambiata in volo, lo fa `applyMascotSize` alla misura
+        // nuova (stesse due chiamate, dopo aver ridimensionato i livelli).
+        if (sizePendingAfterFlight) {
+            applyMascotSize(ctx)
+        } else {
+            placeColumn(ctx, parkX(ctx), parkTop(ctx))
+            setGrip(ctx, arena = false)
+        }
         column?.visibility = View.VISIBLE
         // Consegna al contrario: si spegne l'arte del volo un giro dopo, per
         // non lasciare un fotogramma senza nessuna delle due.
