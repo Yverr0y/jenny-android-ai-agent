@@ -112,32 +112,54 @@ class SnapshotService:
         non producono mai scan sovrapposti.
         """
         async with self._lock:
-            # Il fingerprint si legge PRIMA di creare lo snapshot. Leggerlo dopo
-            # assorbe come "già noto" qualunque modifica arrivata *durante* la
-            # creazione, che quindi non innesca più il debounce e resta fuori
-            # dagli snapshot fino al cambiamento successivo o al safety daily.
-            # L'errore opposto è innocuo: se una modifica arriva fra la lettura
-            # e la creazione, il tick successivo vede un cambiamento già
-            # catturato, `create_snapshot` ritorna None e si spreca uno scan.
-            fingerprint = await asyncio.to_thread(self._engine.fingerprint)
-            manifest = await asyncio.to_thread(
-                self._engine.create_snapshot, trigger=trigger, label=label
+            # Un solo thread per tutto il lavoro, e il lock resta preso finche'
+            # quel thread non finisce **anche se questo task viene cancellato**:
+            # ``stop()`` cancella il timer, e la cancellazione arriva all'await
+            # mentre il thread va avanti. Prima il lock si liberava li', e lo
+            # snapshot di shutdown partiva accanto al thread orfano — due
+            # ``create_snapshot`` insieme, e il gc della retention poteva
+            # togliere i blob che l'orfano aveva scritto e il suo manifest,
+            # scritto dopo, avrebbe referenziato.
+            work = asyncio.ensure_future(
+                asyncio.to_thread(self._snapshot_blocking, trigger, label)
             )
+            try:
+                fingerprint, manifest = await asyncio.shield(work)
+            except asyncio.CancelledError:
+                await asyncio.wait([work])
+                raise
             # Anche un no-op conta come "verificato ora": evita che il safety
             # giornaliero riprovi a ogni tick su un workspace immutato.
             self._last_snapshot_at_ms = _now_ms()
             self._pending_changes = False
             if manifest is not None:
                 self._last_fingerprint = fingerprint
-                removed = await asyncio.to_thread(
-                    self._engine.apply_retention,
-                    keep_recent=self._cfg.retention_recent,
-                    thin_after_days=self._cfg.retention_thin_after_days,
-                    max_age_days=self._cfg.retention_max_age_days or None,
-                )
-                if removed:
-                    await asyncio.to_thread(self._engine.gc)
             return manifest
+
+    def _snapshot_blocking(
+        self, trigger: str, label: str | None
+    ) -> tuple[dict[str, tuple[int, int]], SnapshotManifest | None]:
+        """Fingerprint, snapshot, retention e gc: il corpo di :meth:`snapshot_now`.
+
+        Il fingerprint si legge PRIMA di creare lo snapshot. Leggerlo dopo
+        assorbe come "già noto" qualunque modifica arrivata *durante* la
+        creazione, che quindi non innesca più il debounce e resta fuori dagli
+        snapshot fino al cambiamento successivo o al safety daily. L'errore
+        opposto è innocuo: se una modifica arriva fra la lettura e la creazione,
+        il tick successivo vede un cambiamento già catturato, `create_snapshot`
+        ritorna None e si spreca uno scan.
+        """
+        fingerprint = self._engine.fingerprint()
+        manifest = self._engine.create_snapshot(trigger=trigger, label=label)
+        if manifest is not None:
+            removed = self._engine.apply_retention(
+                keep_recent=self._cfg.retention_recent,
+                thin_after_days=self._cfg.retention_thin_after_days,
+                max_age_days=self._cfg.retention_max_age_days or None,
+            )
+            if removed:
+                self._engine.gc()
+        return fingerprint, manifest
 
     async def set_retention_max_age(self, max_age_days: int) -> int:
         """Aggiorna l'orizzonte di retention (0 = per sempre) e lo applica subito.
