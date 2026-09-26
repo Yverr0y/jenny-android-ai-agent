@@ -728,6 +728,33 @@ class TestConsumeSse:
         assert usage == {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
 
     @pytest.mark.asyncio
+    async def test_incomplete_response_is_a_length_stop_with_usage(self):
+        """``response.incomplete`` chiude lo stream al tetto di token (PC4).
+
+        È l'evento terminale al posto di ``response.completed``: ignorarlo
+        lasciava ``finish_reason="stop"`` e usage vuoto, e il runner non
+        riconosceva il troncamento. Il ramo non-stream lo mappava già a
+        ``length`` (``map_finish_reason("incomplete")``).
+        """
+        response = _SseResponse([
+            {"type": "response.output_text.delta", "delta": "Risposta tagli"},
+            {
+                "type": "response.incomplete",
+                "response": {
+                    "status": "incomplete",
+                    "incomplete_details": {"reason": "max_output_tokens"},
+                    "usage": {"input_tokens": 10, "output_tokens": 64, "total_tokens": 74},
+                },
+            },
+        ])
+
+        content, _, finish_reason, usage, _ = await consume_sse_with_reasoning(response)
+
+        assert content == "Risposta tagli"
+        assert finish_reason == "length"
+        assert usage == {"prompt_tokens": 10, "completion_tokens": 64, "total_tokens": 74}
+
+    @pytest.mark.asyncio
     async def test_tool_call_done_arguments_callback(self):
         response = _SseResponse([
             {

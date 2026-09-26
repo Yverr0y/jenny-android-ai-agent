@@ -240,9 +240,15 @@ async def consume_sse_with_reasoning(
                 summary = _extract_reasoning_summary_from_output([item])
                 if summary:
                     reasoning_content = summary
-        elif event_type == "response.completed":
+        elif event_type in {"response.completed", "response.incomplete"}:
+            # ``response.incomplete`` è l'evento terminale al posto di
+            # ``completed`` quando la risposta si ferma al tetto di token: il suo
+            # ``status`` è "incomplete" → ``length``, come nel ramo non-stream, e
+            # porta l'usage. Ignorarlo dava ``stop`` e un usage vuoto.
             response_obj = event.get("response") or {}
-            status = response_obj.get("status")
+            status = response_obj.get("status") or (
+                "incomplete" if event_type == "response.incomplete" else None
+            )
             finish_reason = map_finish_reason(status)
             usage = _usage_from_response_obj(response_obj) or usage
             if not reasoning_content:
