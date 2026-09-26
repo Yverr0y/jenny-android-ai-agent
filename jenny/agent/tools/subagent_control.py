@@ -68,6 +68,29 @@ class _SubagentControlTool(Tool, ContextAware):
         self._session_key.set(ctx.session_key or f"{ctx.channel}:{ctx.chat_id}")
         self._turn_id.set(ctx.turn_id)
 
+    def _belongs_here(self, task_id: str) -> bool:
+        """``task_id`` (o lineage) è un subagent partito da questa sessione? (TL16)
+
+        ``subagent_status`` guarda solo i subagent della propria sessione, ma
+        ``cancel``/``restart``/``send`` passavano l'id al manager così com'era:
+        da un quaderno si fermava, rilanciava o pilotava un subagent della
+        chat personale. Stesso filtro dello stato — i vivi da
+        ``status_snapshot``, i finiti da ``list_records`` (tutti, non solo i
+        recenti) — e fail-closed senza sessione: queste azioni cambiano
+        qualcosa, lo stato no.
+        """
+        key = self._session_key.get()
+        if not key or not task_id:
+            return False
+        snapshot = self._manager.status_snapshot(key)
+        for entry in snapshot.get("running") or []:
+            if task_id in (entry.get("task_id"), entry.get("lineage_id")):
+                return True
+        return any(
+            task_id in (record.task_id, record.lineage_id)
+            for record in self._manager.list_records(key)
+        )
+
     def _turn_identity(self) -> str | None:
         """Identita del turno per le guardie per-turno, o ``None`` se assente.
 
@@ -281,6 +304,11 @@ class SubagentCancelTool(_SubagentControlTool):
         )
 
     async def execute(self, task_id: str, **kwargs: Any) -> str:
+        if not self._belongs_here(task_id):
+            return (
+                f"Nothing to cancel: no subagent [{task_id}] was started from this "
+                "conversation (check subagent_status)."
+            )
         stopped = await self._manager.cancel_task(task_id)
         if stopped:
             return f"Cancelled subagent [{task_id}]."
@@ -329,6 +357,11 @@ class SubagentRestartTool(_SubagentControlTool):
             SubagentRestartError,
         )
 
+        if not self._belongs_here(task_id):
+            return (
+                f"Cannot restart subagent [{task_id}]: no subagent with this id was "
+                "started from this conversation. Call subagent_status to see yours."
+            )
         try:
             return await self._manager.restart(
                 task_id,
@@ -453,6 +486,11 @@ class SubagentSendTool(_SubagentControlTool):
             SubagentSendError,
         )
 
+        if not self._belongs_here(task_id):
+            return (
+                f"Cannot send to subagent [{task_id}]: no subagent with this id was "
+                "started from this conversation. Call subagent_status to see yours."
+            )
         refusal = self._duplicate_refusal(task_id, message or "")
         if refusal is not None:
             return refusal
