@@ -16,6 +16,7 @@
   "chat": {
     "placeholder": "Ask something…",
     "attach": "Attach",
+    "send": "Send",
     "wsError": "WebSocket not connected. Waiting for reconnection...",
     "agentRunning": "Agent running",
     "copy": "Copy",

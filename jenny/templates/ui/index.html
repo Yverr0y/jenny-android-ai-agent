@@ -136,7 +136,7 @@
     <div class="home-page" data-page="app">
       <div class="home-drawer" id="launcher-sheet" tabindex="-1">
         <div class="launcher-search-row">
-          <i class="ti ti-search launcher-search-icon"></i>
+          <i class="ti ti-search launcher-search-icon" aria-hidden="true"></i>
           <input class="launcher-search" id="launcher-search" type="text"
                  autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
                  enterkeyhint="go" role="combobox" aria-controls="launcher-list"
@@ -144,7 +144,7 @@
                  placeholder="Cerca un'app…" data-i18n-placeholder="launcher.searchPlaceholder"
                  aria-label="Cerca un'app…" data-i18n-aria="launcher.searchPlaceholder">
           <button class="launcher-search-clear" id="launcher-search-clear" type="button"
-                  aria-label="Pulisci" data-i18n-aria="launcher.clearSearch"><i class="ti ti-x"></i></button>
+                  aria-label="Pulisci" data-i18n-aria="launcher.clearSearch"><i class="ti ti-x" aria-hidden="true"></i></button>
         </div>
         <div class="launcher-status" id="launcher-status" role="status" hidden>
           <i class="ti ti-alert-triangle launcher-status-icon" aria-hidden="true"></i>
@@ -204,14 +204,19 @@
             <span class="home-notebook-count" id="home-notebook-pages-count"></span>
           </button>
         </div>
-        <label class="home-field">
+        <!-- Un `<div>`, non una `<label>`: una label che avvolge anche la
+             graffetta dava al campo il nome del bottone («Allega», per
+             TalkBack), e una label non puo' contenere un bottone. Il nome del
+             campo e' il suo segnaposto, che `home-app.js` traduce; il margine
+             a sinistra sta sul campo, cosi' un tocco li' ci scrive ancora. -->
+        <div class="home-field">
           <textarea class="home-input" id="home-input" rows="1" enterkeyhint="send" autocomplete="off"></textarea>
           <button class="home-attach" id="home-attach" type="button" aria-label="Allega">
-            <i class="ti ti-paperclip"></i>
+            <i class="ti ti-paperclip" aria-hidden="true"></i>
           </button>
-        </label>
+        </div>
         <button class="home-send" id="home-send" type="button" aria-label="Manda">
-          <i class="ti ti-arrow-up"></i>
+          <i class="ti ti-arrow-up" aria-hidden="true"></i>
         </button>
       </div>
       </div>
@@ -331,11 +336,14 @@
               role="tab" aria-selected="false" aria-controls="home-map"></button>
     </div>
 
-    <label class="home-search" for="home-notebook-pages-q">
+    <!-- Anche qui un `<div>`: la `<label>` vuota (c'era solo la lente) dava al
+         campo un nome vuoto, e il segnaposto tradotto non arrivava a TalkBack.
+         Il campo copre tutta la pastiglia, lente compresa, e il tocco resta. -->
+    <div class="home-search">
       <i class="ti ti-search" aria-hidden="true"></i>
       <input class="home-search-input" id="home-notebook-pages-q" type="search"
              autocomplete="off" autocapitalize="none" spellcheck="false">
-    </label>
+    </div>
 
     <!-- La nota sta **prima** dell'elenco: l'elenco e' `flex: 1`, quindi da
          vuoto si prende tutta l'altezza e spingerebbe «nessuna pagina con
@@ -428,6 +436,7 @@
           <button class="home-save" id="home-name-save" type="button" hidden></button>
         </div>
         <input class="home-rules home-name" id="home-name" type="text" maxlength="40"
+               aria-labelledby="home-name-label"
                autocapitalize="words" autocomplete="off" spellcheck="false">
         <div class="home-card-note" id="home-name-note"></div>
       </div>
@@ -435,7 +444,8 @@
       <div class="home-rows">
         <div class="home-row">
           <span class="home-row-label" id="home-jenny-visible-label"></span>
-          <button class="home-switch" id="home-jenny-visible" type="button" role="switch">
+          <button class="home-switch" id="home-jenny-visible" type="button" role="switch"
+                  aria-labelledby="home-jenny-visible-label">
             <span class="home-switch-knob"></span>
           </button>
         </div>
@@ -447,7 +457,8 @@
              esistere, e la riga non c'e': `available` lo dice il server. -->
         <div class="home-row" id="home-jenny-floating-row" hidden>
           <span class="home-row-label" id="home-jenny-floating-label"></span>
-          <button class="home-switch" id="home-jenny-floating" type="button" role="switch">
+          <button class="home-switch" id="home-jenny-floating" type="button" role="switch"
+                  aria-labelledby="home-jenny-floating-label">
             <span class="home-switch-knob"></span>
           </button>
         </div>

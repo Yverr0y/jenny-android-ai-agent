@@ -620,7 +620,10 @@ body.home {
      caduta li'. */
   align-items: center;
   gap: 4px;
-  padding: 0 4px 0 14px;
+  /* Il margine a sinistra sta sul campo (`.home-input`) e non qui: la
+     pastiglia e' un `<div>` e non piu' una `<label>` (CS2), e un tocco sul
+     margine deve cadere ancora nel campo. */
+  padding: 0 4px 0 0;
   border: 1px solid var(--border);
   /* **Raggio fisso, non `--radius-pill`.** A una riga (40px) 20px e' esattamente
      meta' dell'altezza, quindi la forma e' la stessa capsula di prima; a tre
@@ -640,7 +643,7 @@ body.home {
   min-width: 0;
   min-height: 40px;
   max-height: 140px;
-  padding: 10px 0;
+  padding: 10px 0 10px 14px;
   border: none;
   background: none;
   color: var(--text);
@@ -1551,18 +1554,28 @@ body.home {
   font-weight: 600;
 }
 
+/* La pastiglia e' un `<div>` (CS2/CS10): il campo la copre tutta, lente
+   compresa, cosi' un tocco ovunque ci scrive — che era l'unica cosa per cui
+   c'era la `<label>`, e la `<label>` vuota toglieva al campo il nome. */
 .home-search {
   flex: none;
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
   height: 38px;
   margin: 0 18px 6px;
-  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   color: var(--text-muted);
+}
+
+.home-search > .ti {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .home-search[hidden] { display: none; }
@@ -1570,6 +1583,7 @@ body.home {
 .home-search-input {
   flex: 1;
   min-width: 0;
+  padding: 0 12px 0 34px;
   border: none;
   background: none;
   color: var(--text);
