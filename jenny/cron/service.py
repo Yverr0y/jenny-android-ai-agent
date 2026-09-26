@@ -1066,8 +1066,15 @@ class CronService:
 
             for job in due_jobs:
                 await self._execute_job(job)
+                # Dopo **ogni** job, non a fine giro: un giro dura quanto la somma
+                # dei suoi turni d'agente, e un kill (o lo spegnimento, che
+                # cancella il job in corso) a meta' lasciava su disco i job gia'
+                # eseguiti ancora dovuti. Al riavvio ripartivano, compreso un
+                # promemoria ``at`` gia' consegnato.
+                self._save_store()
 
-            self._save_store()
+            if not due_jobs:
+                self._save_store()
         finally:
             self._timer_active = False
         self._arm_timer()
