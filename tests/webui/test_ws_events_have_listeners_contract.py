@@ -186,3 +186,47 @@ def test_a_bare_mention_is_not_a_listener() -> None:
     assert _listener("user").search("switch (msg.event) { case 'user': f(); }")
     assert _listener("error").search("if (msg?.event === 'error') g();")
     assert _listener("goal_status").search("if (msg.event !== \"goal_status\") return;")
+
+
+# ── La chat, non la mascotte ────────────────────────────────────────────────
+
+# Il modulo della chat di ogni guscio, e gli eventi che deve smistare **lui**.
+# La mascotte (`shared/jenny-mascot.js`) li ascolta quasi tutti per animarsi, e
+# vive in tutti e due i gusci: contato insieme a lei, il gestore `'error'` della
+# chat si poteva togliere lasciando il banco verde — e un rifiuto del gateway
+# diventava una faccina triste e nessuna parola (TD11 della terza revisione,
+# regressione di T3).
+CHAT_MODULE = {
+    "index.html": "home-chat.js",
+    "workshop.html": "mobile-chat.js",
+}
+CHAT_EVENTS = ("delta", "stream_end", "message", "turn_end", "error")
+
+
+def test_the_mascot_really_hears_the_chat_events() -> None:
+    """E' lei che rendeva il banco di sopra cieco: se smettesse di ascoltarli,
+    questo di sotto non servirebbe piu', e lo si vuole sapere."""
+    mascot = _strip_comments((ASSETS / "shared" / "jenny-mascot.js").read_text(encoding="utf-8"))
+    assert all(_listener(e).search(mascot) for e in CHAT_EVENTS)
+
+
+def _handler(event: str) -> re.Pattern[str]:
+    """Piu' stretto di ``_listener``: ``case 'x':`` o ``event === 'x'``, non
+    ``!==``. Le due chat hanno ``if (msg.event !== 'error') …`` per la bolla in
+    sospeso, che nomina l'evento senza gestirlo: con ``_listener`` il ``case``
+    si toglieva e il banco restava verde lo stesso."""
+    q = r"""['"`]"""
+    return re.compile(rf"(?:\bcase\s+|\bevent\s*===\s*){q}{re.escape(event)}{q}")
+
+
+@pytest.mark.parametrize(
+    ("shell", "event"), [(shell, event) for shell in CHAT_MODULE for event in CHAT_EVENTS]
+)
+def test_the_chat_itself_handles_its_events(shell: str, event: str) -> None:
+    src = _strip_comments(
+        (ASSETS / CHAT_MODULE[shell]).read_text(encoding="utf-8", errors="replace")
+    )
+    assert _handler(event).search(src), (
+        f"{CHAT_MODULE[shell]} non smista `{event}`: lo ascolta solo la mascotte, "
+        "e la chat di quel guscio non lo mostra"
+    )
