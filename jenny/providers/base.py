@@ -652,16 +652,53 @@ class LLMProvider(ABC):
                 await on_stream_recover()
             has_streamed_content = False
 
+        # Ragionamento e frammenti di tool call non fermano il retry (un errore
+        # passeggero dopo un lungo ragionamento si ritenta), ma quello che un
+        # tentativo fallito ha già mostrato non si ripete: il ragionamento del
+        # tentativo dopo comparirebbe sotto il suo doppione, e i suoi frammenti
+        # di tool call si accoderebbero ai vecchi nello stesso ``index``
+        # dell'anteprima dei file. Il primo tentativo che ne manda uno di un
+        # tipo lo tiene; i successivi, di quel tipo, tacciono.
+        attempt_no = 0
+        thinking_attempt: int | None = None
+        tool_call_attempt: int | None = None
+
+        async def _attempt(**call_kw: Any) -> LLMResponse:
+            nonlocal attempt_no
+            attempt_no += 1
+            return await self._safe_chat_stream(**call_kw)
+
+        async def _first_attempt_thinking(text: str) -> None:
+            nonlocal thinking_attempt
+            if thinking_attempt not in (None, attempt_no):
+                return
+            if text:
+                thinking_attempt = attempt_no
+            assert on_thinking_delta is not None
+            await on_thinking_delta(text)
+
+        async def _first_attempt_tool_call(delta: dict[str, Any]) -> None:
+            nonlocal tool_call_attempt
+            if tool_call_attempt not in (None, attempt_no):
+                return
+            tool_call_attempt = attempt_no
+            assert on_tool_call_delta is not None
+            await on_tool_call_delta(delta)
+
         kw: dict[str, Any] = dict(
             messages=messages, tools=tools, model=model,
             max_tokens=max_tokens, temperature=temperature,
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
             on_content_delta=_tracking_delta if on_content_delta is not None else None,
-            on_thinking_delta=on_thinking_delta,
-            on_tool_call_delta=on_tool_call_delta,
+            on_thinking_delta=(
+                _first_attempt_thinking if on_thinking_delta is not None else None
+            ),
+            on_tool_call_delta=(
+                _first_attempt_tool_call if on_tool_call_delta is not None else None
+            ),
         )
         response = await self._run_with_retry(
-            self._safe_chat_stream,
+            _attempt,
             kw,
             messages,
             retry_mode=retry_mode,
