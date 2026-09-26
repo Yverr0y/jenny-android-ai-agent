@@ -282,30 +282,29 @@ class TestDispatchOutboundWithCoalescing:
             metadata={},  # Regular message
         ))
 
-        # Run one iteration of dispatch logic manually
-        pending = []
-        processed = []
+        # Il ciclo vero, non una sua copia (TD5 della terza revisione): la copia
+        # restava verde anche togliendo la coalescenza dal dispatcher. Qui, se
+        # ``_dispatch_outbound`` non rimette in coda il messaggio che
+        # ``_coalesce_stream_deltas`` ha tolto dal bus per guardarlo, «Final»
+        # non arriva mai e l'attesa scade.
+        channel = manager.channels["websocket"]
+        order: list[tuple[str, str]] = []
+        channel._send_delta_mock.side_effect = (
+            lambda chat_id, delta, metadata: order.append(("delta", delta)) or []
+        )
+        channel._send_mock.side_effect = lambda msg: order.append(("send", msg.content)) or []
 
-        # First iteration: should coalesce A+B
-        if pending:
-            msg = pending.pop(0)
-        else:
-            msg = await bus.consume_outbound()
+        task = asyncio.create_task(manager._dispatch_outbound())
+        try:
+            await wait_until(lambda: len(order) >= 2, timeout=1.5, interval=0.02)
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        if msg.metadata.get("_stream_delta") and not msg.metadata.get("_stream_end"):
-            msg, extra_pending = manager._coalesce_stream_deltas(msg)
-            pending.extend(extra_pending)
-
-        channel = manager._route_channel(msg)
-        if channel:
-            await channel.send_delta(msg.chat_id, msg.content, msg.metadata)
-            processed.append(("delta", msg.content))
-
-        # Should have sent coalesced delta
-        assert processed == [("delta", "AB")]
-        # Should have pending regular message
-        assert len(pending) == 1
-        assert pending[0].content == "Final"
+        assert order == [("delta", "AB"), ("send", "Final")]
 
 
 class TestProgressFiltering:
