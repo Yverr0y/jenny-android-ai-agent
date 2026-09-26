@@ -1122,15 +1122,15 @@
     "howToTeach": "To teach her one, ask in chat.",
     "panel": "Skills",
     "yours": "Yours",
-    "integrate": "Built in",
+    "builtIn": "Built in",
     "service": "Plus {n} internal ones Jenny uses on her own.",
     "emptyTitle": "You haven't taught her one yet",
     "emptyText": "Explain something you ask her often: she'll turn it into a skill.",
     "ask": "Ask Jenny",
     "askPrompt": "I want to teach you a new skill. Use the \"skill-creator\" skill and guide me step by step.",
     "active": "Turn on the {name} skill",
-    "integrataBloccata": "Comes with the app: it can't be turned off here.",
-    "tuaBloccata": "Locked by its own file: it can't be turned off here.",
+    "builtInLocked": "Comes with the app: it can't be turned off here.",
+    "yoursLocked": "Locked by its own file: it can't be turned off here.",
     "readError": "The skill list couldn't be read.",
     "retry": "Retry"
   }

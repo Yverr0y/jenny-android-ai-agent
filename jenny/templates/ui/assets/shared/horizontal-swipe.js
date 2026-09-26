@@ -299,7 +299,7 @@ export function watchHorizontalSwipe(element, {
     onDrag?.(dx, width());
   };
 
-  const su = (e) => {
+  const up = (e) => {
     if (!tracking) return;
     const wasHorizontal = horizontal;
     const changed = (e.changedTouches && e.changedTouches[0]) || null;
@@ -359,7 +359,7 @@ export function watchHorizontalSwipe(element, {
     if (synthetic || !horizontal) return;
     e.stopImmediatePropagation();
     if (e.type === 'touchmove') move(e);
-    else if (e.type === 'touchend') su(e);
+    else if (e.type === 'touchend') up(e);
     else if (e.type === 'touchcancel') cancel();
   };
   const markPointer = (e) => {
@@ -371,7 +371,7 @@ export function watchHorizontalSwipe(element, {
 
   element.addEventListener('touchstart', down, { passive: true });
   element.addEventListener('touchmove', move, { passive: false });
-  element.addEventListener('touchend', su, { passive: true });
+  element.addEventListener('touchend', up, { passive: true });
   element.addEventListener('touchcancel', cancel, { passive: true });
   if (exclusive) {
     window.addEventListener('pointerdown', markPointer, { capture: true, passive: true });
@@ -383,7 +383,7 @@ export function watchHorizontalSwipe(element, {
   return () => {
     element.removeEventListener('touchstart', down);
     element.removeEventListener('touchmove', move);
-    element.removeEventListener('touchend', su);
+    element.removeEventListener('touchend', up);
     element.removeEventListener('touchcancel', cancel);
     if (exclusive) {
       window.removeEventListener('pointerdown', markPointer, { capture: true });

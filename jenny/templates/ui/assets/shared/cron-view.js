@@ -248,15 +248,15 @@ export function buildCronView(payload, { nowMs, tr, locale, keep } = {}) {
    * I banner che non dipendono dai lavori (servizio giu', store recuperato)
    * restano comunque: quelli rompono anche i lavori che stai guardando.
    */
-  const visto = keep && payload?.jobs
+  const shown = keep && payload?.jobs
     ? { ...payload, jobs: payload.jobs.filter(keep) }
     : payload;
-  const banner = pickBanner(visto);
-  if (!visto || visto.available === false) {
+  const banner = pickBanner(shown);
+  if (!shown || shown.available === false) {
     return { available: false, banner, rows: [], counts: null, asOf: stamp };
   }
-  const rows = [...(visto.jobs ?? [])].sort(compareJobs).map((job) => {
-    const tz = job.display_timezone || visto.default_timezone;
+  const rows = [...(shown.jobs ?? [])].sort(compareJobs).map((job) => {
+    const tz = job.display_timezone || shown.default_timezone;
     return {
       id: job.id,
       name: job.name,
@@ -294,11 +294,11 @@ export function buildCronView(payload, { nowMs, tr, locale, keep } = {}) {
      filtro attivo non descrivono piu' quel che si vede, quindi si ricontano
      sulle righe rimaste. Un «4 lavori» sopra due righe e' un difetto che si
      legge come un guasto. */
-  /* `visto.jobs` puo' non esserci: la riga che costruisce `visto` si protegge
-     con `payload?.jobs`, e quando quello manca `visto` **e'** `payload`, cioe'
+  /* `shown.jobs` puo' non esserci: la riga che costruisce `shown` si protegge
+     con `payload?.jobs`, e quando quello manca `shown` **e'** `payload`, cioe'
      un oggetto senza `jobs`. Con un filtro attivo — e Mani ne passa sempre uno
      — queste due righe esplodevano. Stesso guardiano di sopra, non uno nuovo. */
-  const toCount = visto.jobs ?? [];
+  const toCount = shown.jobs ?? [];
   const counts = keep
     ? { system: toCount.filter((j) => j.kind === 'system').length,
         user: toCount.filter((j) => j.kind !== 'system').length }

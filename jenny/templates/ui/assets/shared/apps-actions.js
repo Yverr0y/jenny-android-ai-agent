@@ -560,7 +560,7 @@ function pageRow(state, app) {
     ? 'apps.pageBroken'
     : app.view_kind === 'external'
       ? 'apps.pageExternal'
-      : state === 'piena' ? 'apps.pageFull' : null;
+      : state === 'full' ? 'apps.pageFull' : null;
   if (state === 'pending') {
     return { icon: 'ti-pinned-off', label: i18n.t('apps.unpinPage'), action: 'unpin' };
   }

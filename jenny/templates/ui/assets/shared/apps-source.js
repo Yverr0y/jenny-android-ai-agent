@@ -55,7 +55,7 @@ export class AppsSource {
     this._seqJenny = 0;
     /* Le rimozioni gia' annunciate per la via del broadcast, per non dirle due
        volte quando la fetch successiva le riscopre. */
-    this._annunciate = new Set();
+    this._announced = new Set();
     this._timerAndroid = null;
     this._reentryArmed = false;
     /* I due frame del gateway sulle Jenny App (v. `_onFrame`). L'ascolto sta
@@ -210,9 +210,9 @@ export class AppsSource {
     if (announceRemovals && apps && !failed) {
       const present = new Set(apps.map((a) => a.packageName));
       const gone = before.filter(
-        (a) => !present.has(a.packageName) && !this._annunciate.has(a.packageName),
+        (a) => !present.has(a.packageName) && !this._announced.has(a.packageName),
       );
-      this._annunciate.clear();
+      this._announced.clear();
       if (gone.length) this._announce(gone.map((a) => a.label));
     }
     this._emit();
@@ -240,7 +240,7 @@ export class AppsSource {
       if (app) {
         this.androidApps = this.androidApps.filter((a) => a.packageName !== packageName);
         this._emit();
-        this._annunciate.add(packageName);
+        this._announced.add(packageName);
         this._announce([app.label]);
       }
     }

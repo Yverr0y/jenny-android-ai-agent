@@ -115,15 +115,15 @@ def test_the_lock_says_why_in_two_different_ways() -> None:
     il motivo vero, e la chiave deve esistere nelle due lingue."""
     _run_js(
         """
-        assert.equal(blockReason({ bundled: true, locked: false }), 'skills.integrataBloccata');
-        assert.equal(blockReason({ bundled: true, locked: true }), 'skills.integrataBloccata');
-        assert.equal(blockReason({ bundled: false, locked: true }), 'skills.tuaBloccata');
+        assert.equal(blockReason({ bundled: true, locked: false }), 'skills.builtInLocked');
+        assert.equal(blockReason({ bundled: true, locked: true }), 'skills.builtInLocked');
+        assert.equal(blockReason({ bundled: false, locked: true }), 'skills.yoursLocked');
         """
     )
     for language in ("it", "en"):
         entries = locale(language)["skills"]
-        assert entries["tuaBloccata"] and entries["tuaBloccata"] != entries["integrataBloccata"]
+        assert entries["yoursLocked"] and entries["yoursLocked"] != entries["builtInLocked"]
     settings = (VIEW_JS.parents[1] / "mobile-settings.js").read_text(encoding="utf-8")
-    assert "i18n.t('skills.integrataBloccata')" not in settings, (
+    assert "i18n.t('skills.builtInLocked')" not in settings, (
         "il lucchetto della riga dice di nuovo «Viene con l'app» a tutte"
     )

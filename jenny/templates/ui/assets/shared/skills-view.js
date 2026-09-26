@@ -25,7 +25,7 @@ export function controllable(skill) {
  *  scritta dall'utente e' falso — e lo manda a cercare il motivo nel posto
  *  sbagliato. */
 export function blockReason(skill) {
-  return skill.bundled ? 'skills.integrataBloccata' : 'skills.tuaBloccata';
+  return skill.bundled ? 'skills.builtInLocked' : 'skills.yoursLocked';
 }
 
 /** L'elenco del payload, diviso nei due blocchi del pannello più un conto.

@@ -181,7 +181,7 @@ def test_a_pinned_app_offers_to_unpin_it() -> None:
     [
         ({"slug": "waterbot", "name": "WaterBot", "view_kind": "external"}, "free", "apps.pageExternal"),
         ({"slug": "rotta", "name": "Rotta", "broken": True}, "free", "apps.pageBroken"),
-        (GARDEN, "piena", "apps.pageFull"),
+        (GARDEN, "full", "apps.pageFull"),
     ],
     ids=["external", "broken", "full"],
 )

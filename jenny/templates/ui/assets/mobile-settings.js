@@ -2280,7 +2280,7 @@ export class SettingsController {
       </div>
       ${integrate.length ? `
       <div class="settings-group">
-        <div class="settings-group-label">${i18n.t('skills.integrate')}</div>
+        <div class="settings-group-label">${i18n.t('skills.builtIn')}</div>
         <section class="settings-card">${integrate.map((sk) => this._skillRow(sk)).join('')}</section>
       </div>` : ''}
       ${service ? `<p class="settings-link">${i18n.t('skills.service', { n: service })}</p>` : ''}`;

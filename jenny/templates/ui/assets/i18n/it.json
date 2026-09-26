@@ -1125,15 +1125,15 @@
     "howToTeach": "Per insegnargliene una, chiediglielo in chat.",
     "panel": "Skill",
     "yours": "Le tue",
-    "integrate": "Integrate",
+    "builtIn": "Integrate",
     "service": "Più {n} di servizio, che Jenny usa da sé.",
     "emptyTitle": "Non gliene hai ancora insegnata nessuna",
     "emptyText": "Spiegale una cosa che le chiedi spesso: la trasforma in una skill.",
     "ask": "Chiedi a Jenny",
     "askPrompt": "Voglio insegnarti una nuova skill. Usa la skill \"skill-creator\" e guidami passo passo.",
     "active": "Attiva la skill {name}",
-    "integrataBloccata": "Viene con l'app: non si spegne da qui.",
-    "tuaBloccata": "Bloccata dal suo file: non si spegne da qui.",
+    "builtInLocked": "Viene con l'app: non si spegne da qui.",
+    "yoursLocked": "Bloccata dal suo file: non si spegne da qui.",
     "readError": "L'elenco delle skill non si è potuto leggere.",
     "retry": "Riprova"
   }
