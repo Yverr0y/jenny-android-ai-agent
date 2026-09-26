@@ -16,7 +16,7 @@ from typing import Any, Union, get_args, get_origin
 
 from loguru import logger
 
-from jenny.config.bootstrap import restrict_config_permissions
+from jenny.config.bootstrap import write_private_file
 from jenny.config.schema import Config
 from jenny.pydantic_compat import (
     BaseModel,
@@ -25,7 +25,6 @@ from jenny.pydantic_compat import (
     field_for_input_key,
     lenient_literals,
 )
-from jenny.utils.path import atomic_write
 
 
 def get_config_path() -> Path:
@@ -117,8 +116,7 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
             # Promuoviamo il backup a file vivo: senza questo passo ogni avvio
             # rifarebbe il recupero, e la prima scrittura riuscita partirebbe
             # da un grezzo rotto.
-            atomic_write(path, json.dumps(raw, indent=2, ensure_ascii=False))
-            restrict_config_permissions(path)
+            write_private_file(path, json.dumps(raw, indent=2, ensure_ascii=False))
             _record_recovery("backup", quarantined)
             logger.warning("Config recovered from {}; broken file kept at {}", backup, quarantined)
             return raw, config
@@ -244,8 +242,7 @@ def save_config(
         data = _merge_unknown(preserve_unknown_from, data)
 
     _rotate_backup(path)
-    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
-    restrict_config_permissions(path)
+    write_private_file(path, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def _rotate_backup(path: Path) -> None:
@@ -263,8 +260,7 @@ def _rotate_backup(path: Path) -> None:
         return
     try:
         backup = _backup_path(path)
-        atomic_write(backup, content, fsync_dir=False)
-        restrict_config_permissions(backup)
+        write_private_file(backup, content, fsync_dir=False)
     except OSError as e:
         # Il backup è una rete di sicurezza, non un requisito: se non si può
         # scrivere, il salvataggio vero deve comunque procedere.
