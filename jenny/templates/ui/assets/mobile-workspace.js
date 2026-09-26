@@ -36,6 +36,7 @@ const FILE_HELP_KEYS = {
  *  del server. */
 function workspaceErrorText(err) {
   if (err?.code === 'name_taken') return i18n.t('workspace.nameTaken');
+  if (err?.code === 'conflict') return i18n.t('workspace.changedOnDisk');
   return i18n.t('workspace.error') + (err?.message || '');
 }
 
@@ -219,6 +220,12 @@ export class WorkspaceController {
     // percorso di uscita lo leggeva, e il testo modificato finiva in un viewer
     // nascosto irraggiungibile, sovrascritto alla riapertura del file.
     this._dirty = false;
+    // Il testo del file com'era quando l'editor l'ha aperto (o com'e' dopo
+    // l'ultimo salvataggio): il salvataggio lo manda come `base`, e se il file
+    // intanto e' cambiato il server risponde `conflict` invece di sovrascrivere.
+    // Per `config.json` e' la differenza fra salvare e cancellare quel che le
+    // Impostazioni hanno scritto mentre l'editor era aperto.
+    this._editorBase = null;
   }
 
   /** Aggancia l'esploratore al contenitore che la scheda di Memoria ha appena
@@ -897,6 +904,7 @@ export class WorkspaceController {
 
     this._enterEditorView(fullPath, name);
     this.renderCodeViewer(name, data.content, ext);
+    this._editorBase = data.content;
   }
 
   /** Si puo' buttare il buffer dell'editor? Se e' pulito si', senza chiedere;
@@ -924,6 +932,8 @@ export class WorkspaceController {
   _enterEditorView(fullPath, name) {
     // Azzera il buffer: chi arriva qui ha gia' chiesto (`_mayReplaceBuffer`).
     this._dirty = false;
+    // E la base del file di prima: la mette `openFile` a lettura riuscita.
+    this._editorBase = null;
     this.currentPath = fullPath;
     this.viewMode = 'editor';
     this.renderBreadcrumb(this.currentDir, name);
@@ -1051,7 +1061,13 @@ export class WorkspaceController {
     try {
       const btn = document.querySelector('.ws-save-btn');
       if (btn) btn.disabled = true;
-      await rpc.writeWorkspaceFile(path, content);
+      const result = await rpc.writeWorkspaceFile(path, content, this._editorBase ?? undefined);
+      /* Sul disco adesso c'e' questo, qualunque cosa si sia scritta durante
+         l'`await`: e' la base del prossimo salvataggio. Per `config.json` il
+         server lo riserializza e rimanda il testo vero in `content`. */
+      if (this.currentPath === path) {
+        this._editorBase = typeof result?.content === 'string' ? result.content : content;
+      }
       /* Pulito solo se nell'editor c'e' ancora **quel** testo di **quel** file.
          Quel che si e' scritto durante l'`await` non e' salvato, e azzerare il
          flag lo faceva credere: la conferma di uscita non sarebbe comparsa
@@ -1067,7 +1083,7 @@ export class WorkspaceController {
       // Il motivo va mostrato, non inghiottito: un bottone che dice solo
       // "Errore" ha tenuto nascosto per mesi un salvataggio che non poteva
       // riuscire (contenuto in un header HTTP, v. ws-manager.request).
-      showToast(i18n.t('workspace.error') + (err?.message || ''), 'error');
+      showToast(workspaceErrorText(err), 'error');
       const btn = document.querySelector('.ws-save-btn');
       if (btn) { btn.textContent = i18n.t('workspace.save'); btn.disabled = false; }
     }

@@ -81,8 +81,8 @@ const api = {
 };
 const saves = [];
 const rpc = {
-  writeWorkspaceFile(path, content) {
-    return new Promise((resolve) => saves.push({ path, content, resolve }));
+  writeWorkspaceFile(path, content, base) {
+    return new Promise((resolve, reject) => saves.push({ path, content, base, resolve, reject }));
   },
 };
 
@@ -158,9 +158,12 @@ def _harness() -> str:
         if re.search(rf"\n  (?:async )?{re.escape(name)}\(", source):
             methods.append("  " + member(source, name))
     it = json.loads((I18N_DIR / "it.json").read_text(encoding="utf-8"))
+      # La funzione vera che traduce gli errori del file manager, accanto alla classe.
+    helper = re.search(r"\nfunction workspaceErrorText\(err\) \{\n.*?\n\}\n", source, re.S)
+    assert helper, "workspaceErrorText not found in mobile-workspace.js"
     return _HARNESS.replace("__IT__", json.dumps(it, ensure_ascii=False)).replace(
         "__METHODS__", "\n".join(methods)
-    )
+    ) + helper.group(0)
 
 
 def _run(script: str) -> None:
@@ -307,4 +310,67 @@ delete window.JennyNative;
 await c._downloadBinary('dir/pacco.zip', 'pacco.zip');
 assert.deepEqual(fetchedUrls, ['dir/pacco.zip']);
 assert.deepEqual(clicks, [{ href: 'blob:finto', download: 'pacco.zip' }]);
+""")
+
+
+# -- Il salvataggio dice da che testo e' partito -----------------------------
+
+
+def test_a_save_sends_the_text_the_editor_opened() -> None:
+    """Senza ``base`` il server non puo' sapere se la copia dell'editor e'
+    vecchia: per ``config.json`` sovrascriveva quel che le Impostazioni avevano
+    scritto intanto."""
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'config.json', '{"nuovo": 1}');
+const p = c.saveFile();
+await tick();
+assert.equal(saves[0].base, 'originale');
+saves.shift().resolve({ content: '{\\n  "nuovo": 1\\n}' });
+await p;
+
+c.editor.text = '{"nuovo": 2}';
+c._dirty = true;
+const q = c.saveFile();
+await tick();
+assert.equal(saves[0].base, '{\\n  "nuovo": 1\\n}',
+  'la base del secondo salvataggio non e il testo che il server ha scritto');
+saves.shift().resolve({});
+await q;
+
+const r = c.saveFile();
+await tick();
+assert.equal(saves[0].base, '{"nuovo": 2}', 'senza content la base e il testo salvato');
+saves.shift().resolve({});
+await r;
+""")
+
+
+def test_a_conflict_says_the_file_changed_and_keeps_the_edits() -> None:
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'nota.md', 'mia versione');
+const p = c.saveFile();
+await tick();
+saves.shift().reject(Object.assign(new Error('file changed on disk'), { code: 'conflict' }));
+await p;
+assert.deepEqual(toasts, [[T.workspace.changedOnDisk, 'error']]);
+assert.equal(c._dirty, true);
+assert.equal(c._editorBase, 'originale', 'un salvataggio fallito ha spostato la base');
+""")
+
+
+def test_a_file_that_failed_to_open_has_no_base() -> None:
+    """La base e' del file aperto: una lettura fallita non si porta dietro quella
+    del file di prima."""
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'a.md', 'x');
+c._dirty = false;
+const p = c.openFile('b.md');
+await tick();
+reads.shift().reject(Object.assign(new Error('boom'), { status: 500 }));
+await p;
+assert.equal(c.currentPath, 'b.md');
+assert.equal(c._editorBase, null);
 """)

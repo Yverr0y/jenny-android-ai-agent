@@ -184,7 +184,7 @@ def _is_live_config(path: Path) -> bool:
         return False
 
 
-async def _write_live_config(content: str) -> None:
+async def _write_live_config(content: str, base: str) -> str:
     """Il salvataggio di ``config.json`` dall'editor, attraverso ``store.mutate``.
 
     ``workspace.write`` lo riscriveva a mano come un file qualunque (terza
@@ -200,10 +200,21 @@ async def _write_live_config(content: str) -> None:
     ripartirebbe coi default: si rifiuta qui, dicendolo. Dentro il lock ogni
     campo dello schema prende il valore scritto; le chiavi che questa versione
     non conosce restano quelle del file, come per ogni altro scrittore.
+
+    **``base`` e' il testo che l'editor aveva aperto.** Il lock da solo non basta:
+    l'editor rimanda il file intero, e ogni campo prenderebbe il valore di una
+    copia vecchia di minuti — quel che le Impostazioni hanno scritto intanto
+    sparirebbe. Dentro il lock si rilegge il file: se non e' piu' ``base``, la
+    risposta e' ``conflict`` e non si scrive niente, come per ``page.write``.
+
+    Restituisce il testo ora su disco: ``mutate`` lo riserializza a modo suo, e
+    il salvataggio successivo deve confrontarsi con quello, non con quel che
+    l'editor aveva mandato.
     """
     import json
 
     from jenny.config import store
+    from jenny.config.loader import get_config_path
     from jenny.config.schema import Config
 
     try:
@@ -223,21 +234,40 @@ async def _write_live_config(content: str) -> None:
             "bad_request", f"config.json does not fit the settings ({exc}): nothing was saved"
         ) from None
 
+    config_path = get_config_path()
+
     def _apply(config: Config) -> None:
+        # Sotto il lock di ``mutate``: nessun altro scrittore della config puo'
+        # passare fra questo confronto e la scrittura.
+        if _lf(config_path.read_text(encoding="utf-8")) != _lf(base):
+            raise CommandError("conflict", "config.json changed on disk: nothing was saved")
         for name in type(config).model_fields:
             setattr(config, name, getattr(written, name))
 
     await store.mutate(_apply)
+    # Letto senza ``await`` in mezzo: il corpo di ``mutate`` e' sincrono, quindi
+    # nessuno scrittore dell'event loop si infila fra la sua scrittura e questa.
+    return config_path.read_text(encoding="utf-8")
 
 
 async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
-    """Scrive un file di testo del workspace (salvataggio dall'editor WebUI)."""
+    """Scrive un file di testo del workspace (salvataggio dall'editor WebUI).
+
+    ``base``, facoltativo, e' il testo da cui l'editor e' partito: se il file su
+    disco non e' piu' quello la risposta e' ``conflict`` e non si scrive niente
+    (lo stesso patto di ``page.write``). Per ``config.json`` e' obbligatorio, v.
+    :func:`_write_live_config`. Chi scrive un file che possiede da solo (le
+    puntine della mappa, la sua disposizione) non lo manda.
+    """
     from jenny.webui.workspace_files import validate_path, write_file
 
     rel_path = _require_str(params, "path")
     content = params.get("content", "")
     if not isinstance(content, str):
         raise CommandError("bad_request", "content must be a string")
+    base = params.get("base")
+    if base is not None and not isinstance(base, str):
+        raise CommandError("bad_request", "base must be a string")
     size = len(content.encode("utf-8"))
     if size > MAX_WRITE_BYTES:
         raise CommandError(
@@ -251,13 +281,22 @@ async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dic
     try:
         full_path = validate_path(ctx.get_workspace_root(), rel_path)
         if _is_live_config(full_path):
-            await _write_live_config(content)
-            return {"path": rel_path, "bytes": size}
+            if base is None:
+                raise CommandError(
+                    "bad_request",
+                    "saving config.json needs base, the text the editor opened: "
+                    "nothing was saved",
+                )
+            on_disk = await _write_live_config(content, base)
+            return {"path": rel_path, "bytes": size, "content": on_disk}
         # Fuori dall'event loop: ``write_file`` fa un atomic_write con fsync, e
         # fino a 1 MB di disco su una CPU Android sono centinaia di ms in cui il
         # gateway non risponderebbe a nessun altro (stessa ragione per cui il
         # decode dei media sta in un thread, v. ``_save_envelope_media``).
-        await asyncio.to_thread(write_file, full_path, content)
+        if base is None:
+            await asyncio.to_thread(write_file, full_path, content)
+        else:
+            await asyncio.to_thread(_write_file_unchanged, full_path, content, base)
     except ValueError as exc:
         raise CommandError("bad_request", str(exc)) from exc
     except FileNotFoundError as exc:
@@ -659,6 +698,25 @@ def _wiki_page_file(ctx: CommandContext, wiki_name: str, page_path: str) -> Path
 def _lf(text: str) -> str:
     """I fine riga come li vede chi legge con ``read_text`` (universal newlines)."""
     return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _write_file_unchanged(full: Path, content: str, base: str) -> None:
+    """``write_file`` solo se *full* e' ancora *base*, confronto e scrittura nello
+    stesso thread (v. :func:`_write_page_unchanged` per la finestra che resta).
+
+    Il confronto ignora i fine riga: l'editor li porta tutti a ``\n``. Un file
+    che non c'e' piu' e' cambiato anche lui.
+    """
+    from jenny.webui.workspace_files import write_file
+
+    try:
+        with open(full, encoding="utf-8", errors="replace", newline="") as f:
+            raw = f.read()
+    except FileNotFoundError:
+        raise CommandError("conflict", "file changed on disk: nothing was saved") from None
+    if _lf(raw) != _lf(base):
+        raise CommandError("conflict", "file changed on disk: nothing was saved")
+    write_file(full, content)
 
 
 def _write_page_unchanged(full: Path, content: str, base: str) -> None:

@@ -544,7 +544,8 @@
     "deleteProjectFailed": "I could not delete the project “{name}”. Nothing was changed.",
     "deleteProjectBusy": "I'm still working in the project “{name}”: delete it once I've finished.",
     "deletedProject": "Project “{name}” deleted, conversation included",
-    "nameTaken": "Something already has this name: pick another."
+    "nameTaken": "Something already has this name: pick another.",
+    "changedOnDisk": "The file changed since you opened it: nothing was saved. Close the editor and reopen it to see how it is now."
   },
   "launcher": {
     "open": "Open apps",

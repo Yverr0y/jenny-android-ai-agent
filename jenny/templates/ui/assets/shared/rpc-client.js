@@ -61,9 +61,14 @@ async function send(method, params, opts) {
 }
 
 export const rpc = {
-  /** Salva un file di testo del workspace (tetto 1 MB, lato server). */
-  writeWorkspaceFile(path, content) {
-    return send('workspace.write', { path, content });
+  /** Salva un file di testo del workspace (tetto 1 MB, lato server).
+   *
+   *  `base`, facoltativo, e' il testo da cui l'editor e' partito: se il file su
+   *  disco non e' piu' quello il server risponde `conflict` e non scrive. Per
+   *  `config.json` e' obbligatorio, e la risposta porta in `content` il testo
+   *  che il server ha scritto davvero — la base del salvataggio successivo. */
+  writeWorkspaceFile(path, content, base) {
+    return send('workspace.write', base === undefined ? { path, content } : { path, content, base });
   },
 
   /** Cancella un file o una cartella del workspace. Un progetto no: il server

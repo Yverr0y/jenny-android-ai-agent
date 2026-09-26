@@ -544,7 +544,8 @@
     "deleteProjectFailed": "Non ho potuto eliminare il progetto “{name}”. Non ho toccato niente.",
     "deleteProjectBusy": "Sto ancora lavorando nel progetto “{name}”: eliminalo quando ho finito.",
     "deletedProject": "Progetto “{name}” eliminato, conversazione compresa",
-    "nameTaken": "C’è già qualcosa con questo nome: scegline un altro."
+    "nameTaken": "C’è già qualcosa con questo nome: scegline un altro.",
+    "changedOnDisk": "Il file è cambiato da quando l’hai aperto: non ho salvato niente. Chiudi l’editor e riaprilo per vedere com’è ora."
   },
   "launcher": {
     "open": "Apri app",

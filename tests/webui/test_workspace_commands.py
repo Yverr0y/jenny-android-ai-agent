@@ -279,7 +279,9 @@ async def test_writing_config_json_goes_through_the_store(
     data = json.loads(before)
     data.setdefault("workspace", {})["maxFileSize"] = 123456
     await dispatch_command(
-        ctx, "workspace.write", {"path": "config.json", "content": json.dumps(data)}
+        ctx,
+        "workspace.write",
+        {"path": "config.json", "content": json.dumps(data), "base": before},
     )
     assert load_config(live_config).workspace.max_file_size == 123456
     assert stat.S_IMODE(live_config.stat().st_mode) == 0o600
@@ -299,8 +301,9 @@ async def test_writing_config_json_takes_the_store_lock(
         return await real(apply, **kwargs)
 
     monkeypatch.setattr(store, "mutate", spy)
+    text = live_config.read_text()
     await dispatch_command(
-        ctx, "workspace.write", {"path": "config.json", "content": live_config.read_text()}
+        ctx, "workspace.write", {"path": "config.json", "content": text, "base": text}
     )
     assert calls == ["mutate"]
 
@@ -319,10 +322,117 @@ async def test_an_unusable_config_json_is_refused_and_nothing_is_written(
     """Un file che il loader non saprebbe leggere, al prossimo avvio, finirebbe in
     quarantena e il gateway ripartirebbe coi default: si rifiuta qui, dicendolo."""
     before = live_config.read_text(encoding="utf-8")
-    err = await _refused(ctx, "workspace.write", {"path": "config.json", "content": content})
+    err = await _refused(
+        ctx, "workspace.write", {"path": "config.json", "content": content, "base": before}
+    )
     assert err.code == "bad_request"
     assert "config.json" in err.message and "nothing was saved" in err.message
     assert live_config.read_text(encoding="utf-8") == before
+
+
+async def test_a_stale_editor_copy_of_config_json_is_a_conflict(
+    ctx: CommandContext, live_config: Path
+) -> None:
+    """L'editor rimanda tutto il file: ogni campo prendeva il valore del testo
+    aperto minuti prima, e quel che le Impostazioni avevano scritto nel frattempo
+    spariva senza che nessuno lo sapesse. Con ``base`` il salvataggio si ferma."""
+    import json
+
+    from jenny.config import store
+
+    opened = live_config.read_text(encoding="utf-8")
+
+    def _settings(config: Config) -> None:
+        config.workspace.max_file_size = 777
+
+    await store.mutate(_settings)
+
+    edited = json.loads(opened)
+    edited.setdefault("workspace", {})["allowDelete"] = False
+    err = await _refused(
+        ctx,
+        "workspace.write",
+        {"path": "config.json", "content": json.dumps(edited), "base": opened},
+    )
+    assert err.code == "conflict"
+    config = load_config(live_config)
+    assert config.workspace.max_file_size == 777
+    assert config.workspace.allow_delete is True
+
+
+async def test_saving_config_json_needs_the_text_the_editor_opened(
+    ctx: CommandContext, live_config: Path
+) -> None:
+    """Senza ``base`` non c'e' modo di sapere se la copia e' vecchia: si rifiuta
+    invece di sovrascrivere alla cieca."""
+    before = live_config.read_text(encoding="utf-8")
+    err = await _refused(ctx, "workspace.write", {"path": "config.json", "content": before})
+    assert err.code == "bad_request"
+    assert "base" in err.message
+    assert live_config.read_text(encoding="utf-8") == before
+
+
+async def test_the_answer_carries_config_json_as_now_on_disk(
+    ctx: CommandContext, live_config: Path
+) -> None:
+    """``mutate`` riscrive il file a modo suo (chiavi, rientri, default): il testo
+    che l'editor ha mandato non e' quello su disco. Il successivo salvataggio
+    confronta con quel che la risposta restituisce, o sarebbe sempre un conflitto."""
+    import json
+
+    opened = live_config.read_text(encoding="utf-8")
+    edited = json.loads(opened)
+    edited.setdefault("workspace", {})["maxFileSize"] = 4242
+    first = await dispatch_command(
+        ctx,
+        "workspace.write",
+        {"path": "config.json", "content": json.dumps(edited), "base": opened},
+    )
+    assert first["content"] == live_config.read_text(encoding="utf-8")
+
+    edited["workspace"]["maxFileSize"] = 4343
+    await dispatch_command(
+        ctx,
+        "workspace.write",
+        {"path": "config.json", "content": json.dumps(edited), "base": first["content"]},
+    )
+    assert load_config(live_config).workspace.max_file_size == 4343
+
+
+async def test_a_file_changed_under_the_editor_is_a_conflict(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """``base`` vale per ogni file, non solo per la config: Jenny scrive nel
+    workspace con i suoi strumenti mentre l'editor e' aperto."""
+    note = workspace_root / "nota.md"
+    note.write_text("aperta\n", encoding="utf-8")
+    note.write_text("riscritta da Jenny\n", encoding="utf-8")
+    err = await _refused(
+        ctx, "workspace.write", {"path": "nota.md", "content": "mia", "base": "aperta\n"}
+    )
+    assert err.code == "conflict"
+    assert note.read_text(encoding="utf-8") == "riscritta da Jenny\n"
+
+
+async def test_a_file_unchanged_under_the_editor_is_saved(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """I fine riga non contano: l'editor li porta a ``\\n``, il file puo' averli CRLF."""
+    note = workspace_root / "nota.md"
+    note.write_bytes(b"uno\r\ndue\r\n")
+    result = await dispatch_command(
+        ctx, "workspace.write", {"path": "nota.md", "content": "tre\n", "base": "uno\r\ndue\r\n"}
+    )
+    assert "content" not in result
+    assert note.read_text(encoding="utf-8") == "tre\n"
+
+
+async def test_a_non_string_base_is_refused(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    err = await _refused(ctx, "workspace.write", {"path": "a.txt", "content": "x", "base": 3})
+    assert err.code == "bad_request"
+    assert not (workspace_root / "a.txt").exists()
 
 
 # ---------------------------------------------------------------------------
