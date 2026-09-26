@@ -64,8 +64,10 @@ from jenny.channels.http_utils import (
 from jenny.config.paths import get_workspace_path
 from jenny.security.workspace_policy import is_path_within
 from jenny.session.keys import (
+    PROJECT_SESSION_PREFIX,
     UNIFIED_SESSION_KEY,
     is_project_session_key,
+    is_valid_project_name,
     webui_chat_id,
     webui_transcript_key,
 )
@@ -920,4 +922,11 @@ def _is_webui_readable_session_key(key: str) -> bool:
     ``websocket:``. Con le sessioni-progetto quella forma avrebbe risposto **404
     a ogni progetto**, cioe' la chat di un progetto non si sarebbe potuta aprire.
     """
-    return key.startswith("websocket:") or is_project_session_key(key)
+    if key.startswith("websocket:"):
+        return True
+    # Un progetto e' tale solo se il suo nome lo e': ``project:..`` passava
+    # dal solo prefisso e arrivava al session manager e alla trascrizione come
+    # un quaderno, con un nome che e' un percorso.
+    if is_project_session_key(key):
+        return is_valid_project_name(key[len(PROJECT_SESSION_PREFIX):])
+    return False

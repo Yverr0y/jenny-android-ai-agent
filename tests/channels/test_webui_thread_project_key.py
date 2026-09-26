@@ -191,3 +191,20 @@ def test_a_user_quoting_a_subagent_line_keeps_the_bubble(tmp_path, monkeypatch) 
 
     assert out is not None
     assert out["messages"][0]["content"] == quoted
+
+
+@pytest.mark.parametrize("key", ["project:..", "project:.", "project:", "project:.hidden",
+                                 "project:a..b"])
+@pytest.mark.parametrize("route", ["webui-thread", "file-preview"])
+def test_a_key_that_is_not_a_project_name_is_not_a_project(handler, key, route) -> None:
+    """WA15: ``project:..`` passava come chiave leggibile e arrivava al session
+    manager e alla trascrizione come un quaderno. Un progetto è tale solo se il
+    suo nome è un nome di progetto (``is_valid_project_name``)."""
+    quoted = urllib.parse.quote(key, safe="")
+    request = make_request(f"/api/sessions/{quoted}/{route}?path=a.md")
+    if route == "webui-thread":
+        response = handler._handle_webui_thread_get(request, quoted)
+    else:
+        response = handler._handle_file_preview(request, quoted)
+    assert response.status_code == 404, response.body
+    assert handler.read_keys == []
