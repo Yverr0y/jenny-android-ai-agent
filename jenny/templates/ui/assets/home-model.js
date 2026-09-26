@@ -244,7 +244,12 @@ export class HomeModel {
 
   async _loadModels(provider) {
     if (!provider || !this.modelsEl) return;
-    if (this._catalogs.has(provider)) {
+    /* Un elenco che non e' arrivato non si tiene: si richiede alla prossima
+       apertura. Tenuto, la stanza diceva «non e' arrivato» fino al riavvio
+       della casa, che e' il launcher e vive per giorni (terza revisione,
+       HJ12). Quel che il provider ha risposto — anche «serve una chiave» —
+       si tiene: e' una risposta, non una rete andata male. */
+    if (this._catalogs.has(provider) && !this._catalogs.get(provider).failed) {
       this._paintModels();
       return;
     }
@@ -260,7 +265,7 @@ export class HomeModel {
       };
     } catch (err) {
       console.warn('home.model: model list not read', err);
-      outcome = { status: 'error', models: [], message: '' };
+      outcome = { status: 'error', models: [], message: '', failed: true };
     }
     this._catalogs.set(provider, outcome);
     /* Il catalogo si tiene comunque; il ridisegno si salta se nel frattempo

@@ -248,6 +248,9 @@ export class HomeJenny {
          spazio battuto per sbaglio non puo' cancellare niente. */
       if (err?.status !== 404) {
         console.warn('home.jenny: rules not read', err);
+        /* E si richiedono alla prossima apertura: col segno alzato il campo
+           restava vuoto fino al riavvio della casa (HJ12). */
+        this._rulesAsked = false;
         return;
       }
     }
