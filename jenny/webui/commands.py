@@ -530,12 +530,43 @@ async def workspace_copy(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     root = ctx.get_workspace_root()
     with _fs_errors():
         src_path = validate_path(root, src_rel)
+        refusal = _copy_refusal(root, src_path)
+        if refusal:
+            raise CommandError("forbidden", refusal)
         if dest_rel is None:
             dest_path = await asyncio.to_thread(free_copy_name, src_path)
         else:
             dest_path = validate_path(root, dest_rel)
+        # Una cartella copiata dentro se stessa: ``copytree`` ricopia a ogni
+        # livello quel che ha appena scritto, fino al limite dei percorsi.
+        if src_path.is_dir() and dest_path.is_relative_to(src_path):
+            raise CommandError("bad_request", "cannot copy a folder into itself")
         await asyncio.to_thread(copy_path, src_path, dest_path)
     return {"success": True, "path": src_rel, "dest": _workspace_rel(root, dest_path)}
+
+
+def _copy_refusal(workspace_root: Path, source: Path) -> str | None:
+    """Il motivo per cui *source* non si duplica dal file manager, o ``None``.
+
+    La radice del workspace per prima: senza ``dest`` la copia va accanto
+    all'originale, e accanto alla radice vuol dire **fuori** dal confine — una
+    ``copytree`` di tutto, config con le chiavi compresa, in una cartella che
+    nessun gate del workspace vede piu'. Con un ``dest`` dentro sarebbe la
+    copia di una cartella in se stessa.
+
+    Poi una cartella che contiene quaderni, come per la cancellazione: ne
+    copierebbe le pagine senza le conversazioni, che stanno fuori dall'albero.
+    Un quaderno solo si duplica: la copia ha un nome nuovo e una chat vuota.
+    """
+    if source == workspace_root.resolve():
+        return "the workspace itself cannot be copied from the file browser"
+    notebooks = _notebooks_inside(workspace_root, source)
+    if notebooks:
+        return (
+            f"this folder holds notebooks ({_names(notebooks)}): a copy would take their "
+            "pages without their conversations, which live outside this tree."
+        )
+    return None
 
 
 def _workspace_rel(root: Path, path: Path) -> str:

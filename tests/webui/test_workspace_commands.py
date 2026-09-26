@@ -589,3 +589,65 @@ async def test_copying_a_folder_keeps_its_links_as_links(
     os.symlink(linked["outside"], folder / "scorciatoia")
     await dispatch_command(ctx, "workspace.copy", {"path": "album", "dest": "album2"})
     assert os.path.islink(workspace_root / "album2" / "scorciatoia")
+
+
+# ---------------------------------------------------------------------------
+# La copia resta dentro il confine: niente radice, niente cartelle di quaderni
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", [".", "./", "sub/..", "./sub/../."])
+async def test_copy_refuses_the_workspace_root(
+    ctx: CommandContext, workspace_root: Path, tmp_path: Path, config_path: Path, path: str
+) -> None:
+    """Senza ``dest`` la copia va accanto all'originale: per la radice, accanto
+    vuol dire **fuori** dal workspace, e la ``copytree`` ci portava tutto —
+    config con le chiavi, sessioni, memoria."""
+    (workspace_root / "sub").mkdir()
+    (workspace_root / "USER.md").write_text("io", encoding="utf-8")
+    err = await _refused(ctx, "workspace.copy", {"path": path})
+    assert err.code == "forbidden"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.json", "workspace"]
+
+
+async def test_copy_refuses_the_workspace_root_into_itself(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    (workspace_root / "USER.md").write_text("io", encoding="utf-8")
+    err = await _refused(ctx, "workspace.copy", {"path": ".", "dest": "dentro"})
+    assert err.code == "forbidden"
+    assert not (workspace_root / "dentro").exists()
+
+
+@pytest.mark.parametrize("path", ["wikis", "wikis/."])
+async def test_copy_refuses_a_folder_that_holds_notebooks(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, path: str
+) -> None:
+    """Come la cancellazione: una cartella che contiene quaderni porta con se'
+    le pagine e non le conversazioni, che stanno fuori dall'albero."""
+    _notebook(workspace_root)
+    err = await _refused(ctx, "workspace.copy", {"path": path})
+    assert err.code == "forbidden"
+    assert "orto" in err.message
+    assert sorted(p.name for p in workspace_root.iterdir()) == ["wikis"]
+
+
+async def test_copy_refuses_a_destination_inside_the_source(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """``copytree`` in una propria sottocartella ricopia a ogni livello quel che
+    ha appena scritto, fino al limite di lunghezza del percorso."""
+    (workspace_root / "album" / "sotto").mkdir(parents=True)
+    err = await _refused(ctx, "workspace.copy", {"path": "album", "dest": "album/sotto/copia"})
+    assert err.code == "bad_request"
+    assert not (workspace_root / "album" / "sotto" / "copia").exists()
+
+
+async def test_copy_of_a_single_notebook_still_works(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """Il rifiuto e' per chi *contiene* quaderni: un quaderno solo si duplica."""
+    _notebook(workspace_root)
+    result = await dispatch_command(ctx, "workspace.copy", {"path": "wikis/orto"})
+    assert result["dest"] == "wikis/orto (copy)"
+    assert (workspace_root / "wikis" / "orto (copy)" / "wiki" / "index.md").exists()
