@@ -395,6 +395,80 @@ class TestConsolidatorTokenBudget:
         assert consolidator.archive.await_args.kwargs["raw_dump_on_failure"] is True
         assert session.last_consolidated == 50
 
+    async def test_failures_are_counted_per_turn_not_per_call(self, tmp_path):
+        """«Tre fallimenti di fila» vuol dire tre turni, non tre chiamate.
+
+        Un turno chiama la consolidazione due volte (prima di costruire il
+        prompt e dopo il salvataggio): contando le chiamate, la resa al dump
+        grezzo arrivava a metà del secondo turno con il modello giù, e il dump è
+        tagliato — i fatti oltre il taglio uscivano dal diario. Qui con un
+        ``SessionManager`` vero e il turno legato come lo lega il loop.
+        """
+        import re
+
+        from jenny.agent.tools.context import bind_turn_id, reset_turn_id
+        from jenny.session.manager import SessionManager
+
+        store = MemoryStore(tmp_path)
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(side_effect=RuntimeError("down"))
+        sessions = SessionManager(tmp_path)
+        c = Consolidator(
+            store=store, provider=provider, model="m", sessions=sessions,
+            context_window_tokens=12000, build_messages=MagicMock(return_value=[]),
+            get_tool_definitions=MagicMock(return_value=[]), max_completion_tokens=100,
+        )
+        s = sessions.get_or_create("unified:default")
+        for i in range(60):
+            s.add_message("user", f"FACT-{i:02d} " + "z" * 1000)
+            s.add_message("assistant", f"ok {i}")
+        sessions.save(s)
+
+        def est(session):
+            tail = session.messages[session.last_consolidated:]
+            return sum(len(str(m.get("content"))) for m in tail) // 4, "est"
+
+        c.estimate_session_prompt_tokens = est
+
+        async def turn(turn_id: str, calls: int) -> None:
+            token = bind_turn_id(turn_id)
+            try:
+                for _ in range(calls):
+                    await c.maybe_consolidate_by_tokens(s)
+            finally:
+                reset_turn_id(token)
+
+        # Turno 1 intero (prima e dopo), turno 2 intero: due turni, niente resa.
+        await turn("t1", 2)
+        await turn("t2", 2)
+        assert s.last_consolidated == 0
+        assert store.read_unprocessed_history(since_cursor=0) == []
+        assert c._token_failures == {"unified:default": 2}
+
+        # Il terzo turno giù è la soglia: dump grezzo e cursore avanti.
+        await turn("t3", 1)
+        assert s.last_consolidated > 0
+        diary = "\n".join(e["content"] for e in store.read_unprocessed_history(since_cursor=0))
+        assert re.search(r"FACT-00", diary)
+
+    async def test_failures_outside_a_turn_count_one_per_call(self, consolidator):
+        """Senza un turno legato ogni chiamata è un tentativo a sé."""
+        consolidator._SAFETY_BUFFER = 0
+        session = MagicMock()
+        session.last_consolidated = 0
+        session.key = "test:key"
+        session.messages = [
+            {"role": "user" if i in {0, 50} else "assistant", "content": f"m{i}"}
+            for i in range(70)
+        ]
+        session.metadata = {}
+        consolidator.sessions._session_cache[session.key] = session
+        consolidator.estimate_session_prompt_tokens = MagicMock(return_value=(1200, "tiktoken"))
+        consolidator.archive = AsyncMock(return_value=None)
+        for _ in range(2):
+            await consolidator.maybe_consolidate_by_tokens(session)
+        assert consolidator._token_failures == {"test:key": 2}
+
     async def test_a_success_resets_the_failure_count(self, consolidator):
         consolidator._SAFETY_BUFFER = 0
         session = MagicMock()

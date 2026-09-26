@@ -100,7 +100,7 @@ class Consolidator:
 
     _MAX_CONSOLIDATION_ROUNDS = 5
 
-    # Fallimenti di fila della consolidazione per lunghezza, sulla stessa
+    # Turni di fila con la consolidazione per lunghezza fallita, sulla stessa
     # sessione, prima di ripiegare sul dump grezzo e avanzare (AC2 della terza
     # revisione). Sotto la soglia un fallimento non avanza niente e il turno dopo
     # riprova; alla soglia si torna al comportamento di prima, perche' un chunk
@@ -150,6 +150,11 @@ class Consolidator:
         # memoria e non nei metadata: un riavvio che lo azzera concede al
         # modello tre tentativi in piu', che e' il verso innocuo dello sbaglio.
         self._token_failures: dict[str, int] = {}
+        # Il turno che ha contato l'ultimo fallimento, per sessione. Un turno
+        # chiama la consolidazione piu' volte (prima del prompt, dopo il
+        # salvataggio, dopo un overflow): la soglia conta i turni, non le
+        # chiamate, altrimenti due turni di modello giu' bastavano per la resa.
+        self._token_failure_turns: dict[str, str] = {}
         # Gli hook di misura del loop (oggi ``TokenUsageHook``): la chiamata di
         # consolidazione va al provider da sé, fuori da ogni ``AgentRunner``, e
         # senza questi la sua spesa non arrivava in ``token-usage.json`` (AC6
@@ -654,20 +659,34 @@ class Consolidator:
                 # diario. Ora il chunk resta da consolidare, senza dump (niente
                 # doppioni) e il turno dopo riprova; alla soglia dei fallimenti di
                 # fila si torna al dump e all'avanzamento.
+                # Il conto e' per turno: un secondo fallimento nello stesso turno
+                # non avvicina la resa. Fuori da un turno (nessun id legato)
+                # ogni chiamata conta da sola.
+                from jenny.agent.tools.context import current_turn_id
+
+                turn_id = current_turn_id()
                 failures = self._token_failures.get(session.key, 0)
-                give_up = failures + 1 >= self._TOKEN_FAILURES_BEFORE_RAW_DUMP
+                same_turn = (
+                    turn_id is not None
+                    and self._token_failure_turns.get(session.key) == turn_id
+                )
+                counted = failures if same_turn else failures + 1
+                give_up = counted >= self._TOKEN_FAILURES_BEFORE_RAW_DUMP
                 summary = await self.archive(
                     chunk, session_key=session.key, raw_dump_on_failure=give_up,
                 )
                 if not summary and not give_up:
-                    self._token_failures[session.key] = failures + 1
+                    self._token_failures[session.key] = counted
+                    if turn_id is not None:
+                        self._token_failure_turns[session.key] = turn_id
                     logger.warning(
-                        "Token consolidation for {} failed ({} in a row); the chunk stays "
-                        "unconsolidated and the next turn retries",
-                        session.key, failures + 1,
+                        "Token consolidation for {} failed ({} turns in a row); the chunk "
+                        "stays unconsolidated and the next turn retries",
+                        session.key, counted,
                     )
                     break
                 self._token_failures.pop(session.key, None)
+                self._token_failure_turns.pop(session.key, None)
                 if summary:
                     last_summary = summary
                 session.last_consolidated = end_idx
