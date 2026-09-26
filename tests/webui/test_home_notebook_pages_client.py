@@ -159,6 +159,7 @@ class Pages {
   __APPLY_TRANSLATIONS__
   __LOAD__
   __SHOW_TAB__
+  __NEED_MAP__
   __SAY__
   __RENDER__
   __ROW__
@@ -215,6 +216,7 @@ def _harness() -> str:
         .replace("__APPLY_TRANSLATIONS__", member(src, "applyTranslations"))
         .replace("__LOAD__", member(src, "load"))
         .replace("__SHOW_TAB__", member(src, "showTab"))
+        .replace("__NEED_MAP__", member(src, "_needMap"))
         .replace("__SAY__", member(src, "_say"))
         .replace("__RENDER__", member(src, "_render"))
         .replace("__ROW__", member(src, "_row"))

@@ -118,6 +118,7 @@ export class NotebookPages {
     this.tabMapEl = document.getElementById('home-tab-map');
     this.mapEl = document.getElementById('home-map');
     this.mapNoteEl = document.getElementById('home-map-note');
+    this.mapNoteEl = document.getElementById('home-map-note');
 
     this._onOpenPage = onOpenPage;
     this._onNeedMap = onNeedMap;
@@ -212,7 +213,24 @@ export class NotebookPages {
        filtrare che si legga. */
     const search = this.queryEl?.closest('.home-search');
     if (search) search.hidden = !onList;
-    if (!onList && this.data) this._onNeedMap?.(this.data, this.rows, this.notebook);
+    if (!onList && this.data) this._needMap();
+  }
+
+  /* La mappa si chiede al guscio, che la importa al primo tocco. Se non
+     arriva — il modulo, o il suo disegno — lo si dice nella linguetta: prima
+     la promessa non la prendeva nessuno, e la linguetta restava vuota con un
+     rifiuto senza padrone (terza revisione, HJ18). Il guscio dimentica
+     l'import fallito, quindi il tocco dopo riprova. */
+  async _needMap() {
+    const token = this._token;
+    try {
+      await this._onNeedMap?.(this.data, this.rows, this.notebook);
+    } catch (err) {
+      console.warn('home.pages: map not drawn', err);
+      if (token !== this._token || this._tab !== 'map' || !this.mapNoteEl) return;
+      this.mapNoteEl.textContent = i18n.t('home.map.failed');
+      this.mapNoteEl.hidden = false;
+    }
   }
 
   _say(key) {
