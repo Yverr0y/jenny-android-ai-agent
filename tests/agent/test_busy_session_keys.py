@@ -100,8 +100,19 @@ def test_busy_includes_what_the_autocompact_is_rewriting(monkeypatch) -> None:
     assert loop.active_session_keys() == ()
 
 
-async def test_a_diary_harvest_keeps_its_project_busy_until_it_saves() -> None:
-    """La finestra vera: la sessione si rilegge e si salva **dopo** la chiamata LLM."""
+async def test_a_diary_harvest_keeps_its_project_busy_until_it_saves(tmp_path) -> None:
+    """La finestra vera: la sessione si rilegge e si salva **dopo** la chiamata LLM.
+
+    Si entra da ``check_expired``, cioe' dalla porta vera, e non si aggiunge la
+    chiave a mano (TD4 della terza revisione): il test che la aggiungeva da se'
+    restava verde anche togliendo l'``add`` di ``check_expired``, cioe' proprio
+    la riga che la regressione di M1 aveva perso.
+    """
+    from datetime import datetime, timedelta
+
+    from jenny.session.manager import SessionManager
+    from tests.support.aio import wait_until
+
     entered, release = asyncio.Event(), asyncio.Event()
 
     class _Consolidator:
@@ -113,17 +124,23 @@ async def test_a_diary_harvest_keeps_its_project_busy_until_it_saves() -> None:
             await release.wait()
             return "- riassunto"
 
-    session = SimpleNamespace(messages=[{"role": "user"}] * 3, metadata={}, last_consolidated=0)
-    sessions = SimpleNamespace(get_or_create=lambda key: session, save=lambda s: None)
-    compact = AutoCompact(sessions, _Consolidator())  # type: ignore[arg-type]
-    compact._harvesting.add("project:orto")  # come fa ``check_expired``
+    sessions = SessionManager(tmp_path)
+    session = sessions.get_or_create("project:orto")
+    for i in range(3):
+        session.add_message("user", f"riga {i}")
+    session.updated_at = datetime.now() - timedelta(hours=6)
+    sessions.save(session)
+    compact = AutoCompact(sessions, _Consolidator(), session_ttl_minutes=30)  # type: ignore[arg-type]
+    tasks: list[asyncio.Task] = []
 
-    task = asyncio.create_task(compact._harvest_project_diary("project:orto"))
-    await entered.wait()
+    compact.check_expired(lambda coro: tasks.append(asyncio.ensure_future(coro)))
+
+    assert len(tasks) == 1
+    await asyncio.wait_for(entered.wait(), timeout=5.0)
     assert compact.busy_session_keys() == ("project:orto",)
     release.set()
-    await task
-    assert compact.busy_session_keys() == ()
+    await asyncio.wait_for(tasks[0], timeout=5.0)
+    await wait_until(lambda: compact.busy_session_keys() == (), timeout=5.0)
 
 
 def test_the_gardener_hands_out_a_copy_of_its_passes(monkeypatch) -> None:
