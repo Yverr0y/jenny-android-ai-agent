@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from jenny.apps.manifest import AppAction
-from jenny.apps.storage import execute_storage_action
+from jenny.apps.storage import StorageError, execute_storage_action
 
 
 def _action(op: str) -> AppAction:
@@ -36,3 +38,32 @@ async def test_an_append_to_a_clean_file_adds_no_blank_line(tmp_path) -> None:
     await execute_storage_action(tmp_path, _action("append"), {"n": 2})
 
     assert "\n\n" not in _file(tmp_path).read_text(encoding="utf-8")
+
+
+async def test_update_respects_the_collection_size_cap(tmp_path) -> None:
+    """CF11: ``append`` e ``set`` rifiutano una collezione oltre il tetto, ``update``
+    no: bastava aggiornare lo stesso record con un campo enorme per farla crescere
+    senza limite."""
+    first = await execute_storage_action(tmp_path, _action("append"), {"testo": "x"})
+    record_id = first["record"]["id"]
+    _file(tmp_path).write_text(
+        _file(tmp_path).read_text(encoding="utf-8") + "#" * 100 + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(StorageError) as refused:
+        await execute_storage_action(
+            tmp_path, _action("update"), {"id": record_id, "testo": "y" * 10}, max_bytes=50
+        )
+
+    assert refused.value.status == 413
+
+
+async def test_delete_still_works_on_a_collection_over_the_cap(tmp_path) -> None:
+    """Il tetto ferma la crescita, non la pulizia."""
+    first = await execute_storage_action(tmp_path, _action("append"), {"testo": "x" * 100})
+
+    result = await execute_storage_action(
+        tmp_path, _action("delete"), {"id": first["record"]["id"]}, max_bytes=50
+    )
+
+    assert result["deleted"] == first["record"]["id"]

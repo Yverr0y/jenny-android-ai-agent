@@ -262,6 +262,9 @@ async def execute_storage_action(
             return {"ok": True, "record": replacement}
 
         if action.op == "update":
+            # Come ``set``: senza, aggiornare lo stesso record con un campo
+            # sempre piu' grande faceva crescere la collezione senza tetto.
+            _check_size(path, max_bytes)
             record_id = _require_id(params)
             records = _read_records(path)
             for i, record in enumerate(records):
