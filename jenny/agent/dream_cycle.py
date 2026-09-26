@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -708,25 +708,83 @@ async def run_dream_turn(
     ``runs_since_review`` (un Dream che fallisce sempre non arriverebbe mai a un
     review pass). Le eccezioni del turno risalgono: il chiamante le racconta a
     modo suo, e chiude con ``advanced=None``.
+
+    **Due batch quando la finestra ha due tipi** (AC12 della terza revisione).
+    ``build_dream_prompt`` divide la finestra per tipo: il batch di testa porta
+    le voci del suo tipo, e se ce ne sono dell'altro (``rest_scope``) un secondo
+    batch sulla stessa finestra porta quelle. Il cursore va a fine finestra solo
+    se atterrano entrambi; se atterra solo il primo, va fin dove il primo da solo
+    copre (``cursor``), e il resto torna al run dopo. Il secondo parte solo
+    dopo un primo atterrato: un batch che non atterra ferma il run, come prima.
     """
-    from jenny.agent.memory import MemoryStore
     from jenny.agent.memory_budget import render_gauge
 
     result = store.build_dream_prompt(gauge=render_gauge(prologue.report))
     if result is None:
         return DreamTurnResult(DreamOutcome.NO_INPUT, refused=0)
-    prompt, last_cursor = result[0], result[1]
-    # ``getattr`` con un default: ``build_dream_prompt`` è sostituito nei test da
-    # doppi che ritornano una coppia nuda, e un batch che non dichiara il proprio
-    # tipo è un batch personale, che è il comportamento di sempre. Il tipo del
-    # batch sceglie la cassetta in cui Dream può scrivere.
-    scope = getattr(result, "scope", "personal")
     if prologue.review is None:
         # Un solo checkpoint per ciclo. Se il review è appena girato lo snapshot
         # è già stato preso pochi secondi fa e copre anche il turno che segue;
         # rifarlo qui archivierebbe lo stato *dopo* il review sotto l'etichetta
-        # "pre_dream", cioè un secondo checkpoint che non è pre-niente.
+        # "pre_dream", cioè un secondo checkpoint che non è pre-niente. Copre
+        # anche il secondo batch, che è lo stesso ciclo.
         await take_dream_snapshot(take_snapshot)
+    first = await _run_dream_batch(agent, store, prologue, result, before=prologue.report)
+    # ``getattr`` con un default: i doppi dei test ritornano coppie nude, e un
+    # batch che non dichiara un resto è un batch che basta da solo.
+    rest_scope = getattr(result, "rest_scope", None)
+    window_cursor = getattr(result, "window_cursor", None)
+    if first.outcome is not DreamOutcome.ADVANCED or rest_scope is None:
+        if first.outcome is DreamOutcome.ADVANCED and first.last_cursor is not None:
+            store.set_last_dream_cursor(first.last_cursor)
+        return first
+
+    # Il report si rimisura: il primo batch può aver fatto crescere i file, e
+    # ``batch_was_not_consolidated`` legge la crescita da *before* — col report
+    # del prologo, la scrittura del primo batch passerebbe per quella del secondo.
+    report = [replace(item, chars=item.measure_now()) for item in prologue.report]
+    rest = store.build_dream_prompt(
+        gauge=render_gauge(report), scope=rest_scope, until_cursor=window_cursor,
+    )
+    second = (
+        await _run_dream_batch(agent, store, prologue, rest, before=report)
+        if rest is not None else None
+    )
+    if second is not None and second.outcome is DreamOutcome.ADVANCED:
+        if second.last_cursor is not None:
+            store.set_last_dream_cursor(second.last_cursor)
+        return second
+    if second is not None:
+        logger.info(
+            "Dream: the {} batch of the window did not land ({}); the cursor stops at {}",
+            rest_scope, second.outcome.value, first.last_cursor,
+        )
+    if first.last_cursor is not None:
+        store.set_last_dream_cursor(first.last_cursor)
+    return first
+
+
+async def _run_dream_batch(
+    agent: Any,
+    store: "MemoryStore",
+    prologue: "DreamPrologue",
+    batch: Any,
+    *,
+    before: Sequence["FileBudget"],
+) -> DreamTurnResult:
+    """Un batch: il turno LLM e il suo esito. **Non** scrive il cursore.
+
+    Il cursore lo scrive :func:`run_dream_turn`, che sola sa se il batch era
+    l'unico della finestra o il primo di due.
+    """
+    from jenny.agent.memory import MemoryStore
+
+    prompt, last_cursor = batch[0], batch[1]
+    # ``getattr`` con un default: ``build_dream_prompt`` è sostituito nei test da
+    # doppi che ritornano una coppia nuda, e un batch che non dichiara il proprio
+    # tipo è un batch personale, che è il comportamento di sempre. Il tipo del
+    # batch sceglie la cassetta in cui Dream può scrivere.
+    scope = getattr(batch, "scope", "personal")
     dream_tools = store.build_dream_tools(write_size_guard=prologue.guard, scope=scope)
     # ``getattr``: il registry Dream espone ``file_states``, ma il contratto resta
     # tollerante verso registry di altra provenienza (e verso i doppi dei test).
@@ -746,7 +804,7 @@ async def run_dream_turn(
     # Il tool per voci del run: un doppio che non lo espone è un run a zero voci.
     entries = getattr(dream_tools, "memory_entries", None) or NO_ENTRIES
     held_batch = advanced and batch_was_not_consolidated(
-        before=prologue.report,
+        before=before,
         history_text=MemoryStore.dream_prompt_history(prompt),
         stuck=prologue.stuck + prologue.nothing_new,
         added=entries.entries_added,
@@ -764,7 +822,6 @@ async def run_dream_turn(
         # 2026-08-18 14:02:35). Un run, un esito.
         return DreamTurnResult(DreamOutcome.HELD_BATCH, refused=refused, last_cursor=last_cursor)
     if advanced:
-        store.set_last_dream_cursor(last_cursor)
         return DreamTurnResult(DreamOutcome.ADVANCED, refused=refused, last_cursor=last_cursor)
     outcome = (
         DreamOutcome.BLOCKED if MemoryStore.dream_run_completed(resp)
@@ -824,11 +881,12 @@ def finish_dream_cycle(
     # ha fatto esattamente il lavoro — era la sorgente di livelock più
     # probabile di tutte.
     #
-    # E il conto non è solo in token. ``compact_history`` gira comunque a
-    # fine run, nel chiamante, e tiene le ultime ``max_history_entries`` voci
-    # SENZA guardare il cursore (``agent/memory.py``): un livelock abbastanza
-    # lungo non spreca soltanto chiamate, perde storia che non è mai stata
-    # consolidata.
+    # Il conto è in token, non più in storia: ``compact_history``, che gira a
+    # fine run nel chiamante, fino al 26/09 teneva le ultime
+    # ``max_history_entries`` voci senza guardare il cursore, e un livelock
+    # abbastanza lungo perdeva storia mai consolidata. Ora le voci oltre il
+    # cursore restano (AC12 della terza revisione, ``agent/memory.py``), e il
+    # prezzo di un livelock è un file che sfora il tetto finché non si sblocca.
     #
     # Fase 5 del piano: il contatore si è **spaccato in due**, perché contava due
     # cose con rimedi opposti. ``refused > 0`` vuol dire che il tetto ha bloccato

@@ -67,6 +67,14 @@ class DreamBatch(NamedTuple):
     prompt: str
     cursor: int
     scope: str
+    # L'altro tipo presente nella stessa finestra, ``None`` se la finestra ne ha
+    # uno solo: e' il segnale per il secondo batch del run (AC12). E
+    # ``window_cursor`` e' la fine della finestra, dove il cursore puo' andare
+    # quando atterrano entrambi. ``cursor`` resta quel che il batch **da solo**
+    # puo' dichiarare digerito. Default per i doppi dei test che costruiscono
+    # un batch a tre campi.
+    rest_scope: str | None = None
+    window_cursor: int | None = None
 
 
 # ``MemoryStore.build_dream_prompt`` incolla. È una costante perché lo legge anche
@@ -860,6 +868,18 @@ class MemoryStore:
         and nothing under it re-enters ``append_history`` or ``compact_history``
         (``_read_entries`` / ``_write_entries`` are pure file I/O). No caller
         holds the lock when invoking this method.
+
+        **Non taglia quel che Dream deve ancora leggere** (AC12 della terza
+        revisione). Il tetto teneva le ultime *max_history_entries* voci senza
+        guardare il cursore di Dream: un Dream indietro — un livelock, o gli ambiti
+        alternati che gli davano batch da una voce — perdeva storia mai
+        consolidata. Ora una voce personale o di progetto oltre il cursore resta
+        anche fuori dal tetto, e il file sfora finché Dream non recupera. È lo
+        scambio giusto: un Dream fermo ha già il suo allarme
+        (``dream_cycle._alert_stuck``), mentre la storia persa in silenzio non ne
+        aveva nessuno. Le voci interne invece si tagliano come prima: Dream non le
+        legge, e trattenerle vorrebbe dire non tagliarle mai su un'installazione
+        dove parla solo l'heartbeat.
         """
         if self.max_history_entries <= 0:
             return
@@ -867,8 +887,26 @@ class MemoryStore:
             entries = self._read_entries()
             if len(entries) <= self.max_history_entries:
                 return
-            kept = entries[-self.max_history_entries:]
+            dream_cursor = self.get_last_dream_cursor()
+            cut = len(entries) - self.max_history_entries
+            kept = [
+                entry
+                for index, entry in enumerate(entries)
+                if index >= cut or self._awaits_dream(entry, dream_cursor)
+            ]
+            if len(kept) == len(entries):
+                return
             self._write_entries(kept)
+
+    @classmethod
+    def _awaits_dream(cls, entry: dict[str, Any], dream_cursor: int) -> bool:
+        """True se *entry* è una voce che Dream leggerà e non ha ancora letto."""
+        cursor = cls._valid_cursor(entry.get("cursor"))
+        if cursor is None or cursor <= dream_cursor:
+            return False
+        if not cls._valid_history_payload(entry):
+            return False
+        return cls._history_entry_scope(entry.get("session_key")) != "internal"
 
     # -- JSONL helpers -------------------------------------------------------
 
@@ -1110,6 +1148,8 @@ class MemoryStore:
     def build_dream_prompt(
         self, *, max_entries: int = 20, gauge: str = "",
         max_chars: int = _DREAM_BATCH_MAX_CHARS,
+        scope: str | None = None,
+        until_cursor: int | None = None,
     ) -> "DreamBatch | None":
         """Build the Dream prompt with unprocessed history context.
 
@@ -1127,7 +1167,12 @@ class MemoryStore:
 
         *max_chars* è il tetto in caratteri della storia del batch, a voci
         intere; *max_entries* resta il tetto in numero di voci. Vale il primo
-        dei due che si raggiunge.
+        dei due che si raggiunge. I due tetti delimitano la *finestra*, che puo'
+        contenere voci di entrambi i tipi; il batch ne prende quelle di un tipo.
+
+        *scope* e *until_cursor* chiedono il **secondo** batch di un run: le voci
+        di tipo *scope* nella finestra che finisce a *until_cursor* (il
+        ``window_cursor`` del primo). Senza, il batch e' quello di testa.
         """
         last_cursor = self.get_last_dream_cursor()
         # **Il filtro che tiene personale il diario personale.** Dream è l'unico
@@ -1144,27 +1189,14 @@ class MemoryStore:
         # — costa la rilettura di poche righe, mentre saltare in avanti
         # rischierebbe di consumare una voce personale senza averla mai letta.
         pending = [
-            (entry, scope)
+            (entry, kind)
             for entry in self.read_unprocessed_history(since_cursor=last_cursor)
-            if (scope := self._history_entry_scope(entry.get("session_key"))) != "internal"
+            if (kind := self._history_entry_scope(entry.get("session_key"))) != "internal"
         ]
         if not pending:
             return None
 
-        # **Un batch, un tipo solo.** Si prende la sequenza iniziale dello stesso
-        # tipo e ci si ferma al primo cambio: le due categorie hanno prompt
-        # diversi, cassette diverse e destinazioni diverse, quindi mescolarle in
-        # un batch vorrebbe dire scegliere quale delle due regole applicare a
-        # materiale dell'altra.
-        #
-        # Il prezzo e' un batch corto quando i tipi si alternano, e si paga con un
-        # run in piu' — il cursore avanza comunque a ogni giro, quindi non c'e'
-        # nessuno stallo, solo qualche ciclo di Dream in piu' per drenare. E'
-        # il prezzo giusto: l'alternativa che tiene i batch grandi e' un cursore
-        # per tipo, cioe' due filigrane che possono divergere su un file
-        # append-only riscritto anche a mano.
-        #
-        # **Voci intere, e un tetto in caratteri sul batch** (AC1 della terza
+        # **Voci intere, e un tetto in caratteri sulla finestra** (AC1 della terza
         # revisione). Fino al 26/09 ogni voce passava da un taglio a 500
         # caratteri e il cursore avanzava oltre: quel che un riassunto diceva dopo
         # non arrivava mai in memoria. Ora una voce lunga costa voci in meno nello
@@ -1173,17 +1205,59 @@ class MemoryStore:
         # prima voce entra sempre, anche se da sola supera il tetto — spezzarla
         # vorrebbe dire un cursore a meta' voce, e fermarsi un batch vuoto per
         # sempre.
-        scope = pending[0][1]
-        batch_entries: list[dict[str, Any]] = []
+        if until_cursor is not None:
+            pending = [item for item in pending if item[0]["cursor"] <= until_cursor]
+        window: list[tuple[dict[str, Any], str]] = []
         used = 0
         for entry, entry_scope in pending[:max_entries]:
-            if entry_scope != scope:
-                break
             cost = len(entry["content"])
-            if batch_entries and used + cost > max_chars:
+            if window and used + cost > max_chars:
                 break
-            batch_entries.append(entry)
+            window.append((entry, entry_scope))
             used += cost
+        if not window:
+            return None
+
+        # **Un batch, un tipo solo.** Le due categorie hanno prompt diversi,
+        # cassette diverse e destinazioni diverse, quindi mescolarle in un batch
+        # vorrebbe dire scegliere quale delle due regole applicare a materiale
+        # dell'altra.
+        #
+        # Ma la finestra si divide per tipo invece di fermarsi al primo cambio
+        # (AC12 della terza revisione): con la chat personale e un quaderno
+        # usati a turno, fermarsi lì dava batch da una voce, e il diario cresceva
+        # piu' in fretta di quanto Dream lo digerisse. Il batch di testa porta
+        # tutte le voci del suo tipo nella finestra; quelle dell'altro tipo le
+        # porta un secondo batch sulla **stessa** finestra
+        # (``scope=rest_scope, until_cursor=window_cursor``), e
+        # ``dream_cycle.run_dream_turn`` sposta il cursore a fine finestra solo
+        # quando atterrano entrambi. Da solo, il batch di testa puo' dichiarare
+        # digerita solo la sua testa omogenea: e' ``cursor``. Le voci del suo tipo
+        # che seguono tornano al run dopo, e ritrovate su disco rispondono
+        # «already present» — costa una rilettura, non un fatto.
+        #
+        # Resta un cursore solo, di proposito: un cursore per tipo sono due
+        # filigrane che possono divergere su un file append-only riscritto anche
+        # a mano.
+        head_scope = scope if scope is not None else window[0][1]
+        batch_entries = [entry for entry, entry_scope in window if entry_scope == head_scope]
+        if not batch_entries:
+            return None
+        window_cursor = window[-1][0]["cursor"]
+        other = next((s for _, s in window if s != head_scope), None)
+        if scope is not None:
+            # Il secondo batch: il cursore e' la fine della finestra, e vale solo
+            # se il batch dell'altro tipo sulla stessa finestra e' atterrato.
+            cursor = window_cursor
+            rest_scope = None
+        else:
+            cursor = window[0][0]["cursor"]
+            for entry, entry_scope in window:
+                if entry_scope != head_scope:
+                    break
+                cursor = entry["cursor"]
+            rest_scope = other
+        scope = head_scope
 
         history_text = "\n".join(
             f"[{e['timestamp']}] {e['content']}" for e in batch_entries
@@ -1204,7 +1278,7 @@ class MemoryStore:
                 budget_gauge=gauge,
             )
         prompt = f"{template}{DREAM_HISTORY_HEADER}{history_text}"
-        return DreamBatch(prompt, batch_entries[-1]["cursor"], scope)
+        return DreamBatch(prompt, cursor, scope, rest_scope, window_cursor)
 
     def _with_project_replay(self, history_text: str, last_cursor: int) -> str:
         """La storia del batch, preceduta dalle ultime voci di progetto gia' consumate.

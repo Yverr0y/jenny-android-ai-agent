@@ -261,6 +261,8 @@ class TestHistoryWithCursor:
         store.append_history("event 3")
         store.append_history("event 4")
         store.append_history("event 5")
+        # Solo quel che Dream ha gia' letto si taglia (AC12 della terza revisione).
+        store.set_last_dream_cursor(5)
         store.compact_history()
         entries = store.read_unprocessed_history(since_cursor=0)
         assert len(entries) == 2
@@ -281,6 +283,7 @@ class TestHistoryWithCursor:
         store = MemoryStore(tmp_path, max_history_entries=3)
         for i in range(5):
             store.append_history(f"event {i}")  # cursors 1..5
+        store.set_last_dream_cursor(5)  # consumate da Dream: si possono tagliare
 
         inside_compact = threading.Event()
         resume_compact = threading.Event()
