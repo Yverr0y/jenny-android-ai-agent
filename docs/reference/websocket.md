@@ -379,8 +379,8 @@ emoji in it goes through unchanged.
 Two more kinds of operation travel here for the same reason — the query string is the only
 other place their parameters could go. Writes to the workspace (delete, rename, copy), which
 a read-only `/api/` surface should not carry; and settings that carry a secret (a provider's
-API key, the Telegram bot token, an SSH password), which in a request line would end up in
-access logs and anywhere a URL is logged.
+API key — the first one too, from onboarding —, the Telegram bot token, an SSH password),
+which in a request line would end up in access logs and anywhere a URL is logged.
 
 Request:
 
@@ -423,6 +423,7 @@ correlate a reply to.
 | `settings.provider.update` | `name`, `format`, `api_base`, `api_key`, `ca_bundle`, `ca_bundle_clear` | Create or update a provider with its API key, then hot-reload the active provider. |
 | `telegram.save` | `token` | Save the Telegram bot token (checked with `getMe`) and restart the channel. |
 | `ssh.host.save` | `alias`, `host`, `port`, `username`, `auth`, `password`, `description`, `job_log_dir` | Create or update an SSH host. A missing `password` keeps the saved one. |
+| `onboarding.save` | `provider_name`, `format`, `api_key`, `api_base`, `model`, `bot_name`, `bot_icon`, `locale` | The first-run setup: save the provider with its API key, the model and Jenny's name, then wake the agent that was waiting for it and write the welcome message into the conversation. Replies `{status, chat_id, welcome_message}`. A missing provider or model is `bad_request` and nothing is saved. |
 
 **Authorization is the handshake's, not the frame's.** When `token_issue_secret` is set, only
 a connection that presented the token at handshake time may run a command, even if

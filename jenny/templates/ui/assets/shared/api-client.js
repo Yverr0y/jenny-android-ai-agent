@@ -557,8 +557,12 @@ class ApiClient {
     return this._sshCall('/api/settings/ssh/host-key/accept', params);
   }
 
+  /* La prima chiave API dell'utente: viaggia sul WebSocket come gli altri
+     segreti (v. `getProviderModels`), non nella query di una GET. Stessa firma
+     e stessa risposta di prima; l'errore porta il messaggio del server. */
   async saveOnboarding(params) {
-    const qs = new URLSearchParams({
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.saveOnboarding({
       provider_name: params.provider_name || params.provider || '',
       format: params.format || '',
       api_key: params.api_key || '',
@@ -568,12 +572,6 @@ class ApiClient {
       bot_icon: params.bot_icon || '',
       locale: params.locale || '',
     });
-    const res = await this._fetch(`/api/onboarding/save?${qs}`);
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(text || `Onboarding save failed: ${res.status}`);
-    }
-    return res.json();
   }
 
   // ── Telegram APIs ──

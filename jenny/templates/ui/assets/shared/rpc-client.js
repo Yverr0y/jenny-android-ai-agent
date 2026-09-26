@@ -185,4 +185,11 @@ export const rpc = {
     return send('ssh.host.save', params);
   },
 
+  /** Il primo avvio: provider con la sua chiave, modello, nome di Jenny. Stava
+   *  nella query di `/api/onboarding/save`; a salvataggio riuscito il server
+   *  sveglia l'agente e risponde col saluto (`chat_id`, `welcome_message`). */
+  saveOnboarding(params) {
+    return send('onboarding.save', params);
+  },
+
 };

@@ -99,7 +99,6 @@ def build_gateway_services(
         get_subagent_manager=get_subagent_manager,
         get_cron_service=get_cron_service,
         log=logger,
-        onboarding_event=onboarding_event,
         on_settings_changed=on_settings_changed,
         on_telegram_changed=on_telegram_changed,
         on_jobs_changed=on_jobs_changed,
@@ -128,6 +127,10 @@ def build_gateway_services(
             # facevano le rotte GET che hanno sostituito.
             on_settings_changed=on_settings_changed,
             on_telegram_changed=on_telegram_changed,
+            # ``onboarding.save`` scrive il saluto nella sessione e sveglia
+            # l'agente differito, come faceva la rotta GET che ha sostituito.
+            session_manager=session_manager,
+            onboarding_event=onboarding_event,
         ),
         session_manager=session_manager,
         get_subagent_manager=get_subagent_manager,

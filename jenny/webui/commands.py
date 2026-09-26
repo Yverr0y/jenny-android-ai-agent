@@ -105,6 +105,11 @@ class CommandContext:
     # tacere un provider nuovo che non entra in servizio fino al riavvio.
     on_settings_changed: Callable[[], None] | None = None
     on_telegram_changed: Callable[[], None] | None = None
+    # Quel che serve a ``onboarding.save``: la sessione in cui scrivere il
+    # saluto, e l'evento su cui l'agente differito aspetta per nascere. Senza
+    # l'evento l'onboarding salva e l'agente non parte fino al riavvio.
+    session_manager: Any | None = None
+    onboarding_event: Any | None = None
 
 
 Command =Callable[[CommandContext, Mapping[str, Any]], Awaitable[dict[str, Any]]]
@@ -1291,6 +1296,48 @@ async def ssh_host_save(ctx: CommandContext, params: Mapping[str, Any]) -> dict[
         raise _settings_error(exc) from None
 
 
+# I campi dell'onboarding, come li legge ``settings_api.save_onboarding``.
+_ONBOARDING_KEYS = (
+    "provider_name", "format", "api_key", "api_base", "model", "bot_name", "bot_icon", "locale",
+)
+
+
+async def onboarding_save(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Il primo provider, il modello e il nome di Jenny, dal primo avvio. Era
+    ``GET /api/onboarding/save?api_key=…``: la prima chiave dell'utente nella
+    riga di richiesta, come le altre quattro qui sopra.
+
+    Un campo assente vale la stringa vuota, come nella query di prima; i default
+    (formato, nome, icona, lingua) li decide ``save_onboarding``. A salvataggio
+    riuscito l'evento sveglia l'agente differito.
+    """
+    from jenny.webui import settings_api
+
+    query = _as_query(params, _ONBOARDING_KEYS)
+    data = {key: (query.get(key) or [""])[0] for key in _ONBOARDING_KEYS}
+    # La chiave non si logga: solo la sua lunghezza, come faceva la rotta.
+    logger.info(
+        "[onboarding] received: provider_name={!r} format={!r} model={!r} api_key_len={} "
+        "bot_name={!r}",
+        data["provider_name"],
+        data["format"],
+        data["model"],
+        len(data["api_key"]),
+        data["bot_name"],
+    )
+    try:
+        payload = await settings_api.save_onboarding(
+            data,
+            session_manager=ctx.session_manager,
+            onboarding_event=ctx.onboarding_event,
+        )
+    except settings_api.WebUISettingsError as exc:
+        logger.warning("[onboarding] settings error: {}", exc.message)
+        raise _settings_error(exc) from None
+    logger.info("[onboarding] success: chat_id={}", payload.get("chat_id"))
+    return payload
+
+
 COMMANDS: dict[str, Command] = {
     "workspace.write": workspace_write,
     "workspace.delete": workspace_delete,
@@ -1307,6 +1354,7 @@ COMMANDS: dict[str, Command] = {
     "settings.provider.update": settings_provider_update,
     "telegram.save": telegram_save,
     "ssh.host.save": ssh_host_save,
+    "onboarding.save": onboarding_save,
 }
 
 

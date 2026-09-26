@@ -51,6 +51,8 @@ await api.saveTelegramToken('123:segreto');
 await api.saveSshHost({ alias: 'nas', host: 'h', username: 'u', description: null,
   auth: 'password', password: 'segreta' });
 await api.saveSshHost({ alias: 'nas', host: 'h', username: 'u', auth: 'password' });
+await api.saveOnboarding({ provider: 'openai', format: 'openai_compat', api_key: 'sk-prima',
+  model: 'gpt-x', bot_name: 'Jenny', locale: 'it' });
 
 assert.deepEqual(requests, [
   ['settings.provider.models',
@@ -60,6 +62,8 @@ assert.deepEqual(requests, [
   ['ssh.host.save', { alias: 'nas', host: 'h', username: 'u', description: '',
     auth: 'password', password: 'segreta' }],
   ['ssh.host.save', { alias: 'nas', host: 'h', username: 'u', auth: 'password' }],
+  ['onboarding.save', { provider_name: 'openai', format: 'openai_compat', api_key: 'sk-prima',
+    api_base: '', model: 'gpt-x', bot_name: 'Jenny', bot_icon: '', locale: 'it' }],
 ]);
 assert.deepEqual(fetched, [], 'nessun segreto in un URL');
 

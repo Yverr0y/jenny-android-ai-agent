@@ -27,7 +27,6 @@ from jenny.webui.settings_api import (
     delete_provider,
     power_diagnostics_payload,
     run_update_check,
-    save_onboarding,
     settings_payload,
     start_update_install,
     update_agent_settings,
@@ -82,8 +81,6 @@ class WebUISettingsRouter:
         parse_query: Callable[[str], QueryParams],
         json_response: Callable[[dict[str, Any]], Response],
         error_response: Callable[[int, str | None], Response],
-        session_manager: Any | None = None,
-        onboarding_event: Any | None = None,
         on_settings_changed: Callable[[], None] | None = None,
         on_telegram_changed: Callable[[], None] | None = None,
         on_jobs_changed: Callable[[str], None] | None = None,
@@ -94,8 +91,6 @@ class WebUISettingsRouter:
         self._parse_query = parse_query
         self._json_response = json_response
         self._error_response = error_response
-        self._session_manager = session_manager
-        self._onboarding_event = onboarding_event
         self._on_settings_changed = on_settings_changed
         self._on_telegram_changed = on_telegram_changed
         # Secondo gancio, e non un allargamento del primo:
@@ -144,8 +139,6 @@ class WebUISettingsRouter:
             return await self._handle_update_install(request)
         if path == "/api/updates/status":
             return self._handle_update_status(request)
-        if path == "/api/onboarding/save":
-            return await self._handle_onboarding_save(request)
         if path == "/api/telegram/status":
             return self._handle_telegram_status(request)
         if path == "/api/telegram/unpair":
@@ -431,48 +424,6 @@ class WebUISettingsRouter:
             return self._error_response(500, f"{what} failed")
         if on_success is not None:
             on_success(query, payload)
-        return self._json_response(payload)
-
-    async def _handle_onboarding_save(self, request: WsRequest) -> Response:
-        if not self._authorized(request):
-            return self._unauthorized()
-        query = self._query(request)
-        data = {
-            "provider_name": _query_param(query, "provider_name"),
-            "format": _query_param(query, "format"),
-            "api_key": _query_param(query, "api_key"),
-            "api_base": _query_param(query, "api_base"),
-            "model": _query_param(query, "model"),
-            "bot_name": _query_param(query, "bot_name"),
-            "bot_icon": _query_param(query, "bot_icon"),
-            "locale": _query_param(query, "locale"),
-        }
-        self.logger.info(
-            "[onboarding-route] received: provider_name={!r} format={!r} model={!r} "
-            "api_key_len={} bot_name={!r} query_keys={}",
-            data["provider_name"],
-            data["format"],
-            data["model"],
-            len(data["api_key"]),
-            data["bot_name"],
-            sorted(query.keys()),
-        )
-        try:
-            payload = await save_onboarding(
-                data,
-                session_manager=self._session_manager,
-                onboarding_event=self._onboarding_event,
-            )
-        except WebUISettingsError as e:
-            self.logger.warning("[onboarding-route] settings error: {}", e.message)
-            return self._error_response(e.status, e.message)
-        except Exception:
-            self.logger.exception("onboarding save failed")
-            return self._error_response(500, "failed to save onboarding configuration")
-        self.logger.info(
-            "[onboarding-route] success: chat_id={}",
-            payload.get("chat_id"),
-        )
         return self._json_response(payload)
 
     # -- Telegram ---------------------------------------------------------- #

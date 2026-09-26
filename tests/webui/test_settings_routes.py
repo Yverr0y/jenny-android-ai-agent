@@ -8,7 +8,6 @@ dispatch per path, 401 senza token, propagazione degli errori applicativi
 
 from __future__ import annotations
 
-import asyncio
 import json
 from unittest.mock import MagicMock
 
@@ -196,6 +195,7 @@ async def test_settings_update_swallows_on_settings_changed_exception(config_pat
         "/api/settings/provider-models?provider=p&api_key=sk-segreta",
         "/api/telegram/save?token=123:segreto",
         "/api/settings/ssh/host/save?alias=a&host=h&username=u&password=segreta",
+        "/api/onboarding/save?provider_name=openai&model=gpt-x&api_key=sk-segreta",
     ],
 )
 async def test_the_routes_that_carried_a_secret_are_gone(config_path, path: str) -> None:
@@ -309,61 +309,6 @@ async def test_web_search_update_unexpected_error_maps_to_500(config_path, monke
     )
     assert response.status_code == 500
     assert b"guasto inatteso" not in response.body
-
-
-# ---------------------------------------------------------------------------
-# /api/onboarding/save
-# ---------------------------------------------------------------------------
-
-
-async def test_onboarding_save_requires_auth(config_path) -> None:
-    router = _router()
-    response = await router.dispatch(
-        _request("/api/onboarding/save", token=None), "/api/onboarding/save"
-    )
-    assert response.status_code == 401
-
-
-async def test_onboarding_save_settings_error_maps_to_400(config_path) -> None:
-    router = _router()
-    response = await router.dispatch(
-        _request(
-            "/api/onboarding/save?provider_name=openai&format=openai_compat&model=gpt-x"
-        ),
-        "/api/onboarding/save",
-    )
-    assert response.status_code == 400
-
-
-async def test_onboarding_save_success(config_path) -> None:
-    router = _router(onboarding_event=asyncio.Event())
-    response = await router.dispatch(
-        _request(
-            "/api/onboarding/save"
-            "?provider_name=openai&format=openai_compat&model=gpt-x&api_key=sk-test-123"
-        ),
-        "/api/onboarding/save",
-    )
-    assert response.status_code == 200
-    body = _json(response)
-    assert body["chat_id"] == "default"
-
-
-async def test_onboarding_save_unexpected_error_maps_to_500(config_path, monkeypatch) -> None:
-    async def boom(*args, **kwargs):
-        raise RuntimeError("kaboom")
-
-    monkeypatch.setattr("jenny.webui.settings_routes.save_onboarding", boom)
-    router = _router()
-    response = await router.dispatch(
-        _request(
-            "/api/onboarding/save"
-            "?provider_name=openai&format=openai_compat&model=gpt-x&api_key=sk-test-123"
-        ),
-        "/api/onboarding/save",
-    )
-    assert response.status_code == 500
-    assert b"kaboom" not in response.body
 
 
 async def test_settings_update_fires_on_settings_changed_for_generation_params(

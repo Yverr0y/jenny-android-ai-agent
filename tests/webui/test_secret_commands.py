@@ -271,3 +271,108 @@ async def test_ssh_host_save_refuses_a_password_host_without_password(
         {"alias": "nas", "host": "example.com", "username": "u", "auth": "password"},
     )
     assert err.code == "bad_request"
+
+
+# ---------------------------------------------------------------------------
+# onboarding.save
+# ---------------------------------------------------------------------------
+#
+# La prima chiave API dell'utente viaggiava nella query di
+# ``GET /api/onboarding/save?api_key=…``: la stessa riga di richiesta delle
+# altre quattro. E' un comando come loro.
+
+
+_ONBOARDING = {
+    "provider_name": "openai",
+    "format": "openai_compat",
+    "api_key": "sk-test-123",
+    "api_base": "",
+    "model": "gpt-x",
+    "bot_name": "Jenny",
+    "bot_icon": "",
+    "locale": "it",
+}
+
+
+async def test_onboarding_save_writes_the_key_and_wakes_the_agent(
+    tmp_path: Path, config_path: Path
+) -> None:
+    import asyncio
+
+    from jenny.session.keys import UNIFIED_SESSION_KEY
+    from jenny.session.manager import SessionManager
+
+    event = asyncio.Event()
+    sessions = SessionManager(tmp_path)
+    payload = await dispatch_command(
+        _ctx(tmp_path, session_manager=sessions, onboarding_event=event),
+        "onboarding.save",
+        dict(_ONBOARDING),
+    )
+    assert payload["chat_id"] == "default"
+    assert event.is_set(), "l'agente differito aspetta questo evento per nascere"
+    config = load_config(config_path)
+    assert config.providers.default == "openai"
+    assert config.providers.providers[0].api_key == "sk-test-123"
+    assert config.agents.defaults.model == "gpt-x"
+    greeting = sessions.get_or_create(UNIFIED_SESSION_KEY).messages[-1]
+    assert greeting["content"] == payload["welcome_message"]
+
+
+async def test_onboarding_save_refuses_a_missing_model(
+    tmp_path: Path, config_path: Path
+) -> None:
+    import asyncio
+
+    event = asyncio.Event()
+    err = await _refused(
+        _ctx(tmp_path, onboarding_event=event),
+        "onboarding.save",
+        {**_ONBOARDING, "model": ""},
+    )
+    assert err.code == "bad_request"
+    assert "model" in err.message
+    assert not event.is_set()
+    assert load_config(config_path).providers.providers == []
+
+
+async def test_onboarding_save_refuses_a_value_that_is_not_text(
+    tmp_path: Path, config_path: Path
+) -> None:
+    err = await _refused(_ctx(tmp_path), "onboarding.save", {**_ONBOARDING, "model": ["x"]})
+    assert err.code == "bad_request"
+
+
+async def test_onboarding_save_hides_an_unexpected_error(
+    tmp_path: Path, config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def boom(*args, **kwargs):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr("jenny.webui.settings_api.save_onboarding", boom)
+    err = await _refused(_ctx(tmp_path), "onboarding.save", dict(_ONBOARDING))
+    assert err.code == "internal"
+    assert "kaboom" not in err.message
+
+
+def test_the_gateway_hands_the_onboarding_wiring_to_the_commands(tmp_path: Path) -> None:
+    """Senza l'evento il comando salverebbe e l'agente non nascerebbe mai: il
+    gateway resterebbe ad aspettare l'onboarding fino al riavvio."""
+    import asyncio
+
+    from jenny.channels.websocket import WebSocketConfig
+    from jenny.webui.gateway_services import build_gateway_services
+
+    event = asyncio.Event()
+    sessions = MagicMock()
+    services = build_gateway_services(
+        config=WebSocketConfig.model_validate({}),
+        bus=MagicMock(),
+        session_manager=sessions,
+        workspace_path=tmp_path,
+        default_restrict_to_workspace=False,
+        runtime_model_name=None,
+        onboarding_event=event,
+    )
+    assert services.commands.onboarding_event is event
+    assert services.commands.session_manager is sessions
