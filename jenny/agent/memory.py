@@ -43,6 +43,16 @@ from jenny.utils.prompt_templates import render_template
 # punto in cui la curva si appiattisce. Zero disattiva la finestra.
 _DREAM_PROJECT_REPLAY = 3
 
+# Il tetto in caratteri della storia di un batch di Dream, a voci intere (v.
+# ``MemoryStore.build_dream_prompt``). Prima c'era un taglio a 500 caratteri per
+# voce su 20 voci, cioe' al piu' 10.000 caratteri: questo tetto ne tiene lo stesso
+# ordine di grandezza senza buttare la coda di nessuna voce, e basta a far stare
+# da solo anche il dump grezzo piu' lungo (``_RAW_ARCHIVE_MAX_CHARS``).
+_DREAM_BATCH_MAX_CHARS = 16_000
+# Lo stesso, per le voci gia' consumate che la finestra di progetto rimostra: e'
+# contesto in piu', quindi una voce che non ci sta si lascia fuori intera.
+_DREAM_REPLAY_MAX_CHARS = 8_000
+
 
 class DreamBatch(NamedTuple):
     """Un batch pronto per un run di Dream.
@@ -1099,6 +1109,7 @@ class MemoryStore:
 
     def build_dream_prompt(
         self, *, max_entries: int = 20, gauge: str = "",
+        max_chars: int = _DREAM_BATCH_MAX_CHARS,
     ) -> "DreamBatch | None":
         """Build the Dream prompt with unprocessed history context.
 
@@ -1113,6 +1124,10 @@ class MemoryStore:
         sta nel chiamante di proposito: ``MemoryStore`` è uno strato di I/O
         puro e dargli qui la config per misurare il budget lo legherebbe al
         modulo che quel budget lo impone.
+
+        *max_chars* è il tetto in caratteri della storia del batch, a voci
+        intere; *max_entries* resta il tetto in numero di voci. Vale il primo
+        dei due che si raggiunge.
         """
         last_cursor = self.get_last_dream_cursor()
         # **Il filtro che tiene personale il diario personale.** Dream è l'unico
@@ -1148,16 +1163,30 @@ class MemoryStore:
         # il prezzo giusto: l'alternativa che tiene i batch grandi e' un cursore
         # per tipo, cioe' due filigrane che possono divergere su un file
         # append-only riscritto anche a mano.
+        #
+        # **Voci intere, e un tetto in caratteri sul batch** (AC1 della terza
+        # revisione). Fino al 26/09 ogni voce passava da un taglio a 500
+        # caratteri e il cursore avanzava oltre: quel che un riassunto diceva dopo
+        # non arrivava mai in memoria. Ora una voce lunga costa voci in meno nello
+        # stesso run, non fatti in meno: il cursore si ferma all'ultima voce
+        # passata *per intero*, e quella che non ci sta apre il run seguente. La
+        # prima voce entra sempre, anche se da sola supera il tetto — spezzarla
+        # vorrebbe dire un cursore a meta' voce, e fermarsi un batch vuoto per
+        # sempre.
         scope = pending[0][1]
-        batch_entries = []
+        batch_entries: list[dict[str, Any]] = []
+        used = 0
         for entry, entry_scope in pending[:max_entries]:
             if entry_scope != scope:
                 break
+            cost = len(entry["content"])
+            if batch_entries and used + cost > max_chars:
+                break
             batch_entries.append(entry)
+            used += cost
 
         history_text = "\n".join(
-            f"[{e['timestamp']}] {truncate_text(e['content'], 500)}"
-            for e in batch_entries
+            f"[{e['timestamp']}] {e['content']}" for e in batch_entries
         )
         if scope == "project":
             template = render_template(
@@ -1204,17 +1233,26 @@ class MemoryStore:
         """
         if _DREAM_PROJECT_REPLAY <= 0:
             return history_text
-        seen = [
+        candidates = [
             entry
             for entry, cursor in self._iter_valid_entries()
             if cursor <= last_cursor
             and self._history_entry_scope(entry.get("session_key")) == "project"
         ][-_DREAM_PROJECT_REPLAY:]
+        # Voci intere anche qui, dalla piu' recente e dentro un tetto: una voce
+        # tagliata a meta' rimostrerebbe proprio la meta' che il primo passaggio
+        # aveva gia' visto, cioe' toglierebbe alla finestra la sua ragione.
+        seen: list[dict[str, Any]] = []
+        used = 0
+        for entry in reversed(candidates):
+            cost = len(entry["content"])
+            if used + cost > _DREAM_REPLAY_MAX_CHARS:
+                break
+            seen.insert(0, entry)
+            used += cost
         if not seen:
             return history_text
-        replay = "\n".join(
-            f"[{e['timestamp']}] {truncate_text(e['content'], 500)}" for e in seen
-        )
+        replay = "\n".join(f"[{e['timestamp']}] {e['content']}" for e in seen)
         return "\n".join([
             "### Already processed, shown again",
             "",

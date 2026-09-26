@@ -609,6 +609,18 @@ class TestTheReplayWindow:
         assert "prima cosa di progetto" in history, "la finestra non ha rimostrato niente"
         assert "Already processed, shown again" in history
 
+    def test_an_already_consumed_entry_is_shown_again_whole(self, store):
+        """AC1: la finestra rimostra la voce intera, non i suoi primi 500 caratteri."""
+        lunga = "prima cosa di progetto " + "coda inventata " * 80 + "ultima parola"
+        first = store.append_history(lunga, session_key=PROJECT)
+        store.set_last_dream_cursor(first)
+        store.append_history("seconda cosa di progetto", session_key=PROJECT)
+
+        result = store.build_dream_prompt()
+
+        assert result is not None
+        assert lunga in MemoryStore.dream_prompt_history(result.prompt)
+
     def test_the_cursor_advances_anyway(self, store):
         """La differenza fra questo e un cursore che arretra.
 
