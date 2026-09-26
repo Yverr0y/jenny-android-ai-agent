@@ -333,6 +333,12 @@ class LLMProvider(ABC):
 
     _SENTINEL = object()
 
+    # Richieste in volo (retry compresi) e chiusura chiesta: v. ``aclose``.
+    # Attributi di classe come default, così anche una sottoclasse che non
+    # passa da ``__init__`` (i finti dei test) li ha.
+    _inflight = 0
+    _close_requested = False
+
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self.api_key = api_key
         self.api_base = api_base
@@ -813,7 +819,55 @@ class LLMProvider(ABC):
             await asyncio.sleep(chunk)
             remaining -= chunk
 
+    async def aclose(self) -> None:
+        """Chiude il client httpx del provider, quando nessuno lo usa più.
+
+        Si chiama sul provider *sostituito* dopo un cambio di impostazioni: il
+        nuovo ne ha un altro, e il vecchio teneva aperti connessioni e pool per
+        sempre, uno per salvataggio. Se una richiesta è ancora in volo (un
+        turno partito col provider vecchio) la chiusura aspetta che finisca,
+        retry compresi: troncarla vorrebbe dire rompere il turno dell'utente.
+        Idempotente.
+        """
+        self._close_requested = True
+        if self._inflight == 0:
+            await self._close_http_client()
+
+    async def _close_http_client(self) -> None:
+        client = getattr(self, "_http_client", None)
+        if client is None:
+            return
+        with suppress(Exception):
+            await client.aclose()
+
     async def _run_with_retry(
+        self,
+        call: Callable[..., Awaitable[LLMResponse]],
+        kw: dict[str, Any],
+        original_messages: list[dict[str, Any]],
+        *,
+        retry_mode: str,
+        on_retry_wait: Callable[[str], Awaitable[None]] | None,
+        should_retry_guard: Callable[[], bool] | None = None,
+        on_stream_recover: Callable[[], Awaitable[None]] | None = None,
+    ) -> LLMResponse:
+        # Il conteggio copre tutto il ciclo, attese comprese: un ``aclose``
+        # arrivato fra due tentativi non deve chiudere il client sotto al retry.
+        self._inflight += 1
+        try:
+            return await self._run_with_retry_loop(
+                call, kw, original_messages,
+                retry_mode=retry_mode,
+                on_retry_wait=on_retry_wait,
+                should_retry_guard=should_retry_guard,
+                on_stream_recover=on_stream_recover,
+            )
+        finally:
+            self._inflight -= 1
+            if self._close_requested and self._inflight == 0:
+                await self._close_http_client()
+
+    async def _run_with_retry_loop(
         self,
         call: Callable[..., Awaitable[LLMResponse]],
         kw: dict[str, Any],
