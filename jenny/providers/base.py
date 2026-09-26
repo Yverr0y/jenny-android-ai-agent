@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+import httpx
 import json_repair
 from loguru import logger
 
@@ -435,7 +436,14 @@ class LLMProvider(ABC):
         error_name = e.__class__.__name__.lower()
         if "timeout" in error_name:
             error_kind = "timeout"
-        elif "connection" in error_name:
+        elif "connection" in error_name or isinstance(
+            e, (httpx.NetworkError, httpx.RemoteProtocolError),
+        ):
+            # ``RemoteProtocolError`` («Server disconnected without sending a
+            # response») è il keep-alive chiuso dal server, ``ReadError`` la
+            # connessione resettata: nessuno dei due nomi dice «connection», e
+            # il testo non porta marker, quindi finivano in chat come errori
+            # definitivi. Una connessione nuova, al tentativo dopo, passa.
             error_kind = "connection"
 
         return {

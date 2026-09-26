@@ -574,10 +574,16 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
             # behavior is unchanged when there is no partial content to carry;
             # this only adds partial_content when the stream had already
             # produced text before crashing (#audit mid-stream-exception loss).
+            # I metadati (``error_kind`` in testa) vengono dalla regola
+            # condivisa: senza, un ``ReadTimeout`` o un keep-alive chiuso
+            # arrivavano alla retry policy come testo nudo, e non si ritentavano.
+            metadata = self._error_metadata(exc)
             return LLMResponse(
                 content=f"Error calling LLM: {describe_exc(exc)}",
                 finish_reason="error",
                 partial_content="".join(content_parts) or None,
+                retry_after=metadata["error_retry_after_s"],
+                **metadata,
             )
 
         stop_map = {"tool_use": "tool_calls", "end_turn": "stop", "max_tokens": "length"}
