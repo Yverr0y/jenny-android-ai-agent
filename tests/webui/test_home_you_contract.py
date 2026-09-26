@@ -668,12 +668,13 @@ def test_the_export_is_recorded_only_after_the_system_screen() -> None:
     l'unico posto in cui si sa che il file c'e' davvero — e non dopo la
     chiamata che prepara il container."""
     flow = (ASSETS / "shared" / "backup-flow.js").read_text(encoding="utf-8")
-    inside = re.search(r"_pending\.export = \(ok\) => \{(.*?)\n      \};", flow, re.S)
-    assert inside, "il callback del picker non si trova piu'"
-    assert "api.noteBackupExported()" in inside.group(1), (
-        "il record non si scrive dove si sa l'esito"
+    # Dopo la risposta del picker (`_awaitNative`, con la sua cintura: WJ16
+    # della terza revisione), non prima.
+    after = re.search(r"_awaitNative\('export'(.*?)\n    return ok;", flow, re.S)
+    assert after, "l'attesa del picker non si trova piu'"
+    assert "if (ok) api.noteBackupExported()" in after.group(1), (
+        "il record non si scrive dove si sa l'esito, o anche quando e' stato annullato"
     )
-    assert "if (ok)" in inside.group(1), "si segna un backup anche quando e' stato annullato"
     # E da nessun'altra parte: una seconda chiamata segnerebbe il backup
     # quando il container e' solo pronto.
     assert flow.count("noteBackupExported") == 1, "il record si scrive da due posti"
