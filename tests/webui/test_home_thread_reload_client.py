@@ -275,3 +275,23 @@ await tick(100);
 assert.deepEqual(thread(), ['you: Q1', 'jenny: A1', 'you: Q3', 'jenny: A3']);
 """)
 
+
+def test_a_live_answer_survives_two_overlapping_reloads() -> None:
+    """La seconda rilettura parte quando la bolla viva c'e' gia': e' nata
+    durante la prima, e nessuna delle due la butta. Solo il segno messo sul
+    nodo quando nasce la distingue dalla storia che se ne va."""
+    _run("""
+const app = await boot();
+slowThread(120);
+const first = app.chat.reload();
+await tick(30);
+frame({ event: 'delta', chat_id: 'default', turn_id: 'n', text: 'live' });
+await tick(20);
+const second = app.chat.reload();
+await Promise.all([first, second]);
+await tick(50);
+const rows = thread();
+assert.deepEqual(rows.slice(0, 2), ['you: hello', 'jenny: hello to you']);
+assert.ok(rows.slice(2).includes('jenny: live'), `la bolla viva e\\u2019 sparita: ${JSON.stringify(rows)}`);
+""")
+
