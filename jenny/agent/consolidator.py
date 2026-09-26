@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -74,6 +76,12 @@ _PROJECT_COMPACTED_SUBDIR = "raw/compacted"
 # costruisce il Consolidator passa la ``wikis_dir`` configurata, perché su
 # un'installazione che l'ha cambiata cercare qui non troverebbe il progetto.
 _PROJECTS_SUBDIR = WorkspaceScopeResolver.projects_subdir
+
+
+# La finestra ridotta **di un turno**, per le consolidazioni che partono dal suo
+# task (v. :meth:`Consolidator.reduced_window`). Una ``ContextVar`` e non un
+# attributo: i turni delle altre sessioni girano in altri task e non la vedono.
+_WINDOW_OVERRIDE: ContextVar[int | None] = ContextVar("consolidator_window_override", default=None)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -350,9 +358,30 @@ class Consolidator:
         return self._workspace_scopes.for_project(session_key).project_path
 
     @property
+    def _window(self) -> int:
+        """La finestra con cui consolidare adesso: quella ridotta del turno, se c'e'."""
+        override = _WINDOW_OVERRIDE.get()
+        return override if override is not None else self.context_window_tokens
+
+    @contextmanager
+    def reduced_window(self, tokens: int) -> Iterator[None]:
+        """Consolida con *tokens* di finestra, solo dentro il blocco e solo in questo task.
+
+        Lo usa il recupero da un overflow di contesto (AC9 della terza revisione).
+        Prima il callback scriveva la finestra ridotta in ``context_window_tokens``,
+        e da li' valeva per ogni consolidazione successiva di ogni sessione fino
+        al riavvio.
+        """
+        token = _WINDOW_OVERRIDE.set(tokens)
+        try:
+            yield
+        finally:
+            _WINDOW_OVERRIDE.reset(token)
+
+    @property
     def _input_token_budget(self) -> int:
         """Available input token budget for consolidation LLM."""
-        return self.context_window_tokens - self.max_completion_tokens - self._SAFETY_BUFFER
+        return self._window - self.max_completion_tokens - self._SAFETY_BUFFER
 
     def _truncate_to_token_budget(self, text: str, *, reserved_tokens: int = 0) -> str:
         """Truncate text so it fits within the consolidation LLM's token budget.
@@ -548,7 +577,7 @@ class Consolidator:
         The budget reserves space for completion tokens and a safety buffer
         so the LLM request never exceeds the context window.
         """
-        if self.context_window_tokens <= 0:
+        if self._window <= 0:
             return
 
         lock = self.get_lock(session.key)
@@ -582,7 +611,7 @@ class Consolidator:
                     "Token consolidation idle {}: {}/{} via {}, msgs={}",
                     session.key,
                     estimated,
-                    self.context_window_tokens,
+                    self._window,
                     source,
                     unconsolidated_count,
                 )
@@ -613,7 +642,7 @@ class Consolidator:
                     round_num,
                     session.key,
                     estimated,
-                    self.context_window_tokens,
+                    self._window,
                     source,
                     len(chunk),
                 )

@@ -1475,22 +1475,30 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         async def _on_context_overflow(new_window: int) -> None:
             """Called by the runner when a context_length error occurs.
 
-            Shrinks the consolidator budget and triggers compaction so the
-            next retry has a chance of fitting within the model's limit.
+            Triggers compaction with the reduced window so the next retry has
+            a chance of fitting within the model's limit.
+
+            La finestra ridotta vale **per questo turno**: la porta lo ``spec``
+            del runner, e la compattazione qui la vede con
+            ``Consolidator.reduced_window``, legata al task del turno. Prima
+            finiva in ``self.context_window_tokens`` e nel Consolidator, cioe' in
+            ogni turno successivo di ogni sessione fino al riavvio (AC9 della
+            terza revisione): un solo overflow — anche il falso allarme di un
+            provider che non dice il limite — dimezzava per sempre la storia
+            rimandata al modello. Un modello con una finestra davvero piu' piccola
+            si configura (``contextWindowTokens``), non si indovina qui.
             """
-            old_window = self.context_window_tokens
-            self.context_window_tokens = new_window
-            self.consolidator.set_provider(self.provider, self.model, new_window)
             logger.info(
-                "Context window reduced {} -> {}, triggering compaction",
-                old_window, new_window,
+                "Context window reduced {} -> {} for this turn, triggering compaction",
+                self.context_window_tokens, new_window,
             )
             if session is not None:
                 try:
-                    await self.consolidator.maybe_consolidate_by_tokens(
-                        session,
-                        replay_max_messages=self._max_messages,
-                    )
+                    with self.consolidator.reduced_window(new_window):
+                        await self.consolidator.maybe_consolidate_by_tokens(
+                            session,
+                            replay_max_messages=self._max_messages,
+                        )
                 except Exception:
                     logger.debug("Post-overflow compaction failed", exc_info=True)
 
