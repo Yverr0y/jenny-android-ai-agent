@@ -51,6 +51,7 @@ from jenny.agent.tools.ssh_transport import (
     resolve_target,
 )
 from jenny.runtime.power import keep_awake
+from jenny.security.workspace_access import READONLY_TOOL_REFUSAL, current_turn_is_readonly
 from jenny.security.workspace_policy import (
     WorkspaceBoundaryError,
     _safe_expanduser,
@@ -547,6 +548,11 @@ class SshTransferTool(_SshToolMixin, Tool):
         direction = (direction or "").strip().lower()
         if direction not in ("up", "down"):
             return "Error: direction must be 'up' or 'down'."
+        # `down` scrive sul telefono, e la destinazione non passa dal cancello
+        # dei tool file: in sola lettura si rifiuta qui (TL3). `up` scrive sul
+        # remoto, come `ssh_exec`, e resta aperto.
+        if direction == "down" and current_turn_is_readonly():
+            return READONLY_TOOL_REFUSAL
         remote_path = (remote_path or "").strip()
         if not remote_path:
             return "Error: remote_path is empty."
