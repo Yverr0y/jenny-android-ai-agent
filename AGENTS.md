@@ -47,7 +47,7 @@ Messages flow through an async `MessageBus` (`jenny/bus/queue.py`) that decouple
 - **Config** (`jenny/config/schema.py`, `loader.py`, `store.py`): Pydantic-*style* configuration (`jenny/pydantic_compat/`, stdlib-only — see [`FORK_BOUNDARY.md`](./FORK_BOUNDARY.md)) loaded from `workspace/config.json` inside the project root. Supports camelCase aliases for JSON compatibility. **Every write goes through `store.mutate()`** — see the rule under [Config & security](#config--security); calling `save_config()` directly reintroduces a silent data-loss bug that no test will catch for you.
 - **WebUI** (`jenny/templates/ui/`): Mobile-first HTML/JS served by the gateway, in two shells that share `assets/shared/`: the home (`index.html` + `home-*.js`, the default) and the workshop (`workshop.html` + `mobile-*.js`), reached from the home's Settings page. Both talk to the gateway over the same WebSocket used for chat, plus HTTP routes under `/api/`.
 - **WebUI HTTP API** (`jenny/webui/`): The `/api/` route handlers backing the SPA (apps, settings, media, skills, transcript, token usage, workspaces, file preview, etc.), plus gateway service/token wiring.
-- **Jenny Apps** (`jenny/apps/`): Runtime for user-authored mini-apps — `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`. See [`.agent/jenny-apps.md`](.agent/jenny-apps.md).
+- **Jenny Apps** (`jenny/apps/`): Runtime for user-authored mini-apps — `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`. See [Write a mini-app](docs/contribute/write-a-mini-app.md).
 - **Command Router** (`jenny/command/`): Slash command routing and built-in command handlers.
 - **Heartbeat** (`jenny/templates/HEARTBEAT.md`): Periodic task list checked via `cron` jobs.
 - **Skills** (`jenny/skills/`): Built-in skill definitions loaded into agent context.
@@ -72,17 +72,17 @@ Large classes are split into focused mixins/leaf modules composed via MRO (behav
 
 ## Project-Specific Notes
 
-- Architecture constraints: [`.agent/design.md`](.agent/design.md)
-- Security boundaries: [`.agent/security.md`](.agent/security.md)
-- Common gotchas: [`.agent/gotchas.md`](.agent/gotchas.md)
-- Jenny Apps design: [`.agent/jenny-apps.md`](.agent/jenny-apps.md)
-- Fork boundary: [`FORK_BOUNDARY.md`](./FORK_BOUNDARY.md)
-- **Design boards are not in the repo.** Plans under `.agent/` (and some code comments) cite
-  «tavole» — design boards such as `Quaderno.dc.html` or the artifact *Jenny UI: Utente e
-  Operatore* — that lived outside the repository. They are not needed to read a plan: the
-  plans quote what they took from a board, and where a plan and the code disagree, the
-  code and its comments win. Do not go looking for the files, and do not cite a board as the
-  only justification for a new decision.
+Working notes (plans, checklists, reviews) live in a local `.agent/` folder that is not
+versioned: a clone does not have it, so never cite it from code, tests or `docs/`, and put the
+reason in the comment itself. The public references are
+[Security model](docs/internals/security-model.md) for the security boundaries,
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for the design rules and
+[`FORK_BOUNDARY.md`](./FORK_BOUNDARY.md) for what this fork keeps and drops.
+
+- **Design boards are not in the repo.** Some code comments cite «tavole» — design boards
+  such as `Quaderno.dc.html` or the artifact *Jenny UI: Utente e Operatore* — that lived
+  outside the repository. Where a comment and the code disagree, the code wins. Do not go
+  looking for the files, and do not cite a board as the only justification for a new decision.
 - **`docs/` has a second consumer outside this repo.** The website
   (`flagdizero/jenny-site`) generates its `/docs/**` routes from these files at build
   time, deriving each page's title from the `# H1` and its sidebar position from the

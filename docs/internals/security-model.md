@@ -56,9 +56,9 @@ Outbound network tools (`web_fetch`, `download_file`, and the `http_get`/`http_p
 
 **This filter does not cover calls to your configured LLM provider.** Provider requests (the actual chat completions) go out through the HTTP client used by the provider integration, not through the tool-layer SSRF check. If you point a provider's `apiBase` at a LAN or VPN address, that call is not subject to the SSRF whitelist at all — reachability and the HTTPS-outside-localhost constraint (below) are what actually gate it. See [Local models](../reference/local-models.md).
 
-Jenny Apps get a separate, slightly looser blocklist for their own outbound `http` actions (private/RFC1918 ranges are allowed there, since app servers are expected to be LAN devices the user pointed the app at — loopback, link-local, and CGNAT stay blocked so an app manifest can't use the proxy as a back door into the gateway's own API).
+Jenny Apps get a separate, looser policy for their own outbound `http` actions: RFC1918, IPv6 ULA *and* the CGNAT range `100.64.0.0/10` are allowed there, since an app server is a LAN or Tailscale device the user named in the app's manifest. Loopback and link-local stay blocked, so an app manifest can't use the proxy as a back door into the gateway's own API, and redirects are never followed.
 
-**SSH targets get a third policy, looser still**: RFC1918, IPv6 ULA *and* the CGNAT range `100.64.0.0/10` are allowed, because reaching a home server over Tailscale from a phone on mobile data is the case the feature exists for, and the alternative — listing that range in `security.ssrfWhitelist` — is global, so it would have opened CGNAT to `web_fetch` and to Jenny Apps as well, that is, to the targets the model chooses. What justifies the extra room is not that SSH is safer but that its targets are named differently: a person types the host into Settings and accepts its fingerprint by hand before anything is sent. Loopback and link-local/metadata stay blocked in every policy — those resolve to the phone itself, so the agent cannot SSH into its own device or use an SSH session as a bridge back to the gateway's own API. The check runs twice — once when the host is saved in Settings, and again at connection time, so a hostname that only later starts resolving to a blocked address (DNS rebinding) is still caught.
+**SSH targets get a third policy, with the same room**: RFC1918, IPv6 ULA and CGNAT are allowed, because reaching a home server over Tailscale from a phone on mobile data is the case the feature exists for, and the alternative — listing that range in `security.ssrfWhitelist` — is global, so it would have opened CGNAT to `web_fetch`, that is, to the targets the model chooses. The criterion that separates the policies is **who names the address**: a person types an SSH host into Settings and accepts its fingerprint by hand before anything is sent, and declares an app server in a manifest they can read; in `web_fetch` the model picks it. Loopback and link-local/metadata stay blocked in every policy — those resolve to the phone itself, so the agent cannot SSH into its own device or use an SSH session as a bridge back to the gateway's own API. The check runs twice — once when the host is saved in Settings, and again at connection time, so a hostname that only later starts resolving to a blocked address (DNS rebinding) is still caught.
 
 ### Level 4 — `python_exec` guardrails (explicitly not a sandbox)
 
@@ -82,7 +82,7 @@ Defaults: `tools.pythonExec.enable` = `true`, `timeout` = 60 seconds (`0` = no l
 
 SSH is the only capability that acts outside the phone, so the four-level stack above doesn't describe it — nothing Android enforces protects a server on the other side of the network. What contains it instead is four independent gates, none of which the model can open:
 
-**1. Targeting is by alias.** Every SSH tool takes a `host` argument that must be the alias of a machine a person registered in Settings → SSH. There is no parameter for an address, a port, a username or a credential anywhere in the four tool schemas, so no prompt injection can redirect the agent at a machine the user never declared. Aliases are resolved against live config on every call, and the address behind one is re-validated against the network policy each time.
+**1. Targeting is by alias.** Every SSH tool takes a `host` argument that must be the alias of a machine a person registered in the workshop's **Hands → SSH**. There is no parameter for an address, a port, a username or a credential anywhere in the four tool schemas, so no prompt injection can redirect the agent at a machine the user never declared. Aliases are resolved against live config on every call, and the address behind one is re-validated against the network policy each time.
 
 **2. Host keys are pinned, with no trust-on-first-use.** A connection to a host whose key has not been accepted by a human is refused outright, and the error tells the model to ask the user rather than retry. The enforcement is the `known_hosts` file next to the private key — the fingerprint stored in `config.json` is for display only. A registered host presenting a *different* key raises rather than overwriting: it is a possible man-in-the-middle, and the only acceptable response is a person looking at both fingerprints and deciding, which is a second explicit confirmation in the UI.
 
@@ -90,7 +90,7 @@ This gate is unconditional in both authentication modes, and password authentica
 
 **3. The credential is unreachable from the agent — completely for a key, partially for a password.** The key is generated on-device (ed25519, one pair per alias), the private half is never returned by any API — the settings payload carries a boolean, not the key — and it lives outside the workspace, so — **while `security.restrictToWorkspace` is `true`, the default** — no file tool and no `python_exec` file helper can read it. Turning that setting off removes this gate and nothing replaces it (see Level 2). Nothing in the tool layer needs the key material; the backend opens the file by a path derived from the alias, never from a configurable field.
 
-A password gets the same treatment at every layer the tools touch — never in a tool argument, never in a tool result, never in a settings payload (a `has_password` boolean stands in for it, and there is no masked-hint variant of the kind `_mask_api_key` produces for provider keys, because four real characters of a password are four characters given away), kept out of `repr()` so it can't fall into a log line, and named `password` on the wire so `redact_query_secrets` masks it in the request-path log. What it does **not** get is the fourth layer: it is stored in clear text in `config.json`, which sits *inside* the workspace and which the agent's file tools can already read — the same exposure as `telegram.botToken` and the provider API keys. That is the whole reason the SSH private key was put outside the workspace in the first place, so the honest statement is that password authentication trades this specific protection for convenience. `auth` defaults to `"key"`, and Settings refuses to save a password host with an empty password rather than leaving a half-configured host that only fails mid-turn.
+A password gets the same treatment at every layer the tools touch — never in a tool argument, never in a tool result, never in a settings payload (a `has_password` boolean stands in for it, and there is no masked-hint variant of the kind `_mask_api_key` produces for provider keys, because four real characters of a password are four characters given away), kept out of `repr()` so it can't fall into a log line, and sent from Settings inside the `ssh.host.save` command over the WebSocket, never in a URL that a request log could keep. What it does **not** get is the fourth layer: it is stored in clear text in `config.json`, which sits *inside* the workspace and which the agent's file tools can already read — the same exposure as `telegram.botToken` and the provider API keys. That is the whole reason the SSH private key was put outside the workspace in the first place, so the honest statement is that password authentication trades this specific protection for convenience. `auth` defaults to `"key"`, and Settings refuses to save a password host with an empty password rather than leaving a half-configured host that only fails mid-turn.
 
 **4. The capability is compartmentalized.** The four SSH tools live in a tool scope of their own (`remote`) that no agent loads by default. The main agent — the one you talk to — has no SSH at all: it delegates to a **`sysadmin` subagent**, the only type that requests that scope, and that type has neither the web tools nor `download_file` nor `python_exec`. This is the same rule the researcher/coder split follows, applied to a shorter and worse chain: whoever reads untrusted pages must not be whoever holds a shell on a production machine. Keeping the SSH tools out of the `subagent` scope is what stops the catch-all `operator` type — defined as "everything in that scope" — from inheriting a remote shell by accident.
 
@@ -137,13 +137,77 @@ Android hands this secret to the WebView as a **URL fragment** (`#bs=<secret>`),
 
 Operations that carry content — saving a workspace file, closing an audit with a note — run as
 **commands over the WebSocket** (`rpc` frames, see the [WebSocket protocol](../reference/websocket.md#commands-rpc)),
-because the HTTP surface cannot carry a request body at all. Their authorization is the
+because the HTTP surface cannot carry a request body at all. So do the workspace writes
+(`workspace.delete`, `workspace.rename`, `workspace.copy`), which do not belong on a surface of
+reads, and every setting that carries a secret (`settings.provider.models`,
+`settings.provider.update`, `telegram.save`, `ssh.host.save`), which in a URL would end up
+wherever a request line is logged. Their authorization is the
 handshake's verdict, recorded per connection: with a secret configured, only a connection that
 presented it may run a command, even when `websocket_requires_token` is off. Without that rule
 a file write would sit behind a weaker gate than an HTTP call, which fails closed when no
 secret is set.
 
 The gateway listens on `127.0.0.1:18790` by default (WebSocket and HTTP share the same host/port). If you were to reconfigure `websocket.host` to `0.0.0.0` (all interfaces) without setting `tokenIssueSecret`, the config itself refuses to validate — this is rejected before the gateway can even start, specifically to prevent an unauthenticated gateway from being exposed to the rest of your network.
+
+## Smaller boundaries, and where they stop
+
+These are narrower than the four levels, but each one is load-bearing, and each has a limit
+that is known and accepted. A change that weakens one of them is a security decision, not a
+refactor.
+
+- **Network paths outside the SSRF filter.** Besides the chat completions, the
+  `settings.provider.models` command calls `<apiBase>/models` without `validate_url_target`,
+  on purpose: `apiBase` is typed by the user and may well be a local or LAN model server. It
+  follows no redirects and reads only the list of model names. Any other outbound request from
+  a tool must go through `validate_url_target` (`jenny/security/network.py`); never add a bare
+  `httpx.get` to a tool.
+- **The agent browser's WebView.** Python never sees what a visited page loads, so the check
+  lives in Kotlin: `shouldInterceptRequest` for HTTP, a document-start script
+  (`res/raw/browser_network_guard.js`) that makes `WebSocket`, `WebSocketStream` and
+  `WebTransport` ask the native verdict and disables `RTCPeerConnection`, and a service-worker
+  client on the session's own profile. The verdict cache holds at most 256 hosts; a name that
+  is not cached waits at most 2 seconds for DNS, and a timeout counts as blocked. Not covered:
+  `WebSocket` inside a worker, DNS rebinding between the check and the connection, and WebViews
+  too old for document-start scripts or multiple profiles. It stops an ordinary page, not one
+  written against it.
+- **Jenny Apps.** An app runs in an iframe with `sandbox="allow-scripts"` only, and every
+  `/apps/<slug>/**` response carries `Content-Security-Policy: sandbox allow-scripts`, so an app
+  page has an opaque origin in any frame. The frame gets a per-app token (an HMAC of the gateway
+  secret over the slug) that opens that app's own routes and nothing else; every other route
+  and the WebSocket want the full secret. A navigation into the WebUI from another origin is
+  refused. The app-server network policy allows LAN and Tailscale addresses (the user names
+  them in the manifest), never loopback. An external view is served through a proxy bound to
+  `127.0.0.1` that wants a 128-bit capability on its first request. A manifest that declares
+  `server.auth` is rejected.
+- **The native bridge.** `JennyNativeInfo`, visible to every frame, carries only harmless reads.
+  Everything that writes, opens something or returns user data goes through `JennyNativePort`,
+  which Chromium injects only into frames of the gateway's origin. The extra check that a
+  message comes from the main frame is defence in depth, not a second wall: a same-origin frame
+  can reach the parent's port.
+- **Opening, sharing and saving files.** The `FileProvider` exposes `workspace/` and the camera
+  temporary folder only. `openFile`, `shareFile` and `saveToDownloads` resolve the path on the
+  canonical workspace (symlinks included) and refuse `config.json` and its companions (`.bak`,
+  the store's temporary files), so neither the provider keys nor the SSH private key can leave
+  that way.
+- **Notifications.** The direct-reply `PendingIntent` is mutable, as Android's direct reply
+  requires, so an app granted notification access can send it with text of its own, and that
+  text reaches Jenny as yours. Opening the chat from an alert (which also clears the unread
+  alerts) needs a 128-bit token only Jenny's own intents carry; any other app starting the
+  activity gets an ordinary launch.
+- **Telegram pairing.** The pairing code is accepted only from a private chat, and once paired
+  a message must come from that same person (`from.id`). Outside an open pairing window the bot
+  answers no one but the owner, so it does not reveal that it exists; during the window,
+  attempts are capped per chat and the tracked chats are capped too. A group paired by an older
+  version stops being answered and has to be paired again from a private chat.
+- **Memory across chats.** The Dream pass of a project writes only to `USER.md`, and no prompt
+  of a project shows the personal history. The other direction is open by design: your
+  identity (`SOUL.md`, `USER.md`) travels into every project, and `recall_history`, called from
+  the personal chat, can read the journals of every project, including entries that are never
+  shown in any prompt. Personal is not secret from a project, and a project is not secret from
+  the personal chat. See [Memory](../using/memory.md).
+- **The read-only turn** is an instruction backed by tool refusals, not a containment control:
+  code in `python_exec` that starts a raw thread escapes it, together with the workspace path
+  policy. Do not describe it, or `python_exec`, as a sandbox.
 
 ## Related pages
 

@@ -15,7 +15,7 @@ Android is the only runtime target for the finished product, but nearly all of t
 | `android/` | The native Android project: Kotlin `MainActivity`/`GatewayService`, the Gradle build, the Chaquopy configuration that embeds the `jenny` package and its pinned dependencies. |
 | `tests/` | The pytest suite. Mirrors the `jenny/` package structure directory-for-directory (`tests/agent/` for `jenny/agent/`, `tests/webui/` for `jenny/webui/`, and so on) — a new module usually gets a matching test directory in the same relative location. |
 | `docs/` | This documentation. |
-| `.agent/` | Contributor-facing design notes — 18 files. The four `AGENTS.md` points at are `design.md` (architecture constraints), `security.md` (security boundaries), `gotchas.md` (common gotchas) and `jenny-apps.md` (Jenny Apps design); the rest are per-feature plans and handover notes from work already landed. |
+| `.agent/` | A local, untracked working-notes folder some maintainers keep. It is not part of the repository, so a fresh clone does not have it — nothing you need to read lives there. |
 | `scripts/` | Standalone helper scripts (`check_dco.sh`, `vendorize_ui.py`, `capture_screenshots.sh`), kept outside CI YAML so they're runnable and testable on a developer machine too. |
 | `AGENTS.md` | The canonical architecture reference for AI coding agents (and a good orientation doc for humans too) — this page summarizes it, but `AGENTS.md` is the source of truth if the two ever disagree. |
 
@@ -24,20 +24,22 @@ Android is the only runtime target for the finished product, but nearly all of t
 ```bash
 git clone https://github.com/flagdizero/jenny-android-ai-agent.git jenny
 cd jenny
-pip install -e .
-pip install ruff pytest pytest-asyncio cryptography asyncssh
+pip install -e ".[dev]"
 ```
 
-That is what CI's `test` job installs. The last two are **dev-only and not optional if you intend to run the suite**:
+That is what CI installs. The `dev` extra in `pyproject.toml` pins, to exact versions, pytest, pytest-asyncio and ruff plus three test-only packages. Two of them are **not optional if you intend to run the suite**:
 
 - `cryptography` — the encrypted-backup tests. On Android backup crypto uses `javax.crypto` instead, so this must never end up in `requirements-android.txt` / `requirements-android.lock.txt`.
 - `asyncssh` — the desktop SSH backend raises an in-process server for the suite. Without it **eight SSH test modules fail at collection**, which looks like a broken checkout rather than a missing package. On Android the client is jsch through a native bridge, so the same rule applies: never in the Android requirements.
 
-One more thing the suite can want, optional:
+The third is **Pillow**, for `tests/webui/test_mascot_layer_sources.py`, which skips whole without it. `android/image_source/gen_icons.py` and `gen_pose_webp.py` use it too, to regenerate the shipped icon and mascot assets; they are not part of a normal build, which is why Pillow is in no Android requirement file.
 
-- **node** — about twenty WebUI suites execute the real JS. They *skip* without it, so the suite still goes green while ~200 behaviour tests quietly do not run. None of them needs jsdom: the ones that touch the DOM bring a minimal fake of their own.
+Two more things the suite can want, outside Python:
 
-`android/image_source/gen_icons.py` and `gen_pose_webp.py` additionally need **Pillow**. They regenerate the shipped icon and mascot assets and are not part of a normal build, which is why Pillow is in none of the requirement files.
+- **node** — about twenty WebUI suites execute the real JS. They *skip* without it, so the suite still goes green while ~200 behaviour tests quietly do not run.
+- **jsdom** — the suites that mount the whole home in a DOM (`tests/support/home_dom.py`) and the graph contract need it, and skip without it. It is not a dependency of the repo: `npm install --no-save jsdom`, then run the suite with `NODE_PATH=$PWD/node_modules`, as CI does. `node_modules/` is not in `.gitignore`, so delete it afterwards.
+
+In CI, `tests/webui/test_node_is_available.py` fails instead of letting node, jsdom or Pillow go missing in silence.
 
 ## Where subsystems live
 
@@ -54,7 +56,7 @@ The high-level data flow: an async `MessageBus` (`jenny/bus/queue.py`) decouples
 | Config | `jenny/config/schema.py`, `loader.py` | Pydantic-*style* config (`jenny/pydantic_compat/` — a stdlib-only reimplementation, see `FORK_BOUNDARY.md`) loaded from `workspace/config.json`. Supports camelCase aliases for JSON compatibility. |
 | WebUI (frontend) | `jenny/templates/ui/` | The mobile-first SPA. Talks to the gateway over the same WebSocket used for chat, plus HTTP routes under `/api/`. |
 | WebUI (backend) | `jenny/webui/` | The `/api/` route handlers backing the SPA — apps, settings, media, skills, transcript, token usage, workspaces, file preview — plus gateway service/token wiring. |
-| Jenny Apps | `jenny/apps/` | Runtime for user-authored mini-apps: `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`. See [Write a mini-app](write-a-mini-app.md) and `.agent/jenny-apps.md`. |
+| Jenny Apps | `jenny/apps/` | Runtime for user-authored mini-apps: `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`. See [Write a mini-app](write-a-mini-app.md). |
 | Command router | `jenny/command/` | Slash command routing and built-in command handlers. |
 | Skills | `jenny/skills/` | Built-in skill definitions loaded into agent context. |
 | Security | `jenny/security/` | Workspace policy/access control plus SSRF network protections. |
@@ -76,7 +78,7 @@ Several large classes are decomposed into focused mixins/leaf modules composed v
 
 ## Config and security boundaries
 
-`jenny/config/schema.py::SecurityConfig` (`config.security`) is the canonical home for `restrict_to_workspace` / `ssrf_whitelist` (`ToolsConfig` mirrors them for the tool layer; a validator migrates legacy locations). `jenny/config/runtime_env.py` is the single layer for operational `JENNY_*` environment knobs — see [Environment variables](../reference/environment-variables.md). See [Security model](../internals/security-model.md) for what these boundaries actually enforce (and don't).
+`jenny/config/schema.py::SecurityConfig` (`config.security`) is the canonical home for `restrict_to_workspace` / `ssrf_whitelist`. Only `restrict_to_workspace` is mirrored onto `ToolsConfig` for the tool layer; `ssrf_whitelist` lives on `SecurityConfig` alone, so writing `tools.ssrf_whitelist` is silently dropped. A validator migrates the legacy `tools.*` locations into `security` only for a config that has no `security` block at all — and every config Jenny has saved has one. `jenny/config/runtime_env.py` is the single layer for operational `JENNY_*` environment knobs — see [Environment variables](../reference/environment-variables.md). See [Security model](../internals/security-model.md) for what these boundaries actually enforce (and don't).
 
 ## Code style and conventions
 
