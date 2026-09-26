@@ -199,7 +199,12 @@ def _resolve_default_timezone(config: Config) -> None:
         return
     from jenny.runtime.context import get_runtime_context
 
-    config.agents.defaults.timezone = get_runtime_context().device_timezone or "UTC"
+    resolved = get_runtime_context().device_timezone or "UTC"
+    config.agents.defaults.timezone = resolved
+    # Il valore dato alla sentinella, per :func:`_unresolve_default_timezone`:
+    # senza fuso rilevato "" diventa "UTC", e il confronto col solo fuso del
+    # device non lo riconosceva — la prima scrittura congelava "UTC" nel file.
+    config._auto_timezone = resolved
 
 
 def _apply_ssrf_whitelist(config: Config) -> None:
@@ -234,7 +239,7 @@ def save_config(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     data = config.model_dump(mode="json", by_alias=True)
-    _unresolve_default_timezone(data)
+    _unresolve_default_timezone(data, config)
     if preserve_unknown_from:
         data = _merge_unknown(preserve_unknown_from, data)
 
@@ -460,22 +465,25 @@ def _shadowed_key_paths(
     return shadowed
 
 
-def _unresolve_default_timezone(data: dict[str, Any]) -> None:
+def _unresolve_default_timezone(data: dict[str, Any], config: Config) -> None:
     """Riporta a "auto" la timezone risolta prima della persistenza.
 
     ``load_config`` risolve la sentinella vuota nella timezone del device;
     senza questo passo ogni salvataggio la congelerebbe come valore esplicito
     (e smetterebbe di seguire i cambi di timezone del dispositivo). Se il
-    valore coincide con la timezone del device si riscrive ``""`` (= auto);
-    una scelta esplicita diversa viene persistita normalmente.
+    valore coincide con la timezone del device, o con quella che il
+    caricamento ha dato a ``""`` (``UTC`` quando il fuso non si rileva), si
+    riscrive ``""`` (= auto); una scelta esplicita diversa viene persistita
+    normalmente.
     """
     from jenny.runtime.context import get_runtime_context
 
-    device_tz = get_runtime_context().device_timezone
-    if not device_tz:
-        return
+    auto_values = {
+        get_runtime_context().device_timezone,
+        getattr(config, "_auto_timezone", None),
+    } - {None, ""}
     defaults = data.get("agents", {}).get("defaults")
-    if isinstance(defaults, dict) and defaults.get("timezone") == device_tz:
+    if isinstance(defaults, dict) and defaults.get("timezone") in auto_values:
         defaults["timezone"] = ""
 
 
