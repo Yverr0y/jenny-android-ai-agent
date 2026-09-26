@@ -257,8 +257,11 @@ def test_the_service_s_refusals_become_status_codes(workspace, service):
     service.set_paused(one_shot, True)
     time.sleep(0.4)
 
-    assert _act(handler, "dream", "pause")[0] == 403
-    assert _act(handler, "dream", "remove")[0] == 403
+    # 409 e non 403: il client legge 401/403 come token scaduto e ricarica la
+    # SPA (``api-client.js``), cioe' un rifiuto diventava un logout (RC10).
+    assert _dispatch(handler, "/api/webui/cron/dream/pause").status_code == 409
+    assert _dispatch(handler, "/api/webui/cron/dream/remove").status_code == 409
+    assert b"protected" in _dispatch(handler, "/api/webui/cron/dream/remove").body
     assert _act(handler, "nessuno1", "pause")[0] == 404
     assert _act(handler, one_shot, "resume")[0] == 409
 

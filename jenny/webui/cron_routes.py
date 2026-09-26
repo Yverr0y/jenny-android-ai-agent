@@ -21,7 +21,9 @@ pannello era in sola lettura, per due ragioni, e una sola regge ancora:
 
 Il perche' dei tre: fermare un promemoria che dava fastidio voleva dire
 convincere Jenny a cancellarlo. Solo i job dell'utente; un job di sistema
-risponde 403, come ``remove_job`` rifiuta gia'.
+risponde 409 ``protected``, come ``remove_job`` rifiuta gia'. Non 403: il client
+tratta 401 e 403 come token scaduto e ricarica la SPA, e un rifiuto del servizio
+non e' un problema di credenziali.
 
 Il servizio arriva come **getter** e non come oggetto, per la stessa ragione di
 ``SubagentRoutes``: ``GatewayContainer.cron`` nasce ``None`` e durante
@@ -56,7 +58,8 @@ _STATUS = {
     "removed": 200,
     "unchanged": 200,
     "not_found": 404,
-    "protected": 403,
+    # Conflitto con lo stato del job, non credenziali: v. il cappello.
+    "protected": 409,
     "expired": 409,
 }
 
