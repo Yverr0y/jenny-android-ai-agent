@@ -181,5 +181,5 @@ async def test_the_spawn_tool_turns_the_refusal_into_an_actionable_sentence(tmp_
     text = await tool.execute(task="check disk space", agent_type="sysadmin")
 
     assert "no SSH host is registered" in text
-    assert "Settings > SSH" in text
+    assert "Settings → Workshop → Hands → SSH" in text
     assert "do not retry with another agent type" in text

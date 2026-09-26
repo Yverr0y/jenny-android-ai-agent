@@ -3,8 +3,8 @@ name: ssh
 description: Running commands on the user's own remote machines — alias-only targeting, short commands vs detached jobs, delta polling, SFTP transfers, and how to report what you did and where.
 locked: true
 user_summary:
-  it: "Comandi sulle macchine remote che hai registrato in Impostazioni > SSH: Jenny può controllare un servizio, leggere un log, aggiornare un server o scambiare un file. Raggiunge solo gli host che hai dichiarato tu, e i comandi lunghi restano in corso anche a telefono spento."
-  en: "Commands on the remote machines you registered in Settings > SSH: Jenny can check a service, read a log, update a server or move a file. She can only reach hosts you declared yourself, and long commands keep running even with the phone asleep."
+  it: "Comandi sulle macchine remote che hai registrato in Impostazioni → Officina → Mani → SSH: Jenny può controllare un servizio, leggere un log, aggiornare un server o scambiare un file. Raggiunge solo gli host che hai dichiarato tu, e i comandi lunghi restano in corso anche a telefono spento."
+  en: "Commands on the remote machines you registered in Settings → Workshop → Hands → SSH: Jenny can check a service, read a log, update a server or move a file. She can only reach hosts you declared yourself, and long commands keep running even with the phone asleep."
 ---
 
 # Remote machines over SSH

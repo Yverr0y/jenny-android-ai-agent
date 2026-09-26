@@ -92,11 +92,11 @@ def _describe(exc: BaseException) -> str:
     if isinstance(exc, SshHostKeyError):
         return (
             f"Error: {exc} The host key has to be checked and accepted by a person in "
-            "Settings > SSH — it cannot be bypassed from here, and you should not try. "
+            "Settings → Workshop → Hands → SSH — it cannot be bypassed from here, and you should not try. "
             "Tell the user what to open."
         )
     if isinstance(exc, SshHostUnknownError):
-        return f"Error: {exc}. Use one of those aliases, or ask the user to add the host in Settings > SSH."
+        return f"Error: {exc}. Use one of those aliases, or ask the user to add the host in Settings → Workshop → Hands → SSH."
     if isinstance(exc, SshKeyMissingError):
         return f"Error: {exc}."
     if isinstance(exc, SshHostBlockedError):
@@ -108,7 +108,7 @@ def _describe(exc: BaseException) -> str:
         return (
             f"Error: the server refused the key ({exc}). Either the username in Settings is "
             "wrong, or Jenny's public key is not in that user's ~/.ssh/authorized_keys. "
-            "Settings > SSH shows the public key to install."
+            "Settings → Workshop → Hands → SSH shows the public key to install."
         )
     if isinstance(exc, SshTimeoutError):
         return (
@@ -190,9 +190,9 @@ class _SshToolMixin:
         """
         ssh = getattr(getattr(ctx, "config", None), "ssh", None)
         if ssh is None or not ssh.enable:
-            return "SSH access is off (Settings > SSH)"
+            return "SSH access is off (Settings → Workshop → Hands → SSH)"
         if not ssh.hosts:
-            return "no SSH host is registered (Settings > SSH > Add host)"
+            return "no SSH host is registered (Settings → Workshop → Hands → SSH → Add host)"
         return None
 
     @classmethod
@@ -225,7 +225,7 @@ class _SshToolMixin:
         # server si aspetta che smetta, non che finisca il turno.
         if ssh_cfg is None or not ssh_cfg.enable:
             raise SshDisabledError(
-                "SSH is switched off in Settings > SSH. Turning it back on is the "
+                "SSH is switched off in Settings → Workshop → Hands → SSH. Turning it back on is the "
                 "user's call, and it is not something you can do from here."
             )
         host_cfg, target = resolve_target(alias, config=config, validate=self._validate)
@@ -266,11 +266,11 @@ class SshHostsTool(_SshToolMixin, Tool):
             ssh_cfg = _ssh_config(load_config())
             if ssh_cfg is not None and not ssh_cfg.enable:
                 return (
-                    "SSH is switched off in Settings > SSH. Turning it back on is the "
+                    "SSH is switched off in Settings → Workshop → Hands → SSH. Turning it back on is the "
                     "user's call, and it also needs a gateway restart to take effect."
                 )
             return (
-                "No SSH hosts are configured. The user has to add one in Settings > SSH "
+                "No SSH hosts are configured. The user has to add one in Settings → Workshop → Hands → SSH "
                 "(host, username, then accept the host key fingerprint)."
             )
         lines = [f"{len(hosts)} SSH host(s) registered:"]

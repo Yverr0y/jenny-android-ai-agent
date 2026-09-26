@@ -311,7 +311,7 @@ def resolve_target(
     if not is_host_pinned(host_cfg.host, host_cfg.port):
         raise SshHostKeyError(
             f"the host key for {alias!r} has not been accepted yet — open "
-            "Settings > SSH, check the fingerprint and accept it. This is not "
+            "Settings → Workshop → Hands → SSH, check the fingerprint and accept it. This is not "
             "something you can work around from here."
         )
 
@@ -326,13 +326,13 @@ def resolve_target(
         password = host_cfg.password or None
         if password is None:
             raise SshPasswordMissingError(
-                f"no password is set for {alias!r} — open Settings > SSH and set it "
+                f"no password is set for {alias!r} — open Settings → Workshop → Hands → SSH and set it "
                 "for that host. It cannot be set from here, and nobody will show it "
                 "to you"
             )
     elif not key_path.exists():
         raise SshKeyMissingError(
-            f"no private key for {alias!r} — generate one in Settings > SSH and "
+            f"no private key for {alias!r} — generate one in Settings → Workshop → Hands → SSH and "
             "install the public key on the server"
         )
 
