@@ -196,17 +196,32 @@ def bearer_token(headers: Any) -> str | None:
     return None
 
 
+def secret_matches(supplied: str, secret: str) -> bool:
+    """Confronto a tempo costante di un segreto, che non solleva mai.
+
+    ``hmac.compare_digest`` su due ``str`` accetta solo ASCII e con un ``é``
+    solleva ``TypeError`` prima dell'autenticazione: un 500 al posto di un
+    401, e un traceback con il segreto tra le variabili locali. Sui ``bytes``
+    risponde ``False`` e basta. ``surrogatepass`` copre i surrogati con cui
+    ``websockets`` decodifica i byte non ASCII di un header o di un path.
+    """
+    return hmac.compare_digest(
+        supplied.encode("utf-8", "surrogatepass"),
+        secret.encode("utf-8", "surrogatepass"),
+    )
+
+
 def issue_route_secret_matches(headers: Any, configured_secret: str) -> bool:
     if not configured_secret:
         return True
     authorization = headers.get("Authorization") or headers.get("authorization")
     if authorization and authorization.lower().startswith("bearer "):
         supplied = authorization[7:].strip()
-        return hmac.compare_digest(supplied, configured_secret)
+        return secret_matches(supplied, configured_secret)
     header_token = headers.get("X-Jenny-Auth") or headers.get("x-jenny-auth")
     if not header_token:
         return False
-    return hmac.compare_digest(header_token.strip(), configured_secret)
+    return secret_matches(header_token.strip(), configured_secret)
 
 
 def check_api_secret(headers: Any, path_with_query: str, secret: str) -> bool:
@@ -216,7 +231,7 @@ def check_api_secret(headers: Any, path_with_query: str, secret: str) -> bool:
     supplied = bearer_token(headers) or query_first(parse_query(path_with_query), "token")
     if not supplied:
         return False
-    return hmac.compare_digest(supplied, secret)
+    return secret_matches(supplied, secret)
 
 
 def check_app_secret(headers: Any, path_with_query: str, secret: str, slug: str) -> bool:
@@ -235,7 +250,6 @@ def check_app_secret(headers: Any, path_with_query: str, secret: str, slug: str)
         return False
     from jenny.apps.token import app_token
 
-    given = supplied.encode("utf-8")
-    if hmac.compare_digest(given, secret.encode("utf-8")):
+    if secret_matches(supplied, secret):
         return True
-    return hmac.compare_digest(given, app_token(secret, slug).encode("utf-8"))
+    return secret_matches(supplied, app_token(secret, slug))

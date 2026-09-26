@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
 import uuid
 from pathlib import Path
@@ -36,6 +35,9 @@ from jenny.channels.http_utils import (
 )
 from jenny.channels.http_utils import (
     query_first as _query_first,
+)
+from jenny.channels.http_utils import (
+    secret_matches as _secret_matches,
 )
 from jenny.channels.subagent_activity_wire import (
     UNWATCH_REASON_CLIENT,
@@ -332,7 +334,7 @@ class WebSocketChannel(OutboundSenderMixin):
         """
         supplied = _query_first(query, "token")
         secret = self.config.token_issue_secret.strip()
-        token_matches = bool(secret and supplied and hmac.compare_digest(supplied, secret))
+        token_matches = bool(secret and supplied and _secret_matches(supplied, secret))
 
         if self.config.websocket_requires_token:
             if not token_matches:
