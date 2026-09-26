@@ -148,7 +148,7 @@ release. **None of them carries anything about you.** The update check is a plai
 `latest.json` published with the release: no identifier, no version, no headers of ours, no
 query string — a public file fetched and compared on the device. It is the only one that goes
 to a server this project controls, and the only one you did not switch on: it runs every 24h,
-and `updates.enabled: false` stops it. Jenny declares 15 permissions and asks for **no**
+and `updates.enabled: false` stops it. Jenny declares 16 permissions and asks for **no**
 camera, microphone, contacts, SMS, call log, background location or storage.
 → [Every connection and permission](https://jenny.flagdizero.com/docs/reference/android-permissions/)
 
@@ -218,7 +218,7 @@ would want it — GitHub's search ranks on them, and this project has no marketi
 A native Android app with an embedded CPython 3.11 (Chaquopy 17), `minSdk 26` /
 `targetSdk 34`. The agent runs as a persistent foreground service and serves a mobile-first
 SPA over loopback. Messages flow through an async bus that decouples the channel from the
-core. Over 3,500 tests; CI runs `ruff`, `pytest` on 3.11 and 3.12, and `pyright` — blocking on the
+core. Over 11,000 tests; CI runs `ruff`, `pytest` on 3.11 and 3.12, and `pyright` — blocking on the
 subsystems that are already type-clean, advisory on the rest, which is the honest state of a
 codebase being tightened rather than one pretending to be finished.
 
