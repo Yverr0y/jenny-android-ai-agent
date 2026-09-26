@@ -21,6 +21,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from support.gateway_http import make_request
+from support.kotlin_source import read_source
 from websockets.http11 import Request as WsRequest
 
 from jenny.channels.http_utils import check_api_secret, http_error, http_json_response, parse_query
@@ -293,7 +294,7 @@ def test_the_guidance_card_links_to_dontkillmyapp_for_this_phone() -> None:
 
 
 def _kotlin() -> str:
-    return _MAIN_ACTIVITY.read_text(encoding="utf-8")
+    return read_source(_MAIN_ACTIVITY)
 
 
 def _kotlin_fun(name: str) -> str:

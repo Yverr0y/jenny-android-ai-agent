@@ -67,6 +67,20 @@ def code_only(src: str) -> str:
     si riconosce ancora come tale; i template ``${...}`` si svuotano con la
     stringa che li contiene: per questi contratti non contano.
     """
+    return _scan(src, keep_strings=False)
+
+
+def strip_comments(src: str) -> str:
+    """Il sorgente senza commenti, con le stringhe intatte.
+
+    Per i contratti che devono leggere un letterale (``"workshop.html"``, una
+    chiave JSON, un nome di comando): il letterale deve stare nel codice, non
+    in una riga commentata. Stessi indici e stesse righe del file.
+    """
+    return _scan(src, keep_strings=True)
+
+
+def _scan(src: str, *, keep_strings: bool) -> str:
     out: list[str] = []
     i, n = 0, len(src)
     while i < n:
@@ -90,10 +104,13 @@ def code_only(src: str) -> str:
         elif src[i] == '"':
             q = 3 if src.startswith('"""', i) else 1
             j = _string_end(src, i)
-            out.append('"' * q + _blank(src[i + q : j - q]) + '"' * q)
+            if keep_strings:
+                out.append(src[i:j])
+            else:
+                out.append('"' * q + _blank(src[i + q : j - q]) + '"' * q)
             i = j
         elif src[i] == "'" and (m := _CHAR_LITERAL.match(src, i)):
-            out.append("'" + _blank(m.group(1)) + "'")
+            out.append(m.group(0) if keep_strings else "'" + _blank(m.group(1)) + "'")
             i = m.end()
         else:
             out.append(src[i])
@@ -101,12 +118,29 @@ def code_only(src: str) -> str:
     return "".join(out)
 
 
-def read_code(name: str) -> str:
-    """Il solo codice di ``<name>.kt``; salta il test se il checkout non ha Android."""
-    path = ANDROID_SRC / f"{name}.kt"
+def _read(path: Path | str) -> str:
+    path = Path(path)
+    if not path.suffix:
+        path = ANDROID_SRC / f"{path.name}.kt"
     if not path.is_file():
         pytest.skip("sorgente Android non presente in questo checkout")
-    return code_only(path.read_text(encoding="utf-8"))
+    return path.read_text(encoding="utf-8")
+
+
+def read_code(name: Path | str) -> str:
+    """Il solo codice di ``<name>.kt`` (o del percorso dato); salta il test se il
+    checkout non ha Android."""
+    return code_only(_read(name))
+
+
+def read_source(name: Path | str) -> str:
+    """``<name>.kt`` (o il percorso dato) senza commenti, stringhe comprese.
+
+    È la lettura di default dei contratti Kotlin: nessun test deve leggere il
+    ``.kt`` grezzo, perché un'asserzione soddisfatta da un commento resta verde
+    dopo che il codice è stato commentato (voce TD12 della terza revisione).
+    """
+    return strip_comments(_read(name))
 
 
 def block_at(code: str, start: int) -> str:

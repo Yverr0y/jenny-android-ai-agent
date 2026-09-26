@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 from support.js_harness import requires_node, run_js
+from support.kotlin_source import read_source
 
 UI = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui"
 UI_ASSETS = UI / "assets"
@@ -68,8 +69,8 @@ def test_no_left_side_rules_or_hooks_remain() -> None:
 
 def test_the_floating_mascot_has_one_edge_too() -> None:
     """La flottante è la stessa Jenny: nessun bordo sinistro, nessun lato letto."""
-    flight = (ANDROID / "FloatingFlight.kt").read_text("utf-8")
-    overlay = (ANDROID / "FloatingOverlayController.kt").read_text("utf-8")
+    flight = read_source(ANDROID / "FloatingFlight.kt")
+    overlay = read_source(ANDROID / "FloatingOverlayController.kt")
     assert "dockPivotX: Float" in flight
     assert "chooseSide" not in flight
     assert "parkedRight" not in overlay

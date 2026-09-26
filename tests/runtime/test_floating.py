@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from support.kotlin_source import read_source
 
 from jenny.runtime import floating as fl
 
@@ -159,11 +160,11 @@ class TestBoundaryWithKotlin:
     def test_the_kotlin_class_name_exists(self):
         assert fl._BRIDGE.java_class == "com.flagdizero.jenny.FloatingBridge"
         assert BRIDGE_KT.is_file()
-        assert "class FloatingBridge(" in BRIDGE_KT.read_text(encoding="utf-8")
+        assert "class FloatingBridge(" in read_source(BRIDGE_KT)
 
     @pytest.mark.parametrize("method", ["setEnabled", "showReply", "isActive"])
     def test_the_called_methods_exist_in_kotlin(self, method: str):
-        source = BRIDGE_KT.read_text(encoding="utf-8")
+        source = read_source(BRIDGE_KT)
         assert f"fun {method}(" in source
         assert f'"{method}"' in Path(fl.__file__).read_text(encoding="utf-8")
 
@@ -176,7 +177,7 @@ class TestBoundaryWithKotlin:
         """
         import re
 
-        source = CONTROLLER.read_text(encoding="utf-8")
+        source = read_source(CONTROLLER)
         assets = REPO / "jenny/templates/ui/assets"
         names = set(re.findall(r'"(jenny-[a-z0-9-]+)"', source))
         assert names, "nessuno sprite nominato nel controller: il parsing è da rivedere"
@@ -188,7 +189,7 @@ class TestBoundaryWithKotlin:
             assert (assets / f"{name}.webp").is_file(), f"sprite mancante: {name}.webp"
 
     def test_the_controller_reads_from_the_extracted_webui_copy(self):
-        source = CONTROLLER.read_text(encoding="utf-8")
+        source = read_source(CONTROLLER)
         assert '"workspace/ui/assets/$name.webp"' in source
 
 
@@ -243,7 +244,7 @@ class TestThePhysicsDoesNotDiverge:
         return out
 
     def test_every_kotlin_constant_has_the_same_in_js(self):
-        kt = self._kt_numbers(self.FLIGHT_KT.read_text(encoding="utf-8"))
+        kt = self._kt_numbers(read_source(self.FLIGHT_KT))
         js = self._js_numbers(self.COMPANION_JS.read_text(encoding="utf-8"))
 
         # I nomi che in Kotlin portano il suffisso dell'unità: là sono px CSS,
@@ -273,7 +274,7 @@ class TestThePhysicsDoesNotDiverge:
     def test_the_pivot_is_the_same(self):
         """La punta della manica alzata di `jenny-hang`. Sbagliarlo non rompe
         niente: la fa solo ruotare attorno al punto sbagliato."""
-        kt = self.FLIGHT_KT.read_text(encoding="utf-8")
+        kt = read_source(self.FLIGHT_KT)
         js = self.COMPANION_JS.read_text(encoding="utf-8")
         assert "const val PIVOT_X = 0.5083f" in kt
         assert "const val PIVOT_Y = 0.4333f" in kt

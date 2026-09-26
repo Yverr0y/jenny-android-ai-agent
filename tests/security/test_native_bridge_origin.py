@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 
 from support.js_harness import requires_node, run_js
-from support.kotlin_source import ANDROID_SRC, block_after, function_body, read_code
+from support.kotlin_source import block_after, function_body, read_code, read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 UI = ROOT / "jenny" / "templates" / "ui"
@@ -57,7 +57,7 @@ def _main() -> str:
 
 
 def _raw_main() -> str:
-    return (ANDROID_SRC / "MainActivity.kt").read_text(encoding="utf-8")
+    return read_source("MainActivity")
 
 
 def _js_list(name: str) -> set[str]:

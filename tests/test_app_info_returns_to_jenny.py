@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 _BRIDGE = (
     Path(__file__).resolve().parents[1]
     / "android/app/src/main/java/com/flagdizero/jenny/InstalledAppsBridge.kt"
@@ -19,7 +21,7 @@ _BRIDGE = (
 
 
 def test_app_info_gets_its_own_task() -> None:
-    source = _BRIDGE.read_text(encoding="utf-8")
+    source = read_source(_BRIDGE)
     body = re.search(r"fun openAppInfo\(.*?\n    \}\n", source, re.S)
     assert body, "openAppInfo non trovata"
     assert "FLAG_ACTIVITY_NEW_DOCUMENT" in body.group(0)

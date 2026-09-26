@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 
 from support.js_harness import requires_node, run_js
-from support.kotlin_source import ANDROID_SRC, function_body, read_code
+from support.kotlin_source import function_body, read_code, read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 GUARD_JS = ROOT / "android" / "app" / "src" / "main" / "res" / "raw" / "browser_network_guard.js"
@@ -39,7 +39,7 @@ def test_the_session_webview_gets_the_guard_before_any_page() -> None:
     assert "WebViewCompat.addDocumentStartJavaScript(wv, networkGuardJs, setOf(" in install
     # code_only svuota le stringhe: il nome si controlla sul sorgente vero, sotto.
     assert re.search(r'addJavascriptInterface\(NetworkGuard\(\), "\s*"\)', install)
-    raw = (ANDROID_SRC / "JennyBrowserBridge.kt").read_text(encoding="utf-8")
+    raw = read_source("JennyBrowserBridge")
     assert 'addJavascriptInterface(NetworkGuard(), "JennyBrowserGuard")' in raw
     assert 'setOf("*")' in raw
     assert "R.raw.browser_network_guard" in raw
@@ -65,7 +65,7 @@ def test_service_worker_requests_go_through_the_same_filter() -> None:
 
 
 def test_the_comment_no_longer_claims_every_request() -> None:
-    raw = (ANDROID_SRC / "JennyBrowserBridge.kt").read_text(encoding="utf-8")
+    raw = read_source("JennyBrowserBridge")
     assert "l'unico\n        // punto che vede *ogni* richiesta" not in raw
     assert "ed è l'unico" not in raw
 

@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 APP_JS = ASSETS / "mobile-app.js"
@@ -58,7 +60,7 @@ def test_the_shell_hands_every_back_press_to_the_spa() -> None:
     pressione va a lei e a nessun altro": il callback nasce disabilitato e vive
     esattamente quanto la pagina a schermo.
     """
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     assert "OnBackPressedCallback(false)" in kotlin
     assert "OnBackPressedCallback(true)" not in kotlin
     assert "handleHardwareBack()" in kotlin

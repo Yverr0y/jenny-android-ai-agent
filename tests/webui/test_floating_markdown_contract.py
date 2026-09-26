@@ -23,6 +23,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 ROOT = Path(__file__).resolve().parents[2]
 CONTROLLER = ROOT / "android/app/src/main/java/com/flagdizero/jenny/FloatingOverlayController.kt"
 GRADLE = ROOT / "android/app/build.gradle.kts"
@@ -31,7 +33,7 @@ MARKDOWN_JS = ROOT / "jenny/templates/ui/assets/shared/markdown.js"
 
 
 def _read() -> str:
-    return CONTROLLER.read_text(encoding="utf-8")
+    return read_source(CONTROLLER)
 
 
 def _fun(source: str, signature: str) -> str:

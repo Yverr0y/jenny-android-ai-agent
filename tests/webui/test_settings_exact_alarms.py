@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 import pytest
+from support.kotlin_source import read_source
 
 from jenny.config.schema import KEEP_AWAKE_MODES
 
@@ -42,7 +43,7 @@ def _js() -> str:
 
 
 def _kotlin() -> str:
-    return _MAIN_ACTIVITY.read_text(encoding="utf-8")
+    return read_source(_MAIN_ACTIVITY)
 
 
 def _battery_copy(locale: str) -> dict:
@@ -75,8 +76,9 @@ def test_the_request_is_a_no_op_below_android_12() -> None:
     source = _kotlin()
     body = source[source.index("fun requestExactAlarmPermission()") :][:1200]
 
-    guard = body.index("Build.VERSION_CODES.S")
-    assert "return false" in body[guard : guard + 60]
+    # La guardia per intero, verso compreso: con `>=` il nome resta e la
+    # `return false` pure, ma il no-op finisce sulle versioni sbagliate.
+    guard = body.index("if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false")
     # La guardia sta prima di qualunque tentativo di aprire la schermata.
     assert guard < body.index("startActivity")
 

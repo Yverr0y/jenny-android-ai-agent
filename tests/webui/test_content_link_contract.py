@@ -37,6 +37,8 @@ import json
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
@@ -189,7 +191,7 @@ def test_the_shell_calls_the_spa_pages_internal_only_by_exact_path() -> None:
     deve cambiare e' **come** si confrontano: per uguaglianza, uno per uno. Un
     ``startsWith`` sotto il gateway riaprirebbe il buco per intero.
     """
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     body = re.search(
         r"private fun isShellDocument\(path: String\): Boolean \{(.*?)\n    \}", kotlin, re.S
     )
@@ -198,6 +200,7 @@ def test_the_shell_calls_the_spa_pages_internal_only_by_exact_path() -> None:
     assert "path ==" in code, "i path dei gusci vanno confrontati per uguaglianza"
     assert "startsWith" not in code, "un confronto per prefisso riapre il buco"
     assert "contains" not in code, "un confronto per sottostringa riapre il buco"
+    assert "endsWith" not in code, "un confronto per suffisso riapre il buco"
     # I due gusci, per nome: se uno sparisce, la sua porta smette di aprirsi.
     assert "index.html" in code and "workshop.html" in code
     # E il predicato usato dal WebViewClient deve passare di qui, non altrove.
@@ -211,7 +214,7 @@ def test_the_shell_calls_the_spa_pages_internal_only_by_exact_path() -> None:
 def test_a_gateway_url_that_is_not_the_spa_is_blocked_rather_than_handed_out() -> None:
     """``/api/…`` non è la SPA e non è nemmeno roba da Custom Tab: aprirlo fuori
     esporrebbe il gateway locale a un altro processo. Si blocca e basta."""
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     override = re.search(
         r"override fun shouldOverrideUrlLoading\((.*?)\n            \}", kotlin, re.S
     )
@@ -224,7 +227,7 @@ def test_a_gateway_url_that_is_not_the_spa_is_blocked_rather_than_handed_out() -
 def test_the_back_press_asks_a_question_that_can_be_answered_no() -> None:
     """``if (window.mobileApp) …`` valeva sempre ``"null"``: SPA viva e SPA
     sparita davano al nativo esattamente la stessa risposta."""
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     assert "if (window.mobileApp) window.mobileApp.handleHardwareBack()" not in kotlin
     probe = re.search(r"BACK_PRESS_JS = \"\"\"(.*?)\"\"\"", kotlin, re.S)
     assert probe, "BACK_PRESS_JS non trovato"
@@ -250,7 +253,7 @@ def test_losing_the_spa_is_recoverable_and_keeps_the_bootstrap_fragment() -> Non
     della WebView al posto della SPA per sempre — tasto Indietro morto, che è
     esattamente il difetto che questo recupero esiste per chiudere.
     """
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     body = re.search(r"private fun recoverLostSpa\(\) \{(.*?)\n    \}", kotlin, re.S)
     assert body, "recoverLostSpa non trovato"
     code = _strip_comments(body.group(1))

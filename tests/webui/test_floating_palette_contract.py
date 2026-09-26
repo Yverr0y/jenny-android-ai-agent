@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 from support.js_harness import requires_node, run_js
+from support.kotlin_source import read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
@@ -144,11 +145,11 @@ class TestTheBridge:
         assert set(TOKENS) <= declared, f"token spariti da :root: {set(TOKENS) - declared}"
 
     def test_the_shell_receives_and_the_controller_applies(self):
-        main_activity = (ANDROID / "MainActivity.kt").read_text(encoding="utf-8")
+        main_activity = read_source(ANDROID / "MainActivity.kt")
         assert "fun setFloatingPalette(" in main_activity
         assert "FloatingOverlayController.setPalette(" in main_activity
 
-        controller = (ANDROID / "FloatingOverlayController.kt").read_text(encoding="utf-8")
+        controller = read_source(ANDROID / "FloatingOverlayController.kt")
         assert "fun setPalette(" in controller
         assert "private fun applyPalette()" in controller
 
@@ -157,7 +158,7 @@ class TestTheBridge:
         Dev'essere `chanel` **preso dal CSS**, non una palette scelta lì: se
         diverge, la finestra si vede in un modo e un istante dopo in un altro.
         """
-        controller = (ANDROID / "FloatingOverlayController.kt").read_text(encoding="utf-8")
+        controller = read_source(ANDROID / "FloatingOverlayController.kt")
         block = re.search(r"private val CHANEL = Palette\((.*?)\n    \)", controller, re.S)
         assert block, "la palette di riserva non è più leggibile"
         kotlin = dict(re.findall(r"(\w+) = 0x([0-9A-Fa-f]{8})", block.group(1)))

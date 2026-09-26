@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 import pytest
+from support.kotlin_source import read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 ANDROID = ROOT / "android" / "app" / "src" / "main"
@@ -33,7 +34,7 @@ UI_ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 
 
 def _main_activity() -> str:
-    return MAIN_ACTIVITY.read_text(encoding="utf-8")
+    return read_source(MAIN_ACTIVITY)
 
 
 def _app_js() -> str:
@@ -246,7 +247,7 @@ def test_the_alert_notification_carries_a_routable_action() -> None:
     esattamente dov'era — dentro una mini-app, in Wiki, ovunque — e il messaggio
     proattivo non veniva mostrato.
     """
-    notifier = NOTIFIER.read_text(encoding="utf-8")
+    notifier = read_source(NOTIFIER)
     assert "setAction(MainActivity.ACTION_OPEN_CHAT)" in notifier
     kotlin = _main_activity()
     assert re.search(r"\bconst val ACTION_OPEN_CHAT\b", kotlin), (
@@ -398,9 +399,7 @@ def test_every_event_the_shell_dispatches_has_a_listener() -> None:
     il guscio, non noi. Un evento nuovo di la' arriva qui rosso finche' non ha
     un orecchio.
     """
-    kotlin = "\n".join(
-        p.read_text(encoding="utf-8") for p in JAVA.rglob("*.kt")
-    )
+    kotlin = "\n".join(read_source(p) for p in JAVA.rglob("*.kt"))
     events = set(re.findall(r"new (?:Custom)?Event\('([\w-]+)'", kotlin))
     assert events, "nessun evento nel guscio: la ricerca non guarda piu' dove deve"
 

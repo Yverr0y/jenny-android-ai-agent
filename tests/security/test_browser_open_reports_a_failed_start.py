@@ -18,6 +18,7 @@ import re
 from pathlib import Path
 
 import pytest
+from support.kotlin_source import read_source
 
 BRIDGE = (
     Path(__file__).resolve().parents[2]
@@ -28,7 +29,7 @@ BRIDGE = (
 def _open_body() -> str:
     if not BRIDGE.is_file():
         pytest.skip("sorgente Android non presente in questo checkout")
-    src = BRIDGE.read_text(encoding="utf-8")
+    src = read_source(BRIDGE)
     m = re.search(r"\n    fun open\(url: String.*?\n    \}\n", src, re.S)
     assert m, "JennyBrowserBridge.open non trovato"
     return m.group(0)
