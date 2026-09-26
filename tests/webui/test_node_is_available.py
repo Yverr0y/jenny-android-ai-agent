@@ -61,3 +61,19 @@ def test_pillow_is_installed_in_ci() -> None:
         "Pillow manca: tests/webui/test_mascot_layer_sources.py si salterebbe per "
         'intero. Il job `test` deve installare `pip install -e ".[dev]"`.'
     )
+
+
+def test_ci_installs_an_exact_jsdom() -> None:
+    """Senza versione ogni giro della CI prendeva l'ultimo jsdom uscito: un
+    rilascio nuovo poteva cambiare l'esito delle suite senza che il repo
+    cambiasse. Gira anche in locale: legge soltanto il workflow."""
+    import re
+    from pathlib import Path
+
+    ci = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8"
+    )
+    installs = re.findall(r"npm install --no-save (jsdom\S*)", ci)
+    assert installs, "il job `test` non installa piu' jsdom"
+    for spec in installs:
+        assert re.fullmatch(r"jsdom@\d+\.\d+\.\d+", spec), f"versione non esatta: {spec}"

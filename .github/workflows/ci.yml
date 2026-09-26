@@ -104,7 +104,11 @@ jobs:
       # richiedono, e senza si saltano in verde. `--no-save`: niente
       # package.json. NODE_PATH (sotto) perché `require` lo trovi da ogni
       # cartella; tests/webui/test_node_is_available.py fallisce in CI se manca.
-      - run: npm install --no-save jsdom
+      # Versione esatta, come le dipendenze Python dell'extra `dev`: senza, ogni
+      # giro prendeva l'ultima uscita, e un jsdom nuovo poteva cambiare l'esito
+      # delle suite senza che il repo cambiasse. È quella su cui girano in
+      # locale; vuole node ^24.15 (v. `engines`), e il job usa il 24.
+      - run: npm install --no-save jsdom@30.1.1
       # NON aggiungere `--cov` qui, e non reinstallare `pytest-cov`: la misura
       # perturba ciò che misura. La sandbox di `python_exec` intercetta *tutte*
       # le operazioni su path del processo per la durata di una `execute`,
