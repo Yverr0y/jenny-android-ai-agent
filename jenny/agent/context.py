@@ -25,6 +25,7 @@ from jenny.utils.android_assets import (
     template_digest,
 )
 from jenny.utils.helpers import (
+    CHARS_PER_TOKEN,
     current_time_str,
     detect_image_mime,
     load_bundled_template,
@@ -846,10 +847,7 @@ class ContextBuilder:
             )
             if entries:
                 capped = entries[-self._MAX_RECENT_HISTORY:]
-                history_text = "\n".join(
-                    f"- [{e['timestamp']}] {e['content']}" for e in capped
-                )
-                history_text = truncate_text_to_tokens(history_text, self._MAX_HISTORY_TOKENS)
+                history_text = self._render_recent_history(capped)
                 parts.append("# Recent History\n\n" + history_text)
 
         if session_summary:
@@ -859,6 +857,31 @@ class ContextBuilder:
             parts.append(inventory)
 
         return "\n\n---\n\n".join(parts)
+
+    @classmethod
+    def _render_recent_history(cls, entries: Sequence[Mapping[str, Any]]) -> str:
+        """Il blocco «Recent History», dentro ``_MAX_HISTORY_TOKENS`` e dal fondo.
+
+        Si riempie **dalle voci più nuove** e a voci intere (AC13 della terza
+        revisione). Il taglio stava sul testo intero, dalla fine: oltre il tetto il
+        blocco teneva le voci più vecchie e buttava quelle appena scritte, cioè
+        proprio quel che esiste per portare — cosa è successo da quando Dream è
+        passato l'ultima volta. Solo la più nuova, se da sola supera il tetto, si
+        tronca: una voce a metà vale più di un blocco vuoto.
+        """
+        budget = cls._MAX_HISTORY_TOKENS * CHARS_PER_TOKEN
+        lines: list[str] = []
+        used = 0
+        for entry in reversed(entries):
+            line = f"- [{entry['timestamp']}] {entry['content']}"
+            cost = len(line) + (1 if lines else 0)
+            if used + cost > budget:
+                if not lines:
+                    lines.append(truncate_text_to_tokens(line, cls._MAX_HISTORY_TOKENS))
+                break
+            lines.append(line)
+            used += cost
+        return "\n".join(reversed(lines))
 
     @staticmethod
     def _tool_predicate(tool_names: list[str] | None) -> Callable[[str], bool]:

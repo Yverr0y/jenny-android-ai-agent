@@ -223,6 +223,31 @@ def test_recent_history_truncated_at_max_tokens(tmp_path) -> None:
     assert len(history_section[1]) <= builder._MAX_HISTORY_TOKENS * 4 + 100
 
 
+def test_recent_history_over_budget_keeps_the_newest_entries(tmp_path) -> None:
+    """AC13 della terza revisione: oltre il tetto restano le voci **nuove**.
+
+    Il taglio era sul testo intero, dalla fine: sopra il budget il blocco teneva
+    le voci più vecchie e buttava proprio quelle appena scritte, cioè la parte che
+    il blocco esiste per portare.
+    """
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    for i in range(50):
+        builder.memory.append_history(f"entry-{i:02d} " + "x" * 1000)
+
+    prompt = builder.build_system_prompt()
+    section = prompt.split("# Recent History\n\n", 1)[1].split("\n\n---\n\n", 1)[0]
+
+    assert "entry-49" in section
+    assert "entry-00" not in section
+    assert len(section) <= builder._MAX_HISTORY_TOKENS * 4 + 100
+    # Le voci che restano sono intere, e in ordine.
+    kept = re.findall(r"entry-(\d\d) (x+)", section)
+    assert all(len(xs) == 1000 for _, xs in kept)
+    assert [int(n) for n, _ in kept] == sorted(int(n) for n, _ in kept)
+    assert int(kept[-1][0]) == 49
+
+
 def test_no_recent_history_when_dream_has_processed_all(tmp_path) -> None:
     """If Dream has consumed everything, no Recent History section should appear."""
     workspace = _make_workspace(tmp_path)
