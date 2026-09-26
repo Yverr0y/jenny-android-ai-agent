@@ -496,3 +496,27 @@ def test_cast_nullable_param_no_crash() -> None:
     assert result["name"] == "hello"
     result = tool.cast_params({"name": None})
     assert result["name"] is None
+
+
+def test_cast_params_object_for_a_string_becomes_json() -> None:
+    """TL5 (terza revisione): un dict o una lista per un parametro ``string``.
+
+    Il modello a volte manda ``write_file(content={...})``. Prima diventava il
+    ``repr`` Python (``{'a': True, 'b': None}``): un file che nessun lettore JSON
+    apre, e il tool rispondeva «Successfully wrote». Ora è il JSON che il modello
+    intendeva.
+    """
+    import json
+
+    tool = CastTestTool(
+        {"type": "object", "properties": {"content": {"type": "string"}}}
+    )
+    value = {"enabled": True, "n": None, "nome": "caffè", "xs": [1, 2]}
+    out = tool.cast_params({"content": value})["content"]
+    assert isinstance(out, str) and json.loads(out) == value
+    assert "caffè" in out
+
+    out = tool.cast_params({"content": [True, None]})["content"]
+    assert out == "[true, null]"
+    # Gli scalari restano come prima.
+    assert tool.cast_params({"content": 5})["content"] == "5"
