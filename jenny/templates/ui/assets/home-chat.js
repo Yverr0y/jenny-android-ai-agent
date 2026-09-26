@@ -131,6 +131,9 @@ export class HomeChat {
        serve quando una risposta si incolla altrove. `WeakMap` perche' la
        chiave e' il nodo, e una ricarica del filo li butta tutti. */
     this._source = new WeakMap();
+    /* L'allegato dietro ogni pastiglia di file: il percorso che il ponte
+       nativo sa aprire non sta nell'URL firmato (v. `_openMediaFile`). */
+    this._files = new WeakMap();
     /* I secondi dell'ultimo `turn_end`, in attesa che la bolla si chiuda. */
     this._seconds = null;
     /* L'ultimo invio, finché il gateway non ha dimostrato di averlo preso.
@@ -199,6 +202,15 @@ export class HomeChat {
      in casa non ce n'e', ma il primo che arrivera' non deve prendersi anche
      l'avviso del link inerte (e' successo in officina). */
   _onClick(e) {
+    /* Una pastiglia di file e' un `<a>` anche lei, ma non e' un link del
+       testo: non e' Jenny ad averla scritta, e la regola dei link la dava per
+       inerte (HJ4, regressione di `a1b8b1e3`). Si apre col visore. */
+    const file = e.target.closest('a.home-file');
+    if (file && this.el.contains(file)) {
+      e.preventDefault();
+      this._openMediaFile(this._files.get(file) || { url: file.getAttribute('href') });
+      return;
+    }
     const link = e.target.closest('a[href]');
     if (link && this.el.contains(link)) {
       if (!e.defaultPrevented) this._openLink(e, link);
@@ -838,10 +850,34 @@ export class HomeChat {
         chip.className = 'home-file';
         chip.href = entry.url;
         chip.textContent = entry.name || entry.url;
+        this._files.set(chip, entry);
         wrap.appendChild(chip);
       }
     }
     if (wrap.childElementCount) node.appendChild(wrap);
+  }
+
+  /** Apre un allegato che il filo non sa mostrare: col ponte nativo, che lo
+   *  passa al visore di sistema, come fa l'officina (`mobile-chat.js`,
+   *  `_openMediaFile`).
+   *
+   *  Col ponte presente un fallimento si dice e basta: la WebView non ha un
+   *  `DownloadListener` e blocca le schede nuove, quindi `window.open` li'
+   *  non sarebbe un ripiego ma un tocco che non fa niente. Fuori dal guscio
+   *  nativo (un browser) e' la strada giusta. */
+  async _openMediaFile(entry) {
+    const bridge = window.JennyNative;
+    if (bridge && typeof bridge.openFile === 'function') {
+      try {
+        // Asincrono: `openFile` risponde con una Promise (v. `shared/native-bridge.js`).
+        if (entry.path && await bridge.openFile(entry.path)) return;
+      } catch (err) {
+        console.warn('home: native openFile failed', err);
+      }
+      showToast(i18n.t('chat.couldNotOpen', { path: entry.name || entry.path || '' }), 'error');
+      return;
+    }
+    if (entry.url) window.open(entry.url, '_blank');
   }
 
   /** La bolla dell'assistente del turno, creata al primo frame che la riempie. */
