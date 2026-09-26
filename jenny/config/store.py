@@ -73,8 +73,9 @@ async def persist_schema_migrations(*, config_path: Path | None = None) -> bool:
     try:
         _, raw = load_config_with_raw(config_path)
         candidate = raw.get("configVersion", raw.get("config_version", 0))
-        # Lo stesso criterio di ``Config._migrate_by_version``: un ``"3"`` non e'
-        # la versione 3, e senza riscriverlo avviserebbe a ogni lettura.
+        # Solo un intero vero e' gia' a posto. Un ``"3"`` o un ``3.0`` il parse li
+        # legge come 3 (``schema._whole_config_version``), ma nel file restano
+        # nella forma sbagliata: si riscrivono una volta, e diventano un intero.
         raw_version = candidate if type(candidate) is int else -1
     except Exception:
         # File assente, illeggibile o versione non numerica: in tutti i casi

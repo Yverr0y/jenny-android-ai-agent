@@ -1,6 +1,7 @@
 """Configuration schema using Pydantic."""
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -1061,6 +1062,26 @@ CURRENT_CONFIG_VERSION = 3
 # volte per boot e una riga per lettura e rumore, non informazione.
 _ANNOUNCED_MIGRATIONS: set[int] = set()
 
+
+def _whole_config_version(raw: Any) -> int | None:
+    """*raw* come versione dello schema: un intero non negativo, o ``None``.
+
+    Oltre all'intero vero, le sue forme innocue: ``3.0`` (un float intero) e
+    ``"3"`` (cifre in una stringa, spazi attorno ammessi). Non ``true``, che per
+    Python e' un 1 ma nel file e' un'altra cosa, non ``2.5`` ne' un infinito
+    (``1e400``), e non una stringa di cifre lunga oltre ogni versione possibile:
+    ``int()`` su migliaia di cifre solleva, fuori dal recupero del loader.
+    """
+    if type(raw) is int:
+        return raw if raw >= 0 else None
+    if type(raw) is float:
+        return int(raw) if math.isfinite(raw) and raw >= 0 and raw.is_integer() else None
+    if isinstance(raw, str):
+        text = raw.strip()
+        if text.isascii() and text.isdigit() and len(text) <= 9:
+            return int(text)
+    return None
+
 # I valori italiani del blocco ``casa`` (fino al 25/09/2026) e i loro nomi di adesso:
 # v. :meth:`Config._migrate_casa_to_home`.
 _CASA_KINDS = {"conversazione": "conversation", "stanza": "room"}
@@ -1139,8 +1160,15 @@ class Config(BaseSettings):
         if not isinstance(data, dict):
             return data
         raw_version = data.get("configVersion", data.get("config_version", 0))
-        if type(raw_version) is int and raw_version >= 0:
-            version = raw_version
+        version = _whole_config_version(raw_version)
+        if version is not None:
+            if type(raw_version) is not int:
+                # ``"3"`` o ``3.0`` sono la versione 3 scritta in un'altra forma:
+                # valevano 0, e la migrazione v1 riportava a 3 un
+                # ``maxConcurrentSubagents: 1`` scelto dopo lo stamp. Si passa al
+                # campo l'intero, che il campo accetta.
+                data = {k: v for k, v in data.items() if k != "config_version"}
+                data["configVersion"] = version
         else:
             # Versione illeggibile (file toccato a mano): la trattiamo come 0 e la
             # riscriviamo sanificata, invece di far fallire la validazione del
