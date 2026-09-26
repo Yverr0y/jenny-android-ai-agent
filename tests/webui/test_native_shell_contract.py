@@ -90,9 +90,9 @@ def _activity_config_changes() -> set[str]:
 def test_the_activity_absorbs_the_config_changes_that_really_happen() -> None:
     """Ogni configurazione non elencata ricrea l'activity, e ricreare l'activity
     distrugge la WebView — cioè la SPA, con la vista corrente, lo scroll della
-    chat, la mini-app aperta e la connessione WebSocket. Non c'è nessun
-    ``onSaveInstanceState`` che la rimetta a posto: ``stateNotNeeded="true"``
-    dichiara proprio che lo stato non si salva.
+    chat, la mini-app aperta e la connessione WebSocket. ``onSaveInstanceState``
+    salva solo il path di un export in corso: la SPA non la rimette a posto
+    niente.
 
     Mancavano i quattro cambi che su un telefono capitano davvero con l'app
     davanti: tema scuro di sistema (``uiMode``, anche quello automatico
@@ -117,8 +117,31 @@ def test_the_activity_absorbs_the_config_changes_that_really_happen() -> None:
         "keyboard",
         "navigation",
         "layoutDirection",
+        # 26/09/2026 (AN8): il «testo in grassetto» di Accessibilità (API 31),
+        # accanto alla dimensione carattere; e due cambi senza risorse da
+        # ri-risolvere (v. il test qui sotto).
+        "fontWeightAdjustment",
+        "colorMode",
+        "touchscreen",
     ):
         assert required in tokens, f"configChanges senza {required}"
+
+
+def test_absorbing_color_mode_and_touchscreen_is_safe_because_no_resource_follows_them() -> None:
+    """``colorMode`` e ``touchscreen`` si assorbono perché nessuna cartella di
+    risorse usa i loro qualificatori: se un giorno ne comparisse una, l'app la
+    ignorerebbe fino al riavvio. ``mcc``/``mnc`` restano fuori apposta."""
+    res = ANDROID / "res"
+    qualified = [
+        d.name
+        for d in res.iterdir()
+        if d.is_dir()
+        and any(q in d.name.split("-") for q in ("widecg", "nowidecg", "highdr", "lowdr",
+                                                   "notouch", "finger", "stylus"))
+    ]
+    assert qualified == [], qualified
+    tokens = _activity_config_changes()
+    assert "mcc" not in tokens and "mnc" not in tokens
 
 
 def test_absorbing_uimode_is_safe_because_nothing_native_follows_it() -> None:
