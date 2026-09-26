@@ -5442,7 +5442,16 @@ body {
   border-color: var(--border);
 }
 
-.onboarding-btn:not(:disabled):hover { transform: scale(1.03); }
+/* Il passaggio del mouse esiste solo dove c'e' un mouse. Su un telefono un
+   tocco lascia `:hover` acceso finche' non si tocca altrove, e il bottone
+   restava ingrandito e del colore di passaggio. Prima lo si «annullava» con
+   `revert` sotto `(hover: none)`, ma `revert` torna al foglio **del
+   browser**, non allo stile di base: dopo un tocco il bottone diventava
+   grigio di sistema con il testo bianco (CS8 della terza revisione). Qui il
+   passaggio del mouse non si accende affatto, e non c'e' niente da annullare. */
+@media (hover: hover) {
+  .onboarding-btn:not(:disabled):hover { transform: scale(1.03); }
+}
 .onboarding-btn:not(:disabled):active { transform: scale(0.97); }
 
 .onboarding-btn-primary {
@@ -5451,10 +5460,12 @@ body {
   box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.25);
 }
 
-.onboarding-btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  color: var(--on-accent);
-  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.35);
+@media (hover: hover) {
+  .onboarding-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    color: var(--on-accent);
+    box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.35);
+  }
 }
 
 .onboarding-btn-secondary {
@@ -5463,8 +5474,10 @@ body {
   border: 1px solid var(--border-strong);
 }
 
-.onboarding-btn-secondary:hover:not(:disabled) {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .onboarding-btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
 }
 
 .onboarding-btn-lg {
@@ -5596,15 +5609,6 @@ body {
 
 .onboarding-btn:active {
   transform: scale(0.97);
-}
-
-@media (hover: none) {
-  .onboarding-btn-primary:hover:not(:disabled),
-  .onboarding-btn-secondary:hover:not(:disabled) {
-    background: revert;
-    color: revert;
-    border-color: revert;
-  }
 }
 
 .onboarding-loading-overlay {
