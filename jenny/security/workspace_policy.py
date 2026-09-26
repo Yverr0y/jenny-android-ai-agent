@@ -6,6 +6,7 @@ consistent across tools, but they are not a replacement for an OS sandbox.
 
 from __future__ import annotations
 
+import errno
 import os
 from pathlib import Path
 from typing import Iterable
@@ -84,7 +85,22 @@ def _resolve_path(path: str | Path, workspace: str | Path | None = None, *, stri
     candidate = _safe_expanduser(path)
     if not candidate.is_absolute() and workspace is not None:
         candidate = _safe_expanduser(workspace) / candidate
-    return candidate.resolve(strict=strict)
+    try:
+        return candidate.resolve(strict=strict)
+    except RuntimeError:
+        # Loop di symlink su Python 3.11 (il telefono): ``pathlib`` trasforma
+        # l'``ELOOP`` in ``RuntimeError``, che nessun chiamante del gate si
+        # aspetta — le rotte del file manager rispondevano 500, il codice di
+        # ``python_exec`` riceveva un ``RuntimeError`` da un ``open`` (terza
+        # revisione, WA8 e TL15). Dal 3.13 ``resolve`` e' ``os.path.realpath``,
+        # che in modo non stretto lascia il loop irrisolto nel percorso: qui si
+        # fa lo stesso, cosi' 3.11 e 3.14 danno la stessa risposta. Il confine
+        # non si allarga: il percorso restituito passa comunque dal controllo di
+        # contenimento, e un loop non porta a nessun file. In modo stretto e'
+        # l'``OSError`` che il 3.13 solleverebbe.
+        if strict:
+            raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(candidate)) from None
+        return Path(os.path.realpath(candidate))
 
 
 def _resolve_logical_path(path: str | Path, workspace: str | Path | None = None) -> Path:
