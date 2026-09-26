@@ -107,12 +107,28 @@ export class JennyCompanion extends JennyMascot {
       this.scrim.setAttribute('aria-label', i18n.t('jenny.closeMinichat'));
       this.input.setAttribute('aria-label', i18n.t('jenny.askJenny'));
       this.sendBtn.setAttribute('aria-label', i18n.t('jenny.send'));
-      // Stesso placeholder (e stessa lingua) della chat vera.
-      const t = i18n.t('chat.placeholder');
-      this.input.placeholder = t && t !== 'chat.placeholder' ? t : i18n.t('jenny.askHere');
+      this._syncPlaceholder();
     };
     translate();
     i18n.load(i18n.locale).then(translate).catch(() => {});
+  }
+
+  /* Lo stesso placeholder della chat vera, **letto dal suo campo**: e' quello
+     che nomina dove va il messaggio — un progetto, la sola lettura — e lo
+     tiene aggiornato lo scope chip (`syncPlaceholder` in
+     `shared/scope-chip.js`). La minichat manda nella stessa conversazione e
+     con lo stesso modo, ma diceva sempre «Chiedi qualcosa»: dal Cervello si
+     scriveva in un progetto, o in sola lettura, senza saperlo (WJ14 della
+     terza revisione). Si rilegge a ogni apertura: finche' la minichat e'
+     aperta, il chip non si puo' toccare. */
+  _syncPlaceholder() {
+    const chat = document.getElementById('chat-input')?.placeholder;
+    if (chat) {
+      this.input.placeholder = chat;
+      return;
+    }
+    const t = i18n.t('chat.placeholder');
+    this.input.placeholder = t && t !== 'chat.placeholder' ? t : i18n.t('jenny.askHere');
   }
 
   /* ── Modalità vista ── */
@@ -186,6 +202,7 @@ export class JennyCompanion extends JennyMascot {
     this.scrim.classList.add('open');
     this.mc.classList.add('open');
     this.mc.dataset.state = 'ask';
+    this._syncPlaceholder();
     // Il campo prende il fuoco da solo: la minichat si apre per scrivere, e
     // chiederle di aprirla e poi toccare il campo è un tap di troppo. Va fatto
     // qui e in modo sincrono — siamo ancora dentro il gesto dell'utente

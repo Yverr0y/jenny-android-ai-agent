@@ -82,12 +82,13 @@ function node() {
   };
   return n;
 }
-globalThis.document = { createElement: () => node() };
+globalThis.document = { createElement: () => node(), getElementById: () => null };
 class JennyMascot { _buildDom() {} }
 class J extends JennyMascot {
   constructor() { super(); this.host = node(); }
 """
         + member(JENNY, "_buildDom")
+        + member(JENNY, "_syncPlaceholder")
         + """
   _setOut() {}
 }

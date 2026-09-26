@@ -342,3 +342,29 @@ def test_a_question_asked_at_rest_adopts_its_own_turn() -> None:
         assert.equal(j._streamTurnId, 't2');
         """
     )
+
+
+def test_the_minichat_names_where_and_how_it_sends() -> None:
+    """WJ14 della terza revisione: la minichat manda nella conversazione aperta
+    e col modo di scrittura scelto, ma diceva sempre «Chiedi qualcosa». Ora
+    prende il placeholder della chat vera, che lo scope chip tiene aggiornato
+    col progetto e con la sola lettura."""
+    _run(
+        """
+        const inputs = { 'chat-input': { placeholder: 'Chiedi su orto (sola lettura)…' } };
+        globalThis.document = { getElementById: (id) => inputs[id] || null };
+        const j = minichat({ open: false });
+        Object.assign(j, {
+          scrim: { classList: classes() },
+          input: { placeholder: '', focus() {} },
+        });
+        j._openMini();
+        assert.equal(j.input.placeholder, 'Chiedi su orto (sola lettura)…');
+        inputs['chat-input'].placeholder = 'Chiedi qualcosa…';
+        j._openMini();
+        assert.equal(j.input.placeholder, 'Chiedi qualcosa…', 'si rilegge a ogni apertura');
+        delete inputs['chat-input'];
+        j._syncPlaceholder();
+        assert.equal(j.input.placeholder, 'jenny.askHere', 'senza la chat, il ripiego di sempre');
+        """
+    )
