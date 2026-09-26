@@ -308,3 +308,28 @@ async def test_the_agent_born_after_onboarding_resolves_env_references(monkeypat
 
     assert built[0].get_active_provider().api_key == "secret-from-env"
     assert born[0].get_active_provider().api_key == "secret-from-env"
+
+
+def test_replaced_provider_is_closed_in_background(container_with_agent, monkeypatch) -> None:
+    """Il provider sostituito chiude il suo client httpx (PC17).
+
+    Prima restava vivo, con pool e connessioni, uno per salvataggio.
+    """
+    container, agent = container_with_agent
+    closed: list[str] = []
+
+    async def _aclose() -> None:
+        closed.append("old")
+
+    container.provider.aclose = _aclose
+    old_provider = container.provider
+    scheduled: list[Any] = []
+    agent._schedule_background = scheduled.append
+    _patch_reload(monkeypatch, config=_config(model="other-model"))
+
+    container._on_settings_changed()
+
+    assert container.provider is not old_provider
+    assert len(scheduled) == 1
+    asyncio.run(scheduled[0])
+    assert closed == ["old"]

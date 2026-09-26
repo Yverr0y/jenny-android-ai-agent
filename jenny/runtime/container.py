@@ -155,7 +155,14 @@ class GatewayContainer:
             # sparita, una chiave tolta) l'impronta resta quella vecchia e il
             # prossimo salvataggio ritenta invece di credersi allineato.
             self._provider_fingerprint = new_fingerprint
+            old_provider = self.provider
             self.provider = new_provider
+            # Il provider sostituito teneva aperto il suo client httpx: si chiude
+            # in background, e ``aclose`` aspetta un turno ancora in volo con lui.
+            if old_provider is not None and old_provider is not new_provider:
+                aclose = getattr(old_provider, "aclose", None)
+                if aclose is not None:
+                    self._agent._schedule_background(aclose())
             logger.info(
                 "Hot-reloaded after settings change: model={!r} provider={!r}",
                 new_model,
