@@ -1558,19 +1558,23 @@ export class ChatController {
   // senza turn_end (oggi coperto da _resetStreamState su send + turn_end
   // garantito dal backend anche su /stop).
   _handleDelta(text) {
-    this._ensureAiMessage();
-
-    if (!this._currentContent) {
-      const content = document.createElement('div');
-      content.className = 'chat-content';
-      this._currentMsg.appendChild(content);
-      this._currentContent = content;
-      this._deltaBuffer = '';
-    }
-
+    this._openContent();
     this._deltaBuffer += text;
     this._deltaDirty = true;
     this._scheduleFlush();
+  }
+
+  /* Il blocco di testo del segmento in corso, nella bolla del turno: lo apre
+     il primo delta, o — se i delta si sono persi tutti — lo `stream_end` che
+     porta il testo intero (v. `_handleStreamEnd`). */
+  _openContent() {
+    this._ensureAiMessage();
+    if (this._currentContent) return;
+    const content = document.createElement('div');
+    content.className = 'chat-content';
+    this._currentMsg.appendChild(content);
+    this._currentContent = content;
+    this._deltaBuffer = '';
   }
 
   /* Programma un flush coalizzato del rendering per il prossimo frame.
@@ -1820,6 +1824,13 @@ export class ChatController {
     // `$$...$$` fino a un riavvio) e niente path cliccabili. Il buffer locale
     // è la stessa cosa, quindi fa da fallback.
     const finalText = fullText || this._deltaBuffer;
+    /* Un segmento che ha perso **tutti** i suoi delta (il bus li scarta sotto
+       backpressure, e allora il gateway rimanda il testo intero nello
+       `stream_end`: PC3 della terza revisione) non ha un blocco aperto: senza
+       aprirlo qui, la risposta dal vivo non si vedeva affatto. Solo col testo
+       del frame: un segmento di soli tool chiude senza testo, e non deve
+       lasciare una bolla vuota. */
+    if (!this._currentContent && fullText) this._openContent();
     if (this._currentContent && finalText) {
       this._currentContent.innerHTML = renderMarkdown(finalText);
       renderRich(this._currentContent);

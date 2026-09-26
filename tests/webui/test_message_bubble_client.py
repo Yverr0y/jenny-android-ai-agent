@@ -44,6 +44,7 @@ pytestmark = requires_node
 # che cresce, e la chiusura di segmento che i due condividono.
 _METHODS = (
     "_ensureAiMessage",
+    "_openContent",
     "_handleDelta",
     "_handleMessage",
     "_handleStreamEnd",
@@ -222,4 +223,30 @@ def test_a_message_does_not_lose_the_tail_of_an_open_stream() -> None:
       chat._handleDelta('testo in volo');  // nessun frame eseguito: buffer sporco
       chat._handleMessage({{ text: {NOTICE!r} }});
       assert.deepEqual(blocks(chat), ['testo in volo', {NOTICE!r}]);
+    """)
+
+
+def test_a_stream_that_lost_every_delta_still_shows_its_text() -> None:
+    """PC3 della terza revisione (lato client). Sotto backpressure il bus scarta
+    i delta, e il gateway rimanda il testo intero dello stream nello
+    ``stream_end``. Se il segmento li ha persi **tutti** non c'e' un blocco
+    aperto, e il client ignorava quel testo: dal vivo la risposta non si vedeva.
+    Ora lo ``stream_end`` col testo apre il blocco; senza testo (un segmento di
+    soli tool) no, come nella sequenza del 27/08 qui sopra."""
+    _run_js("""
+      const chat = makeChat();
+      chat._handleStreamEnd('la risposta intera');
+      assert.deepEqual(blocks(chat), ['la risposta intera']);
+      assert.equal(chat._currentContent, null, 'il segmento e\\' chiuso');
+      chat._handleStreamEnd();
+      assert.deepEqual(blocks(chat), ['la risposta intera'], 'a vuoto non apre niente');
+    """)
+
+
+def test_a_bare_stream_end_opens_no_bubble() -> None:
+    _run_js("""
+      const chat = makeChat();
+      chat._handleStreamEnd();
+      assert.equal(chat._currentMsg, null);
+      assert.deepEqual(blocks(chat), []);
     """)
