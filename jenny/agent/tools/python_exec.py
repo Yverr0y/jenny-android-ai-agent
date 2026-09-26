@@ -3208,7 +3208,10 @@ async def run_python_async(
             maximum=600,
         ),
         max_output_chars=IntegerSchema(
-            description="Maximum output characters to return (default 10000, max 50000).",
+            description=(
+                "Maximum output characters to return (default: the configured "
+                "ceiling, stated in the tool description; max 50000)."
+            ),
             minimum=1000,
             maximum=MAX_OUTPUT_CHARS,
             nullable=True,
@@ -3231,7 +3234,6 @@ class PythonExecTool(PythonExecGateMixin, Tool):
     _scopes = {"core", "subagent"}
 
     _MAX_TIMEOUT = 600
-    _MAX_OUTPUT = 10_000
 
     @classmethod
     def create(cls, ctx: Any) -> Tool:
@@ -3293,8 +3295,21 @@ class PythonExecTool(PythonExecGateMixin, Tool):
             "Use function='name' with args/kwargs to call registered functions. "
             "Prefer dedicated tools (read_file, grep, apply_patch, web_search, web_fetch) for file/search/web tasks. "
             "Use python_exec for tests, builds, calculations, data processing, "
-            "and other logic. Output is truncated at 10000 chars."
+            f"and other logic. Output is truncated at {self._default_max_output()} chars."
         )
+
+    def _default_max_output(self) -> int:
+        """Il tetto di config (``tools.pythonExec.maxOutputChars``), nei limiti dello schema.
+
+        Prima il default era la costante di classe ``_MAX_OUTPUT`` e il valore
+        di config, pur salvato, non si usava (TL14). Un valore che non è un
+        intero (config anomala) ripiega sul default: la descrizione del tool
+        non deve poter sollevare, la legge anche l'assemblaggio del prompt.
+        """
+        value = self.max_output_chars
+        if not isinstance(value, int) or isinstance(value, bool):
+            value = None
+        return clamp_session_int(value, 10_000, 1000, MAX_OUTPUT_CHARS)
 
     @property
     def exclusive(self) -> bool:
@@ -3329,7 +3344,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
 
         effective_timeout = self._resolve_timeout(timeout)
         effective_max = clamp_session_int(
-            max_output_chars, self._MAX_OUTPUT, 1000, MAX_OUTPUT_CHARS,
+            max_output_chars, self._default_max_output(), 1000, MAX_OUTPUT_CHARS,
         )
 
         if yield_time_ms is not None:
