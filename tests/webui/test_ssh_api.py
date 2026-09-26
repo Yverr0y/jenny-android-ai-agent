@@ -674,7 +674,6 @@ async def test_route_layer_maps_auth_and_errors(env, monkeypatch) -> None:
     for path in (
         "/api/settings/ssh",
         "/api/settings/ssh/update",
-        "/api/settings/ssh/host/save",
         "/api/settings/ssh/host/delete",
         "/api/settings/ssh/key/generate",
         "/api/settings/ssh/host-key/probe",
@@ -683,12 +682,14 @@ async def test_route_layer_maps_auth_and_errors(env, monkeypatch) -> None:
         response = await router.dispatch(request(path, token=None), path)
         assert response is not None and response.status_code == 401, path
 
-    saved = await router.dispatch(
+    # Il salvataggio di un host non e' piu' una rotta: porta la password, e la
+    # query la metteva nella riga di richiesta (terza revisione, WA2). E' il
+    # comando ``ssh.host.save`` (``tests/webui/test_secret_commands.py``).
+    assert await router.dispatch(
         request("/api/settings/ssh/host/save?alias=prod&host=example.com&username=root"),
         "/api/settings/ssh/host/save",
-    )
-    assert saved.status_code == 200
-    assert json.loads(saved.body.decode())["hosts"][0]["alias"] == "prod"
+    ) is None
+    await _add_host()
 
     read = await router.dispatch(request("/api/settings/ssh"), "/api/settings/ssh")
     assert read.status_code == 200

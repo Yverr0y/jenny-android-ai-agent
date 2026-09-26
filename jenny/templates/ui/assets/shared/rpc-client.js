@@ -55,9 +55,9 @@ function whenOpen() {
   });
 }
 
-async function send(method, params) {
+async function send(method, params, opts) {
   await whenOpen();
-  return wsManager.request(method, params);
+  return opts ? wsManager.request(method, params, opts) : wsManager.request(method, params);
 }
 
 export const rpc = {
@@ -147,6 +147,37 @@ export const rpc = {
    *  (v. `webui/commands.py::home_pages_set`). */
   saveHomePages(pages, order) {
     return send('home.pages.set', { pages, order });
+  },
+
+  /* ── I segreti ──────────────────────────────────────────────────────────
+     Chiave del provider, token Telegram, password SSH: viaggiavano nella
+     query di una GET, cioe' nella riga di richiesta che log e traceback
+     vedono (terza revisione, WA2). Qui stanno nel frame. Li chiamano i
+     metodi omonimi di `api`, con la stessa firma di prima. */
+
+  /** L'elenco dei modelli di un provider, anche con una chiave non salvata. */
+  providerModels({ provider, apiKey, apiBase, format }) {
+    return send('settings.provider.models', {
+      provider, api_key: apiKey || '', api_base: apiBase || '', format: format || '',
+    });
+  },
+
+  /** Crea o aggiorna un provider; `params` come la vecchia query
+   *  (`name`, `format`, `api_key`, `api_base`, `ca_bundle`, `ca_bundle_clear`). */
+  updateProvider(params) {
+    return send('settings.provider.update', params);
+  },
+
+  /** Salva il token del bot Telegram (il server lo valida con `getMe`). */
+  saveTelegramToken(token) {
+    return send('telegram.save', { token }, { timeoutMs: 30000 });
+  },
+
+  /** Crea o aggiorna un host SSH. `password` va omessa, non mandata vuota,
+   *  quando l'utente non l'ha ridigitata: assente vuol dire «tieni quella
+   *  salvata». */
+  saveSshHost(params) {
+    return send('ssh.host.save', params);
   },
 
 };

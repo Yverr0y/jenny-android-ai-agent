@@ -95,9 +95,19 @@ class CommandContext:
     # quella spostata, o al posto di quella cancellata. Obbligatorio per la stessa
     # ragione di ``invalidate_session``.
     busy_session_keys: Callable[[], Collection[str]]
+    # I due ganci che le rotte dei settings chiamano dopo un salvataggio
+    # riuscito, per i comandi che ne hanno preso il posto (terza revisione,
+    # WA2): ``settings.provider.update`` ricostruisce provider e modello,
+    # ``telegram.save`` riavvia il canale. Facoltativi e non obbligatori come i
+    # due qui sopra perche' i siti di costruzione dei test sono decine e nessuno
+    # di loro salva un provider; il composition root li passa
+    # (``gateway_services``), e se mancano il comando lo dice nel log invece di
+    # tacere un provider nuovo che non entra in servizio fino al riavvio.
+    on_settings_changed: Callable[[], None] | None = None
+    on_telegram_changed: Callable[[], None] | None = None
 
 
-Command = Callable[[CommandContext, Mapping[str, Any]], Awaitable[dict[str, Any]]]
+Command =Callable[[CommandContext, Mapping[str, Any]], Awaitable[dict[str, Any]]]
 
 
 def _require_str(params: Mapping[str, Any], key: str) -> str:
@@ -1032,6 +1042,166 @@ async def home_pages_set(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     return {"ok": True, "pages": after, "order": list(order_after)}
 
 
+# ---------------------------------------------------------------------------
+# I segreti: chiave del provider, token Telegram, password SSH
+# ---------------------------------------------------------------------------
+#
+# Viaggiavano nella query di una GET (``/api/settings/provider/update?api_key=``,
+# ``provider-models``, ``/api/telegram/save?token=``,
+# ``/api/settings/ssh/host/save?password=``): una query string sta nella riga
+# di richiesta, e la riga di richiesta la vedono il log di accesso, i
+# traceback con le variabili locali e chiunque logghi un URL (terza revisione,
+# WA2). Il gateway non legge body HTTP (``.agent/design.md``), quindi la strada
+# e' questa: un frame WebSocket, autenticato all'handshake. La logica resta
+# dov'era (``settings_api``, ``telegram_api``, ``ssh_api``): qui si traduce solo
+# il trasporto.
+
+# ``WebUISettingsError.status`` → codice di ``CommandError``. Un 502 (Telegram o
+# il provider irraggiungibili) e un 503 dicono entrambi «adesso non si puo'».
+_SETTINGS_STATUS_CODES = {
+    400: "bad_request",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    413: "too_large",
+    502: "unavailable",
+    503: "unavailable",
+}
+
+
+def _settings_error(exc: Any) -> CommandError:
+    return CommandError(_SETTINGS_STATUS_CODES.get(exc.status, "bad_request"), exc.message)
+
+
+def _as_query(params: Mapping[str, Any], keys: Collection[str]) -> dict[str, list[str]]:
+    """I parametri RPC nella forma ``QueryParams`` che le funzioni dei settings
+    leggono (``{nome: [valore]}``). Solo *keys*; ``None`` diventa la stringa
+    vuota, come la mandava il client HTTP (``_sshCall``); un valore che non sia
+    una stringa, un numero o un booleano e' una richiesta sbagliata."""
+    query: dict[str, list[str]] = {}
+    for key in keys:
+        if key not in params:
+            continue
+        value = params[key]
+        if value is None:
+            value = ""
+        elif isinstance(value, bool):
+            value = "1" if value else ""
+        elif isinstance(value, (int, float)):
+            value = str(value)
+        elif not isinstance(value, str):
+            raise CommandError("bad_request", f"{key} must be a string")
+        query[key] = [value]
+    return query
+
+
+def _fire(hook: Callable[[], None] | None, name: str) -> None:
+    """Chiama un gancio dopo un salvataggio riuscito; un suo errore resta nel log
+    (come nelle rotte: il salvataggio e' gia' avvenuto)."""
+    if hook is None:
+        logger.warning("{} is not wired: the change applies on the next restart", name)
+        return
+    try:
+        hook()
+    except Exception:
+        logger.exception("{} callback failed", name)
+
+
+async def settings_provider_models(
+    ctx: CommandContext, params: Mapping[str, Any]
+) -> dict[str, Any]:
+    """L'elenco dei modelli di un provider, anche non ancora salvato.
+
+    Era ``GET /api/settings/provider-models?api_key=…``: l'onboarding e la
+    scheda del provider chiedono i modelli con la chiave appena digitata,
+    prima di salvarla. Sola lettura, e advisory: non tocca la config.
+    """
+    from jenny.webui.settings_api import WebUISettingsError, provider_models_payload
+
+    query = _as_query(params, ("provider", "api_key", "api_base", "format"))
+    try:
+        payload = await asyncio.to_thread(provider_models_payload, query)
+    except WebUISettingsError as exc:
+        raise _settings_error(exc) from None
+    # Diagnostica: il fetch modelli non solleva sugli esiti applicativi
+    # (not_configured/error/unsupported), e senza questa riga una lista vuota
+    # resterebbe invisibile nel log (era nella rotta).
+    logger.info(
+        "[provider-models] provider={!r} status={!r} count={} message={!r}",
+        payload.get("provider"),
+        payload.get("status"),
+        payload.get("model_count"),
+        payload.get("message"),
+    )
+    return payload
+
+
+async def settings_provider_update(
+    ctx: CommandContext, params: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Crea o aggiorna un provider — con la sua chiave API. Era
+    ``GET /api/settings/provider/update?api_key=…``.
+
+    Dopo il salvataggio ``on_settings_changed``, sempre, come faceva la rotta:
+    il fingerprint del provider attivo decide da se' se c'e' qualcosa da
+    ricostruire.
+    """
+    from jenny.webui.settings_api import WebUISettingsError, update_provider
+
+    query = _as_query(
+        params, ("name", "format", "api_key", "api_base", "ca_bundle", "ca_bundle_clear")
+    )
+    # Solo i campi valorizzati, come la rotta: ``ca_bundle_clear`` e' un segnale
+    # a parte proprio perche' la stringa vuota qui vuol dire «non toccare».
+    data: dict[str, str] = {"name": (query.get("name") or [""])[0]}
+    for key in ("format", "api_key", "api_base", "ca_bundle", "ca_bundle_clear"):
+        value = (query.get(key) or [""])[0]
+        if value:
+            data[key] = value
+    try:
+        payload = await update_provider(data)
+    except WebUISettingsError as exc:
+        raise _settings_error(exc) from None
+    _fire(ctx.on_settings_changed, "on_settings_changed")
+    return payload
+
+
+async def telegram_save(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Salva il token del bot Telegram (lo valida con ``getMe``) e riavvia il
+    canale. Era ``GET /api/telegram/save?token=…``."""
+    from jenny.webui.settings_api import WebUISettingsError
+    from jenny.webui.telegram_api import save_telegram_token
+
+    token = params.get("token", "")
+    if not isinstance(token, str):
+        raise CommandError("bad_request", "token must be a string")
+    try:
+        payload = await save_telegram_token(token)
+    except WebUISettingsError as exc:
+        raise _settings_error(exc) from None
+    _fire(ctx.on_telegram_changed, "on_telegram_changed")
+    return payload
+
+
+# I campi di un host SSH, come li legge ``ssh_api.save_ssh_host``.
+_SSH_HOST_KEYS = (
+    "alias", "host", "port", "username", "description", "job_log_dir", "auth", "password",
+)
+
+
+async def ssh_host_save(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Crea o aggiorna un host SSH — con la sua password, se ne ha una. Era
+    ``GET /api/settings/ssh/host/save?password=…``. ``password`` assente vuol
+    dire «tieni quella salvata», come prima."""
+    from jenny.webui.settings_api import WebUISettingsError
+    from jenny.webui.ssh_api import save_ssh_host
+
+    try:
+        return await save_ssh_host(_as_query(params, _SSH_HOST_KEYS))
+    except WebUISettingsError as exc:
+        raise _settings_error(exc) from None
+
+
 COMMANDS: dict[str, Command] = {
     "workspace.write": workspace_write,
     "workspace.delete": workspace_delete,
@@ -1044,6 +1214,10 @@ COMMANDS: dict[str, Command] = {
     "project.delete": project_delete,
     "project.rename": project_rename,
     "home.pages.set": home_pages_set,
+    "settings.provider.models": settings_provider_models,
+    "settings.provider.update": settings_provider_update,
+    "telegram.save": telegram_save,
+    "ssh.host.save": ssh_host_save,
 }
 
 

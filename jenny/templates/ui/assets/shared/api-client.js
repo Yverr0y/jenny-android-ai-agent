@@ -386,14 +386,17 @@ class ApiClient {
     return res.json();
   }
 
+  /* I quattro metodi che portano un segreto — `getProviderModels`,
+     `updateProvider`, `saveTelegramToken`, `saveSshHost` — viaggiano sul
+     WebSocket (`rpc`): la chiave API, il token del bot e la password SSH
+     stavano nella query di una GET, cioe' nella riga di richiesta che log e
+     traceback vedono (terza revisione, WA2). Firma e forma della risposta sono
+     quelle di prima, cosi' i chiamanti non cambiano; l'errore porta il
+     messaggio del server e il `code` del comando. Import **dinamico** per la
+     stessa ragione di `savePages`. */
   async getProviderModels(provider, apiKey, apiBase, format) {
-    let url = `/api/settings/provider-models?provider=${encodeURIComponent(provider)}`;
-    if (apiKey) url += `&api_key=${encodeURIComponent(apiKey)}`;
-    if (apiBase) url += `&api_base=${encodeURIComponent(apiBase)}`;
-    if (format) url += `&format=${encodeURIComponent(format)}`;
-    const res = await this._fetch(url);
-    if (!res.ok) throw new Error(`Provider models failed: ${res.status}`);
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.providerModels({ provider, apiKey, apiBase, format });
   }
 
   _postWithQuery(url, params) {
@@ -410,18 +413,18 @@ class ApiClient {
     return res.json();
   }
 
+  /* Il messaggio del server arriva nell'errore: il backend rifiuta il
+     salvataggio spiegando *quale* file CA non ha potuto leggere e dove, e uno
+     stato secco trasformerebbe quella spiegazione in un mistero. I valori vuoti
+     si scartano come faceva `_postWithQuery`: la stringa vuota vuol dire «non
+     toccare», e `ca_bundle_clear` e' il segnale a parte per svuotare. */
   async updateProvider(params) {
-    const res = await this._postWithQuery('/api/settings/provider/update', params);
-    if (!res.ok) {
-      // Il corpo dell'errore va propagato: il backend rifiuta il salvataggio
-      // spiegando *quale* file CA non ha potuto leggere e dove, e uno stato
-      // secco ("400") trasformerebbe quella spiegazione in un mistero. Le rotte
-      // dei settings rispondono in `text/plain` (`http_error`), non in JSON come
-      // quelle delle app: qui si legge il testo, non `err.error`.
-      const detail = await res.text().catch(() => '');
-      throw new Error(detail.trim() || `Provider update failed: ${res.status}`);
+    const { rpc } = await import('./rpc-client.js');
+    const clean = {};
+    for (const [k, v] of Object.entries(params || {})) {
+      if (v !== null && v !== undefined && v !== '') clean[k] = String(v);
     }
-    return res.json();
+    return rpc.updateProvider(clean);
   }
 
   async deleteProvider(params) {
@@ -517,16 +520,19 @@ class ApiClient {
   }
 
   // `params` accetta anche `auth` ('key' | 'password') e, solo con
-  // `auth: 'password'`, la password in chiaro. Due cose da sapere prima di
-  // toccarla: il parametro si deve chiamare esattamente `password`, perché è
-  // quel nome che `http_utils.redact_query_secrets` riconosce e maschera nel
-  // log del path lato gateway; e va omesso — non passato vuoto — quando
-  // l'utente non l'ha ridigitata, perché assente significa "tieni quella
-  // salvata". Il valore non va mai loggato né tenuto in giro: la risposta non
-  // lo rimanda indietro (porta `has_password`, un booleano) proprio perché non
-  // esista una copia da cui possa ricomparire.
+  // `auth: 'password'`, la password in chiaro. Viaggia sul WebSocket (comando
+  // `ssh.host.save`), non piu' nella query: v. il commento su
+  // `getProviderModels`. Va omessa — non passata vuota — quando l'utente non
+  // l'ha ridigitata, perché assente significa "tieni quella salvata". Il valore
+  // non va mai loggato né tenuto in giro: la risposta non lo rimanda indietro
+  // (porta `has_password`, un booleano) proprio perché non esista una copia da
+  // cui possa ricomparire. I valori `null` diventano stringa vuota come in
+  // `_sshCall`: un campo svuotato deve arrivare vuoto.
   async saveSshHost(params) {
-    return this._sshCall('/api/settings/ssh/host/save', params);
+    const { rpc } = await import('./rpc-client.js');
+    const clean = {};
+    for (const [k, v] of Object.entries(params || {})) clean[k] = v == null ? '' : String(v);
+    return rpc.saveSshHost(clean);
   }
 
   async deleteSshHost(alias) {
@@ -584,8 +590,11 @@ class ApiClient {
     return this._telegramGet('/api/telegram/status');
   }
 
+  /* Il token sul WebSocket (comando `telegram.save`), non nella query: v. il
+     commento su `getProviderModels`. */
   async saveTelegramToken(token) {
-    return this._telegramGet(`/api/telegram/save?token=${encodeURIComponent(token)}`);
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.saveTelegramToken(token);
   }
 
   async unpairTelegram() {

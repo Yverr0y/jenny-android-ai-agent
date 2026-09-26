@@ -4,8 +4,17 @@ Stesso pattern adapter di ``WorkspaceRoutes``/``WikiRoutes``. Il payload delle
 operazioni di scrittura viaggia nell'header ``X-Jenny-Backup-Data`` come JSON
 UTF-8 codificato base64: il server WebSocket non legge mai i body HTTP
 (``websockets.http11.Request`` non li espone) e il base64 evita i problemi
-latin-1 degli header con passphrase non-ASCII. La passphrase non transita MAI
-nella query string (finirebbe nei log).
+latin-1 degli header con passphrase non-ASCII. La passphrase non transita
+nella query string, e questo la tiene fuori dalla riga di richiesta — che
+finisce nei log di accesso.
+
+Non la tiene fuori da **ogni** log, e la frase di prima («mai nella query,
+finirebbe nei log») lo lasciava credere (terza revisione, WA2): decodificata,
+la passphrase e' una variabile locale di ``_export``/``_import``, e un
+``logger.exception`` con ``diagnose`` acceso stampa le variabili locali dei
+frame. Cio' che la protegge li' e' ``diagnose=False`` nella configurazione di
+loguru, non questo header. Migrabile sull'RPC WebSocket senza design nuovo
+(v. ``tests/webui/test_no_payload_headers.py``).
 """
 
 from __future__ import annotations
