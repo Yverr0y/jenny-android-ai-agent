@@ -1800,8 +1800,11 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                             meta["_stream_delta"] = True
                             meta["_stream_id"] = _current_stream_id()
                             # Transient live-preview: non bloccante, scartabile
-                            # sotto backpressure (la risposta finale autoritativa
-                            # è pubblicata a parte più sotto).
+                            # sotto backpressure. Il finale del turno è
+                            # ``_streamed`` e alla WebUI non si rispedisce: a
+                            # recuperare un delta perso è il bus, che mette il
+                            # testo intero sullo ``stream_end`` di quello stream
+                            # (v. ``MessageBus.try_publish_outbound``).
                             self.bus.try_publish_outbound(OutboundMessage(
                                 channel=msg.channel, chat_id=msg.chat_id,
                                 content=delta,

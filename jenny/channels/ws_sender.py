@@ -615,8 +615,16 @@ class OutboundSenderMixin:
             if delta:
                 buffered.append(delta)
             full_text = "".join(buffered)
+            authoritative = meta.get("_stream_full_text")
+            if isinstance(authoritative, str):
+                # Lo stream ha perso dei delta sotto backpressure (v.
+                # ``MessageBus.try_publish_outbound``): il buffer qui ha solo
+                # quelli arrivati. Vale il testo intero che il bus ha tenuto, e
+                # va sempre nel frame: il client sostituisce il blocco, il
+                # transcript riscrive la riga.
+                full_text = authoritative
             rewritten = self._media.rewrite_local_markdown_images(full_text)
-            if delta or rewritten != full_text:
+            if delta or rewritten != full_text or isinstance(authoritative, str):
                 body["text"] = rewritten
         else:
             body = {

@@ -27,6 +27,13 @@ class MessageBus:
             maxsize=max(0, outbound_maxsize)
         )
         self._dropped_outbound = 0
+        # Stato degli stream sotto backpressure (solo su coda limitata, v.
+        # ``try_publish_outbound``): il testo visto per ogni stream aperto, gli
+        # stream che hanno perso almeno un delta, e gli ``stream_end`` che non
+        # sono entrati in coda e aspettano il prossimo messaggio bloccante.
+        self._stream_texts: dict[tuple[str, str, str], list[str]] = {}
+        self._degraded_streams: set[tuple[str, str, str]] = set()
+        self._pending_stream_ends: dict[tuple[str, str], list[OutboundMessage]] = {}
 
     async def publish_inbound(self, msg: InboundMessage) -> None:
         """Publish a message from a channel to the agent.
@@ -43,7 +50,18 @@ class MessageBus:
         """Publish a response from the agent to channels (blocking).
 
         Da usare per i messaggi che NON devono mai essere persi (risposta finale,
-        turn_end). Per i messaggi transient usare ``try_publish_outbound``."""
+        turn_end). Per i messaggi transient usare ``try_publish_outbound``.
+
+        Prima del messaggio passano gli ``stream_end`` della stessa chat che la
+        coda piena aveva respinto (v. ``try_publish_outbound``): chiudono lo
+        stream col testo intero, e vanno davanti al finale del turno."""
+        for end in self._pending_stream_ends.pop((msg.channel, msg.chat_id), ()):
+            await self.outbound.put(end)
+        if msg.metadata.get("_turn_end") and self._stream_texts:
+            # Un turno interrotto (``/stop``) può lasciare uno stream senza
+            # ``stream_end``: il suo testo non serve più a nessuno.
+            for key in [k for k in self._stream_texts if k[:2] == (msg.channel, msg.chat_id)]:
+                self._forget_stream(key)
         await self.outbound.put(msg)
 
     async def consume_outbound(self) -> OutboundMessage:
@@ -55,13 +73,30 @@ class MessageBus:
         è piena.
 
         Pensato per i messaggi transient (stream delta, progress, reasoning) su
-        code limitate: perdere il live-preview è sicuro perché il messaggio
-        finale autoritativo viene pubblicato a parte con ``publish_outbound``.
-        Su coda illimitata (default) non scarta mai → identico a ``publish_outbound``.
+        code limitate. Su coda illimitata (default) non scarta mai → identico a
+        ``publish_outbound``.
+
+        **Un delta perso non si perde per sempre.** Il finale di un turno
+        streammato è ``_streamed`` e non si rispedisce alla WebUI, quindi il
+        testo di un delta scartato mancava dalla bolla e dal transcript (512
+        parole su 800, misurato). Per questo, su coda limitata, il bus tiene il
+        testo di ogni stream aperto; se ne ha scartato anche un solo delta, lo
+        ``stream_end`` di quello stream parte con il testo intero del segmento
+        in ``_stream_full_text``, che il canale usa al posto dei delta (il
+        client sostituisce il blocco, il transcript riscrive la riga). E se è lo
+        ``stream_end`` stesso a non entrare in coda, lo si tiene da parte e lo
+        consegna il prossimo ``publish_outbound`` della stessa chat — il finale
+        o il ``turn_end``, che arrivano sempre.
         """
+        key = self._stream_key(msg)
+        is_end = bool(key and msg.metadata.get("_stream_end"))
+        if key is not None:
+            if msg.metadata.get("_stream_delta") and msg.content:
+                self._stream_texts.setdefault(key, []).append(msg.content)
+            if is_end and key in self._degraded_streams:
+                msg = self._authoritative_end(msg, key)
         try:
             self.outbound.put_nowait(msg)
-            return True
         except asyncio.QueueFull:
             self._dropped_outbound += 1
             if self._dropped_outbound % 100 == 1:
@@ -69,7 +104,52 @@ class MessageBus:
                     "Outbound queue full; dropped {} transient message(s) so far",
                     self._dropped_outbound,
                 )
+            if key is not None:
+                if is_end:
+                    if "_stream_full_text" not in msg.metadata:
+                        msg = self._authoritative_end(msg, key)
+                    self._pending_stream_ends.setdefault(
+                        (msg.channel, msg.chat_id), [],
+                    ).append(msg)
+                    self._forget_stream(key)
+                else:
+                    self._degraded_streams.add(key)
             return False
+        if is_end and key is not None:
+            self._forget_stream(key)
+        return True
+
+    def _stream_key(self, msg: OutboundMessage) -> tuple[str, str, str] | None:
+        """Chiave dello stream di *msg*, o ``None`` se non è un delta/end da seguire.
+
+        Su coda illimitata niente si scarta, quindi non serve tenere nulla.
+        """
+        if self.outbound.maxsize <= 0:
+            return None
+        meta = msg.metadata or {}
+        if not (meta.get("_stream_delta") or meta.get("_stream_end")):
+            return None
+        return (msg.channel, msg.chat_id, str(meta.get("_stream_id") or ""))
+
+    def _authoritative_end(
+        self, msg: OutboundMessage, key: tuple[str, str, str],
+    ) -> OutboundMessage:
+        """Lo ``stream_end`` di *msg* con il testo intero dello stream."""
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content=msg.content,
+            media=msg.media,
+            metadata={
+                **msg.metadata,
+                "_stream_full_text": "".join(self._stream_texts.get(key, ())),
+            },
+            buttons=msg.buttons,
+        )
+
+    def _forget_stream(self, key: tuple[str, str, str]) -> None:
+        self._stream_texts.pop(key, None)
+        self._degraded_streams.discard(key)
 
     @property
     def outbound_size(self) -> int:
