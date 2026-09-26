@@ -510,6 +510,11 @@ export class HomeChat {
      Regola 3: il blocco si chiude qui, o il segmento dopo gli si incolla. */
   _streamEnd(fullText) {
     this._cancelRender();
+    /* Un segmento che ha perso **tutti** i suoi delta — il bus li scarta
+       sotto backpressure, e lo `stream_end` porta allora il testo intero
+       (terza revisione, PC3) — arriva qui senza un blocco aperto: il testo
+       va disegnato lo stesso, o dal vivo la risposta non si vede. */
+    if (!this.blockNode && fullText) this._ensureBlock();
     const finalText = fullText || this.buffer;
     if (this.blockNode && finalText) {
       this.blockNode.innerHTML = renderMarkdown(finalText);
