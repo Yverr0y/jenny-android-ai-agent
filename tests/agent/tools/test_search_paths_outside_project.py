@@ -58,3 +58,25 @@ async def test_a_find_files_hit_outside_the_project_can_be_read(install: Path) -
 async def test_a_hit_inside_the_project_stays_relative(install: Path) -> None:
     out = await GrepTool(workspace=install, allowed_dir=install).execute(pattern="regola")
     assert _first_path(out) == "wiki/index.md", out
+
+
+async def test_the_query_filter_ignores_the_folders_above_the_install(install: Path) -> None:
+    """Il filtro ``query`` guarda il percorso nell'installazione, non quello assoluto.
+
+    Fuori dal progetto il risultato si mostra assoluto, ma confrontare il
+    filtro con quel testo faceva passare ogni file per una parola che sta sopra
+    l'installazione (qui il nome della sua cartella, ``ws``, o quello della
+    cartella temporanea del test).
+    """
+    tool = FindFilesTool(workspace=install, allowed_dir=install)
+    (install / "skills" / "llm-wiki" / "notes.md").write_text("x\n", encoding="utf-8")
+    above = install.parent.name
+
+    assert await tool.execute(path=str(install / "skills"), query=above) == "No files found"
+    assert await tool.execute(path=str(install / "skills"), query="ws") == "No files found"
+
+    out = await tool.execute(path=str(install / "skills"), query="llm-wiki notes")
+    assert out.strip().splitlines() == [str(install / "skills" / "llm-wiki" / "notes.md")], out
+    # Come dentro l'installazione: il percorso conta dalla sua radice.
+    out = await tool.execute(path=str(install / "skills"), query="skills SKILL.md")
+    assert out.strip().splitlines() == [str(install / "skills" / "llm-wiki" / "SKILL.md")], out

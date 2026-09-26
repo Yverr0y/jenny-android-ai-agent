@@ -113,6 +113,24 @@ class _SearchTool(_FsTool):
             return target.as_posix()
         return target.relative_to(root).as_posix()
 
+    def _query_path(self, target: Path, display_path: str, rel_path: str) -> str:
+        """Il testo su cui si misura il filtro ``query`` di un risultato.
+
+        Di norma quello mostrato. Ma fuori dalla base dei percorsi relativi il
+        risultato si mostra assoluto (v. ``_display_path``), e un filtro misurato
+        sul percorso assoluto faceva passare ogni file per una parola che sta
+        sopra l'installazione — il nome della sua cartella, ``tmp``, ``data``.
+        Lì si misura sul percorso dentro il workspace, che è quello che un
+        risultato interno mostrerebbe; e, se il file sta fuori anche da lui, su
+        quello dentro la radice della ricerca.
+        """
+        if not Path(display_path).is_absolute():
+            return display_path
+        if self._workspace is not None:
+            with suppress(ValueError):
+                return target.relative_to(Path(self._workspace)).as_posix()
+        return rel_path
+
     def _link_escapes(self, candidate: Path) -> bool:
         """Un file-symlink il cui bersaglio ``read_file`` rifiuterebbe (TL12).
 
@@ -274,7 +292,7 @@ class FindFilesTool(_SearchTool):
                     continue
                 if candidate.is_dir() and type:
                     continue
-                if not _matches_query(display_path, query):
+                if not _matches_query(self._query_path(candidate, display_path, rel_path), query):
                     continue
                 try:
                     mtime = candidate.stat().st_mtime
