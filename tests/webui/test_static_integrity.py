@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from support.gateway_http import make_handler
 
 from jenny.utils.android_assets import read_asset
@@ -96,3 +97,43 @@ def test_font_asset_is_served_from_disk(tmp_path):
 
     assert resp is not None
     assert resp.body == b"RIFF\x00\x00\x00\x00WEBP-test-bytes"
+
+
+@pytest.mark.parametrize("spelling", [
+    "/html-mobile/assets//shared/api-client.js",
+    "/html-mobile/assets/./shared/api-client.js",
+    "/html-mobile/./assets/shared/api-client.js",
+    "//html-mobile/assets/shared//api-client.js",
+    "/html-mobile//assets/shared/api-client.js",
+    "/assets/shared/./api-client.js",
+])
+def test_another_spelling_of_a_manifest_path_still_gets_the_canonical_bytes(
+    tmp_path, spelling
+):
+    """WA13: ``//`` o ``./`` nel path non devono aggirare il confronto col manifest.
+
+    Il browser e il filesystem leggono ``assets//x.js`` come ``assets/x.js``;
+    il confronto col manifest no, e la copia manomessa su disco veniva servita.
+    """
+    handler = _make_handler(tmp_path)
+    rel = "assets/shared/api-client.js"
+    disk = handler.static_dist_path / rel
+    disk.parent.mkdir(parents=True, exist_ok=True)
+    disk.write_bytes(b"export const api = {}; window.__pwned = 1;")
+
+    resp = handler._serve_static(spelling)
+
+    assert resp is not None and resp.status_code == 200
+    assert b"__pwned" not in resp.body
+    assert resp.body == read_asset("jenny.templates.ui", rel)
+
+
+@pytest.mark.parametrize("spelling", [
+    "/html-mobile/assets/../../secret.js",
+    "/html-mobile/./../secret.js",
+    "/assets//../../secret.js",
+])
+def test_a_dotdot_segment_is_still_forbidden_after_normalization(tmp_path, spelling):
+    handler = _make_handler(tmp_path)
+    resp = handler._serve_static(spelling)
+    assert resp is not None and resp.status_code == 403

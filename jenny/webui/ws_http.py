@@ -807,15 +807,19 @@ class GatewayHTTPHandler:
 
     def _serve_static(self, request_path: str) -> Response | None:
         assert self.static_dist_path is not None
-        rel = request_path.lstrip("/")
-        if not rel:
-            rel = "index.html"
+        # Forma canonica prima di tutto: senza segmenti vuoti né ``.``. Il
+        # filesystem legge ``assets//x.js`` e ``assets/./x.js`` come
+        # ``assets/x.js``, il confronto col manifest no: con il path grezzo la
+        # copia su disco (scrivibile) di un asset attivo veniva servita al posto
+        # dei byte canonici. Lo stesso ``rel`` serve poi anche il disco.
+        segments = [s for s in request_path.split("/") if s not in ("", ".")]
+        if ".." in segments:
+            return _http_error(403, "Forbidden")
         # Strip html-mobile/ prefix — JS imports use /html-mobile/assets/...
         # but files live at templates/ui/assets/...
-        if rel.startswith("html-mobile/"):
-            rel = rel[len("html-mobile/"):]
-        if ".." in rel.split("/") or rel.startswith("/"):
-            return _http_error(403, "Forbidden")
+        if segments[:1] == ["html-mobile"]:
+            segments = segments[1:]
+        rel = "/".join(segments) or "index.html"
         # Il percorso grezzo: lo risolve ``is_path_within``, e un loop di symlink
         # (``RuntimeError`` su Python 3.11) e' un 403 invece di un'eccezione.
         candidate = self.static_dist_path / rel
