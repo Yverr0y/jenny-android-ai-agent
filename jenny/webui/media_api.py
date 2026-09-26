@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import hmac
 import mimetypes
+import os
 import re
 import shutil
 import uuid
@@ -122,6 +123,52 @@ def sign_media_path(
     return f"/api/media/{b64url_encode(mac)}/{payload}"
 
 
+# Le copie dei file fuori dalla media root finiscono qui, e **solo** loro: la
+# cartella si può potare senza toccare altro. Budget LRU come ``remote/``
+# (``media_ingest.REMOTE_MEDIA_BUDGET_BYTES``): una copia potata si rifà al
+# render successivo, finché il file d'origine esiste.
+_STAGE_CHANNEL = "websocket"
+STAGED_MEDIA_BUDGET_BYTES = 200 * 1024 * 1024
+
+
+def _stage_key(path: Path, size: int, mtime_ns: int) -> str:
+    """Nome stabile della copia: stesso file, stessa versione → stessa copia."""
+    ident = f"{path}|{mtime_ns}|{size}"
+    return hashlib.sha256(ident.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+
+
+def _enforce_staged_budget(staged_dir: Path, *, keep: Path, logger: Any | None) -> None:
+    """Toglie le copie usate meno di recente finché la cartella sta nel budget.
+
+    ``keep`` (la copia appena fatta) non si tocca mai, anche se da sola sfora:
+    il render che l'ha chiesta deve poterla servire.
+    """
+    entries: list[tuple[float, int, Path]] = []
+    try:
+        for f in staged_dir.iterdir():
+            if f.name.endswith(".tmp") or not f.is_file():
+                continue
+            st = f.stat()
+            entries.append((st.st_mtime, st.st_size, f))
+    except OSError:
+        return
+    total = sum(size for _, size, _ in entries)
+    if total <= STAGED_MEDIA_BUDGET_BYTES:
+        return
+    for _, size, f in sorted(entries, key=lambda e: e[0]):
+        if total <= STAGED_MEDIA_BUDGET_BYTES:
+            break
+        if f == keep:
+            continue
+        try:
+            f.unlink()
+        except OSError:
+            continue
+        total -= size
+        if logger is not None:
+            logger.debug("staged media: evicted {} ({} bytes) to enforce budget", f.name, size)
+
+
 def sign_or_stage_media_path(
     path: Path,
     *,
@@ -129,18 +176,42 @@ def sign_or_stage_media_path(
     media_dir: MediaDirProvider = _default_media_dir,
     logger: Any | None = None,
 ) -> dict[str, str] | None:
-    """Sign an existing media-root path, or stage an arbitrary file before signing."""
+    """Sign an existing media-root path, or stage an arbitrary file before signing.
+
+    La copia si fa una volta per versione del file (chiave: percorso, mtime,
+    dimensione) e si riusa ai render successivi: prima ogni ridisegno della
+    chat ne aggiungeva una, e la cartella cresceva senza limite.
+    """
     signed = sign_media_path(path, secret=secret, media_dir=media_dir)
     if signed is not None:
         return {"url": signed, "name": path.name}
+    tmp: Path | None = None
     try:
         if not path.is_file():
             return None
-        target_dir = media_dir("websocket")
+        st = path.stat()
+        target_dir = media_dir(_STAGE_CHANNEL)
         safe_name = safe_filename(path.name) or "attachment"
-        staged = target_dir / f"{uuid.uuid4().hex[:12]}-{safe_name}"
-        shutil.copyfile(path, staged)
-    except OSError as exc:
+        key = _stage_key(path.resolve(), st.st_size, st.st_mtime_ns)
+        staged = target_dir / f"{key}-{safe_name}"
+        if staged.is_file() and staged.stat().st_size == st.st_size:
+            # Riusata: è «usata di recente» per il budget LRU.
+            os.utime(staged)
+        else:
+            # Copia su un temporaneo e rename: una copia a metà (disco pieno,
+            # processo ucciso) non deve mai sembrare quella buona.
+            tmp = target_dir / f".{uuid.uuid4().hex[:12]}.tmp"
+            shutil.copyfile(path, tmp)
+            os.replace(tmp, staged)
+            tmp = None
+            _enforce_staged_budget(target_dir, keep=staged, logger=logger)
+    except (OSError, RuntimeError) as exc:
+        # ``RuntimeError``: un loop di symlink in ``resolve``, su Python 3.11.
+        if tmp is not None:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
         if logger is not None:
             logger.warning("failed to stage outbound media {}: {}", path, exc)
         return None
