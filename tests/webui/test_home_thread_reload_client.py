@@ -212,3 +212,66 @@ assert.deepEqual(unhandled, []);
 const rows = thread();
 assert.ok(rows.at(-1).startsWith('note: '), `nessun avviso: ${JSON.stringify(rows)}`);
 """)
+
+
+_PAGED = """
+threads['websocket:default'] = { messages: [
+  { role: 'user', text: 'Q3' }, { role: 'assistant', text: 'A3', turnId: 'c' },
+], page: { before_cursor: 'c1', has_more_before: true } };
+const olderPage = () => ({ ok: true, status: 200, json: async () => ({ messages: [
+  { role: 'user', text: 'Q1' }, { role: 'assistant', text: 'A1', turnId: 'a' }],
+  page: { before_cursor: null, has_more_before: false } }) });
+/* La pagina precedente torna dopo `pageMs`, la storia recente dopo `threadMs`. */
+const slowPaging = (pageMs, threadMs) => {
+  hooks.fetch = async (u) => {
+    if (!u.pathname.endsWith('/webui-thread')) return undefined;
+    if (u.searchParams.get('before')) { await tick(pageMs); return olderPage(); }
+    await tick(threadMs);
+    return undefined;
+  };
+};
+"""
+
+
+def test_an_older_page_loaded_during_a_reload_does_not_end_up_below_the_history() -> None:
+    """Si scorre in su mentre il filo si sta rileggendo: la pagina piu'
+    vecchia entra in cima prima che la storia recente arrivi. La storia non le
+    finisce sopra, e il tocco dopo non la riaggiunge una seconda volta."""
+    _run(_PAGED + """
+const app = await boot();
+assert.deepEqual(thread(), ['you: Q3', 'jenny: A3']);
+slowPaging(20, 100);
+const reading = app.chat.reload();
+await tick(5);
+await app.chat.pager.loadMore();
+assert.deepEqual(thread(), ['you: Q1', 'jenny: A1', 'you: Q3', 'jenny: A3']);
+await reading;
+await tick(30);
+assert.deepEqual(thread(), ['you: Q3', 'jenny: A3'], 'la storia e\\u2019 entrata sopra la pagina');
+assert.equal(app.chat.pager.cursor, 'c1');
+assert.equal(app.chat.pager.hasMore, true);
+await app.chat.pager.loadMore();
+await tick(50);
+assert.deepEqual(thread(), ['you: Q1', 'jenny: A1', 'you: Q3', 'jenny: A3']);
+""")
+
+
+def test_an_older_page_asked_before_a_reload_is_not_added_twice() -> None:
+    """La stessa corsa, partita dall'altro capo: lo scorrimento chiede la
+    pagina, poi arriva la rilettura, e la pagina torna mentre la rilettura e'
+    ancora in volo."""
+    _run(_PAGED + """
+const app = await boot();
+slowPaging(60, 100);
+const paging = app.chat.pager.loadMore();
+await tick(5);
+const reading = app.chat.reload();
+await paging;
+await reading;
+await tick(30);
+assert.deepEqual(thread(), ['you: Q3', 'jenny: A3']);
+await app.chat.pager.loadMore();
+await tick(100);
+assert.deepEqual(thread(), ['you: Q1', 'jenny: A1', 'you: Q3', 'jenny: A3']);
+""")
+

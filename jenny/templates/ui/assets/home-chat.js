@@ -287,7 +287,6 @@ export class HomeChat {
     const key = sessionManager.currentKey;
     const switched = key !== this._shownKey;
     this._shownKey = key;
-    let old = [];
     if (fresh && switched) {
       /* Tutto, compreso quel che era nato dal vivo: era dell'altra. */
       this.el.querySelectorAll(THREAD_NODES).forEach((n) => n.remove());
@@ -300,8 +299,6 @@ export class HomeChat {
          questo `reset()` esiste, e il suo commento dice proprio «si chiama al
          cambio di conversazione». */
       this.pager.reset();
-    } else if (fresh) {
-      old = [...this.el.querySelectorAll(THREAD_NODES)].filter((n) => !this._live.has(n));
     }
     this._reading += 1;
     let res;
@@ -315,10 +312,22 @@ export class HomeChat {
     }
     if (gen !== this._readGen || res.stale) return null;
     const { thread } = res;
-    old.forEach((n) => n.remove());
+    /* Cosa se ne va si decide adesso, a storia arrivata, e non alla partenza:
+       nel frattempo puo' essere entrata in cima una pagina piu' vecchia
+       chiesta con lo scorrimento. Contata alla partenza restava a schermo, la
+       storia recente le finiva sopra (Q3, A3, Q1, A1), e `adopt` qui sotto
+       rimetteva il cursore che la stessa pagina l'avrebbe riaggiunta al tocco
+       dopo. Il cursore che si adotta e' quello della storia appena letta,
+       quindi tutto quel che non e' nato dal vivo va via: la pagina si
+       richiede, ed entra al suo posto. */
+    if (fresh) {
+      this.el.querySelectorAll(THREAD_NODES).forEach((n) => {
+        if (!this._live.has(n)) n.remove();
+      });
+    }
     const messages = thread?.messages || [];
-    /* Il primo nodo rimasto e' nato dal vivo: la storia va prima di lui. */
-    this._anchor = this.el.querySelector(THREAD_NODES);
+    /* La storia va prima del primo nodo nato dal vivo. */
+    this._anchor = [...this.el.querySelectorAll(THREAD_NODES)].find((n) => this._live.has(n)) || null;
     try {
       this._inBatch(() => {
         for (const turn of this._buildTurns(messages)) {
