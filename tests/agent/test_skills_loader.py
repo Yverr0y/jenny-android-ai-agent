@@ -394,3 +394,65 @@ def test_update_skill_failed_write_leaves_the_skill_intact(tmp_path: Path) -> No
 
     assert skill_path.read_text(encoding="utf-8") == before
     assert loader.load_skill("alpha") is not None
+
+
+def _count_skill_reads(monkeypatch) -> list[str]:
+    reads: list[str] = []
+    original = Path.read_text
+
+    def counting(self, *args, **kwargs):
+        if self.name == "SKILL.md":
+            reads.append(self.parent.name)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting)
+    return reads
+
+
+def test_a_second_summary_reads_no_skill_file_again(tmp_path: Path, monkeypatch) -> None:
+    """AC16 della terza revisione: le skill si leggono una volta, finché non cambiano.
+
+    Ogni costruzione del prompt rileggeva e riparsava in YAML ogni ``SKILL.md``
+    più volte (elenco, requisiti, descrizione, always): 56 letture per prompt sul
+    telefono, tre prompt a turno. Ora il testo e il frontmatter stanno in cache,
+    validi finché ``mtime`` e dimensione del file restano quelli.
+    """
+    workspace = tmp_path / "ws"
+    skills_root = workspace / "skills"
+    for name in ("alfa", "beta", "gamma"):
+        _write_skill(skills_root, name, metadata_json={"always": name == "alfa"})
+    loader = SkillsLoader(workspace)
+    first = loader.build_skills_summary()
+    loader.get_always_skills()
+    reads = _count_skill_reads(monkeypatch)
+
+    assert loader.build_skills_summary() == first
+    assert loader.get_always_skills() == ["alfa"]
+    assert loader.load_skills_for_context(["alfa"])
+    assert reads == []
+
+
+def test_a_changed_skill_is_read_again(tmp_path: Path) -> None:
+    import os
+
+    workspace = tmp_path / "ws"
+    path = _write_skill(workspace / "skills", "alfa", body="# Prima\n")
+    loader = SkillsLoader(workspace)
+    assert "Prima" in (loader.load_skill("alfa") or "")
+
+    path.write_text("---\ndescription: nuova\n---\n\n# Dopo, e piu' lunga\n", encoding="utf-8")
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    assert "Dopo" in (loader.load_skill("alfa") or "")
+    assert loader.get_skill_metadata("alfa") == {"description": "nuova"}
+
+
+def test_a_removed_skill_is_forgotten(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    path = _write_skill(workspace / "skills", "alfa")
+    loader = SkillsLoader(workspace)
+    assert loader.load_skill("alfa")
+    path.unlink()
+    assert loader.load_skill("alfa") is None
+    assert loader.get_skill_metadata("alfa") is None
