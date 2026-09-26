@@ -865,6 +865,16 @@ class GatewayService : Service() {
                 // Vedi `hasLocationType`: ripiegare qui declasserebbe un
                 // foreground che il tipo ce l'ha già.
                 if (hasLocationType) return true
+            } catch (e: IllegalStateException) {
+                // Da Android 12 (API 31) l'avvio in foreground da background
+                // lancia ForegroundServiceStartNotAllowedException, che e' una
+                // IllegalStateException: si prende la classe madre, che esiste
+                // a ogni livello di API, invece di nominare una classe che
+                // sotto la 31 non c'e'. Prima usciva da qui e il servizio
+                // cadeva, senza arrivare al ripiego qui sotto, che la stessa
+                // eccezione la gestisce gia'.
+                Log.w(TAG, "FGS location start not allowed (${e.javaClass.simpleName})")
+                if (hasLocationType) return true
             }
         }
         return try {
