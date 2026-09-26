@@ -289,9 +289,26 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
                         "completed_tool_results": [],
                         "pending_tool_calls": [],
                     },
+                    messages=messages,
                 )
         self._append_injected_messages(messages, injections)
         if real_injection:
+            # Un messaggio dell'utente entrato a metà turno va nel checkpoint
+            # adesso, non alla prossima risposta del modello: uno /stop durante
+            # quella chiamata lo perderebbe (AC3). Senza messaggio dell'assistente
+            # in volo, ``prior_messages`` è il turno intero.
+            await self._emit_checkpoint(
+                spec,
+                {
+                    "phase": "injected",
+                    "iteration": iteration,
+                    "model": spec.model,
+                    "assistant_message": None,
+                    "completed_tool_results": [],
+                    "pending_tool_calls": [],
+                },
+                messages=messages,
+            )
             logger.info(
                 "Injected {} follow-up message(s) {} ({}/{})",
                 len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
@@ -647,6 +664,7 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
                     "completed_tool_results": [],
                     "pending_tool_calls": [],
                 },
+                messages=messages,
             )
             state.final_content = clean
             context.final_content = state.final_content
@@ -742,6 +760,7 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
                 "completed_tool_results": [],
                 "pending_tool_calls": [tc.to_openai_tool_call() for tc in response.tool_calls],
             },
+            messages=messages,
         )
 
         await hook.before_execute_tools(context)
@@ -803,6 +822,7 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
                 "completed_tool_results": completed_tool_results,
                 "pending_tool_calls": [],
             },
+            messages=messages,
         )
         state.empty_content_retries = 0
         state.length_recovery_count = 0
@@ -1240,10 +1260,32 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
         self,
         spec: AgentRunSpec,
         payload: dict[str, Any],
+        *,
+        messages: list[dict[str, Any]] | None = None,
     ) -> None:
+        """Passa il checkpoint al chiamante, con **tutto** il turno fin qui.
+
+        ``prior_messages`` sono i messaggi del turno prima dell'iterazione in
+        corso: le iterazioni già chiuse (assistente con le tool call, e i loro
+        risultati) e i messaggi dell'utente iniettati a metà turno (AC3 della
+        terza revisione). Senza, il checkpoint portava solo l'ultima iterazione, e
+        dopo uno /stop o un kill la storia perdeva tool call che avevano girato —
+        e magari scritto file. Il turno comincia dove finiscono
+        ``spec.initial_messages``: ``messages`` ne è una copia a cui il runner
+        aggiunge in coda soltanto.
+        """
         callback = spec.checkpoint_callback
-        if callback is not None:
-            await callback(payload)
+        if callback is None:
+            return
+        if messages is not None:
+            start = len(spec.initial_messages)
+            anchor = payload.get("assistant_message")
+            end = next(
+                (i for i in range(len(messages) - 1, start - 1, -1) if messages[i] is anchor),
+                len(messages),
+            )
+            payload = {**payload, "prior_messages": list(messages[start:end])}
+        await callback(payload)
 
     @staticmethod
     def _append_final_message(messages: list[dict[str, Any]], content: str | None) -> None:

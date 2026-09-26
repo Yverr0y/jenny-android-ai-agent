@@ -173,7 +173,25 @@ class TurnPersistenceMixin:
         return True
 
     def _set_runtime_checkpoint(self, session: Session, payload: dict[str, Any]) -> None:
-        """Persist the latest in-flight turn state into session metadata."""
+        """Persist the latest in-flight turn state into session metadata.
+
+        ``prior_messages`` (il turno prima dell'iterazione in corso, v.
+        ``AgentRunner._emit_checkpoint``) si alleggerisce qui delle immagini in
+        base64: il checkpoint si riscrive a ogni fase del turno, e una foto
+        iniettata a metà turno lo gonfierebbe di megabyte a ogni riscrittura. Il
+        segnaposto è lo stesso che la storia salvata porterebbe comunque.
+        """
+        prior = payload.get("prior_messages")
+        if isinstance(prior, list):
+            light: list[Any] = []
+            for message in prior:
+                if isinstance(message, dict) and isinstance(message.get("content"), list):
+                    message = {
+                        **message,
+                        "content": self._sanitize_persisted_blocks(message["content"]),
+                    }
+                light.append(message)
+            payload = {**payload, "prior_messages": light}
         session.metadata[self._RUNTIME_CHECKPOINT_KEY] = payload
         self.sessions.save(session)
 
@@ -210,8 +228,14 @@ class TurnPersistenceMixin:
         assistant_message = checkpoint.get("assistant_message")
         completed_tool_results = checkpoint.get("completed_tool_results") or []
         pending_tool_calls = checkpoint.get("pending_tool_calls") or []
+        # Le iterazioni già chiuse del turno e i messaggi iniettati (AC3 della
+        # terza revisione): assenti in un checkpoint scritto da una versione
+        # precedente, che si ripristina come prima.
+        prior_messages = checkpoint.get("prior_messages") or []
 
-        restored_messages: list[dict[str, Any]] = []
+        restored_messages: list[dict[str, Any]] = [
+            dict(message) for message in prior_messages if isinstance(message, dict)
+        ]
         if isinstance(assistant_message, dict):
             restored = dict(assistant_message)
             restored.setdefault("timestamp", datetime.now().isoformat())
@@ -247,7 +271,10 @@ class TurnPersistenceMixin:
             ):
                 overlap = size
                 break
-        session.messages.extend(restored_messages[overlap:])
+        # Dalla stessa porta di un turno finito: il runtime context tolto dai
+        # messaggi utente iniettati, i risultati tool troncati, le immagini a
+        # segnaposto, i risultati orfani scartati.
+        self._save_turn(session, restored_messages, overlap)
 
         self._clear_pending_user_turn(session)
         self._clear_runtime_checkpoint(session)

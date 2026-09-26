@@ -1829,13 +1829,15 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                         error=asyncio.CancelledError(),
                     )
                     logger.info("Task cancelled for session {}", session_key)
-                    # Preserve partial context from the interrupted turn so
-                    # the user does not lose tool results and assistant
-                    # messages accumulated before /stop.  The checkpoint was
-                    # already persisted to session metadata by
-                    # _emit_checkpoint during tool execution; materializing
-                    # it into session history now makes it visible in the
-                    # next conversation turn.
+                    # Il contesto parziale del turno interrotto non va perso.
+                    # Il checkpoint e' gia' nei metadata della sessione
+                    # (``AgentRunner._emit_checkpoint``, a ogni fase del turno),
+                    # e dalla terza revisione (AC3) porta il turno *intero*: le
+                    # iterazioni chiuse in ``prior_messages``, i messaggi
+                    # iniettati, e l'iterazione in volo con le sue tool call.
+                    # Materializzarlo ora lo rende visibile al turno dopo; prima
+                    # portava solo l'ultima iterazione, e le tool call di quelle
+                    # precedenti — che avevano girato — sparivano dalla storia.
                     # Un turno RIPUDIATO (epoch bumpato da /stop o /new) salta
                     # il ripristino: lo ha già fatto il comando in modo
                     # sincrono, e questo handler può girare molto più tardi
