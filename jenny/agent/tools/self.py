@@ -54,6 +54,9 @@ class MyTool(Tool, ContextAware):
         "_session_locks", "_active_tasks", "_background_tasks",
         # Security boundaries (inspect + modify both blocked)
         "restrict_to_workspace", "channels_config",
+        # La config dei tool porta i confini veri (restrict_to_workspace, i moduli
+        # di python_exec, gli host SSH): TL9 della terza revisione.
+        "tools_config",
         "_concurrency_gate", "_extra_hooks",
     })
 
@@ -371,15 +374,25 @@ class MyTool(Tool, ContextAware):
             if leaf.lower() in self._SENSITIVE_NAMES:
                 self._audit("modify", f"BLOCKED sensitive leaf '{leaf}'")
                 return f"Error: '{leaf}' is not accessible"
+            # Ogni segmento, non solo il primo: `x.restrict_to_workspace` è lo
+            # stesso confine di `restrict_to_workspace` (TL9).
+            if any(part in self.BLOCKED for part in key.split(".")):
+                self._audit("modify", f"BLOCKED {key}")
+                return f"Error: '{key}' is protected and cannot be modified"
             parent, err = self._resolve_path(parent_path)
             if err:
                 return f"Error: {err}"
-            if isinstance(parent, dict):
-                parent[leaf] = value
-            else:
-                setattr(parent, leaf, value)
-            self._audit("modify", f"{key} = {value!r}")
-            return f"Set {key} = {value!r}"
+            # Fail-closed come per le chiavi semplici (`_modify_free`): la
+            # allowlist (`RESTRICTED`, `model_preset`) non ha voci annidate,
+            # quindi un attributo annidato del loop non è mai scrivibile. Prima
+            # qui c'era un `setattr` libero: `tools_config.restrict_to_workspace`
+            # passava senza che nessuna lista l'avesse deciso.
+            self._audit("modify", f"BLOCKED nested runtime attr {key}")
+            return (
+                f"Error: '{key}' is a nested runtime attribute and is not settable. Only "
+                "whitelisted runtime controls can be modified; free-form keys are "
+                "stored in the scratchpad instead."
+            )
         if key == "model_preset":
             return self._modify_model_preset(value)
         if key in self.RESTRICTED:
