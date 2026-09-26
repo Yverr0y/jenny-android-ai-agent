@@ -19,7 +19,6 @@ import httpx
 import pytest
 import websockets
 from port_alloc import free_port
-from websockets.datastructures import Headers
 
 from jenny.channels.http_utils import (
     check_api_secret,
@@ -51,9 +50,12 @@ def test_secret_matches_accepts_the_right_secret_and_a_non_ascii_one() -> None:
 
 @pytest.mark.parametrize("supplied", HOSTILE)
 def test_every_gateway_check_is_false_on_non_ascii_token(supplied: str) -> None:
-    bearer = Headers([("Authorization", f"Bearer {supplied}")])
-    jenny_auth = Headers([("X-Jenny-Auth", supplied)])
-    none = Headers([])
+    # Dizionari e non ``Headers``: websockets 16.1 rifiuta già alla costruzione
+    # un valore con surrogati o fuori da Latin-1, e qui conta cosa fanno le
+    # funzioni con qualunque stringa arrivi (16.0, sul Mac, la lascia passare).
+    bearer = {"Authorization": f"Bearer {supplied}"}
+    jenny_auth = {"X-Jenny-Auth": supplied}
+    none: dict[str, str] = {}
     assert issue_route_secret_matches(bearer, SECRET) is False
     assert issue_route_secret_matches(jenny_auth, SECRET) is False
     assert check_api_secret(bearer, "/api/x", SECRET) is False
