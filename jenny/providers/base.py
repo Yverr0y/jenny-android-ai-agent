@@ -658,6 +658,17 @@ class LLMProvider(ABC):
             should_retry_guard=lambda: not has_streamed_content,
             on_stream_recover=_recover_stream if on_stream_recover else None,
         )
+        if response.finish_reason == "error":
+            # A retry esauriti il contenuto resta il messaggio d'errore: col
+            # testo dei segmenti davanti, il runner lo pubblicava come finale e
+            # l'utente rivedeva tutto con l'errore in coda. Ciò che è stato
+            # mostrato va invece in ``partial_content`` — tutti i segmenti, anche
+            # quello dell'ultimo tentativo, che un timeout non si porta dietro —
+            # così la history combacia con lo schermo.
+            shown = "".join(prior_segments_text) + "".join(current_segment_parts)
+            if shown:
+                response = replace(response, partial_content=shown)
+            return response
         if prior_segments_text:
             # Concatenate text-only content from stalled-and-retried segments
             # ahead of the final attempt's content, in the order it was shown

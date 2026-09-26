@@ -358,6 +358,81 @@ async def test_chat_stream_with_retry_stall_accumulation_ignores_tool_call_fragm
     assert response.finish_reason == "tool_calls"
 
 
+def _stall(delta: str) -> LLMResponse:
+    stalled = LLMResponse(
+        content="Error calling LLM: stream stalled for more than 30 seconds",
+        finish_reason="error",
+        error_kind="timeout",
+    )
+    stalled._test_stream_delta = delta  # type: ignore[attr-defined]
+    return stalled
+
+
+@pytest.mark.asyncio
+async def test_exhausted_stall_retries_keep_the_error_and_carry_the_text_aside(
+    monkeypatch,
+) -> None:
+    """A retry esauriti il contenuto è l'errore, e il testo visto va in ``partial_content``.
+
+    Prima i segmenti già mostrati si anteponevano al messaggio d'errore: il
+    runner lo pubblicava come finale, e l'utente rivedeva tutto il testo di
+    nuovo con l'errore in coda; ``partial_content`` invece restava vuoto,
+    quindi la history perdeva ciò che era stato mostrato (PC13).
+    """
+    provider = ScriptedProvider([_stall("Uno. "), _stall("Due. "), _stall("Tre. "), _stall("Quattro.")])
+
+    async def _fake_sleep(delay: int) -> None:
+        return None
+
+    async def _on_delta(delta: str) -> None:
+        return None
+
+    async def _on_stream_recover() -> None:
+        return None
+
+    monkeypatch.setattr("jenny.providers.base.asyncio.sleep", _fake_sleep)
+
+    response = await provider.chat_stream_with_retry(
+        messages=[{"role": "user", "content": "hello"}],
+        on_content_delta=_on_delta,
+        on_stream_recover=_on_stream_recover,
+    )
+
+    assert response.finish_reason == "error"
+    assert response.content == "Error calling LLM: stream stalled for more than 30 seconds"
+    assert response.partial_content == "Uno. Due. Tre. Quattro."
+
+
+@pytest.mark.asyncio
+async def test_a_failure_after_a_recovered_stall_keeps_both_segments_aside(monkeypatch) -> None:
+    failed = LLMResponse(
+        content="Error: upstream closed", finish_reason="error",
+        error_status_code=400, partial_content="Due.",
+    )
+    failed._test_stream_delta = "Due."  # type: ignore[attr-defined]
+    provider = ScriptedProvider([_stall("Uno. "), failed])
+
+    async def _fake_sleep(delay: int) -> None:
+        return None
+
+    async def _on_delta(delta: str) -> None:
+        return None
+
+    async def _on_stream_recover() -> None:
+        return None
+
+    monkeypatch.setattr("jenny.providers.base.asyncio.sleep", _fake_sleep)
+
+    response = await provider.chat_stream_with_retry(
+        messages=[{"role": "user", "content": "hello"}],
+        on_content_delta=_on_delta,
+        on_stream_recover=_on_stream_recover,
+    )
+
+    assert response.content == "Error: upstream closed"
+    assert response.partial_content == "Uno. Due."
+
+
 @pytest.mark.asyncio
 async def test_chat_with_retry_uses_provider_generation_defaults() -> None:
     """When callers omit generation params, provider.generation defaults are used."""
