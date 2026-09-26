@@ -97,6 +97,29 @@ def test_restore_snapshot_refuses_a_path_outside_the_destination(tmp_path) -> No
     assert not list(tmp_path.rglob("fuori.txt"))
 
 
+def test_restore_snapshot_refuses_a_path_that_a_link_takes_outside(tmp_path) -> None:
+    """``link/dato.txt`` e' una stringa sana: nessun ``..``, nessun assoluto. Se
+    nella destinazione ``link`` e' un collegamento verso fuori, scriverci vuol
+    dire scrivere fuori — e questo lo vede solo il confronto sul percorso
+    risolto, non il controllo sulla stringa."""
+    env = _env(tmp_path)
+    hash_hex = put_blob(env.engine.objects_dir, b"payload")
+    env.engine.manifests_dir.mkdir(parents=True, exist_ok=True)
+    (env.engine.manifests_dir / f"{'b' * 64}.json").write_bytes(
+        _manifest("link/dato.txt", hash_hex=hash_hex)
+    )
+    outside = tmp_path / "fuori"
+    outside.mkdir()
+    dest = tmp_path / "staged" / "workspace"
+    dest.mkdir(parents=True)
+    (dest / "link").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="leaves the destination"):
+        env.engine.restore_snapshot("b" * 64, dest)
+
+    assert list(outside.iterdir()) == []
+
+
 # ---------------------------------------------------------------------------
 # L'id del manifest: finisce in un percorso, quindi e' dato non fidato anche lui
 # ---------------------------------------------------------------------------
