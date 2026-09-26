@@ -73,7 +73,9 @@ async def persist_schema_migrations(*, config_path: Path | None = None) -> bool:
     try:
         _, raw = load_config_with_raw(config_path)
         candidate = raw.get("configVersion", raw.get("config_version", 0))
-        raw_version = int(candidate)
+        # Lo stesso criterio di ``Config._migrate_by_version``: un ``"3"`` non e'
+        # la versione 3, e senza riscriverlo avviserebbe a ogni lettura.
+        raw_version = candidate if type(candidate) is int else -1
     except Exception:
         # File assente, illeggibile o versione non numerica: in tutti i casi
         # "indietro". Il rewrite lo sistema; se non si può leggere, mutate

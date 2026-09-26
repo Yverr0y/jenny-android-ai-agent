@@ -1140,12 +1140,20 @@ class Config(BaseSettings):
         if not isinstance(data, dict):
             return data
         raw_version = data.get("configVersion", data.get("config_version", 0))
-        try:
-            version = int(raw_version)
-        except (TypeError, ValueError):
+        if type(raw_version) is int and raw_version >= 0:
+            version = raw_version
+        else:
             # Versione illeggibile (file toccato a mano): la trattiamo come 0 e la
             # riscriviamo sanificata, invece di far fallire la validazione del
-            # campo e mandare in quarantena un config per il resto valido.
+            # campo e mandare in quarantena un config per il resto valido. Solo un
+            # intero vero: ``int()`` accettava ``2.5``, ``"3"`` e ``true`` e poi il
+            # campo li rifiutava (il file intero ai default), e su ``1e400`` — che
+            # per ``json`` e' infinito — sollevava ``OverflowError`` fuori dal
+            # recupero del loader: un gateway che non ripartiva piu'.
+            logger.warning(
+                "Config version {!r} is not a non-negative integer; treating it as 0",
+                raw_version,
+            )
             version = 0
             data = {k: v for k, v in data.items() if k != "config_version"}
             data["configVersion"] = 0
