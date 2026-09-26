@@ -71,26 +71,34 @@ class SkillsRoutes:
             return self._error(500, "skills list failed")
 
     def _update(self, request: WsRequest, raw_name: str) -> Response:
+        """Accende o spegne una skill del workspace: ``?disabled=`` e nient'altro.
+
+        ``description`` e ``content`` in query non si leggono più: erano
+        decodificati due volte (``parse_qs``, poi ``unquote``) e portavano
+        contenuto su una GET, contro ``design.md``; nessun client li mandava.
+        """
         if not self._check_api_token(request):
             return self._error(401, "Unauthorized")
+        # Una sola decodifica, poi il controllo sul nome *decodificato*: la regex
+        # del path vede ``%2e%2e``, il filesystem ``..`` — e ``skills/../SKILL.md``
+        # è un file fuori da ``skills/``. Niente nome che inizi con un punto
+        # (``.``, ``..``, cartelle nascoste), niente separatori, niente NUL.
         name = unquote(raw_name)
-        if not name or "/" in name or "\\" in name:
+        if (
+            not name
+            or name.startswith(".")
+            or "/" in name
+            or "\\" in name
+            or "\x00" in name
+        ):
             return self._error(400, "invalid skill name")
-        query = self._parse_query(request.path)
-        description = self._query_first(query, "description")
-        content = self._query_first(query, "content")
-        disabled_raw = self._query_first(query, "disabled")
-        kwargs: dict = {}
-        if description is not None:
-            kwargs["description"] = unquote(description)
-        if content is not None:
-            kwargs["content"] = unquote(content)
-        if disabled_raw is not None:
-            kwargs["disabled"] = parse_flag(disabled_raw)
-        if not kwargs:
+        disabled_raw = self._query_first(self._parse_query(request.path), "disabled")
+        if disabled_raw is None:
             return self._error(400, "nothing to update")
         try:
-            payload = update_workspace_skill(self._skills_workspace_path, name, **kwargs)
+            payload = update_workspace_skill(
+                self._skills_workspace_path, name, disabled=parse_flag(disabled_raw)
+            )
             return self._json(payload)
         except PermissionError as e:
             return self._error(403, str(e))
