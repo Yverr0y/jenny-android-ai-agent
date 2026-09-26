@@ -3382,9 +3382,12 @@ export class ChatController {
     }
     preview.style.display = 'flex';
     // Immagini → thumbnail; qualsiasi altro file → chip con icona e nome.
+    // `kind`, il secchio di `ImageHandler`: c'era `item.isImage`, un campo che
+    // l'handler non scrive piu' da `2e42db88`, e ogni foto era un chip «file»
+    // (WJ7 della terza revisione).
     preview.innerHTML = items.map((item, i) => {
       const remove = `<button class="attach-remove" data-idx="${i}"><i class="ti ti-x"></i></button>`;
-      if (item.isImage) {
+      if (item.kind === 'image') {
         return `<div class="attach-thumb" data-idx="${i}">
             <img src="${item.data_url}" alt="${escapeHtml(item.name)}">${remove}
           </div>`;
