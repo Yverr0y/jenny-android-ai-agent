@@ -33,8 +33,14 @@ import { escapeHtml, showToast } from './shared/utils.js';
 import { i18n } from './shared/i18n.js';
 import { confirmDialog } from './shared/dialog.js';
 import { renderRich } from './shared/rich-content.js';
-import { SANITIZE_CONFIG } from './shared/markdown.js';
-import { contentLinkTarget, openOutsideWebView } from './shared/content-link.js';
+import { sanitizeContent } from './shared/markdown.js';
+import {
+  contentLinkHref,
+  contentLinkOf,
+  contentLinkTarget,
+  findContentAnchor,
+  openOutsideWebView,
+} from './shared/content-link.js';
 
 /** Un link markdown relativo risolto contro la pagina che lo contiene.
  *
@@ -298,9 +304,12 @@ export class HomeReader {
   /* Lo stesso ripiego dell'officina, e per la stessa ragione: senza DOMPurify
      non si mostra l'HTML del server "tanto viene da noi" — viene da un file che
      l'agente ha scritto. Si mostra il markdown, scappato. La regola e' quella
-     della chat (`SANITIZE_CONFIG`): niente moduli, campi o bottoni. */
+     della chat (`sanitizeContent`, cioe' `SANITIZE_CONFIG` piu' l'hook che
+     toglie i link dentro un `<svg>`): niente moduli, campi o bottoni, e ogni
+     `id` esce `user-content-…` — per questo l'indice si segue con
+     `findContentAnchor` e non con l'id scritto nell'href. */
   _safeHtml(html, raw) {
-    if (typeof DOMPurify !== 'undefined') return DOMPurify.sanitize(html || '', SANITIZE_CONFIG);
+    if (typeof DOMPurify !== 'undefined') return sanitizeContent(html);
     console.warn('home.reader: DOMPurify missing, falling back to markdown');
     return `<pre class="home-reader-raw">${escapeHtml(raw || '')}</pre>`;
   }
@@ -314,11 +323,13 @@ export class HomeReader {
   }
 
   _onClick(e) {
-    const a = e.target.closest('a[href]');
+    /* Non solo `a[href]`: un `<area>` o un link SVG che il sanificatore
+       lasciasse passare navigherebbe il frame principale (WJ3). */
+    const a = contentLinkOf(e.target);
     if (!a) return;
     e.preventDefault();
     const target = linkTarget({
-      href: a.getAttribute('href'),
+      href: contentLinkHref(a),
       wikilink: a.classList.contains('wikilink'),
       notebook: this.notebook,
       currentPath: this.path,
@@ -328,7 +339,7 @@ export class HomeReader {
       return;
     }
     if (target.kind === 'hash') {
-      const anchor = this.bodyEl.querySelector(`#${CSS.escape(target.id)}`);
+      const anchor = findContentAnchor(this.bodyEl, target.id);
       anchor?.scrollIntoView({ block: 'start' });
       return;
     }

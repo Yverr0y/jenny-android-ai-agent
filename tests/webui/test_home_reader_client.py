@@ -13,8 +13,10 @@ buco in mezzo: qui si dice solo di no.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from support.home_dom import requires_jsdom, run_home
 from support.js_harness import function, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
@@ -129,3 +131,46 @@ def test_a_dead_link_is_null_and_not_a_guess() -> None:
       );
       assert.equal(linkTarget({ href: '', notebook: 'orto', currentPath: 'i.md' }), null);
     """)
+
+
+# ── Il lettore vero, in jsdom ────────────────────────────────────────────────
+
+# DOMPurify vero, legato alla finestra di jsdom: e' lui che rinomina gli id.
+_PURIFY_BOOT = f"""
+import assert from 'node:assert/strict';
+import {{ createRequire }} from 'node:module';
+import {{ boot, tick, routes }} from './boot.mjs';
+const require = createRequire(import.meta.url);
+const createDOMPurify = require({json.dumps(str(ASSETS / "vendor" / "dompurify@3" / "purify.min.js"))});
+globalThis.DOMPurify = createDOMPurify(window);
+window.DOMPurify = globalThis.DOMPurify;
+const scrolled = [];
+window.HTMLElement.prototype.scrollIntoView = function () {{ scrolled.push(this); }};
+"""
+
+
+@requires_jsdom
+def test_a_table_of_contents_link_scrolls_to_its_heading() -> None:
+    """L'indice (`toc`) del server porta ai titoli con ``#id``; il sanificatore
+    li fa uscire ``user-content-…`` (HJ8). Il lettore cercava l'id com'e'
+    scritto nell'href e non trovava niente: l'indice era morto."""
+    run_home(
+        _PURIFY_BOOT
+        + """
+routes['/api/page'] = {
+  title: 'Orto',
+  raw: '# Orto',
+  html: '<nav class="toc"><a href="#semina">Semina</a></nav>'
+    + '<h2 id="semina">Semina</h2><p>testo</p>',
+};
+const app = await boot();
+await tick(30);
+await app.reader.load('orto', 'index.md', 'Orto');
+const body = document.getElementById('home-reader-body');
+const heading = body.querySelector('h2');
+assert.equal(heading.id, 'user-content-semina', body.innerHTML);
+body.querySelector('.toc a').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+assert.equal(scrolled.length, 1, 'l\u2019indice non ha fatto scorrere');
+assert.equal(scrolled[0], heading);
+"""
+    )

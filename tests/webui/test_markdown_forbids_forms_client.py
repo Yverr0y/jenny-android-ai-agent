@@ -131,7 +131,8 @@ def test_the_notebook_reader_sanitizes_with_the_same_rule() -> None:
     run_js(
         "import assert from 'node:assert/strict';\n"
         + _FAKE_PURIFY
-        + f"const {{ SANITIZE_CONFIG }} = await import('{markdown}');\n"
+        # Il lettore sanifica con la funzione del modulo, non con una sua copia.
+        + f"const {{ SANITIZE_CONFIG, sanitizeContent }} = await import('{markdown}');\n"
         "const escapeHtml = (s) => s;\n"
         "const reader = {\n  "
         + member(src, "_safeHtml")
