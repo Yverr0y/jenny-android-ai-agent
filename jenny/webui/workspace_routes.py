@@ -9,6 +9,11 @@ c'è di proposito: il contenuto di un file non può viaggiare su questo trasport
 (l'hook di handshake di ``websockets`` non legge body; query string e header
 stanno in 8192 byte per riga e in ISO-8859-1), quindi ``workspace.write`` è un
 comando dell'RPC WebSocket — v. ``webui.commands`` e ``channels.ws_rpc``.
+
+Non ci sono nemmeno cancellazione, rinomina e copia: fino al 26/09/2026 erano
+GET di questo router, cioe' scritture sul disco su una superficie di sola
+lettura. Sono i comandi ``workspace.delete``/``rename``/``copy`` (decisione D3
+della terza revisione). Resta ``mkdir``, un parametro corto e idempotente.
 """
 
 from __future__ import annotations
@@ -33,69 +38,8 @@ from jenny.channels.http_utils import (
 from jenny.webui.workspace_files import WorkspaceBinaryFileError
 
 
-def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
-    """Il motivo per cui *target* non si cancella da qui, o ``None``.
-
-    **La delete del file manager non deve poter cancellare un progetto**, e il
-    perche' non e' che sia pericolosa: e' che e' *parziale*. Un progetto vive in
-    due domini — l'albero sotto ``wikis/<nome>/`` e le quattro tracce della sua
-    conversazione, che stanno altrove (v.
-    ``session/project_rename.py::project_trace_paths``). Una ``rmtree`` raggiunge
-    il primo e non sa del secondo, quindi libera il *nome* senza liberare la
-    conversazione: il progetto successivo creato con quel nome se la riprende
-    tutta. Riprodotto sul telefono il 24/08/2026.
-
-    Il rifiuto **dice dove**, che e' la forma degli altri rifiuti di questo
-    codice (``command/builtin.py::_gardener_no_target``, il rifiuto di
-    ``journal_append`` fuori da un progetto): su un telefono un divieto che non
-    indica la strada e' un vicolo cieco.
-
-    Due bersagli, non uno. La radice del progetto e' quello ovvio; la sua
-    ``wiki/`` e' lo stesso guasto per un'altra porta, perche' senza quella
-    cartella ``is_wiki_root`` diventa falso e il progetto sparisce dal picker
-    **con la chat ancora attaccata al nome** — cioe' di nuovo l'orfano.
-
-    Solo i figli diretti di ``wikis_dir``: ``is_wiki_root`` da solo direbbe di si'
-    a qualunque cartella che contenga una ``wiki/``, e bloccherebbe
-    cancellazioni legittime altrove nel workspace.
-    """
-    from jenny.session.keys import is_valid_project_name
-    from jenny.utils.wiki_paths import is_wiki_root
-
-    try:
-        from jenny.config.loader import load_config
-
-        wikis_dir = workspace_root / (load_config().wiki.wikis_dir or "wikis")
-    except Exception:  # noqa: BLE001 — senza config si usa il nome di default
-        wikis_dir = workspace_root / "wikis"
-
-    if target.parent == wikis_dir and is_wiki_root(target):
-        name = target.name
-    elif (
-        target.name == "wiki"
-        and target.parent.parent == wikis_dir
-        and is_wiki_root(target.parent)
-    ):
-        name = target.parent.name
-    else:
-        return None
-    if not is_valid_project_name(name):
-        # Una cartella il cui nome non puo' essere il nome di una conversazione
-        # (``wikis/Ricerca ETF``, v. ``_collect_projects``) non ha una chat da
-        # orfanare, e ``project.delete`` la rifiuterebbe proprio per quel nome:
-        # rifiutare qui la renderebbe incancellabile da qualunque porta.
-        return None
-    return (
-        f"`{name}` is a project, not just a folder: its conversation lives outside "
-        "this tree, and deleting the folder here would leave that behind under a name "
-        "anything else could take. Deleting a project is its own operation and it "
-        "removes both — the file browser uses it for you, so if you are seeing this "
-        "the app is out of date or something else made the call."
-    )
-
-
 class WorkspaceRoutes:
-    """Route ``/api/workspace/*`` (CRUD file del workspace)."""
+    """Route ``/api/workspace/*``: letture del file manager, piu' ``mkdir``."""
 
     def __init__(
         self,
@@ -132,7 +76,7 @@ class WorkspaceRoutes:
     async def dispatch(self, request: WsRequest, path: str) -> Response | None:
         """Auth, gate e traduzione degli errori del filesystem: qui, una volta.
 
-        I sette handler ripetevano identici il controllo del token, il gate
+        Gli handler ripetevano identici il controllo del token, il gate
         ``workspace.enabled`` e la stessa scala a quattro rami — cioè il modo
         più facile per lasciarne uno che risponde 500 dove gli altri
         rispondono 404. ``backup_routes.dispatch`` faceva già così.
@@ -145,9 +89,6 @@ class WorkspaceRoutes:
             "/api/workspace/list": self._list,
             "/api/workspace/read": self._read,
             "/api/workspace/mkdir": self._mkdir,
-            "/api/workspace/rename": self._rename,
-            "/api/workspace/delete": self._delete,
-            "/api/workspace/copy": self._copy,
             "/api/workspace/download": self._download,
         }
         handler = handlers.get(path)
@@ -217,48 +158,6 @@ class WorkspaceRoutes:
         full_path = validate_path(workspace_root, rel_path)
         create_directory(full_path)
         return http_json_response({"success": True, "path": rel_path})
-
-    async def _rename(self, request: WsRequest) -> Response:
-        from jenny.webui.workspace_files import rename_path, validate_path
-
-        query = parse_query(request.path)
-        old_rel = query_first(query, "oldPath") or ""
-        new_rel = query_first(query, "newPath") or ""
-        workspace_root = self._get_workspace_root()
-        old_path = validate_path(workspace_root, old_rel)
-        new_path = validate_path(workspace_root, new_rel)
-        rename_path(old_path, new_path)
-        return http_json_response({"success": True})
-
-    async def _delete(self, request: WsRequest) -> Response:
-        err = self._require_workspace_flag(
-            "allow_delete", 403, "workspace deletes are disabled"
-        )
-        if err:
-            return err
-        from jenny.webui.workspace_files import delete_path, validate_path
-
-        query = parse_query(request.path)
-        rel_path = query_first(query, "path") or ""
-        workspace_root = self._get_workspace_root()
-        full_path = validate_path(workspace_root, rel_path)
-        refusal = _project_delete_refusal(workspace_root, full_path)
-        if refusal:
-            return http_error(403, refusal)
-        delete_path(full_path)
-        return http_json_response({"success": True, "path": rel_path})
-
-    async def _copy(self, request: WsRequest) -> Response:
-        from jenny.webui.workspace_files import copy_path, validate_path
-
-        query = parse_query(request.path)
-        src_rel = query_first(query, "path") or ""
-        dest_rel = query_first(query, "dest") or ""
-        workspace_root = self._get_workspace_root()
-        src_path = validate_path(workspace_root, src_rel)
-        dest_path = validate_path(workspace_root, dest_rel)
-        copy_path(src_path, dest_path)
-        return http_json_response({"success": True})
 
     async def _download(self, request: WsRequest) -> Response:
         from jenny.webui.workspace_files import validate_path

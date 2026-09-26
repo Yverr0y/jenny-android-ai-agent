@@ -345,37 +345,26 @@ class ApiClient {
     return res.json();
   }
 
+  /* Rinomina, cancellazione e copia viaggiano sul WebSocket (`rpc`, comandi
+     `workspace.rename`/`delete`/`copy`): cambiano il disco, e fino al
+     26/09/2026 erano GET su /api/, che e' per letture e parametri corti
+     (`.agent/design.md`, decisione D3 della terza revisione). Stanno qui con
+     la stessa firma perche' i chiamanti non cambino; l'errore porta il `code`
+     del comando e il messaggio del server. Import **dinamico** per la stessa
+     ragione di `savePages`. */
   async renameWorkspace(oldPath, newPath) {
-    const params = new URLSearchParams();
-    params.set('oldPath', oldPath);
-    params.set('newPath', newPath);
-    const res = await this._fetch(`/api/workspace/rename?${params}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Workspace rename failed: ${res.status}`);
-    }
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.renameWorkspace(oldPath, newPath);
   }
 
   async deleteWorkspace(path) {
-    const res = await this._fetch(`/api/workspace/delete?path=${encodeURIComponent(path)}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Workspace delete failed: ${res.status}`);
-    }
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.deleteWorkspace(path);
   }
 
   async copyWorkspace(path, dest) {
-    const params = new URLSearchParams();
-    params.set('path', path);
-    if (dest) params.set('dest', dest);
-    const res = await this._fetch(`/api/workspace/copy?${params}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Workspace copy failed: ${res.status}`);
-    }
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.copyWorkspace(path, dest);
   }
 
   // ── Session APIs ──

@@ -738,7 +738,7 @@ export class WorkspaceController {
            creato con lo stesso nome se la riprendeva intera. Riprodotto sul
            telefono il 24/08/2026.
 
-           Il server rifiuta ormai `/api/workspace/delete` su una radice di
+           Il server rifiuta ormai `workspace.delete` su una radice di
            progetto, e quel rifiuto resta la garanzia meccanica — vale anche per
            un client vecchio o per una chiamata diretta. Qui non si aspetta di
            essere rifiutati: si usa la porta giusta, e la conferma dice **anche

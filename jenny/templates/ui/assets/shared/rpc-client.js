@@ -14,14 +14,73 @@
  *  da lì era impossibile. Un frame WebSocket invece è framed e UTF-8.
  *
  *  Ogni metodo qui corrisponde a un comando in `jenny/webui/commands.py`.
+ *
+ *  Qui passano anche le operazioni **distruttive** del file manager
+ *  (`workspace.delete`/`rename`/`copy`), che non portano contenuto ma cambiano
+ *  il disco: fino al 26/09/2026 erano GET di /api/, superficie di sola lettura
+ *  (decisione D3 della terza revisione).
  */
 
 import { wsManager } from './ws-manager.js';
 
+// Quanto aspettare che il socket si apra prima di lasciar rispondere `request`
+// (che, a socket chiuso, rifiuta con «gateway offline»).
+const OPEN_TIMEOUT_MS = 8000;
+// `WebSocket.OPEN`, scritto come numero: fuori dal browser (i banchi node)
+// `WebSocket` non esiste.
+const WS_OPEN = 1;
+
+/** Il socket aperto, se si puo' aprire.
+ *
+ *  Il WebSocket della chat lo apre il controller della chat, e i controller
+ *  dell'officina nascono pigri: nell'onboarding, o in un'officina aperta
+ *  direttamente sul file manager, nessuno lo aveva ancora aperto e ogni comando
+ *  rifiutava con «gateway offline» su un gateway vivo. Da quando qui passano
+ *  anche le chiavi del provider e i comandi del file manager (terza revisione,
+ *  D3 e WA2) quel caso non e' piu' raro. `connectChat` e' idempotente. Un
+ *  `wsManager` senza `connectChat` (i finti dei banchi) si usa com'e'. */
+function whenOpen() {
+  if (typeof wsManager.connectChat !== 'function') return Promise.resolve();
+  if (wsManager.chatWs?.readyState === WS_OPEN) return Promise.resolve();
+  wsManager.connectChat();
+  if (wsManager.chatWs?.readyState === WS_OPEN) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      wsManager.removeEventListener('chat:open', done);
+      resolve();
+    };
+    const timer = setTimeout(done, OPEN_TIMEOUT_MS);
+    wsManager.addEventListener('chat:open', done);
+  });
+}
+
+async function send(method, params) {
+  await whenOpen();
+  return wsManager.request(method, params);
+}
+
 export const rpc = {
   /** Salva un file di testo del workspace (tetto 1 MB, lato server). */
   writeWorkspaceFile(path, content) {
-    return wsManager.request('workspace.write', { path, content });
+    return send('workspace.write', { path, content });
+  },
+
+  /** Cancella un file o una cartella del workspace. Un progetto no: il server
+   *  lo rifiuta e la strada e' `deleteProject`. */
+  deleteWorkspace(path) {
+    return send('workspace.delete', { path });
+  },
+
+  /** Rinomina (o sposta) un file o una cartella del workspace. */
+  renameWorkspace(oldPath, newPath) {
+    return send('workspace.rename', { old_path: oldPath, new_path: newPath });
+  },
+
+  /** Copia un file o una cartella. Senza `dest` la copia va accanto
+   *  all'originale con un nome libero, scelto dal server. */
+  copyWorkspace(path, dest) {
+    return send('workspace.copy', dest ? { path, dest } : { path });
   },
 
   /** Salva le regole che l'utente ha dato a Jenny.
@@ -31,14 +90,14 @@ export const rpc = {
    *  Le due scritture sono una sola operazione, e stanno di la'
    *  (`jenny/agent/soul_rules.py`). */
   writeSoulRules(content) {
-    return wsManager.request('soul.rules.write', { content });
+    return send('soul.rules.write', { content });
   },
 
   /** Crea un progetto: una wiki nuova e vuota, piu' la riga di scope che
    *  l'utente ha scritto. Passa da qui e non da `api` proprio per quella riga:
    *  e' testo libero, e la superficie /api/ non sa trasportarne. */
   createProject(name, seed, conversation) {
-    return wsManager.request('project.create', { name, seed, conversation });
+    return send('project.create', { name, seed, conversation });
   },
 
   /** Salva una pagina di quaderno modificata a mano dal lettore.
@@ -51,7 +110,7 @@ export const rpc = {
    *  anche Jenny**: se il file e' cambiato sotto, il server risponde con
    *  `conflict` e non scrive niente. */
   writePage(wiki, page, content, base) {
-    return wsManager.request('page.write', { wiki, page, content, base });
+    return send('page.write', { wiki, page, content, base });
   },
 
   /** Cancella un progetto: l'albero della wiki **e** la sua conversazione.
@@ -62,14 +121,14 @@ export const rpc = {
    *  nome se la riprendeva (difetto del 24/08/2026). Il server rifiuta ormai
    *  quella strada; questa e' l'altra. */
   deleteProject(name) {
-    return wsManager.request('project.delete', { name });
+    return send('project.delete', { name });
   },
 
   /** Rinomina un quaderno: la cartella, la sua chat, le sue pagine in casa.
    *  Fra i comandi per la stessa ragione della cancellazione: cambia il disco
    *  (v. `webui/commands.py::project_rename`). */
   renameProject(name, newName) {
-    return wsManager.request('project.rename', { name, new_name: newName });
+    return send('project.rename', { name, new_name: newName });
   },
 
   /** Apre una segnalazione su un punto di una pagina di quaderno. Fra i
@@ -78,7 +137,7 @@ export const rpc = {
    *  `/api/wiki/config` dichiarava per questo campo: l'audit lo scrive chi
    *  legge, non lei. */
   createAudit({ wiki, target, selStart, selEnd, comment }) {
-    return wsManager.request('audit.create', {
+    return send('audit.create', {
       wiki, target, sel_start: selStart, sel_end: selEnd, comment, author: 'me',
     });
   },
@@ -87,7 +146,7 @@ export const rpc = {
    *  `api.savePages`, gemella della lettura `api.getPages`
    *  (v. `webui/commands.py::home_pages_set`). */
   saveHomePages(pages, order) {
-    return wsManager.request('home.pages.set', { pages, order });
+    return send('home.pages.set', { pages, order });
   },
 
 };

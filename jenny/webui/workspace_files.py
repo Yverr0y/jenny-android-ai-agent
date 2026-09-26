@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from fnmatch import fnmatch
 from pathlib import Path
@@ -187,6 +188,26 @@ def delete_path(path: Path) -> None:
         shutil.rmtree(path)
     else:
         path.unlink()
+
+
+def free_copy_name(src: Path) -> Path:
+    """Un nome libero accanto a *src* per la sua copia: ``nota (copy).md``, poi
+    ``nota (copy 2).md`` e cosi' via. Per una cartella il suffisso resta sul nome
+    intero (``foto.2024`` → ``foto.2024 (copy)``): li' un punto non e' un'estensione.
+
+    Il nome e' inglese come gli altri che il runtime scrive su disco; non passa
+    dall'i18n perche' non e' un testo dell'interfaccia, e' un file.
+    """
+    if src.is_dir():
+        stem, suffix = src.name, ""
+    else:
+        stem, suffix = src.stem, src.suffix
+    for n in range(1, 1000):
+        label = "copy" if n == 1 else f"copy {n}"
+        candidate = src.with_name(f"{stem} ({label}){suffix}")
+        if not os.path.lexists(candidate):
+            return candidate
+    raise FileExistsError("no free name for the copy")
 
 
 def copy_path(src: Path, dest: Path) -> None:

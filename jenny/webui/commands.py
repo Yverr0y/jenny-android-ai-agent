@@ -21,7 +21,8 @@ trasportare contenuto: framed, UTF-8, autenticato all'handshake.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Collection, Mapping
+from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -195,6 +196,177 @@ async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dic
     except OSError as exc:
         raise CommandError("bad_request", str(exc)) from exc
     return {"path": rel_path, "bytes": size}
+
+
+# ---------------------------------------------------------------------------
+# workspace.delete / workspace.rename / workspace.copy
+# ---------------------------------------------------------------------------
+#
+# Fino al 26/09/2026 erano tre GET (``/api/workspace/delete``, ``rename``,
+# ``copy``): scritture sul disco su una superficie che ``.agent/design.md``
+# vuole di sola lettura, e che una qualunque ``<img src>`` con il token
+# nell'indirizzo poteva far partire. Decisione D3 della terza revisione: stanno
+# qui, accanto a ``project.delete`` e ``page.write``, sulla superficie
+# autenticata all'handshake che la WebView usa per cio' che cambia il disco.
+
+
+@contextmanager
+def _fs_errors() -> Iterator[None]:
+    """Traduce gli errori del filesystem nei codici di ``CommandError``.
+
+    La stessa scala delle rotte del file manager (``WorkspaceRoutes.dispatch``):
+    ``ValueError`` (il gate dei percorsi) → ``bad_request``, file che non c'e'
+    → ``not_found``, permesso negato → ``forbidden``, il resto → ``bad_request``.
+    """
+    try:
+        yield
+    except ValueError as exc:
+        raise CommandError("bad_request", str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise CommandError("not_found", "path not found") from exc
+    except PermissionError as exc:
+        raise CommandError("forbidden", "permission denied") from exc
+    except OSError as exc:
+        raise CommandError("bad_request", str(exc)) from exc
+
+
+def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
+    """Il motivo per cui *target* non si cancella da qui, o ``None``.
+
+    **La delete del file manager non deve poter cancellare un progetto**, e il
+    perche' non e' che sia pericolosa: e' che e' *parziale*. Un progetto vive in
+    due domini — l'albero sotto ``wikis/<nome>/`` e le quattro tracce della sua
+    conversazione, che stanno altrove (v.
+    ``session/project_rename.py::project_trace_paths``). Una ``rmtree`` raggiunge
+    il primo e non sa del secondo, quindi libera il *nome* senza liberare la
+    conversazione: il progetto successivo creato con quel nome se la riprende
+    tutta. Riprodotto sul telefono il 24/08/2026.
+
+    Il rifiuto **dice dove**, che e' la forma degli altri rifiuti di questo
+    codice (``command/builtin.py::_gardener_no_target``, il rifiuto di
+    ``journal_append`` fuori da un progetto): su un telefono un divieto che non
+    indica la strada e' un vicolo cieco.
+
+    Due bersagli, non uno. La radice del progetto e' quello ovvio; la sua
+    ``wiki/`` e' lo stesso guasto per un'altra porta, perche' senza quella
+    cartella ``is_wiki_root`` diventa falso e il progetto sparisce dal picker
+    **con la chat ancora attaccata al nome** — cioe' di nuovo l'orfano.
+
+    Solo i figli diretti di ``wikis_dir``: ``is_wiki_root`` da solo direbbe di si'
+    a qualunque cartella che contenga una ``wiki/``, e bloccherebbe
+    cancellazioni legittime altrove nel workspace.
+
+    Era in ``webui/workspace_routes.py`` finche' la cancellazione era una GET.
+    """
+    from jenny.session.keys import is_valid_project_name
+    from jenny.utils.wiki_paths import is_wiki_root
+
+    try:
+        from jenny.config.loader import load_config
+
+        wikis_dir = workspace_root / (load_config().wiki.wikis_dir or "wikis")
+    except Exception:  # noqa: BLE001 — senza config si usa il nome di default
+        wikis_dir = workspace_root / "wikis"
+
+    if target.parent == wikis_dir and is_wiki_root(target):
+        name = target.name
+    elif (
+        target.name == "wiki"
+        and target.parent.parent == wikis_dir
+        and is_wiki_root(target.parent)
+    ):
+        name = target.parent.name
+    else:
+        return None
+    if not is_valid_project_name(name):
+        # Una cartella il cui nome non puo' essere il nome di una conversazione
+        # (``wikis/Ricerca ETF``, v. ``_collect_projects``) non ha una chat da
+        # orfanare, e ``project.delete`` la rifiuterebbe proprio per quel nome:
+        # rifiutare qui la renderebbe incancellabile da qualunque porta.
+        return None
+    return (
+        f"`{name}` is a project, not just a folder: its conversation lives outside "
+        "this tree, and deleting the folder here would leave that behind under a name "
+        "anything else could take. Deleting a project is its own operation and it "
+        "removes both — the file browser uses it for you, so if you are seeing this "
+        "the app is out of date or something else made the call."
+    )
+
+
+async def workspace_delete(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Cancella un file o una cartella del workspace (il «Elimina» del file manager).
+
+    Un progetto no: v. :func:`_project_delete_refusal`, la strada e'
+    ``project.delete``. La ``rmtree`` sta in un thread: una cartella grande su
+    una CPU Android sono secondi in cui il gateway non risponderebbe a nessuno.
+    """
+    from jenny.webui.workspace_files import delete_path, validate_path
+
+    rel_path = _require_str(params, "path")
+    _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
+    _require_workspace_flag("allow_delete", "forbidden", "workspace deletes are disabled")
+
+    root = ctx.get_workspace_root()
+    with _fs_errors():
+        full_path = validate_path(root, rel_path)
+        refusal = _project_delete_refusal(root, full_path)
+        if refusal:
+            raise CommandError("forbidden", refusal)
+        await asyncio.to_thread(delete_path, full_path)
+    return {"success": True, "path": rel_path}
+
+
+async def workspace_rename(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Rinomina (o sposta) un file o una cartella del workspace."""
+    from jenny.webui.workspace_files import rename_path, validate_path
+
+    old_rel = _require_str(params, "old_path")
+    new_rel = _require_str(params, "new_path")
+    _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
+
+    root = ctx.get_workspace_root()
+    with _fs_errors():
+        old_path = validate_path(root, old_rel)
+        new_path = validate_path(root, new_rel)
+        await asyncio.to_thread(rename_path, old_path, new_path)
+    return {"success": True, "old_path": old_rel, "new_path": new_rel}
+
+
+async def workspace_copy(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Copia un file o una cartella del workspace (il «Duplica» del file manager).
+
+    ``dest`` e' facoltativo: senza, la copia va **accanto all'originale** con un
+    nome libero (``nota (copy).md``, poi ``nota (copy 2).md``…). La rotta di
+    prima, senza ``dest``, copiava nella radice del workspace: un file della
+    radice finiva su se stesso (``SameFileError``) e una cartella trovava sempre
+    la destinazione occupata — il «Duplica» del file manager, che ``dest`` non lo
+    manda, non aveva mai funzionato.
+    """
+    from jenny.webui.workspace_files import copy_path, free_copy_name, validate_path
+
+    src_rel = _require_str(params, "path")
+    dest_rel = params.get("dest")
+    if dest_rel is not None and (not isinstance(dest_rel, str) or not dest_rel.strip()):
+        raise CommandError("bad_request", "dest must be a non-empty string")
+    _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
+
+    root = ctx.get_workspace_root()
+    with _fs_errors():
+        src_path = validate_path(root, src_rel)
+        if dest_rel is None:
+            dest_path = await asyncio.to_thread(free_copy_name, src_path)
+        else:
+            dest_path = validate_path(root, dest_rel)
+        await asyncio.to_thread(copy_path, src_path, dest_path)
+    return {"success": True, "path": src_rel, "dest": _workspace_rel(root, dest_path)}
+
+
+def _workspace_rel(root: Path, path: Path) -> str:
+    """*path* relativo alla radice del workspace, come lo scrive il client."""
+    try:
+        return path.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.name
 
 
 # Tetto sulle regole che l'utente scrive a Jenny. Non e' un limite di
@@ -695,6 +867,9 @@ async def home_pages_set(ctx: CommandContext, params: Mapping[str, Any]) -> dict
 
 COMMANDS: dict[str, Command] = {
     "workspace.write": workspace_write,
+    "workspace.delete": workspace_delete,
+    "workspace.rename": workspace_rename,
+    "workspace.copy": workspace_copy,
     "soul.rules.write": soul_rules_write,
     "page.write": page_write,
     "audit.create": audit_create,

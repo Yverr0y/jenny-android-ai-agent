@@ -34,9 +34,9 @@ from jenny.session.project_traces import (
     describe_project_traces,
     project_trace_paths,
 )
+from jenny.webui.commands import _project_delete_refusal
 from jenny.webui.project_create import create_project
 from jenny.webui.project_delete import ProjectDeleteError, delete_project
-from jenny.webui.workspace_routes import _project_delete_refusal
 
 NAME = "viaggio"
 KEY = f"project:{NAME}"

@@ -1,12 +1,14 @@
 """Test delle route ``/api/workspace/*`` (file-manager del workspace).
 
 ``jenny/webui/workspace_routes.py`` non aveva ancora test dedicati: qui si
-copre auth 401, il gate ``workspace.enabled`` (503), il rispetto dei flag
-``allow_write``/``allow_delete``, i path felici di ogni operazione e il
-rifiuto del path traversal (delegato a ``workspace_files.validate_path``).
+copre auth 401, il gate ``workspace.enabled`` (503), il rispetto di
+``allow_write``, i path felici di ogni operazione e il rifiuto del path
+traversal (delegato a ``workspace_files.validate_path``).
 
 La **scrittura** non è più una route (il contenuto di un file non entra in un
-header HTTP): i suoi test sono in ``tests/webui/test_commands.py``.
+header HTTP): i suoi test sono in ``tests/webui/test_commands.py``. Cancellazione,
+rinomina e copia nemmeno (D3 della terza revisione): i loro sono in
+``tests/webui/test_workspace_commands.py``.
 """
 
 from __future__ import annotations
@@ -414,25 +416,6 @@ async def test_read_invalid_utf8_is_tolerated(
     assert "�" in _json(response)["content"]
 
 
-async def test_delete_fails_closed_when_config_raises(
-    routes: WorkspaceRoutes,
-    workspace_root: Path,
-    config_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    (workspace_root / "keep.txt").write_text("stay", encoding="utf-8")
-
-    def _boom(*args, **kwargs):
-        raise RuntimeError("config unreadable")
-
-    monkeypatch.setattr("jenny.config.loader.load_config", _boom)
-    response = await routes.dispatch(
-        _request("/api/workspace/delete?path=keep.txt"), "/api/workspace/delete"
-    )
-    assert response.status_code == 503
-    assert (workspace_root / "keep.txt").exists()
-
-
 # ---------------------------------------------------------------------------
 # /api/workspace/mkdir
 # ---------------------------------------------------------------------------
@@ -457,76 +440,36 @@ async def test_mkdir_happy_path(
 
 
 # ---------------------------------------------------------------------------
-# /api/workspace/rename
+# rename / delete / copy: non piu' rotte (D3 della terza revisione)
 # ---------------------------------------------------------------------------
 
 
-async def test_rename_happy_path(
-    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/workspace/delete?path=gone.txt",
+        "/api/workspace/rename?oldPath=gone.txt&newPath=new.txt",
+        "/api/workspace/copy?path=gone.txt&dest=dst.txt",
+    ],
+)
+async def test_the_writing_gets_are_gone(
+    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path, path: str
 ) -> None:
-    (workspace_root / "old.txt").write_text("z", encoding="utf-8")
-    response = await routes.dispatch(
-        _request("/api/workspace/rename?oldPath=old.txt&newPath=new.txt"),
-        "/api/workspace/rename",
-    )
-    assert response.status_code == 200
-    assert not (workspace_root / "old.txt").exists()
-    assert (workspace_root / "new.txt").read_text(encoding="utf-8") == "z"
+    """Cancellare, rinominare e copiare sono comandi dell'RPC WebSocket
+    (``workspace.delete``/``rename``/``copy``, in ``tests/webui/test_workspace_commands.py``):
+    una GET che scrive sul disco non esiste piu', e l'indirizzo e' un 404."""
+    from unittest.mock import MagicMock
 
+    from support.gateway_http import make_handler
 
-async def test_rename_missing_source_returns_404(
-    routes: WorkspaceRoutes, config_path: Path
-) -> None:
-    response = await routes.dispatch(
-        _request("/api/workspace/rename?oldPath=missing.txt&newPath=new.txt"),
-        "/api/workspace/rename",
-    )
-    assert response.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# /api/workspace/delete
-# ---------------------------------------------------------------------------
-
-
-async def test_delete_requires_allow_delete(
-    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path
-) -> None:
-    _set_workspace_config(config_path, allow_delete=False)
     (workspace_root / "gone.txt").write_text("z", encoding="utf-8")
-    response = await routes.dispatch(
-        _request("/api/workspace/delete?path=gone.txt"), "/api/workspace/delete"
-    )
-    assert response.status_code == 403
-    assert (workspace_root / "gone.txt").exists()
-
-
-async def test_delete_happy_path(
-    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path
-) -> None:
-    (workspace_root / "gone.txt").write_text("z", encoding="utf-8")
-    response = await routes.dispatch(
-        _request("/api/workspace/delete?path=gone.txt"), "/api/workspace/delete"
-    )
-    assert response.status_code == 200
-    assert not (workspace_root / "gone.txt").exists()
-
-
-# ---------------------------------------------------------------------------
-# /api/workspace/copy
-# ---------------------------------------------------------------------------
-
-
-async def test_copy_happy_path(
-    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path
-) -> None:
-    (workspace_root / "src.txt").write_text("dati", encoding="utf-8")
-    response = await routes.dispatch(
-        _request("/api/workspace/copy?path=src.txt&dest=dst.txt"), "/api/workspace/copy"
-    )
-    assert response.status_code == 200
-    assert (workspace_root / "dst.txt").read_text(encoding="utf-8") == "dati"
-    assert (workspace_root / "src.txt").exists()
+    route = path.split("?")[0]
+    assert await routes.dispatch(_request(path), route) is None
+    reply = await make_handler(workspace_root).dispatch(MagicMock(), make_request(path))
+    assert reply.status_code == 404
+    assert (workspace_root / "gone.txt").read_text(encoding="utf-8") == "z"
+    assert not (workspace_root / "new.txt").exists()
+    assert not (workspace_root / "dst.txt").exists()
 
 
 # ---------------------------------------------------------------------------
