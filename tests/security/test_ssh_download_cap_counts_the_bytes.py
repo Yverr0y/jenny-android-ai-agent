@@ -10,7 +10,7 @@ solo a trasferimento completo, così un'interruzione non lascia un file tronco.
 
 from __future__ import annotations
 
-from support.kotlin_source import block_after, block_at, function_body, read_code
+from support.kotlin_source import block_after, block_at, function_body, read_code, read_source
 
 
 def _get_body() -> str:
@@ -47,6 +47,18 @@ def test_an_interrupted_download_leaves_no_partial_file() -> None:
     catch = block_after(body, r"catch \(e: Throwable\)")
     assert "part.delete()" in catch
     assert "out.overflowed" in catch, "il motivo si legge dal contatore, non dal messaggio di jsch"
+
+
+def test_the_partial_file_never_takes_the_name_of_an_existing_one() -> None:
+    """``<nome>.part`` poteva essere un file dell'utente: il download lo
+    riscriveva, e a un'interruzione lo cancellava. Il temporaneo lo crea
+    ``File.createTempFile``, con una parte casuale, e non riusa mai un file che
+    esiste."""
+    body = _get_body()
+    assert 'File.createTempFile(".${target.name}.", ".part", target.parentFile)' in (
+        function_body(read_source("SshBridge"), "get")
+    )
+    assert "File(target.parentFile," not in body, "un nome fisso accanto alla destinazione"
 
 
 def test_the_reported_size_is_what_was_written() -> None:

@@ -592,8 +592,9 @@ object SshBridge {
      * La dimensione si verifica PRIMA di iniziare, cosi un file troppo grande
      * si rifiuta senza trasferirne un byte. Ma e la dimensione che dichiara il
      * server: il tetto vale anche per i byte che arrivano davvero
-     * ([CappedOutputStream]). Si scrive su un `.part` accanto alla
-     * destinazione e si rinomina solo a trasferimento completo: un download
+     * ([CappedOutputStream]). Si scrive su un temporaneo accanto alla
+     * destinazione (`.<nome>.<casuale>.part`, mai un file che c'era gia') e
+     * si rinomina solo a trasferimento completo: un download
      * interrotto — dal tetto o dalla rete — non lascia un file troncato a
      * meta, indistinguibile da uno buono.
      */
@@ -608,7 +609,12 @@ object SshBridge {
             if (size > maxBytes) {
                 throw BridgeException("io", "$remote is $size bytes, over the $maxBytes byte limit")
             }
-            val part = File(target.parentFile, "${target.name}.part")
+            // Un nome che non c'era: `<nome>.part` poteva essere un file
+            // dell'utente, e questo ramo lo riscriveva e poi lo cancellava.
+            // `createTempFile` lo crea lui, con una parte casuale, e non
+            // riusa mai un file che esiste. Nascosto (il punto davanti) come
+            // ogni temporaneo, per l'esploratore del workspace.
+            val part = File.createTempFile(".${target.name}.", ".part", target.parentFile)
             val out = CappedOutputStream(part.outputStream(), maxBytes)
             try {
                 out.use { sftp.get(remote, it) }
