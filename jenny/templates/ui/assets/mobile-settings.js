@@ -163,6 +163,10 @@ export class SettingsController {
        controller da solo — i banchi, e la schermata finche' il dock non e'
        passato a quattro voci. */
     this._drawer = null;
+    /* Il JSON dell'ultima `/api/settings` letta, e se `setDrawer` ha appena
+       disegnato con quei dati: v. `loadSettings`. */
+    this._loadedJson = null;
+    this._paintedFromCache = false;
     /* La posizione va letta *mentre* la vista è visibile: `switchMode` mette il
        display:none sulla view prima di chiamare `deactivate()`, e un
        contenitore senza box legge scrollTop 0 — salvare lì avrebbe riportato in
@@ -215,8 +219,18 @@ export class SettingsController {
     try {
       const settings = await api.getSettings();
       if (this._stale(gen)) return;
+      /* Un render solo per ingresso (WJ11 della terza revisione). Passando da
+         un cassetto all'altro `setDrawer` ha gia' disegnato coi dati in cache,
+         e `activate()` rilegge comunque: se il server risponde con gli stessi
+         dati il secondo render butterebbe via un DOM identico, e con lui
+         ripartirebbero SSH, cron, Telegram e skill (le letture dei blocchi in
+         ritardo). Si ridisegna solo se qualcosa e' cambiato. */
+      const json = JSON.stringify(settings);
+      const painted = this._paintedFromCache && json === this._loadedJson;
+      this._paintedFromCache = false;
+      this._loadedJson = json;
       this.data = settings;
-      this.render();
+      if (!painted) this.render();
       this._realignPanel(
         'brand', this._brandOpen,
         (this.data.providers || []).some(p => p.name === this._brandOpen),
@@ -236,13 +250,19 @@ export class SettingsController {
   }
 
   /** Quale dei cassetti disegnare. Lo dice il guscio, che sa quale voce del
-   *  dock e' stata toccata. Ridisegna subito se i dati ci sono gia': i tre
-   *  cassetti condividono un controller solo, quindi passare dall'uno
-   *  all'altro non deve ricaricare `/api/settings`. */
+   *  dock e' stata toccata, **prima** di `activate()`. Ridisegna subito se i
+   *  dati ci sono gia', perche' il cassetto nuovo compaia senza aspettare la
+   *  rete: i tre cassetti condividono un controller solo e un contenitore
+   *  solo, e fino alla risposta si vedrebbe quello di prima. `/api/settings`
+   *  si rilegge lo stesso, in `activate()`; ma se non e' cambiato niente non
+   *  si ridisegna una seconda volta (v. `loadSettings`). */
   setDrawer(name) {
     if (this._drawer === name) return;
     this._drawer = name;
-    if (this.data) this.render();
+    if (this.data) {
+      this.render();
+      this._paintedFromCache = true;
+    }
   }
 
   activate() { this.loadSettings(); }
