@@ -1204,13 +1204,15 @@ class PythonNamespace:
         self.blocked_modules = set(blocked_modules or [])
         self.restrict_to_workspace = restrict_to_workspace
         self.workspace = workspace or self.working_dir
-        # Base di risoluzione richiesta per le prossime esecuzioni, o None per
-        # "radice del workspace" (default storico). Volutamente NON derivata da
-        # `self.working_dir`: quello è un attributo di comodo (lo mostra
-        # `list_exec_sessions`) che di default vale la workspace globale del
-        # processo, e usarlo come base romperebbe ogni namespace costruito con
-        # un `workspace` diverso. La base la decide il chiamante, per chiamata.
-        self.exec_base: str | None = None
+        # Nessuna base di risoluzione sull'istanza: la passa il chiamante a ogni
+        # `execute`/`call_function` (``working_dir``), e ``None`` vuol dire
+        # "radice del workspace". Un tempo stava qui (`exec_base`), scritta da
+        # `PythonExecTool.execute` e riletta da `_enter_guard`: l'istanza è
+        # condivisa da tutte le sessioni, quindi una chiamata in coda sul pool
+        # (o un thread di sessione partito un giro dopo) trovava la base messa
+        # nel frattempo da un'altra, e scriveva nella sua cartella (TL2).
+        # Nemmeno `self.working_dir` è una base: è un attributo di comodo che
+        # di default vale la workspace globale del processo.
         self._ns: dict[str, Any] = {
             "__builtins__": self._safe_builtins(),
             "__name__": "__python_exec__",
@@ -2639,9 +2641,9 @@ class PythonNamespace:
     def _enter_guard(self, working_dir: str | None = None) -> None:
         """Activate the process-wide import guard for this thread.
 
-        *working_dir* (o, se assente, ``self.exec_base``) diventa la base di
-        risoluzione dei percorsi relativi e la testa di ``sys.path`` per la
-        durata dell'exec. Valida PRIMA di toccare qualunque stato globale, così
+        *working_dir* diventa la base di risoluzione dei percorsi relativi e la
+        testa di ``sys.path`` per la durata dell'exec; ``None`` vuol dire la
+        radice del workspace. Mai letta dall'istanza, che è condivisa. Valida PRIMA di toccare qualunque stato globale, così
         una base rifiutata non lascia niente da ripulire.
         """
         # Unica normalizzazione difensiva all'ingresso, e solo su `bypass`.
@@ -2676,9 +2678,7 @@ class PythonNamespace:
         from jenny.security.workspace_policy import invalidate_root_cache
 
         invalidate_root_cache()
-        base = self._resolve_exec_base(
-            working_dir if working_dir is not None else self.exec_base
-        )
+        base = self._resolve_exec_base(working_dir)
         # Stesso ragionamento del confine di path qui sotto, applicato alla
         # superficie di evasione di `os`: legarla all'`import os` esplicito non
         # bloccava nulla, perché `import shutil; shutil.os.system("...")` arriva
@@ -2957,13 +2957,18 @@ class _ContextBoundNamespace:
     **propria** copia del contesto, quindi non esiste il caso "già entrato".
     """
 
-    def __init__(self, namespace: Any) -> None:
+    def __init__(self, namespace: Any, *, working_dir: str | None = None) -> None:
         self._namespace = namespace
         self._execute = _carry_turn_across_thread(namespace.execute)
         self._call_function = _carry_turn_across_thread(namespace.call_function)
+        # La base della chiamata che ha aperto la sessione, fissata qui: il
+        # thread chiama senza argomenti e l'istanza condivisa non la conserva
+        # (TL2). `working_dir` è anche ciò che `list_exec_sessions` mostra.
+        self._base = working_dir
+        self.working_dir = working_dir or namespace.working_dir
 
     def execute(self, code: str, working_dir: str | None = None) -> tuple[str, str, Any]:
-        return self._execute(code, working_dir)
+        return self._execute(code, working_dir if working_dir is not None else self._base)
 
     def call_function(
         self,
@@ -2972,7 +2977,9 @@ class _ContextBoundNamespace:
         kwargs: dict | None = None,
         working_dir: str | None = None,
     ) -> tuple[str, str, Any]:
-        return self._call_function(function, args, kwargs, working_dir)
+        return self._call_function(
+            function, args, kwargs, working_dir if working_dir is not None else self._base,
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._namespace, name)
@@ -2991,9 +2998,10 @@ async def run_python_async(
     """Execute Python code/function in a thread with timeout.
 
     *working_dir* è la base di risoluzione per questa esecuzione (vedi
-    ``PythonNamespace._enter_guard``): passata esplicitamente, non letta dal
+    ``PythonNamespace._enter_guard``): passata esplicitamente e mai letta dal
     namespace, così due chiamate concorrenti sullo stesso tool non si
-    sovrascrivono la base a vicenda.
+    sovrascrivono la base a vicenda. ``None`` vuol dire la radice del workspace,
+    non "la base dell'ultima chiamata" (TL2).
 
     IL CONTESTO DEL TURNO VIAGGIA CON L'ESECUZIONE, e non è un dettaglio: è la
     differenza fra un cancello che tiene e un cancello che sembra tenere.
@@ -3247,17 +3255,12 @@ class PythonExecTool(PythonExecGateMixin, Tool):
 
         # `working_dir` è la base di risoluzione della SOLA chiamata corrente:
         # validata qui per restituire al modello un errore leggibile invece di
-        # un traceback, e riazzerata quando non è passata (senza il reset,
-        # una chiamata con working_dir avvelenerebbe silenziosamente la
-        # risoluzione dei percorsi di tutte le successive che non lo passano).
+        # un traceback, e poi passata per argomento fino a `_enter_guard` —
+        # mai scritta sull'istanza, che è condivisa da tutte le sessioni (TL2).
         try:
             resolved_working_dir = self.namespace._resolve_exec_base(working_dir)
         except OSError as exc:
             return f"Error: {exc}"
-        # Il ramo con yield_time_ms esegue in un thread di sessione che chiama
-        # il namespace senza argomenti: la base gli arriva da qui.
-        self.namespace.exec_base = resolved_working_dir
-        self.namespace.working_dir = resolved_working_dir or self.working_dir
 
         effective_timeout = self._resolve_timeout(timeout)
         effective_max = clamp_session_int(
@@ -3273,6 +3276,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
                 yield_time_ms=yield_time_ms,
                 max_output_chars=effective_max,
                 timeout=effective_timeout,
+                working_dir=resolved_working_dir,
             )
 
         return await run_python_async(
@@ -3296,6 +3300,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
         yield_time_ms: int,
         max_output_chars: int,
         timeout: int | None,
+        working_dir: str | None,
     ) -> str:
         try:
             session_id, poll = await self._session_manager.start_python(
@@ -3306,7 +3311,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
                 # Il turno non attraversa il thread grezzo della sessione:
                 # l'involucro costruisce il ponte qui, sul thread dell'event
                 # loop. Vedi `_ContextBoundNamespace`.
-                namespace=_ContextBoundNamespace(self.namespace),
+                namespace=_ContextBoundNamespace(self.namespace, working_dir=working_dir),
                 timeout=timeout,
                 yield_time_ms=clamp_session_int(yield_time_ms, DEFAULT_YIELD_MS, 0, MAX_YIELD_MS),
                 owner_session_key=current_request_session_key(),
