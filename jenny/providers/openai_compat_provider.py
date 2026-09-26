@@ -410,10 +410,18 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
 
         GPT-5 family and reasoning models (o1/o3/o4) reject temperature
         when reasoning_effort is set to anything other than ``"none"``.
+
+        Un effort impostato spegneva la temperatura per **ogni** modello, e
+        siccome il default è ``"medium"`` non partiva mai: nemmeno per un gpt-4o
+        o un Llama in loopback, che la accettano. Ora la tolgono solo i modelli
+        reasoning OpenAI (sempre, come prima) e quelli col thinking nativo
+        acceso (``_model_thinking_style``: Kimi in thinking la fissa lui).
         """
-        if reasoning_effort and reasoning_effort.lower() != "none":
+        if is_openai_reasoning_model(model_name):
             return False
-        return not is_openai_reasoning_model(model_name)
+        effort = (reasoning_effort or "").lower()
+        thinking_on = bool(effort) and effort not in ("none", "minimal", "minimum")
+        return not (thinking_on and _model_thinking_style(model_name))
 
     def _build_kwargs(
         self,
