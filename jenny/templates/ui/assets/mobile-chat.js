@@ -794,6 +794,9 @@ export class ChatController {
     const generation = sessionManager.switchGeneration;
     const key = sessionManager.currentKey;
     const superseded = () => generation !== sessionManager.switchGeneration;
+    /* Quel che c'e' nella chat **prima** delle attese: tutto quel che compare
+       dopo lo hanno messo i frame vivi (v. sotto, prima del render). */
+    const earlier = new Set(this.chatArea.children || []);
     try {
       if (!key) {
         this.hasMoreHistory = false;
@@ -820,7 +823,20 @@ export class ChatController {
       // in cima a un thread che c'è (`_renderThreadMessages` accoda, non
       // sostituisce).
       this._clearHistoryError();
+      /* La storia va **sopra** quel che e' arrivato vivo durante le attese
+         (WJ2 della terza revisione). Se Jenny sta rispondendo nella
+         conversazione che si apre — un cambio di chat, una riconnessione, un
+         /new — i suoi delta disegnano la bolla nella chat appena svuotata, e la
+         storia accodata dopo le finiva sotto: la risposta in corso in cima e la
+         domanda a cui risponde in fondo. I nodi vivi si staccano, la storia si
+         disegna, e si rimettono in coda: sono gli stessi nodi, quindi i
+         riferimenti dello stream (`_currentContent`, ...) restano validi.
+         L'intestazione di Jenny non e' un nodo vivo anche se nata adesso. */
+      const live = Array.from(this.chatArea.children || [])
+        .filter((node) => !earlier.has(node) && node !== this.identityEl);
+      for (const node of live) node.remove();
       this._renderThreadMessages(thread.messages || []);
+      for (const node of live) this.chatArea.appendChild(node);
       this._pager.adopt(thread.page);
       this._ensureHistoryReach();
       this.scrollToBottom(true);
