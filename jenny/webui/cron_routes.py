@@ -94,7 +94,7 @@ class CronRoutes:
         try:
             cron = self._get_cron_service()
         except Exception:
-            self._log.exception("Cron routes: il getter del servizio ha sollevato")
+            self._log.exception("Cron routes: the service getter raised")
             cron = None
         if cron is None:
             return http_error(503, "scheduler not available")
@@ -119,7 +119,7 @@ class CronRoutes:
         except Exception:
             # Il getter e' una lambda sul container: se solleva, il pannello non
             # deve diventare un 500 — e' lo stesso caso di "non c'e' ancora".
-            self._log.exception("Cron routes: il getter del servizio ha sollevato")
+            self._log.exception("Cron routes: the service getter raised")
             cron = None
         try:
             # Lo store si legge qui, sul loop, come lo leggono il timer, il tool

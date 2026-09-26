@@ -119,7 +119,7 @@ def _heartbeat_tasks(workspace: Path) -> dict[str, Any]:
     try:
         content = path.read_text(encoding="utf-8")
     except OSError as exc:
-        logger.warning("HEARTBEAT.md illeggibile: {}", exc)
+        logger.warning("HEARTBEAT.md is unreadable: {}", exc)
         return {"file_present": True, "file_readable": False, "tasks": []}
     tasks = parse_heartbeat_tasks(content)
     return {
