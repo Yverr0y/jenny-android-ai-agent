@@ -68,7 +68,7 @@ Once a model is selected (from the list or typed manually), the **Launch** butto
 
 ### Step 4 — Connect Telegram (optional)
 
-After Launch succeeds, a final, skippable step offers to pair a Telegram bot so you can talk to Jenny from Telegram as well as the WebUI. Tap **Skip for now** to finish onboarding without it — you can pair Telegram later from Settings at any time. See [Telegram bridge](../using/telegram.md) for the full pairing flow.
+After Launch succeeds, a final, skippable step offers to pair a Telegram bot so you can talk to Jenny from Telegram as well as the WebUI. Tap **Skip for now** to finish onboarding without it — you can pair Telegram later at any time, from the workshop's **Hands → Telegram**. See [Telegram bridge](../using/telegram.md) for the full pairing flow.
 
 <!-- TODO: screenshots (O-1) -->
 
@@ -84,17 +84,17 @@ Pressing **Launch** does the following, in order:
 ## Interrupting the wizard
 
 - **Before pressing Launch on step 3**: nothing has been persisted yet. If you close the app or back out, reopening it lands you back at step 1 — you start over from scratch.
-- **After Launch, during the optional Telegram step**: the provider, model, and assistant name are already saved and the agent is running. If you close the app here, the next launch goes straight to the normal chat view (Telegram can still be paired later from Settings).
+- **After Launch, during the optional Telegram step**: the provider, model, and assistant name are already saved and the agent is running. If you close the app here, the next launch goes straight to the normal chat view (Telegram can still be paired later from the workshop's **Hands → Telegram**).
 
 ## Restoring from a backup instead
 
-If you've used Jenny before and have an encrypted `.jbk` backup file, tap **Restore from backup** on step 1 instead of going through the wizard. This opens the same import flow used from Settings: pick the file via the Android system picker, enter the backup passphrase, and confirm. The restore is staged, not applied immediately — the app then prompts you to restart, and the actual restore happens at that restart, before anything else touches the workspace. Once restored, the app boots straight into chat with your old provider, history, and memory already in place — the wizard is skipped because a provider is already configured. See [Backup and restore](../using/backup.md) for the full mechanics.
+If you've used Jenny before and have an encrypted `.jbk` backup file, tap **Restore from backup** on step 1 instead of going through the wizard. This opens the same import flow used from the home's **Settings → Backup → Restore from a file**: pick the file via the Android system picker, enter the backup passphrase, and confirm. The restore is staged, not applied immediately — the app then prompts you to restart, and the actual restore happens at that restart, before anything else touches the workspace. Once restored, the app boots straight into chat with your old provider, history, and memory already in place — the wizard is skipped because a provider is already configured. See [Backup and restore](../using/backup.md) for the full mechanics.
 
 <!-- TODO: verify on-device (O-2): full restore-from-onboarding flow, including SAF picker behavior with Google Drive -->
 
 ## Things to know that aren't obvious
 
-- **Onboarding replaces the entire provider list.** If you ever run through the Setup wizard again on a device that already had providers configured (this shouldn't normally happen after first run, but can matter if you're scripting or debugging), it discards the old provider list and keeps only the one you just entered. Add further providers afterward from Settings → Model → API keys.
+- **Onboarding replaces the entire provider list.** If you ever run through the Setup wizard again on a device that already had providers configured (this shouldn't normally happen after first run, but can matter if you're scripting or debugging), it discards the old provider list and keeps only the one you just entered. Add further providers afterward from the workshop's **Brain → Brands → Add provider**.
 - **Model-fetch error messages come from the backend in English**, regardless of which UI language you're using — for example "The provider rejected the configured credential." or "Configure an API base URL to load models." They aren't translated.
 - **An empty model list is not an error.** If the provider's `/models` endpoint returns zero models (wrong key, wrong base URL, or the provider just doesn't have any), the backend still responds with HTTP 200 and an explanatory message; the wizard shows that message instead of an error banner, and reveals the manual model-ID field.
 

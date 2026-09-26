@@ -20,18 +20,11 @@ If you don't want the chooser to appear at all yet, just don't press Home after 
 
 ## Where the Home button lands
 
-Once Jenny is your launcher, every press of Home arrives inside the app and means "collapse back to the home screen": any open mini-app closes, the drawer closes, any open dialog closes. What counts as the home screen is yours to choose, in **Settings → Personalization → Home button**:
+Once Jenny is your launcher, every press of Home arrives inside the app and means "you're home": whatever is open on top closes (a sheet, a mini-app, an enlarged image), you land back in your personal conversation, even if you were inside a notebook, and the chat scrolls to its latest message. The on-screen keyboard closes too; with a physical keyboard the message field keeps the focus, so you can start typing straight away. If you are in the workshop when you press Home, it closes whatever is open there and goes to the workshop's **Console**.
 
-| Choice | What Home does |
-|---|---|
-| Chat | Lands on the chat (✿). The historical behavior, and still the default. |
-| Apps | Lands on the Apps tab. |
-| Workspace | Lands on the Workspace tab. |
-| Wherever I was | Changes no view at all — it closes the mini-app, drawer and dialogs and leaves you on whichever tab you were reading. |
+There is no setting for where Home lands. Earlier versions had a **Home button** choice (Chat, Apps, Workspace, or "Wherever I was"); it was retired, and Home always goes back to the conversation.
 
-Earlier versions always went to chat, which is fine if you chat all day and less fine if you mostly use Jenny for mini-apps or files: every Home press threw away where you were. Leave the setting alone and nothing changes from before.
-
-This is separate from what happens on a cold start. When the app is launched fresh it reopens on the tab you last used, regardless of this setting — the setting governs the Home button specifically.
+Pressing Back works one layer at a time and, in the personal conversation with nothing open on top, does nothing: since Jenny is the launcher, Back never closes it.
 
 ## Reverting to your normal launcher
 

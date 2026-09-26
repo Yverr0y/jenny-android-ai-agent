@@ -1,10 +1,10 @@
 # Themes and mascot
 
-Jenny's look — color theme, the on-screen mascot, and the interface language — is entirely personal to the phone you're using: none of it is backed up or synced.
+Jenny's look (the color theme and the on-screen mascot) is personal to the phone you're using: none of it is backed up or synced.
 
 ## Themes
 
-Open **Settings → Personalization** and you'll find a strip of theme cards under the label "Theme." Each card is not a swatch — it's a live mini-conversation dressed in that theme's actual colors, so what you see is exactly what you get. Tap a card to switch instantly; the app doesn't ask for confirmation and there's nothing to save.
+Open the home's **Settings** page and the first card, **Theme**, holds a row of pills: each one is a three-colour swatch (background, surface, accent) with the theme's short name. Tap a pill to switch instantly; the app doesn't ask for confirmation and there's nothing to save. The card shows the full name of the active theme and a one-line description of it.
 
 There are seven named themes:
 
@@ -29,7 +29,7 @@ Your theme choice lives in the WebView's local storage on this specific device, 
 
 ## Mascot
 
-A small companion (Jenny, styled as "✿") lives docked at the edge of every screen except the main chat, where she's just present in the corner without any extra interaction — the real conversation is already open there. Tap her, or swipe her inward from the edge, and she pops out with a one-turn minichat: a text field ("Ask here…") and a speech bubble for the reply.
+A small companion (Jenny, styled as "✿") follows the conversation from the corner of the screen. In the home the chat *is* the screen, so there she is simply present, and a tap sends her to the edge or brings her back out. In the workshop she lives docked at the edge of every view except the Console: tap her, or swipe her inward from the edge, and she pops out with a one-turn minichat, a text field ("Ask here…") and a speech bubble for the reply.
 
 A few things about that minichat are worth knowing before you rely on it:
 
@@ -45,43 +45,42 @@ Her face and her body are two separate drawings stacked on each other, which is 
 
 Drag her instead of tapping and she takes flight: she hangs from your finger with a bit of pendulum physics, and on release falls, bounces, gets up, and walks back home to her docked position. It's a pure fidget interaction with no functional effect — dragging her doesn't send anything or change any setting.
 
-Two preferences control her, both in **Settings → Personalization → Mascot**:
+Her preferences are on the home's **Settings → Jenny** page:
 
 | Setting | Options | Default |
 |---|---|---|
 | Show mascot | on / off | On |
 | Mascot size | Small / Medium / Large | Small |
+| Floating mascot | on / off (Android only) | Off |
+
+**Floating mascot** puts her in a window above other apps: tap her there to talk, and the answer comes in a bubble, in the same conversation as the app. It needs Android's "Display over other apps" permission, and the page tells you when that is missing.
 
 Size is the side of the square she occupies — 120, 160 or 210 px; she starts small. The rest of her geometry follows from it, including where the minichat bubble sits relative to her head, so she stays coherent at every size rather than growing out of her own speech balloon.
 
-Which edge she docks on is not a setting: it's where you last left her. She starts on the left, and after a throw (below) she lands on whichever edge is nearer and stays there.
-
-The size control below the toggle stays on screen when she's switched off, greyed out and inert rather than removed. It reads oddly at first — a control you can see but not use — and it's on purpose: turning her off is exactly the moment you'd go looking for a way to keep her but calm her down, and hiding the option at that moment hid the answer to the question. Greyed-out is a promise about what you get back if you switch her on again.
+Which edge she docks on is not a setting: she always docks on the right, and after a throw she walks back there.
 
 She comes in one look, in color. There used to be a black-and-white switch here, drawn from a second set of line-art artwork; it was retired when her expressions were drawn, because keeping both meant drawing every expression twice.
 
-Like the theme, these two preferences — and the edge she last landed on — are stored in this device's local storage — not in `config.json`, not in your encrypted backup. A reinstall brings her back showing, small, on the left.
+Like the theme, **Show mascot** and **Mascot size** are stored in this device's local storage, not in `config.json` and not in your encrypted backup. A reinstall brings her back showing and small. **Floating mascot** is the exception: it lives in `config.json` (`floating.enabled`), because the window is started by the app's background service, which can't read the WebView's storage.
 
 If your phone has "reduce motion" turned on at the OS level, Jenny respects it: the animated mouth-flap while she talks is skipped in favor of a static pose. The drag-to-fly gesture itself is a direct manipulation you control with your finger, so it still works if you choose to use it.
 
 ## UI language
 
-The interface exists in two languages: Italian and English. On first launch, before you've made any choice, Jenny reads the phone's system language and picks Italian or English if either matches (checking an exact match first, then just the language prefix); if neither matches, it falls back to English.
-
-You can change it anytime from **Settings → Personalization → Language**, with a two-button segmented control (Italiano / English). Switching is instant — the whole interface re-renders in the new language with no reload and no restart.
+The interface exists in two languages: Italian and English. It follows the phone's system language, checking an exact match first and then just the language prefix; for any other language it falls back to English. There is no language switch inside the app: to change it, change the phone's language.
 
 This is worth separating clearly from a similarly named setting:
 
-- **UI language** (what you just changed) lives in this device's local storage. It only controls what the buttons, labels, and toasts in the WebUI say.
-- **`agents.defaults.language`** is a `config.json` field, and the *only* place that writes it is the onboarding wizard — it captures whichever UI language was active at the time you set the phone up, and uses it for a handful of backend-generated strings (like the initial welcome message).
+- **UI language** only controls what the buttons, labels, and toasts in the WebUI say.
+- **`agents.defaults.language`** is a `config.json` field, and the *only* place that writes it is the onboarding wizard. It captures the UI language active when you set the phone up, and uses it for a handful of backend-generated strings (like the initial welcome message).
 
-Because of that split, changing the language toggle in Settings later does **not** touch `agents.defaults.language`. Any backend-generated text that depends on that config field keeps using whichever language you had during onboarding until you edit `config.json` directly — see [Configuration](../reference/configuration.md). Note also that several backend error messages (settings validation, model-list fetch failures) are hardcoded in English regardless of either setting.
+Changing the phone's language later does **not** touch `agents.defaults.language`. Any backend-generated text that depends on that field keeps using the language you had during onboarding until you edit `config.json` directly; see [Configuration](../reference/configuration.md). Several backend error messages (settings validation, some model-list failures) are in English regardless of either.
 
-None of this affects what language Jenny actually *replies* to you in during a normal conversation — that depends on the language model you're using and how you write to it, not on any toggle in this app.
+None of this affects what language Jenny actually *replies* to you in during a normal conversation: that depends on the language model you're using and how you write to it, not on any setting in this app.
 
 ## See also
 
-- [Settings](../reference/settings.md) — the full accordion this page's controls live in.
+- [Settings](../reference/settings.md): where this page's controls live.
 - [Chat basics](chat.md) — how the main conversation renders.
 - [Backup and restore](backup.md) — what does and doesn't travel in a `.jbk` file.
 - [Configuration](../reference/configuration.md) — `config.json` reference, including `agents.defaults.language`.

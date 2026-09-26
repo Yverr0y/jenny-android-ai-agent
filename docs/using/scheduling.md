@@ -1,6 +1,6 @@
 # Scheduling and proactivity
 
-Jenny can remind you of things, watch a checklist in the background, work a long task across many turns, and delegate side work to a helper agent — all by asking in chat, no separate scheduling screen involved.
+Jenny can remind you of things, watch a checklist in the background, work a long task across many turns, and delegate side work to a helper agent — all set up by asking in chat. The workshop shows your reminders and the heartbeat, and lets you pause, resume or delete the reminders you created.
 
 ## The one thing to know before you rely on this
 
@@ -24,8 +24,8 @@ What none of that fixes, and you should plan around:
 - **A missed cron-expression occurrence is still dropped.** A `0 9 * * *` job that came due while the app was dead is recomputed from now, so that morning's run is skipped without a word; the next one arrives normally. Only one-shot and interval schedules catch up.
 - **A recovered one-shot arrives with no sense of how late it is.** It fires whenever the app next comes up — hours or days after the fact — and the message is the one you wrote, unchanged. If that would be worse than silence for a particular reminder, a one-shot is the wrong tool for it.
 - **After a reboot, nothing runs until you unlock the phone.** Jenny's workspace, config and runtime live in storage that Android keeps encrypted until the first unlock, so the gateway cannot start before it — deliberately, since the alternative is keeping your API keys and memory outside that encryption. A phone that reboots at 3am and sits locked until 8 is a phone with a five-hour hole in it.
-- **Exact alarms can be switched off.** If Android's "Alarms & reminders" permission isn't granted, Jenny falls back to inexact alarms: they still fire in Doze, but they slip. Settings → Background activity tells you which of the two you're getting.
-- **Your phone's own battery manager outranks all of it.** Samsung, Xiaomi/MIUI, Huawei/Honor, Oppo and Vivo kill background apps on their own terms, and no application code can prevent it. What Jenny can now do is *notice*: a stretch of downtime longer than `power.gapWarningMin` (default 60 minutes) is recorded and listed under **Settings → Background activity**, with the manufacturer-specific advice for turning the restriction off.
+- **Exact alarms can be switched off.** If Android's "Alarms & reminders" permission isn't granted, Jenny falls back to inexact alarms: they still fire in Doze, but they slip. The workshop's **Brain → Background activity** tells you which of the two you're getting, and offers a button to grant the permission.
+- **Your phone's own battery manager outranks all of it.** Samsung, Xiaomi/MIUI, Huawei/Honor, Oppo and Vivo kill background apps on their own terms, and no application code can prevent it. What Jenny can now do is *notice*: a stretch of downtime longer than `power.gapWarningMin` (default 60 minutes) is recorded and listed under the workshop's **Brain → Background activity**, with the manufacturer-specific advice for turning the restriction off.
 
 So: intervals are still a floor, not a promise — but the floor moved a long way up. Measured on the development phone (Unihertz Titan 2, Android 16), unplugged and idle for nine hours overnight, with both the battery exemption and the "Alarms & reminders" permission granted: a 30-minute job fired 19 times in a row and **every single interval landed between 30m00s and 30m02s**, including right through an uninterrupted four-hour stretch of deep Doze with no maintenance windows at all. The gateway was never killed and never restarted; the battery went from 80% to 77% over 9.4 hours.
 
@@ -33,7 +33,7 @@ Read that for what it is: one phone, in the configuration where everything is gr
 
 If reminders matter to you, the practical measures are unchanged:
 
-- Grant the battery-optimization exemption Jenny offers during first-run setup (or later from **Settings → Background activity**, or from Android's own battery settings) so the OS is less likely to freeze the background service.
+- Grant the battery-optimization exemption Jenny offers during first-run setup (or later from the workshop's **Brain → Background activity**, or from Android's own battery settings) so the OS is less likely to freeze the background service.
 - Keep the phone charged and connected when a reminder is close to due.
 - Treat "at" reminders as best-effort, not guaranteed alarms — for anything truly time-critical, use your phone's own alarm clock as a backup.
 
@@ -41,7 +41,7 @@ If reminders matter to you, the practical measures are unchanged:
 
 ## Reminders (the `cron` tool)
 
-You don't configure this from a screen — you just ask, in plain language, and Jenny translates it into a scheduled job:
+You don't create these from a screen — you just ask, in plain language, and Jenny translates it into a scheduled job:
 
 - "Remind me to take the pizza out in 20 minutes."
 - "Every day at 9am, ask me how I slept."
@@ -97,7 +97,7 @@ Monitor mode only makes sense on a repeating schedule, so **it cannot be combine
 
 ### Protected system jobs
 
-When you ask Jenny to list reminders, you'll also see jobs you didn't create: **`dream`**, **`heartbeat`**, and — when they are on — the [gardener](gardener.md) and the update check. These are system-managed and will show up as protected — visible for inspection, but Jenny will refuse to remove them if asked (a removal attempt gets a reply along the lines of "this is a protected system-managed cron job" and cannot be removed). The way to stop one is its config switch, not the reminder list.
+When you ask Jenny to list reminders, you'll also see jobs you didn't create: **`dream`**, **`heartbeat`**, and — when they are on — the [gardener](gardener.md) and the update check. These are system-managed and will show up as protected — visible for inspection, but Jenny will refuse to remove them if asked (a removal attempt gets a reply along the lines of "this is a protected system-managed cron job" and cannot be removed). The way to stop one is its config switch, not the reminder list: Dream's and the gardener's are in the workshop's **Memory** drawer, the heartbeat's and the update check's are in `config.json`.
 
 | Job | Runs | Config | What it costs you |
 |---|---|---|---|
@@ -110,17 +110,17 @@ When you ask Jenny to list reminders, you'll also see jobs you didn't create: **
 
 Your reminders live in one file, `cron/jobs.json` inside the workspace, and a phone can leave a file unreadable — storage trouble, or the system killing the process mid-write.
 
-Since 0.6.6 that file is handled the same way as `config.json`. Jenny keeps the previous good copy as `cron/jobs.json.bak` and refreshes it before every save. If the live file can't be read at startup, the backup is used and promoted; if there's no usable backup either, the unreadable file is set aside as `cron/jobs.json.corrupt-<timestamp>` and Jenny starts with **no reminders at all**. Either way the app comes online, and Settings shows a notice saying which of the two happened and where the broken file went.
+Since 0.6.6 that file is handled the same way as `config.json`. Jenny keeps the previous good copy as `cron/jobs.json.bak` and refreshes it before every save. If the live file can't be read at startup, the backup is used and promoted; if there's no usable backup either, the unreadable file is set aside as `cron/jobs.json.corrupt-<timestamp>` and Jenny starts with **no reminders at all**. Either way the app comes online, and the workshop shows a notice at the top of its drawers saying which of the two happened and where the broken file went.
 
 That notice matters more here than it does for settings. A reminder that has stopped existing looks exactly like a reminder that hasn't come due yet, so without being told, you'd find out when it didn't go off. If you see the "started with none" version, your own reminders need recreating — the system jobs above come back on their own.
 
-Settings → **Scheduling** is where you check the outcome: it lists everything scheduled and repeats the recovery notice above the list itself, because further down the screen a short list of reminders looks exactly like a correct one. See [Settings → Scheduling](../reference/settings.md#scheduling).
+The workshop's **Hands → When she acts on her own** is where you check the outcome: it lists your reminders and the heartbeat, and repeats the recovery notice above the list itself, because further down the screen a short list of reminders looks exactly like a correct one. See [Settings → When she acts on her own](../reference/settings.md#when-she-acts-on-her-own).
 
 The single case where Jenny still refuses to start is when the broken file can't be moved aside at all. Starting anyway would mean the next save overwrites it, and that file is the only copy of your reminders left.
 
 ## Heartbeat: a periodic checklist
 
-Heartbeat is Jenny's own background watchdog, driven entirely by one file: `workspace/HEARTBEAT.md` in your workspace. You can edit it directly through the Workspace file browser, or just ask Jenny to add something to it.
+Heartbeat is Jenny's own background watchdog, driven entirely by one file: `workspace/HEARTBEAT.md` in your workspace. You can edit it directly from the workshop's file manager (**Memory → The real files**), or just ask Jenny to add something to it.
 
 Only the section literally named `## Active Tasks` is read — anything you write under a different heading, or outside any heading, is ignored. The file ships with a comment reminding you of this and to delete tasks once they're done rather than leaving them checked off.
 
@@ -134,7 +134,7 @@ The practical rule of thumb: **write tasks under `## Active Tasks`, and delete t
 
 Example of something reasonable to put there: "Check the weather forecast around 7am and warn me if it looks like rain."
 
-**An empty checklist is free, and now it is also visible.** Skipping the cycle costs nothing, but the job still records a normal `ok` on every beat — so from the outside a heartbeat that is checking nothing is indistinguishable from a healthy one, and the only trace was a debug log line. Settings → **Scheduling** says it in words: the tasks it can actually see in `HEARTBEAT.md`, or a notice that there are none. The same panel names a task that has not been carried out for several cycles, and whether Jenny has already told you about it.
+**An empty checklist is free, and now it is also visible.** Skipping the cycle costs nothing, but the job still records a normal `ok` on every beat — so from the outside a heartbeat that is checking nothing is indistinguishable from a healthy one, and the only trace was a debug log line. The workshop's **Hands → When she acts on her own** says it in words: tap the heartbeat and it lists the tasks it can actually see in `HEARTBEAT.md`, or a notice that there are none. The same detail names a task that has not been carried out for several cycles, and whether Jenny has already told you about it.
 
 **Heartbeat has one schedule for the whole file.** Every line under `## Active Tasks` is looked at on the same 30-minute beat; there's no per-task cadence, and adding a second heartbeat job isn't the way to get one. If a particular check needs its own rhythm — every 10 minutes, or only on weekday mornings — that's a monitor job ([Two modes](#two-modes-one-that-always-speaks-one-that-speaks-only-if-it-has-to) above), which gives you an independent schedule and the same "only speaks if it's worth it" behavior. Heartbeat stays the right home for the shared, ambient checklist.
 
