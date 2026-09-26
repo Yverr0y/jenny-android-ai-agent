@@ -124,6 +124,30 @@ async def test_a_second_request_on_the_connection_never_reaches_the_server_raw(k
         assert head.startswith("GET /base/"), head
 
 
+async def test_a_client_that_reuses_the_connection_is_not_forwarded(keepalive):
+    """Il test qui sopra manda le due richieste insieme: la seconda arriva nei
+    byte gia' letti con la testa, e non passa mai dal ciclo che scarta quel che
+    il client manda **dopo** il body. Un client che ignora ``Connection: close``
+    e riusa la connessione a risposta ricevuta, invece, ci passa: la seconda
+    richiesta deve morire li', non arrivare cruda al server."""
+    p, up = keepalive
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", p.port)
+    try:
+        writer.write(_get("/uno", p._cap))
+        await writer.drain()
+        await asyncio.wait_for(reader.readuntil(b"OK"), timeout=3)
+
+        writer.write(_get("/due", p._cap))
+        await writer.drain()
+        await asyncio.sleep(0.2)
+    finally:
+        writer.close()
+
+    assert [h.splitlines()[0] for h in up.seen] == ["GET /base/uno HTTP/1.1"]
+    assert all(p._cap not in head for head in up.seen)
+
+
 async def test_the_server_is_asked_to_close_and_the_browser_is_told_so(keepalive):
     p, up = keepalive
 
