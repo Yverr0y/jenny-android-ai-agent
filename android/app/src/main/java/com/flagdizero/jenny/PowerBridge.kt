@@ -275,7 +275,10 @@ class PowerBridge(context: Context) {
                     // Android 12+ senza SCHEDULE_EXACT_ALARM concesso. Inesatta
                     // (il sistema la può far slittare di minuti) ma `AllowWhileIdle`
                     // la fa comunque scattare in Doze: meglio una sveglia in
-                    // ritardo che nessuna sveglia.
+                    // ritardo che nessuna sveglia. Ma la sua allowlist **non**
+                    // permette di avviare un FGS (AOSP: `mOptsWithoutFgs`): sveglia
+                    // un gateway vivo, non ne rialza uno morto — v.
+                    // `GatewayStarter.ALARM_FALLBACK_DELAY_MS`.
                     alarm.setAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP, atMillisSinceEpoch, pending
                     )

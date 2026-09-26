@@ -118,6 +118,16 @@ def _scan(src: str, *, keep_strings: bool) -> str:
     return "".join(out)
 
 
+def comments_only(src: str) -> str:
+    """Il rovescio di :func:`strip_comments`: solo i commenti, codice in bianco.
+
+    Per i pochi test che verificano che un KDoc dica il vero: leggono i
+    commenti apposta, e dichiarandolo non passano per una lettura grezza.
+    """
+    kept = strip_comments(src)
+    return "".join(c if (c != k or c == "\n") else " " for c, k in zip(src, kept, strict=True))
+
+
 def _read(path: Path | str) -> str:
     path = Path(path)
     if not path.suffix:
@@ -141,6 +151,11 @@ def read_source(name: Path | str) -> str:
     dopo che il codice è stato commentato (voce TD12 della terza revisione).
     """
     return strip_comments(_read(name))
+
+
+def read_comments(name: Path | str) -> str:
+    """Solo i commenti di ``<name>.kt`` (v. :func:`comments_only`)."""
+    return comments_only(_read(name))
 
 
 def block_at(code: str, start: int) -> str:

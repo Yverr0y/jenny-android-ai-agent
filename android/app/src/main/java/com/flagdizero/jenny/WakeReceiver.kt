@@ -20,7 +20,11 @@ import android.util.Log
  * Avviare un FGS da background è vietato da Android 12, ma una sveglia
  * `setExactAndAllowWhileIdle` mette l'app in allowlist temporanea proprio per
  * la durata di questa callback — ed è il motivo per cui il riavvio passa da un
- * alarm e non da un job differito.
+ * alarm e non da un job differito. **Solo una sveglia esatta.** Senza
+ * `SCHEDULE_EXACT_ALARM` le sveglie arrivano da `setAndAllowWhileIdle`, la cui
+ * allowlist esclude il FGS (v. `GatewayStarter.ALARM_FALLBACK_DELAY_MS`): qui
+ * l'avvio del service viene rifiutato, e la sveglia rimette su il gateway solo
+ * se l'app è esente dall'ottimizzazione batteria.
  *
  * Il ri-armo delle catene al cambio di permesso ha DUE porte d'ingresso, e non
  * è ridondanza gratuita: la broadcast di sistema (qui sotto) e
@@ -56,7 +60,8 @@ class WakeReceiver : BroadcastReceiver() {
             // Tutto il resto è una sveglia di LAVORO armata da Python (request
             // code sotto 9000): una scadenza cron da onorare adesso.
             // `wakeTick`: v. `GatewayStarter.ensureUp`. Niente `alarmFallback`:
-            // siamo già dentro la finestra di allowlist di una sveglia.
+            // siamo già dentro la finestra di allowlist di una sveglia (col FGS
+            // se era esatta; se no un'altra sveglia non cambierebbe niente).
             else -> GatewayStarter.ensureUp(context, reason = "wake-alarm/work", wakeTick = true)
         }
     }

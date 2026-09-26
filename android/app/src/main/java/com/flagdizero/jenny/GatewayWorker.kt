@@ -60,7 +60,9 @@ class GatewayWorker(
             // `alarmFallback = true`: un worker NON gode dell'allowlist
             // temporanea che una sveglia concede, quindi su Android 12+ il suo
             // `startForegroundService` può essere rifiutato. In quel caso
-            // l'unica via è rientrare da una sveglia, che l'allowlist ce l'ha.
+            // l'unica via è rientrare da una sveglia **esatta**, che
+            // l'allowlist col FGS ce l'ha; senza sveglie esatte non c'è (v.
+            // `GatewayStarter.ALARM_FALLBACK_DELAY_MS`).
             GatewayStarter.ensureUpIfDown(
                 applicationContext,
                 reason = "workmanager",
