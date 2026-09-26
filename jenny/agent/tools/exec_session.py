@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import atexit
 import sys
 import threading
@@ -27,6 +28,8 @@ DEFAULT_WAIT_FOR_MS = 10_000
 MAX_WAIT_FOR_MS = 120_000
 DEFAULT_MAX_OUTPUT_CHARS = 10_000
 MAX_OUTPUT_CHARS = 50_000
+# Passo dell'attesa asincrona in ``_PythonSession.poll``.
+_POLL_STEP_S = 0.05
 
 
 @dataclass(slots=True)
@@ -205,11 +208,24 @@ class _PythonSession:
                 if self._exit_code is None:
                     self._exit_code = 0
 
-    def poll(self, yield_time_ms: int, max_output_chars: int) -> _SessionPoll:
+    async def poll(self, yield_time_ms: int, max_output_chars: int) -> _SessionPoll:
+        """Aspetta fino a ``yield_time_ms`` (o la fine del thread) e raccoglie l'output.
+
+        L'attesa è un ``asyncio.sleep`` a passi brevi, mai un ``time.sleep``:
+        questo metodo gira sul thread dell'event loop, e un sonno bloccante qui
+        fermava tutto il gateway per la durata dell'attesa (TL1 della terza
+        revisione). A ogni passo si guarda ``_done``, così un codice che finisce
+        prima non paga l'attesa intera.
+        """
         self.last_access = time.monotonic()
 
         if yield_time_ms > 0 and not self._done:
-            time.sleep(min(yield_time_ms, MAX_YIELD_MS) / 1000)
+            until = time.monotonic() + min(yield_time_ms, MAX_YIELD_MS) / 1000
+            while not self._done:
+                remaining = until - time.monotonic()
+                if remaining <= 0:
+                    break
+                await asyncio.sleep(min(_POLL_STEP_S, remaining))
 
         if not self._done and time.monotonic() >= self.deadline:
             # Percorso deadline: segnala lo stop al thread e marca SOLO
@@ -307,7 +323,7 @@ class ExecSessionManager:
         )
         self._python_sessions[session_id] = session
 
-        poll = session.poll(yield_time_ms, max_output_chars)
+        poll = await session.poll(yield_time_ms, max_output_chars)
         if poll.done:
             self._python_sessions.pop(session_id, None)
         return session_id, poll
@@ -358,7 +374,7 @@ class ExecSessionManager:
         if terminate:
             session.terminate()
 
-        poll = session.poll(yield_time_ms, max_output_chars)
+        poll = await session.poll(yield_time_ms, max_output_chars)
         if poll.done:
             self._python_sessions.pop(session_id, None)
         return poll

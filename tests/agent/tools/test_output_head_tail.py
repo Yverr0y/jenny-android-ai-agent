@@ -40,24 +40,24 @@ async def test_short_output_is_untouched(tmp_path: Path) -> None:
     assert await _run(tmp_path, len(full)) == full
 
 
-def _session_output(tmp_path: Path, limit: int):
+async def _session_output(tmp_path: Path, limit: int):
     ns = PythonNamespace(working_dir=str(tmp_path), workspace=str(tmp_path))
     session = _PythonSession(
         session_id="s1", code=CODE, function=None, args=None, kwargs=None,
         namespace=ns, timeout=10,
     )
     session._thread.join(timeout=10)
-    return session.poll(0, limit)
+    return await session.poll(0, limit)
 
 
-def test_a_session_keeps_head_and_tail_and_counts_the_cut(tmp_path: Path) -> None:
-    full = _session_output(tmp_path, 100_000).output
-    poll = _session_output(tmp_path, 40)
+async def test_a_session_keeps_head_and_tail_and_counts_the_cut(tmp_path: Path) -> None:
+    full = (await _session_output(tmp_path, 100_000)).output
+    poll = await _session_output(tmp_path, 40)
     assert poll.output == _expected(full, 40)
     assert poll.truncated_chars == len(full) - 40
 
 
-def test_a_session_under_the_limit_reports_no_cut(tmp_path: Path) -> None:
-    poll = _session_output(tmp_path, 100_000)
+async def test_a_session_under_the_limit_reports_no_cut(tmp_path: Path) -> None:
+    poll = await _session_output(tmp_path, 100_000)
     assert poll.truncated_chars == 0
     assert "chars truncated" not in poll.output
