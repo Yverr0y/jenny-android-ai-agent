@@ -207,6 +207,22 @@ def _recover_from_safety(runtime_root: Path, workspace: Path) -> None:
 # -- pulizia copie di sicurezza ----------------------------------------------------
 
 
+def _safety_copy_time_s(candidate: Path) -> float:
+    """L'istante (epoch, secondi) del restore che ha prodotto *candidate*.
+
+    Dal nome, ``<prefisso><created_at_ms>[_<ms>]``, che scrive la mossa 1 di
+    :func:`_apply_pending_restore`, e non dall'mtime: la copia e' il workspace
+    **rinominato**, e il rename tiene l'mtime della cartella — l'ultima volta che
+    nella sua radice si e' creato o tolto un file, magari mesi prima. Con l'mtime
+    la pulizia all'avvio, che gira subito dopo il ripristino, cancellava la copia
+    appena fatta. L'mtime resta per un nome che non porta la data.
+    """
+    stamp = candidate.name[len(SAFETY_DIR_PREFIX):].split("_", 1)[0]
+    if stamp.isdigit():
+        return int(stamp) / 1000
+    return candidate.stat().st_mtime
+
+
 def sweep_safety_copies(runtime_root: Path, *, max_age_days: int = 7) -> int:
     """Elimina le copie di sicurezza più vecchie di ``max_age_days``. Mai raises."""
     removed = 0
@@ -214,7 +230,7 @@ def sweep_safety_copies(runtime_root: Path, *, max_age_days: int = 7) -> int:
     try:
         for candidate in Path(runtime_root).glob(f"{SAFETY_DIR_PREFIX}*"):
             try:
-                if candidate.is_dir() and candidate.stat().st_mtime < threshold:
+                if candidate.is_dir() and _safety_copy_time_s(candidate) < threshold:
                     shutil.rmtree(candidate, ignore_errors=True)
                     removed += 1
             except OSError:

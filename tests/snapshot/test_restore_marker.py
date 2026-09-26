@@ -173,6 +173,31 @@ def test_sweep_safety_copies(tmp_path: Path) -> None:
     assert recent.exists()
 
 
+def test_a_fresh_safety_copy_of_an_old_workspace_is_kept(tmp_path: Path) -> None:
+    """CF14: la copia di sicurezza e' il workspace **rinominato**, e il rename tiene
+    l'mtime della cartella — l'ultima volta che nella sua radice si e' creato o
+    tolto qualcosa, magari mesi prima. La pulizia all'avvio, che gira subito dopo
+    il ripristino, la cancellava al primo boot. L'eta' e' quella del restore,
+    scritta nel nome."""
+    import os
+    import time
+
+    now_ms = int(time.time() * 1000)
+    fresh = tmp_path / f"{SAFETY_DIR_PREFIX}{now_ms}"
+    fresh.mkdir()
+    retried = tmp_path / f"{SAFETY_DIR_PREFIX}{now_ms}_{now_ms + 5}"
+    retried.mkdir()
+    ancient = time.time() - 90 * 86_400
+    for d in (fresh, retried):
+        os.utime(d, (ancient, ancient))
+    stale = tmp_path / f"{SAFETY_DIR_PREFIX}{now_ms - 30 * 86_400_000}"
+    stale.mkdir()
+
+    assert sweep_safety_copies(tmp_path, max_age_days=7) == 1
+    assert fresh.exists() and retried.exists()
+    assert not stale.exists()
+
+
 def test_safety_dir_collision_gets_unique_suffix(tmp_path: Path) -> None:
     """Se la safety dir esiste già, il vecchio workspace va in una dir con suffisso."""
     _make_workspace(tmp_path)
