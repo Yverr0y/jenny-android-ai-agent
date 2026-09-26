@@ -19,6 +19,7 @@ from jenny.config.paths import get_uploads_dir
 from jenny.config.schema import Base
 from jenny.pydantic_compat import Field, field_validator, model_validator
 from jenny.security.workspace_access import WORKSPACE_READONLY_METADATA_KEY
+from jenny.session.manager import scrub_lone_surrogates
 from jenny.session.webui_turns import websocket_turn_wall_started_at
 
 if TYPE_CHECKING:
@@ -687,6 +688,10 @@ class WebSocketChannel(OutboundSenderMixin):
                     detail="missing content", reason="missing_content",
                 )
                 return
+            # Un surrogato isolato (un frame tagliato a metà di un'emoji) non
+            # esiste in UTF-8: la riga utente, scritta nel transcript prima che
+            # il loop ripulisca il messaggio, falliva la codifica e spariva.
+            content = scrub_lone_surrogates(content)
 
             raw_media = envelope.get("media")
             media_paths: list[str] = []
