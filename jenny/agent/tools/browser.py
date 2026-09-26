@@ -73,23 +73,42 @@ _FOCUS_REF: str = ""
 # Confronto a parola intera: "ordina" non deve scattare su "ordinamento", e
 # "conferma" da sola non deve scattare su ogni banner dei cookie — per questo
 # c'e' "conferma ordine" e non "conferma".
-_SENSITIVE_VERBS = (
+_COSTLY_VERBS = (
     r"pag(?:a|are|amento)", r"acquist(?:a|are|o)", r"compra", r"ordina",
     r"conferma ordine", r"procedi al pagamento", r"abbonati",
     r"pay", r"buy", r"purchase", r"checkout", r"place order", r"subscribe",
     r"elimin(?:a|are)", r"cancell(?:a|are)", r"rimuov(?:i|ere)", r"svuota",
     r"delete", r"remove", r"empty (?:cart|trash)",
     r"trasferisc(?:i|ere)", r"bonifico", r"invia denaro", r"transfer", r"send money",
+)
+_ACCESS_VERBS = (
     # "entra" e' l'etichetta di accesso piu' comune sui siti italiani, e senza
     # di essa l'interlocco non copre il caso piu' frequente qui. Il confine di
     # parola la tiene stretta: non scatta su "rientra", "entrata", "centrale".
     r"accedi", r"entra", r"sign in", r"log ?in",
 )
+_SENSITIVE_VERBS = _COSTLY_VERBS + _ACCESS_VERBS
 _SENSITIVE_RE = re.compile(r"\b(?:" + "|".join(_SENSITIVE_VERBS) + r")\b", re.IGNORECASE)
+_COSTLY_RE = re.compile(r"\b(?:" + "|".join(_COSTLY_VERBS) + r")\b", re.IGNORECASE)
 
 
 def _is_sensitive(name: str) -> bool:
     return bool(name) and _SENSITIVE_RE.search(name) is not None
+
+
+def _page_has_costly_actions() -> bool:
+    """Vero se nello snapshot corrente c'e' un nome che costa (soldi o distruzione).
+
+    Serve a ``press Enter`` quando il modulo non si conosce: un Enter lo legge
+    anche il JavaScript della pagina, e senza un ``<form>`` non c'e' un bottone
+    di cui leggere il nome. Guarda i nomi e i moduli di tutti i ref che lo
+    snapshot ha mostrato; i verbi di accesso restano fuori, perche' un link
+    «Accedi» sta quasi su ogni pagina e un accesso senza password — che l'utente
+    mette da se' — non parte.
+    """
+    return any(_COSTLY_RE.search(name) for _role, name in _LAST_INDEX.values()) or any(
+        _COSTLY_RE.search(label) for label in _FORM_OF.values()
+    )
 
 
 def reset_browser_state() -> None:
@@ -372,6 +391,13 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
     ``submit: false`` e la pagina non invia: l'invio passa allora dal click sul
     bottone, che il suo nome lo porta. **Unico passo che questa funzione
     modifica**, e solo quel campo.
+
+    Un campo fuori da un ``<form>`` ha l'etichetta vuota, e vuota **non** vuol
+    dire innocuo: l'Enter lo legge il JavaScript della pagina, che può farci
+    quello che vuole. Vuota, o sconosciuta, vale come «non so»: se lo snapshot
+    mostra azioni che costano (:func:`_page_has_costly_actions`) si chiede
+    conferma, altrimenti l'Enter parte — con ``submit: false`` se il cursore
+    non si sa.
     """
     focus = _FOCUS_REF
     for i, st in enumerate(steps):
@@ -384,15 +410,26 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
             if str(st.get("key") or "Enter") != "Enter" or st.get("confirm"):
                 continue
             label = _FORM_OF.get(focus) if focus else None
-            if label is None:
-                st["submit"] = False
-            elif _is_sensitive(label):
+            if label and _is_sensitive(label):
                 return (
                     f'passo {i}: Enter invierebbe il modulo "{label}", un\'azione che costa '
                     "(soldi, cancellazione o accesso). Non la faccio da sola: chiedi conferma "
                     "all'utente, e se dice di si' ripeti lo stesso passo aggiungendo "
                     '"confirm": true.'
                 )
+            if not label and _page_has_costly_actions():
+                # Cursore sconosciuto, o un campo fuori da un <form> (etichetta
+                # vuota): che cosa faccia l'Enter lo decide il JavaScript della
+                # pagina, e la pagina ha azioni che costano. Si chiede.
+                where = "un campo fuori da un modulo" if label == "" else "un campo che non so"
+                return (
+                    f"passo {i}: Enter su {where}, in una pagina con azioni che costano "
+                    "(soldi o cancellazione): non so che cosa farebbe partire. Clicca il "
+                    "bottone che serve, o chiedi conferma all'utente e, se dice di si', "
+                    'ripeti lo stesso passo aggiungendo "confirm": true.'
+                )
+            if label is None:
+                st["submit"] = False
             continue
         if action in ("click", "type", "select") and ref:
             focus = ref

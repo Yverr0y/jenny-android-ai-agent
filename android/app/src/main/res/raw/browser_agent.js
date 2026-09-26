@@ -388,18 +388,20 @@
         } else if (a === 'press') {
           var target = document.activeElement || document.body;
           var key = st.key || 'Enter';
+          // `submit: false` lo mette Python quando non sa (o non deve) far
+          // partire il modulo: l'invio si fa allora col click sul bottone, che
+          // passa dal controllo sui verbi che costano. Il rifiuto viene **prima**
+          // dei tasti: un keydown Enter lo legge anche il JavaScript della
+          // pagina, e un gestore che paga all'Enter non aspetta il submit.
+          if (key === 'Enter' && target.form && st.submit === false) {
+            r.error = 'Enter invierebbe il modulo "' + formLabel(target) + '": clicca il ' +
+              'suo bottone invece, o ripeti il passo con "confirm": true se l\'utente ha detto si\'.';
+            results.push(r); break;
+          }
           ['keydown', 'keyup'].forEach(function (t) {
             target.dispatchEvent(new KeyboardEvent(t, { key: key, bubbles: true }));
           });
           if (key === 'Enter' && target.form) {
-            // `submit: false` lo mette Python quando non sa (o non deve) far
-            // partire il modulo: l'invio si fa allora col click sul bottone,
-            // che passa dal controllo sui verbi che costano.
-            if (st.submit === false) {
-              r.error = 'Enter invierebbe il modulo "' + formLabel(target) + '": clicca il ' +
-                'suo bottone invece, o ripeti il passo con "confirm": true se l\'utente ha detto si\'.';
-              results.push(r); break;
-            }
             target.form.requestSubmit ?
               target.form.requestSubmit() : target.form.submit(); navHint = true;
           }

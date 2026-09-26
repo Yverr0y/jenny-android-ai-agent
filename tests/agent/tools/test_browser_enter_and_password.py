@@ -101,6 +101,55 @@ class TestEnterGoesThroughTheSameGate:
         await _tool(BrowserDoTool).execute(steps=[{"action": "press"}])
         assert _sent_steps(holder)[0]["submit"] is False
 
+    async def test_a_field_outside_a_form_is_not_a_harmless_form(self, monkeypatch):
+        """Etichetta vuota vuol dire «nessun <form>», non «modulo innocuo».
+
+        Fuori da un modulo l'Enter lo gestisce il JavaScript della pagina, e in
+        una pagina con «Paga ora» può essere lui a pagare.
+        """
+        holder = _install(monkeypatch)
+        _snapshot_index({
+            "1:e0": ["textbox", "Codice sconto", ""],
+            "1:e1": ["button", "Paga ora", ""],
+        })
+        out = await _tool(BrowserDoTool).execute(steps=[
+            {"action": "type", "ref": "1:e0", "text": "ESTATE"},
+            {"action": "press"},
+        ])
+        assert out.startswith("Error:") and "confirm" in out, out
+        assert "bridge" not in holder
+
+    async def test_a_field_outside_a_form_on_a_harmless_page_still_presses(self, monkeypatch):
+        holder = _install(monkeypatch)
+        _snapshot_index({
+            "1:e0": ["searchbox", "Cerca", ""],
+            "1:e1": ["link", "Accedi", ""],
+        })
+        await _tool(BrowserDoTool).execute(steps=[
+            {"action": "type", "ref": "1:e0", "text": "meteo"},
+            {"action": "press"},
+        ])
+        assert _sent_steps(holder)[1].get("submit") is not False
+
+    async def test_an_unknown_focus_on_a_costly_page_asks_first(self, monkeypatch):
+        holder = _install(monkeypatch)
+        _snapshot_index({"1:e1": ["button", "Conferma ordine", "Conferma ordine"]})
+        out = await _tool(BrowserDoTool).execute(steps=[{"action": "press"}])
+        assert out.startswith("Error:") and "confirm" in out, out
+        assert "bridge" not in holder
+
+    async def test_confirm_lets_enter_through_outside_a_form(self, monkeypatch):
+        holder = _install(monkeypatch)
+        _snapshot_index({
+            "1:e0": ["textbox", "Codice sconto", ""],
+            "1:e1": ["button", "Paga ora", ""],
+        })
+        await _tool(BrowserDoTool).execute(steps=[
+            {"action": "type", "ref": "1:e0", "text": "ESTATE"},
+            {"action": "press", "confirm": True},
+        ])
+        assert _sent_steps(holder)[1].get("submit") is not False
+
     async def test_other_keys_are_untouched(self, monkeypatch):
         holder = _install(monkeypatch)
         await _tool(BrowserDoTool).execute(steps=[{"action": "press", "key": "Escape"}])
@@ -148,6 +197,46 @@ class TestInThePage:
         assert out["blocked"]["results"][0]["ok"] is False
         assert "Paga ora" in out["blocked"]["results"][0]["error"]
         assert out["allowed"]["results"][0]["ok"] is True
+
+    def test_a_refused_enter_sends_no_key_to_the_page(self):
+        """Il keydown lo legge anche il JavaScript della pagina: rifiutato, non parte."""
+        script = _js_functions("isPassword", "act") + """
+        const keys = [];
+        let submitted = 0;
+        const form = {requestSubmit() { submitted++; }, getAttribute: () => null,
+                      querySelector: () => null};
+        globalThis.KeyboardEvent = class { constructor(t, o) { this.type = t; this.key = o.key; } };
+        globalThis.document = {
+          activeElement: {form, dispatchEvent(ev) { keys.push(ev.type + ':' + ev.key); }},
+          body: {},
+        };
+        function formLabel() { return 'Paga ora'; }
+        const blocked = act({steps: [{action: 'press', submit: false}]});
+        const refusedKeys = keys.length;
+        const allowed = act({steps: [{action: 'press'}]});
+        console.log(JSON.stringify({blocked, allowed, refusedKeys, keys, submitted}));
+        """
+        out = json.loads(run_js(script))
+        assert out["blocked"]["results"][0]["ok"] is False
+        assert out["refusedKeys"] == 0, out["keys"]
+        assert out["keys"] == ["keydown:Enter", "keyup:Enter"]
+        assert out["submitted"] == 1
+
+    def test_submit_false_outside_a_form_still_sends_the_keys(self):
+        """Senza <form> non c'e' niente da rifiutare nella pagina: il giudizio l'ha dato Python."""
+        script = _js_functions("isPassword", "act") + """
+        const keys = [];
+        globalThis.KeyboardEvent = class { constructor(t, o) { this.type = t; this.key = o.key; } };
+        globalThis.document = {
+          activeElement: {form: null, dispatchEvent(ev) { keys.push(ev.type); }}, body: {},
+        };
+        function formLabel() { return ''; }
+        const out = act({steps: [{action: 'press', submit: false}]});
+        console.log(JSON.stringify({out, keys}));
+        """
+        out = json.loads(run_js(script))
+        assert out["out"]["results"][0]["ok"] is True
+        assert out["keys"] == ["keydown", "keyup"]
 
     def test_typing_into_a_password_field_is_refused_in_the_page(self):
         script = _js_functions("isPassword", "act") + f"""
