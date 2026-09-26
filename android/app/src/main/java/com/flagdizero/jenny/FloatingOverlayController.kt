@@ -1355,6 +1355,25 @@ object FloatingOverlayController {
     private fun buildGrip(ctx: Context): View {
         val handle = View(ctx)
         bindTouch(ctx, handle)
+        // **Fuori dalla zona del gesto «indietro».** Parcheggiata sporge dal
+        // bordo per poco meno di metà quadrato: quel che resta visibile sta
+        // tutto nella fascia in cui Android legge uno swipe come *back*, e
+        // senza esclusione il sistema si prende il gesto al primo movimento.
+        //
+        // Sulla maniglia, non sulla finestra di lei, dove stava fino al
+        // 26/09/2026 senza effetto: `DisplayContent.calculateSystemGestureExclusion`
+        // (AOSP) scorre le finestre dall'alto e a ciascuna conta l'esclusione
+        // solo dentro la sua area toccabile **non ancora coperta** da quelle
+        // sopra. La maniglia le sta sopra, toccabile e grande uguale: all'altra
+        // non restava niente. In arena (schermo intero, durante il volo) non
+        // si esclude nulla: coprirebbe tutto il bordo.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            handle.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val arena = gripParams?.width == WindowManager.LayoutParams.MATCH_PARENT
+                v.systemGestureExclusionRects =
+                    if (arena) emptyList() else listOf(android.graphics.Rect(0, 0, v.width, v.height))
+            }
+        }
         return handle
     }
 
@@ -1382,18 +1401,7 @@ object FloatingOverlayController {
         mascotBody = body
         mascotFace = face
         column = box
-        // **Fuori dalla zona del gesto «indietro».** Parcheggiata sporge dal
-        // bordo per poco meno di metà quadrato: quel che resta visibile sta
-        // tutto nella fascia in cui Android legge uno swipe come *back*, e
-        // senza questa riga il sistema si prende il gesto al primo movimento.
-        // Sta qui e non sulla maniglia perché questa finestra è sempre grande
-        // quanto lei: la maniglia, in arena, coprirebbe tutto lo schermo.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            box.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-                v.systemGestureExclusionRects =
-                    listOf(android.graphics.Rect(0, 0, v.width, v.height))
-            }
-        }
+        // L'esclusione dal gesto «indietro» non sta qui: v. [buildGrip].
         return box
     }
 
