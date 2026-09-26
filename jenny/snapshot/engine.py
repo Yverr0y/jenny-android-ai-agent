@@ -20,7 +20,7 @@ from typing import Any, Iterable, Iterator
 from loguru import logger
 
 from jenny.snapshot.store import get_blob, iter_blob_hashes, object_path, put_blob
-from jenny.snapshot.types import FileEntry, SnapshotManifest
+from jenny.snapshot.types import FileEntry, SnapshotManifest, unsafe_entry_reason
 from jenny.utils.path import atomic_write
 
 # Esclusioni di default (path POSIX relativi alla radice del workspace).
@@ -290,6 +290,19 @@ class SnapshotEngine:
         """
         manifest = self.load_manifest(snapshot_id)
         dest_dir = Path(dest_dir)
+        # Tutte le voci prima di scrivere la prima: un manifest importato da un
+        # ``.jbk`` e' dato non fidato, e un ``..`` usciva dallo staging. Il
+        # confronto sul percorso risolto copre anche un link simbolico che
+        # nessun controllo sulla stringa vedrebbe.
+        root = dest_dir.resolve()
+        for entry in manifest.files:
+            reason = unsafe_entry_reason(entry.path, entry.hash)
+            if reason is None:
+                resolved = (root / Path(*entry.path.split("/"))).resolve()
+                if not resolved.is_relative_to(root):
+                    reason = f"unsafe path {entry.path!r} leaves the destination"
+            if reason is not None:
+                raise ValueError(f"snapshot {snapshot_id[:12]}: {reason}")
         dest_dir.mkdir(parents=True, exist_ok=True)
         for entry in manifest.files:
             content = get_blob(self.objects_dir, entry.hash)

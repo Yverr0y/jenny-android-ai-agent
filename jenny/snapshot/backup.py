@@ -35,6 +35,7 @@ from jenny.snapshot.locations import (
     runtime_root_for,
 )
 from jenny.snapshot.restore_marker import write_marker, write_staging_sanity
+from jenny.snapshot.types import SnapshotManifest, unsafe_entry_reason
 from jenny.utils.path import atomic_write
 
 if TYPE_CHECKING:
@@ -224,9 +225,16 @@ class BackupManager:
                 pure = PurePosixPath(rel)
                 if pure.is_absolute() or ".." in pure.parts:
                     raise BackupError(f"backup archive contains an unsafe path: {name}")
+                data = archive.read(name)
+                if dest_root is staged_snap and pure.parts[0] == "manifests":
+                    problem = _imported_manifest_problem(data)
+                    if problem is not None:
+                        shutil.rmtree(staged_ws, ignore_errors=True)
+                        shutil.rmtree(staged_snap, ignore_errors=True)
+                        raise BackupError(f"backup archive {name}: {problem}")
                 target = dest_root / Path(*pure.parts)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(archive.read(name))
+                target.write_bytes(data)
                 if dest_root is staged_ws:
                     extracted_tree += 1
 
@@ -261,6 +269,24 @@ class BackupManager:
                 "created_at_ms": manifest.created_at_ms,
                 "file_count": manifest.file_count,
             }
+
+
+def _imported_manifest_problem(data: bytes) -> str | None:
+    """Perche' un manifest dello store importato non entra nella storia, o ``None``.
+
+    La guardia zip-slip sopra guarda i nomi dello zip, non i percorsi scritti
+    dentro i manifest: quelli entrano nella storia locale al boot
+    (``_merge_snapshot_store``) e un ripristino li scriveva sotto lo staging.
+    """
+    try:
+        manifest = SnapshotManifest.from_dict(json.loads(data.decode("utf-8")))
+    except (ValueError, UnicodeDecodeError, KeyError, TypeError, AttributeError):
+        return "unsafe or unreadable snapshot manifest"
+    for entry in manifest.files:
+        reason = unsafe_entry_reason(entry.path, entry.hash)
+        if reason is not None:
+            return reason
+    return None
 
 
 def _jenny_version() -> str:

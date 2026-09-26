@@ -2,8 +2,30 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Any
+
+_HASH_RE = re.compile(r"\A[0-9a-f]{64}\Z")
+
+
+def unsafe_entry_reason(path: str, hash_hex: str) -> str | None:
+    """Perche' una voce di manifest non si puo' materializzare, o ``None``.
+
+    Un manifest scritto da questo motore e' sano per costruzione; uno arrivato
+    con un ``.jbk`` e' dato non fidato, e ``restore_snapshot`` scrive ogni
+    ``path`` sotto la destinazione: un ``..`` o un assoluto ne uscivano. Il
+    ``hash`` finisce in un percorso sotto ``objects/``, quindi anche lui.
+    """
+    pure = PurePosixPath(path)
+    if not path or pure.is_absolute() or path.startswith("/"):
+        return f"unsafe path {path!r}"
+    if any(part in ("", ".", "..") for part in path.split("/")):
+        return f"unsafe path {path!r}"
+    if not _HASH_RE.match(hash_hex):
+        return f"unsafe blob hash {hash_hex!r} for {path!r}"
+    return None
 
 # Trigger riconosciuti per uno snapshot. La stringa finisce nel manifest e
 # nella UI (badge tradotto via i18n lato client).
