@@ -18,15 +18,19 @@ import android.content.Context
  *
  * **Il salto sul main thread è qui e non nel controller.** Python entra da un
  * thread di `asyncio.to_thread`, e toccare delle `View` da lì sarebbe un
- * `CalledFromWrongThreadException`. Il latch serve a rispondere davvero — se il
+ * `CalledFromWrongThreadException`. L'attesa serve a rispondere davvero — se il
  * risultato tornasse ottimisticamente, Python registrerebbe come mostrato un
  * fumetto che non è mai comparso, e un log che mente su questo costa una
  * diagnosi intera.
  *
- * Il tetto sull'attesa è corto di proposito: dall'altra parte c'è il loop del
- * gateway, fermo su questa chiamata dentro un `wait_for`. Se il main Looper è
- * occupato più di così, la cosa giusta è tornare `false` e lasciar andare il
- * turno — la risposta è comunque nella conversazione.
+ * Il tetto sull'attesa è corto di proposito: dall'altra parte c'è un thread di
+ * `asyncio.to_thread`, e il turno aspetta la sua risposta. Se il main Looper è
+ * occupato più di così si torna `false` e si lascia andare il turno — la
+ * risposta è comunque nella conversazione. E `false` resta vero: a tetto
+ * scaduto [MainHop] toglie il blocco dalla coda, quindi il fumetto non compare
+ * dopo (né la mascotte si accende dopo un «non applicato»). Fino al 26/09/2026
+ * il blocco girava lo stesso, in ritardo, e il `false` mentiva nell'altro
+ * verso.
  */
 class FloatingBridge(context: Context) {
 
@@ -39,7 +43,7 @@ class FloatingBridge(context: Context) {
         /** Esegue *block* sul main thread (v. [MainHop]); `false` se non ci
          *  riesce in tempo. */
         private fun onMain(block: () -> Boolean): Boolean =
-            MainHop.call(MAIN_HOP_TIMEOUT_MS, false, TAG, block)
+            MainHop.call(MAIN_HOP_TIMEOUT_MS, false, TAG, block = block)
     }
 
     private val appContext = context.applicationContext

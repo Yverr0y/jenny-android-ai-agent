@@ -33,9 +33,10 @@ MAIN_HOP = (
     / "android/app/src/main/java/com/flagdizero/jenny/MainHop.kt"
 )
 
-# ``block()`` dentro un ``try``, con un ``catch (e: Exception)`` subito dopo.
+# ``block()`` dentro un ``try``, con un ``catch (e: Throwable)`` subito dopo: un
+# ``Error`` sul main abbatte il processo quanto un'eccezione (voce AN10).
 _TRY_BLOCK_CATCH = re.compile(
-    r"\btry\s*\{[^{}]*\bblock\(\)[^{}]*\}\s*catch\s*\(\s*e\s*:\s*Exception\s*\)\s*\{([^{}]*)\}"
+    r"\btry\s*\{[^{}]*\bblock\(\)[^{}]*\}\s*catch\s*\(\s*e\s*:\s*Throwable\s*\)\s*\{([^{}]*)\}"
 )
 
 
@@ -72,3 +73,36 @@ def test_the_posted_branch_catches_too() -> None:
     caught = _TRY_BLOCK_CATCH.search(posted)
     assert caught, "il blocco postato esegue block() senza try/catch"
     assert re.search(r"\bLog\.e\(", caught.group(1)), "il catch postato non scrive nel log"
+
+
+def test_a_timed_out_block_does_not_run_later() -> None:
+    """A tetto scaduto ``call`` risponde *fallback*; il blocco restava in coda e
+    girava dopo, facendo ciò che si era appena detto non fatto (voce AN10).
+    Ora il blocco postato prende lo stato prima di partire, e il chiamante lo
+    abbandona prima di rispondere: uno dei due soltanto."""
+    body = _call_body()
+    m = re.search(r"\.post\s*(?=\{)", body)
+    assert m
+    posted = _inner(body, m.end())
+    assert posted is not None
+    take = posted.index("state.compareAndSet(PENDING, RUNNING)")
+    assert take < posted.index("block()"), "lo stato si prende prima di eseguire"
+    assert "return@post" in posted[take : posted.index("block()")]
+    after = body[body.index("done.await(timeoutMs"):]
+    abandon = after.index("state.compareAndSet(PENDING, ABANDONED)")
+    assert abandon < after.index("return fallback", abandon)
+    # Partito allo scadere: se ne aspetta l'esito invece di smentirlo.
+    assert after.index("done.await()") > abandon
+
+
+def test_only_the_browser_close_asks_to_run_late() -> None:
+    """La pulizia di ``close`` deve arrivare anche in ritardo: è l'unico salto
+    che lo chiede, e lo chiede per nome."""
+    callers = []
+    for name in ("FloatingBridge", "JennyBrowserBridge", "AgenticSearchBridge"):
+        path = MAIN_HOP.with_name(f"{name}.kt")
+        if path.is_file():
+            code = code_only(path.read_text(encoding="utf-8"))
+            callers += [(name, c) for c in re.findall(r"MainHop\.call\(([^)]*)\)", code)]
+    late = [c for c in callers if "runLate" in c[1]]
+    assert late == [("JennyBrowserBridge", "10_000L, Unit, TAG, runLate = true")], late

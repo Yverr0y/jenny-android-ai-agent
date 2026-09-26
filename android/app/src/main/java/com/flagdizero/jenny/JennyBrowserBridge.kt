@@ -527,13 +527,14 @@ class JennyBrowserBridge(context: Context) {
      * Distrugge la sessione e ne svuota il profilo (cookie, storage, cache).
      *
      * Tutto il lavoro sulla WebView e sul profilo sta nel salto sul main: le
-     * API di `ProfileStore` e `Profile` sono `@UiThread`. Un tetto scaduto
-     * non annulla il blocco, che resta in coda e gira appena il main si
-     * libera: la pulizia arriva in ritardo, non si perde. Lo stato di questo
-     * lato (verdetti, recinto, avvisi) si butta subito comunque.
+     * API di `ProfileStore` e `Profile` sono `@UiThread`. È l'unico salto
+     * che chiede `runLate`: a tetto scaduto il blocco resta in coda e gira
+     * appena il main si libera — la pulizia arriva in ritardo, non si perde.
+     * Lo stato di questo lato (verdetti, recinto, avvisi) si butta subito
+     * comunque.
      */
     fun close(): String {
-        MainHop.call(10_000L, Unit, TAG) {
+        MainHop.call(10_000L, Unit, TAG, runLate = true) {
             val wv = webView
             webView = null
             val p = profile
@@ -610,8 +611,10 @@ class JennyBrowserBridge(context: Context) {
     /**
      * Esegue [js] nella pagina e ne aspetta il valore.
      *
-     * Lo stesso cancello di [open], per la stessa ragione: un tetto scaduto non
-     * toglie il blocco dalla coda del main, che gira dopo. Per uno snapshot
+     * Lo stesso cancello di [open]. Qui il salto non passa da [MainHop] —
+     * l'attesa finisce in una callback — quindi un tetto scaduto non toglie
+     * il blocco dalla coda del main, che gira dopo, e il cancello è l'unica
+     * cosa che lo ferma. Per uno snapshot
      * sarebbe solo lavoro buttato; per un `act` sarebbe un **click tardivo**,
      * eseguito dopo che il modello ha sentito «timeout» e magari mentre sta
      * già facendo altro. Il main prende il cancello prima di toccare la
@@ -677,13 +680,13 @@ class JennyBrowserBridge(context: Context) {
         // aspettare un caricamento che non c'e' e rispondere "ok" con indirizzo
         // e titolo vuoti.
         //
-        // Ma un tetto scaduto non ferma il blocco: resta in coda sul main e
-        // gira dopo. Se allora caricasse, la pagina partirebbe dopo che l'agente
-        // ha sentito "non e' partita": una navigazione che nessuno aspetta e
-        // che nessuno descrive. Il cancello decide **una volta**, per
-        // tutti e due i thread, se il caricamento c'e': il main lo prende prima
-        // di `loadUrl`, questo thread lo chiude prima di dire di no. Chi arriva
-        // secondo si adegua.
+        // Un tetto scaduto oggi toglie il blocco dalla coda (MainHop lo
+        // abbandona, e se era gia' partito ne aspetta l'esito). Il cancello
+        // resta lo stesso, perche' e' lui a dire **una volta**, per tutti e due
+        // i thread, se il caricamento c'e': se un blocco girasse dopo il "non
+        // e' partita", la pagina partirebbe senza che nessuno la aspetti o la
+        // descriva. Il main lo prende prima di `loadUrl`, questo thread lo
+        // chiude prima di dire di no. Chi arriva secondo si adegua.
         val gate = AtomicInteger(GATE_OPEN)
         val started = MainHop.call(10_000L, false, TAG) {
             // Gia' abbandonato: niente WebView da costruire per una pagina che non
