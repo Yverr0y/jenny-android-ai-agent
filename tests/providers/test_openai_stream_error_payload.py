@@ -102,3 +102,40 @@ async def test_a_permanent_error_is_not_retried() -> None:
     assert calls["n"] == 1
     assert response.finish_reason == "error"
     assert not is_transient_response(response)
+
+
+# Lo stesso errore, fuori dallo stream: una risposta non-stream a 200 il cui
+# corpo è solo ``{"error": ...}``. Diventava «API returned empty choices», senza
+# status: il 502 di un gateway non si ritentava, e il suo messaggio si perdeva.
+
+OK_JSON = json.dumps({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})
+
+
+async def test_a_non_stream_error_body_keeps_status_and_message() -> None:
+    provider, _ = _provider(json.dumps(
+        {"error": {"code": 502, "message": "Provider returned error"}},
+    ))
+    response = await provider.chat(messages=MESSAGES)
+    assert response.finish_reason == "error"
+    assert response.error_status_code == 502
+    assert "Provider returned error" in (response.content or "")
+    assert is_transient_response(response)
+
+
+async def test_a_non_stream_error_body_is_retried() -> None:
+    provider, calls = _provider(
+        json.dumps({"error": {"code": 503, "message": "busy"}}), OK_JSON,
+    )
+    response = await provider.chat_with_retry(messages=MESSAGES)
+    assert calls["n"] == 2
+    assert (response.finish_reason, response.content) == ("stop", "ok")
+
+
+async def test_a_permanent_non_stream_error_body_is_not_retried() -> None:
+    provider, calls = _provider(
+        json.dumps({"error": {"code": 401, "message": "No auth credentials found"}}), OK_JSON,
+    )
+    response = await provider.chat_with_retry(messages=MESSAGES)
+    assert calls["n"] == 1
+    assert response.error_status_code == 401
+    assert not is_transient_response(response)

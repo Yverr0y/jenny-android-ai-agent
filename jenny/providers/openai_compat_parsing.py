@@ -139,6 +139,12 @@ class ResponseParsingMixin:
 
     def _parse(self, response: Any) -> LLMResponse:
         response_map = self._maybe_mapping(response) or {}
+        if response_map.get("error"):
+            # Un 200 il cui corpo è un errore del gateway (OpenRouter, un proxy
+            # davanti a un modello sovraccarico): è lo stesso ``{"error": ...}``
+            # che scrive dentro uno stream, e si legge allo stesso modo. Senza,
+            # diventava «empty choices» senza status, e un 502 non si ritentava.
+            return stream_error_response(response_map["error"])
         choices = response_map.get("choices") or []
         if not choices:
             content = self._extract_text_content(
