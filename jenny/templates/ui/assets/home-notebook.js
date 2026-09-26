@@ -51,7 +51,7 @@ export class NotebookCard {
         icon: 'ti-pin',
         label: i18n.t('apps.pinAsPage'),
         action: 'pin',
-        ...(state === 'piena' ? { disabled: true, reason: i18n.t('apps.pageFull') } : {}),
+        ...(state === 'full' ? { disabled: true, reason: i18n.t('apps.pageFull') } : {}),
       });
     }
     if (this.shell.rename) {

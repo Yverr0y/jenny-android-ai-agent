@@ -21,6 +21,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from support.home_dom import requires_jsdom, run_home
 from support.js_harness import member, requires_node, run_js, run_module
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -147,7 +148,7 @@ def test_with_the_pages_full_the_pin_row_is_off() -> None:
         "card.show('piante');\n"
         "assert.equal(rows()[1].action, 'pin');\n"
         "assert.equal(rows()[1].off, true);\n",
-        state="piena",
+        state="full",
     )
 
 
@@ -470,3 +471,41 @@ def test_the_sheet_gets_its_rename_row_from_the_shell() -> None:
     app_js = (ASSETS / "home-app.js").read_text(encoding="utf-8")
     card = app_js.split("notebookCard() {", 1)[1].split("\n  }\n", 1)[0]
     assert "rename: (name) => this.renameNotebook(name)" in card
+
+
+# ── La casa vera, in jsdom ───────────────────────────────────────────────────
+
+
+@requires_jsdom
+def test_with_the_real_home_full_no_sheet_offers_to_pin() -> None:
+    """Il valore di ``pagesPort().state`` attraversa ``shared/apps-actions.js``:
+    rinominato da una parte sola (``'piena'`` in casa, ``'full'`` nella scheda),
+    le pagine piene non spegnevano piu' niente."""
+    run_home(
+        """
+import assert from 'node:assert/strict';
+import { boot, tick, routes } from './boot.mjs';
+routes['/api/home/pages'] = {
+  pages: [{ id: 'p1', kind: 'app', ref: 'todo' }, { id: 'p2', kind: 'app', ref: 'meteo' }],
+  order: ['app', 'chat', 'p1', 'p2', 'notebooks', 'settings'],
+  fixed: ['app', 'chat', 'notebooks', 'settings'], max: 2,
+};
+const app = await boot();
+await tick(30);
+assert.equal(app.homePages.full, true, 'la prova parte da una casa piena');
+assert.equal(app.pagesPort().state('app', 'orto'), 'full');
+app.notebookCard().show('orto');
+await tick(10);
+const pin = document.querySelector('[data-action="pin"]');
+assert.ok(pin, document.body.innerHTML.slice(0, 400));
+assert.equal(pin.disabled, true, 'con le pagine piene si puo\\u2019 ancora appendere');
+
+// La scheda di una Jenny App e' quella di `shared/apps-actions.js`: e' li' che
+// il nome diverso spegneva il cancello.
+app.appsSource().jennyApps = [{ slug: 'garden', name: 'Garden' }];
+app.appsActions().showJennyAppSheet('garden');
+const appPin = document.querySelector('#jenny-app-sheet-actions [data-action="pin"]');
+assert.ok(appPin, document.getElementById('jenny-app-sheet-actions')?.innerHTML);
+assert.equal(appPin.disabled, true, 'la scheda di una app appende a casa piena');
+"""
+    )

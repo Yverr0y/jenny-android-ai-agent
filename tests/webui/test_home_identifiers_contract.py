@@ -5,9 +5,10 @@ sbagliati: ``BEYOND_NEWLINE`` era «oltre il capo» letto come «a capo», e
 ``beyondMeta`` era «oltre la meta'» letta come *meta*. La chiave i18n del
 quaderno eliminato era rimasta ``eliminato``.
 
-Resta italiano, e non per svista, il valore ``'piena'`` di
-``pagesPort().state``: attraversa ``shared/apps-actions.js``, e si rinomina
-insieme a quel file.
+Il valore ``'piena'`` di ``pagesPort().state`` attraversa
+``shared/apps-actions.js``: le due correzioni l'hanno rinominato ``'full'`` ognuna
+dalla sua parte, e finche' la casa diceva ancora ``'piena'`` le pagine piene
+non spegnevano piu' il «Metti come pagina». Qui si tiene che non torni.
 """
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ import re
 from support.js_harness import ASSETS, I18N_DIR
 
 _GONE = {
-    "home-app.js": ("_haComposer", "home.notebook.eliminato"),
+    "home-app.js": ("_haComposer", "home.notebook.eliminato", "'piena'"),
+    "home-notebook.js": ("'piena'",),
     "home-pages.js": ("BEYOND_NEWLINE",),
     "home-strip.js": ("beyondMeta",),
 }

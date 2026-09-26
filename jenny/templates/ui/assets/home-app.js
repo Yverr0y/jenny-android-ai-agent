@@ -1441,7 +1441,7 @@ class HomeApp {
     return (this._pagesPort ||= {
       state: (kind, ref) => {
         if (this.homePages.pending(kind, ref)) return 'pending';
-        return this.homePages.full ? 'piena' : 'free';
+        return this.homePages.full ? 'full' : 'free';
       },
       append: async (kind, ref) => {
         this._closeAllOverlays();
