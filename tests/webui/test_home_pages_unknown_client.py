@@ -83,3 +83,42 @@ await tick(30);
 assert.equal(app.strip.sorting, true);
 assert.deepEqual(app.strip._draft, ['app', 'chat', 'p1', 'p2', 'notebooks', 'settings']);
 """)
+
+
+def test_detaching_after_a_failed_read_reads_again_and_keeps_the_other_pages() -> None:
+    """Staccare una pagina e' una scrittura dell'elenco intero come appenderla:
+    sull'elenco vuoto del ripiego la pagina non si troverebbe nemmeno. Si
+    rilegge, e si scrive l'elenco vero meno quella."""
+    run_home(_HEAD + """
+pagesDown = false;
+const done = await app.homePages.detach('app', 'todo');
+await tick(30);
+assert.equal(done, true, 'la pagina non e\\u2019 stata staccata');
+const [write] = writes();
+assert.ok(write, 'nessuna scrittura');
+assert.deepEqual(write.params.pages.map((p) => p.ref), ['project:trip']);
+""")
+
+
+def test_detaching_while_the_list_is_still_unknown_writes_nothing_and_says_so() -> None:
+    run_home(_HEAD + """
+const before = pageReads;
+const done = await app.homePages.detach('app', 'todo');
+await tick(30);
+assert.equal(done, false);
+assert.equal(pageReads, before + 1, 'al primo uso non si rilegge');
+assert.deepEqual(writes(), []);
+assert.ok(toasts().some((t) => unknownText.includes(t)), JSON.stringify(toasts()));
+""")
+
+
+def test_a_save_on_a_list_never_read_writes_nothing() -> None:
+    """L'ultima cintura: una scrittura che arrivasse senza aver chiesto se
+    l'elenco si conosce non parte comunque."""
+    run_home(_HEAD + """
+const saved = await app.homePages.save([], ['app', 'chat', 'notebooks', 'settings']);
+await tick(30);
+assert.equal(saved, false);
+assert.deepEqual(writes(), [], 'un elenco mai letto e\\u2019 stato riscritto sul server');
+assert.ok(toasts().some((t) => unknownText.includes(t)), JSON.stringify(toasts()));
+""")
