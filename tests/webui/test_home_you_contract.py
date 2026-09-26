@@ -14,7 +14,7 @@ import json
 import re
 from pathlib import Path
 
-from support import css_levels
+from support import css_levels, theme_tokens
 
 from jenny.utils.android_assets import _UI_MANIFEST
 
@@ -511,6 +511,117 @@ def test_the_workshop_icon_is_legible_on_the_inverted_card_in_every_theme() -> N
             f"tema «{theme}»: l'icona dell'officina e' {resolved} su un fondo "
             f"{values['text']} — contrasto {ratio:.2f}:1, sotto la soglia di 3:1"
         )
+
+
+# ── Il contrasto di ogni parola, in ogni tema (CS3/CS4) ─────────────────────
+
+# I token che colorano **parole**, e i fondi su cui stanno. `--text-faint` non
+# c'e' di proposito: e' per le decorazioni (separatori, segnaposto, icone
+# spente), e le parole vere l'hanno lasciato (v. il banco qui sotto). Nemmeno
+# `--flower`: e' il fiore ✿, un segno, non una parola.
+_INKS = ("text", "heading", "text-muted", "text-accent", "error", "warning", "ok", "meta")
+# (fondo, ciò che ha sotto): le tre superfici stanno sulla pagina.
+_GROUNDS = (("bg", "bg"), ("surface", "bg"), ("surface-2", "bg"))
+# `--overlay` e' la rotaia delle linguette e delle taglie, traslucida sopra una
+# scheda: ci stanno solo le parole delle linguette.
+_TRACK = ("overlay", "surface")
+_TRACK_INKS = ("text", "heading", "text-muted")
+# Le coppie «parola su un riempimento».
+_FILLED = (("on-accent", "accent"), ("bubble-user-text", "bubble-user-bg"))
+
+
+def test_every_text_token_reads_in_every_theme() -> None:
+    """Ogni token di testo arriva a 4,5:1 (WCAG AA, testo normale) su ogni
+    fondo, in tutti e sette i temi.
+
+    Prima guardava solo `--accent-on-text`, e intanto nei temi chiari il testo
+    muto, il bianco sull'accento e i link stavano sotto AA — fino a 1,81:1
+    (Y2K). Misurato sul rig prima della correzione, il peggio per tema:
+
+      y2k   muto 2,82 · bianco su accento 2,76 · link 2,23 · avviso 1,66 · ok 1,67
+      stone muto 2,74 · su accento 4,14 · link 3,45 · avviso 2,65 · ok 2,70
+      synthwave bianco su accento 3,52 · link 4,34
+      kyoto muto 4,32 · su accento 4,33 · link 2,99 · errore 3,47
+      comic errore 3,96 · avviso 2,92 · meta 3,69 · chanel errore 4,43
+
+    Un colore semitrasparente si compone sul fondo, e un fondo traslucido su
+    quello che ha sotto; di un gradiente conta la fermata peggiore. Sulla
+    rotaia `--overlay` il muto stava a 4,15 (Synthwave), 4,22 (Kyoto) e 4,45
+    (Chanel): «Media» fra le taglie di Jenny.
+    """
+    problems = []
+    for theme in theme_tokens.themes():
+        v = theme_tokens.tokens(theme)
+        for ink in _INKS:
+            assert ink in v, f"{theme}: `--{ink}` non arriva"
+            grounds = _GROUNDS + ((_TRACK,) if ink in _TRACK_INKS else ())
+            for ground, under in grounds:
+                ratio = theme_tokens.contrast(v[ink], v[ground], v[under])
+                if ratio < 4.5:
+                    problems.append(f"{theme}: --{ink} {v[ink]} su --{ground} = {ratio:.2f}")
+        for ink, fill in _FILLED:
+            for stop in theme_tokens.stops(v[fill]):
+                ratio = theme_tokens.contrast(v[ink], stop, v["bg"])
+                if ratio < 4.5:
+                    problems.append(f"{theme}: --{ink} su --{fill} ({stop}) = {ratio:.2f}")
+    assert not problems, "sotto 4,5:1:\n  " + "\n  ".join(problems)
+
+
+# Le parole che stavano in `--text-faint` (2,70:1 nel tema di serie): frasi,
+# etichette, voci del dock, bottoni. Il registro della terza revisione le
+# elenca per riga; qui per selettore.
+_REAL_WORDS = {
+    "home-style.css": (
+        ".home-empty-text", ".home-seconds", ".home-origin", ".home-key-hint.is-faint",
+    ),
+    "mobile-style.css": (
+        ".dock-item", ".launcher-title", ".launcher-row-server", ".launcher-row-kind",
+        ".launcher-note", ".oc-sheet-reason", ".oc-sheet-cancel",
+    ),
+}
+
+
+def test_real_words_are_not_written_in_the_faint_ink() -> None:
+    for sheet, selectors in _REAL_WORDS.items():
+        css = (ASSETS / sheet).read_text(encoding="utf-8")
+        for selector in selectors:
+            body = _rule(css, selector)
+            assert body, f"{sheet}: `{selector}` non c'e' piu'"
+            assert "var(--text-faint)" not in body, (
+                f"{sheet}: `{selector}` e' testo vero in `--text-faint`, che e' "
+                f"per le decorazioni e non arriva a 4,5:1"
+            )
+
+
+def test_link_like_words_use_the_accent_as_ink() -> None:
+    """Un link e' una parola: in `--text-accent`, non nella tinta del
+    riempimento, che nei temi chiari non si legge su `--bg`."""
+    for sheet, selector in (
+        ("home-style.css", ".home-block a"),
+        ("home-style.css", ".home-reader-body a"),
+        ("mobile-style.css", ".chat-content a"),
+        ("mobile-style.css", ".chat-file-path-link"),
+    ):
+        body = _rule((ASSETS / sheet).read_text(encoding="utf-8"), selector)
+        assert re.search(r"(?<![\w-])color:\s*var\(--text-accent\)", body), (sheet, selector)
+
+
+def test_a_theme_chip_writes_its_name_in_the_page_ink() -> None:
+    """La pastiglia di un tema porta `data-theme="<quel tema>"`, e le regole
+    `[data-theme]` le riscrivono i token: `var(--text-muted)` li' dentro e' il
+    grigio *dell'altro* tema sul fondo di questo («Fumetto» a 2,76:1 su
+    Kyoto). Il nome eredita il colore gia' calcolato dalla striscia."""
+    css = CSS.read_text(encoding="utf-8")
+    assert re.search(r"(?<![\w-])color:\s*inherit", _rule(css, ".home-theme"))
+    assert "var(--text-muted)" in _rule(css, ".home-themes")
+
+
+def test_the_lit_count_is_not_faded() -> None:
+    """Il numero sulla linguetta accesa: con l'opacita' 0,75 sopra, il suo
+    contrasto e' quello di `--on-accent` sbiadito, e nessun banco lo misura."""
+    body = _rule(CSS.read_text(encoding="utf-8"), ".home-view-seg.is-on .home-view-count")
+    assert "var(--on-accent)" in body
+    assert "opacity" not in body
 
 
 # ── «Chi risponde» ──────────────────────────────────────────────────────────

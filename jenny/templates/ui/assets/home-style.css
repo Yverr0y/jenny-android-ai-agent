@@ -429,10 +429,11 @@ body.home {
   font-weight: 500;
 }
 /* Sul fondo acceso il grigio del numero non si legge: prende il colore della
-   parola, un po' piu' tenue. */
+   parola. Non piu' «un po' piu' tenue» con l'opacita': a 0,75 il numero
+   scendeva sotto 4,5:1 nei temi in cui `--on-accent` ci sta appena sopra
+   (CS4). Lo distingue dalla parola il peso, 500 contro 600. */
 .home-view-seg.is-on .home-view-count {
   color: var(--on-accent);
-  opacity: 0.75;
 }
 .home-view-count:empty { display: none; }
 
@@ -476,7 +477,7 @@ body.home {
 .home-empty[hidden] { display: none; }
 
 .home-empty-text {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 15px;
   line-height: 1.5;
   /* La stringa tradotta porta il proprio a capo: e' una frase in due tempi, e
@@ -862,7 +863,7 @@ body.home {
 .home-seconds {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .home-msg-user .home-block {
@@ -888,7 +889,7 @@ body.home {
   font-size: 15.5px;
   font-weight: 600;
 }
-.home-block a { color: var(--accent); }
+.home-block a { color: var(--text-accent); }
 .home-block code {
   padding: 1px 5px;
   border-radius: var(--radius-sm);
@@ -935,7 +936,7 @@ body.home {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .home-origin i { font-size: 12px; }
@@ -1884,7 +1885,7 @@ body.home {
 .home-reader-body ul,
 .home-reader-body ol { margin: 8px 0; padding-left: 22px; }
 .home-reader-body li { margin: 3px 0; }
-.home-reader-body a { color: var(--accent); }
+.home-reader-body a { color: var(--text-accent); }
 
 .home-reader-body code {
   padding: 1px 4px;
@@ -2028,7 +2029,10 @@ body.home {
 .home-workshop-hint {
   font-size: 11.5px;
   color: var(--bg);
-  opacity: 0.62;
+  /* Piu' tenue del nome, ma non quanto prima: a 0,62 la frase stava sotto
+     4,5:1 sul fondo invertito in Kyoto (4,23) e Synthwave (4,44), misurato
+     in Chrome (CS4). */
+  opacity: 0.8;
 }
 
 .home-row-go { flex: none; color: var(--text-muted); font-size: 16px; }
@@ -2100,6 +2104,7 @@ body.home {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
+  color: var(--text-muted);
 }
 
 .home-themes::-webkit-scrollbar { display: none; }
@@ -2119,7 +2124,13 @@ body.home {
   padding: 0;
   border: none;
   background: none;
-  color: var(--text-muted);
+  /* **Ereditato**, non `var(--text-muted)`. La pastiglia porta
+     `data-theme="<il suo tema>"` (e' da li' che il tocco lo legge), e quindi
+     le regole `[data-theme]` di `mobile-style.css` le riscrivono i token: un
+     `var()` qui dentro e' il grigio *di quel tema* sul fondo *di questo* —
+     «Fumetto» a 2,76:1 su Kyoto. Il colore gia' calcolato dal genitore arriva
+     invece intatto (CS4). */
+  color: inherit;
   font-family: inherit;
   font-size: 10px;
   cursor: pointer;
@@ -2369,7 +2380,7 @@ body.home {
   font-size: 11.5px;
 }
 
-.home-key-hint.is-faint { color: var(--text-faint); font-family: inherit; }
+.home-key-hint.is-faint { color: var(--text-muted); font-family: inherit; }
 
 .home-key-btn {
   flex: none;
@@ -2465,7 +2476,7 @@ body.home {
 .home-update-notes {
   display: block;
   margin-top: 6px;
-  color: var(--accent);
+  color: var(--text-accent);
   font-size: 12px;
 }
 
