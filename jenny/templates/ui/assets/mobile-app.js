@@ -362,9 +362,14 @@ class MobileApp {
   }
 
   _initKeyboardShortcuts() {
-    // Cmd/Ctrl+,: open settings
+    /* Cmd/Ctrl+,: le impostazioni, cioe' il Cervello (modello e provider),
+       la prima delle tre voci del dock che le dividono. Apriva il modo
+       `settings`, che non e' nel dock: tutti i sedici gruppi in una pagina e
+       nessuna voce accesa (WJ12 della terza revisione). Gia' dentro uno dei
+       tre cassetti, non si fa niente: si e' gia' nelle impostazioni. */
     keyboard.register('mod+,', () => {
-      this.switchMode('settings');
+      if (VIEW_OF[this.currentMode] === 'settings') return;
+      this.switchMode('brain');
     });
 
     // Escape: stessa catena del tasto Indietro hardware. Sul Titan 2 la
