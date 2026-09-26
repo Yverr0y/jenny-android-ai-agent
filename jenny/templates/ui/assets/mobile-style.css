@@ -906,7 +906,12 @@ body {
   padding: 8px 8px 8px 16px;
   transition: border-color 0.3s cubic-bezier(.25,.1,.25,1);
 }
-.compose-pill:focus-within {
+/* L'anello si accende quando il fuoco **si vede**, non quando e' solo dentro:
+   il campo lo vede sempre (un campo di testo e' `:focus-visible` a ogni
+   fuoco), un bottone della pastiglia solo da tastiera. Con `:focus-within` un
+   tocco del dito su «Comandi» o sulla graffetta accendeva tutta la pastiglia,
+   e restava accesa. Come la casa (`.home-field` in `home-style.css`). */
+.compose-pill:has(:focus-visible) {
   border-color: var(--focus-ring);
   box-shadow: 0 0 0 1px var(--focus-ring);
 }

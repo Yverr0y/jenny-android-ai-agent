@@ -28,9 +28,9 @@ SHOP = ASSETS / "mobile-style.css"
 
 # I campi che dicevano il fuoco col solo colore del bordo, o non lo dicevano.
 _FIELDS = {
-    HOME: (".home-field:focus-within", ".home-search:focus-within", ".home-rules:focus",
+    HOME: (".home-field:has(:focus-visible)", ".home-search:focus-within", ".home-rules:focus",
            ".home-key-input:focus", ".home-audit-comment:focus"),
-    SHOP: (".compose-pill:focus-within", ".oc-dialog-input:focus", ".settings-input:focus",
+    SHOP: (".compose-pill:has(:focus-visible)", ".oc-dialog-input:focus", ".settings-input:focus",
            ".launcher-search:focus", ".onboarding-input:focus"),
 }
 
@@ -96,3 +96,13 @@ def test_the_page_search_says_where_the_focus_is() -> None:
     assert _bodies(HOME, ".home-search:focus-within"), (
         "il campo toglie l'anello e la pastiglia non lo rimette: fuoco invisibile"
     )
+
+
+def test_a_finger_on_a_composer_button_does_not_light_the_composer() -> None:
+    """La pastiglia del composer contiene dei bottoni (la graffetta, i
+    comandi): con ``:focus-within`` un tocco del dito su uno di loro
+    accendeva l'anello di tutta la pastiglia. L'anello segue il fuoco che si
+    vede: il campo di testo sempre, un bottone solo da tastiera."""
+    for path, selector in ((HOME, ".home-field"), (SHOP, ".compose-pill")):
+        assert not _bodies(path, f"{selector}:focus-within"), (path.name, selector)
+        assert _bodies(path, f"{selector}:has(:focus-visible)"), (path.name, selector)

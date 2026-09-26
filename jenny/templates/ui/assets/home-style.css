@@ -662,8 +662,10 @@ body.home {
 
 /* Il fuoco del campo: bordo del colore dell'anello **e** piu' spesso (1px di
    ombra piena sopra il bordo). Solo il colore non basta: in Fumetto bordo,
-   bordo forte e accento sono lo stesso nero (CS5). */
-.home-field:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+   bordo forte e accento sono lo stesso nero (CS5). Si accende quando il fuoco
+   si vede: il campo sempre, la graffetta solo da tastiera — un suo tocco col
+   dito non accende la pastiglia (v. `.compose-pill` in officina). */
+.home-field:has(:focus-visible) { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 
 .home-input {
   flex: 1;
