@@ -1952,21 +1952,33 @@ body {
   font-style: italic;
 }
 
+/* Una tabella larga scorre **di lato da sola**, dentro la sua scatola, e non
+   si stringe sotto le parole che contiene: nessuna parola spezzata a meta'
+   in una cella, e la pagina resta ferma. La stessa resa in tre posti — la
+   chat e il lettore della casa, la chat dell'officina — perche' e' la stessa
+   tabella (CS6/CS17 della terza revisione). `fit-content`: la scatola e'
+   larga quanto la tabella, cosi' il bordo non gira attorno a un vuoto. */
 .chat-content table {
-  width: 100%;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;
   margin: 0.6em 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  overflow: hidden;
 }
 
 .chat-content th, .chat-content td {
   padding: 6px 8px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  /* Il contenitore spezza ovunque (`overflow-wrap: anywhere`/`word-break`):
+     qui no, o la cella si stringe fino a una lettera per riga. */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .chat-content th {

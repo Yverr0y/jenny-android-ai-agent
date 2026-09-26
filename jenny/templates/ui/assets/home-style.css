@@ -915,9 +915,11 @@ body.home {
   color: var(--text-muted);
 }
 /* Una tabella non si stringe sotto il proprio contenuto: senza `display:block`
-   deborda dal messaggio come faceva il `<pre>`, e scorre il filo invece di lei. */
+   deborda dal messaggio come faceva il `<pre>`, e scorre il filo invece di lei.
+   Resa comune con il lettore e con l'officina: v. `.home-reader-body table`. */
 .home-block table {
   display: block;
+  width: fit-content;
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
@@ -927,6 +929,10 @@ body.home {
   padding: 4px 8px;
   border: 1px solid var(--border);
   text-align: left;
+  /* Il contenitore spezza ovunque (`overflow-wrap: anywhere`/`word-break`):
+     qui no, o la cella si stringe fino a una lettera per riga. */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* ── Da dove e' entrato ── */
@@ -1745,6 +1751,11 @@ body.home {
   padding: 4px 18px 16px;
   font-size: 15px;
   line-height: 1.55;
+  /* Un URL o una parola piu' lunghi della riga vanno a capo invece di
+     allargare la pagina: prima il lettore intero scorreva di lato (957 px di
+     contenuto in 590). `break-word` e non `anywhere`: non tocca la larghezza
+     minima delle celle, che le tabelle qui sotto non devono spezzare (CS6). */
+  overflow-wrap: break-word;
 }
 
 /* L'editor prende esattamente il posto del testo reso: stesso `flex`, stesso
@@ -1919,12 +1930,29 @@ body.home {
 
 .home-reader-body img { max-width: 100%; height: auto; border-radius: 8px; }
 
-.home-reader-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Una tabella larga scorre **di lato da sola**, dentro la sua scatola, e non
+   si stringe sotto le parole che contiene: nessuna parola spezzata a meta'
+   in una cella, e la pagina resta ferma. La stessa resa in tre posti — la
+   chat e il lettore della casa, la chat dell'officina — perche' e' la stessa
+   tabella (CS6/CS17 della terza revisione). `fit-content`: la scatola e'
+   larga quanto la tabella, cosi' il bordo non gira attorno a un vuoto. */
+.home-reader-body table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
 .home-reader-body th,
 .home-reader-body td {
   padding: 5px 8px;
   border: 1px solid var(--border);
   text-align: left;
+  /* Il contenitore spezza ovunque (`overflow-wrap: anywhere`/`word-break`):
+     qui no, o la cella si stringe fino a una lettera per riga. */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* Il ripiego senza DOMPurify: il markdown scappato, che si legge male ma non
