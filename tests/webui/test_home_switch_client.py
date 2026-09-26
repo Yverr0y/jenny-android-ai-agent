@@ -261,6 +261,7 @@ class App {
     };
     this.files = { count: 0 };
     this._personalName = 'Jenny';
+    this._settingsGen = 0;
     this._drafts = new Map();
     this._threadFailed = false;
     this._threadReads = 0;

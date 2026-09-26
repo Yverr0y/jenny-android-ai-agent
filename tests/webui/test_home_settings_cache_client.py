@@ -39,7 +39,7 @@ const api = {{
   }},
 }};
 class Home {{
-  constructor() {{ this._settings = null; }}
+  constructor() {{ this._settings = null; this._settingsGen = 0; }}
   {_member(src, "_askSettings")}
   {_member(src, "_keepFloating")}
 }}
@@ -113,6 +113,7 @@ const room = (name) => ({{
 class Home {{
   constructor() {{
     this._settings = null;
+    this._settingsGen = 0;
     this.you = {{ open() {{}}, sayJenny() {{}}, sayModel() {{}}, sayUpdates() {{}}, sayBackup() {{}} }};
     this.jennyRoom = room('j');
     this.modelRoom = room('m');

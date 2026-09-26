@@ -302,6 +302,12 @@ class HomeApp {
     /* Il payload delle impostazioni, chiesto una volta e diviso fra le due
        stanze che ne leggono un campo per uno. */
     this._settings = null;
+    /* Quante volte il guscio ha saputo qualcosa di nuovo sulle impostazioni
+       senza chiederlo: un salvataggio, un nome, la finestra flottante, una
+       versione. Una lettura partita prima di uno di questi non ridipinge piu'
+       niente quando torna — prima riportava a schermo il modello e il nome di
+       prima del salvataggio (terza revisione, HJ11). */
+    this._settingsGen = 0;
     this._running = false;
     /* Il guscio nativo copre la pagina con un caricamento finche' non chiama
        onNativeReady: fino ad allora qualunque animazione d'ingresso scorre
@@ -794,9 +800,12 @@ class HomeApp {
   async _openSettings() {
     this.you.open();
     this.you.sayJenny(this.jennyRoom.value());
+    const gen = this._settingsGen;
     const cached = this._settings ? await this._settings : null;
-    if (cached) this._paintSettings(cached);
+    if (cached && gen === this._settingsGen) this._paintSettings(cached);
     const data = await this._askSettings({ fresh: true });
+    /* Nel frattempo e' arrivato qualcosa di piu' nuovo, ed e' gia' a schermo. */
+    if (gen !== this._settingsGen) return;
     if (data || !cached) this._paintSettings(data);
   }
 
@@ -848,6 +857,7 @@ class HomeApp {
      quella vecchia da un payload messo da parte prima del controllo. */
   _keepVersion(version) {
     if (!version) return;
+    this._settingsGen += 1;
     this._settings?.then?.((data) => {
       if (data) data.version = version;
     });
@@ -859,6 +869,7 @@ class HomeApp {
      letto la prima volta — l'interruttore tornava spento con la finestra
      accesa (visto sul telefono il 25/09). */
   _keepFloating(floating) {
+    this._settingsGen += 1;
     this._settings?.then?.((data) => {
       if (data && floating) data.floating = floating;
     });
@@ -868,6 +879,7 @@ class HomeApp {
      prossima apertura delle Impostazioni `setName` rimetterebbe il nome letto
      la prima volta; e va nella fila e nei Quaderni, che lo scrivono. */
   _keepName(name) {
+    this._settingsGen += 1;
     this._settings?.then?.((data) => {
       if (data && name) (data.agent ||= {}).bot_name = name;
     });
@@ -877,8 +889,9 @@ class HomeApp {
   /* Il nome di lei, dalle impostazioni: la stessa lettura che la pagina
      Impostazioni fa comunque, e che resta in cache per lei. */
   async _readName() {
+    const gen = this._settingsGen;
     const data = await this._askSettings();
-    if (data) this._applyBotName(data.agent?.bot_name);
+    if (data && gen === this._settingsGen) this._applyBotName(data.agent?.bot_name);
   }
 
   /* Il nome della conversazione personale, dove lo si scrive: la fila e la
@@ -897,6 +910,7 @@ class HomeApp {
      di prima fino al riavvio della casa. */
   _keepSettings(data) {
     if (!data) return;
+    this._settingsGen += 1;
     this._settings = Promise.resolve(data);
     this.you.sayModel(this.modelRoom.value());
   }
