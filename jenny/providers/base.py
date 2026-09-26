@@ -233,6 +233,74 @@ def stream_timeout_response(waited_s: float, saw_output: bool) -> LLMResponse:
     )
 
 
+# Tipo d'errore arrivato *dentro* uno stream → lo status HTTP che lo stesso
+# errore avrebbe avuto prima dello stream. Serve alla retry policy, che decide
+# sullo status: un ``overloaded_error`` è il 529 di Anthropic, un ``api_error``
+# il suo 500. I nomi OpenAI (``server_error``) stanno nella stessa tabella.
+_STREAM_ERROR_STATUS = {
+    "overloaded_error": 529,
+    "api_error": 500,
+    "server_error": 500,
+    "rate_limit_error": 429,
+    "invalid_request_error": 400,
+    "authentication_error": 401,
+    "permission_error": 403,
+    "not_found_error": 404,
+    "request_too_large": 413,
+}
+
+
+def stream_error_response(error: Any, *, partial_content: str | None = None) -> LLMResponse:
+    """L'errore che il server ha scritto dentro uno stream già aperto.
+
+    Lo status della risposta era 200, quindi i metadati si ricavano dal corpo
+    dell'errore: ``type``/``code`` come per un errore HTTP, e lo status dal
+    ``code`` numerico (OpenRouter manda ``{"error": {"code": 502, ...}}``) o, in
+    mancanza, dal tipo (``_STREAM_ERROR_STATUS``). Così un ``overloaded_error``
+    è transitorio come lo sarebbe stato il 529 prima dello stream, e un
+    ``invalid_request_error`` no.
+    """
+    detail: dict[str, Any] = error if isinstance(error, dict) else {"message": error}
+    error_type, error_code = extract_error_type_code({"error": detail})
+    message = str(detail.get("message") or "").strip() or str(error)[:500]
+
+    status: int | None = None
+    raw_code = detail.get("code")
+    with suppress(TypeError, ValueError):
+        numeric = int(raw_code) if not isinstance(raw_code, bool) else None
+        if numeric is not None and 400 <= numeric <= 599:
+            status = numeric
+    if status is None and error_type:
+        status = _STREAM_ERROR_STATUS.get(error_type)
+
+    label = error_type or error_code
+    return LLMResponse(
+        content=f"Error: {label}: {message}"[:600] if label else f"Error: {message}"[:600],
+        finish_reason="error",
+        partial_content=partial_content or None,
+        error_status_code=status,
+        error_kind="stream_error",
+        error_type=error_type,
+        error_code=error_code,
+    )
+
+
+def stream_truncated_response(partial_content: str | None = None) -> LLMResponse:
+    """Lo stream si è chiuso prima dell'evento che dice «la risposta è finita».
+
+    Non è una risposta completa: è una connessione caduta a metà, e va trattata
+    come tale (``error_kind="connection"``, transitorio). Prima diventava
+    ``finish_reason="stop"`` col testo arrivato fin lì — cioè una risposta
+    troncata salvata come buona, e un ``tool_use`` a metà eseguito.
+    """
+    return LLMResponse(
+        content="Error calling LLM: the stream ended before the response was complete",
+        finish_reason="error",
+        partial_content=partial_content or None,
+        error_kind="connection",
+    )
+
+
 @dataclass(frozen=True)
 class GenerationSettings:
     """Default generation settings."""

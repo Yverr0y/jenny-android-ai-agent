@@ -30,7 +30,9 @@ from jenny.providers.base import (
     ToolCallRequest,
     describe_exc,
     parse_tool_arguments,
+    stream_error_response,
     stream_timeout_response,
+    stream_truncated_response,
 )
 from jenny.providers.body_merge import deep_merge
 from jenny.providers.endpoint_budget import is_local_endpoint, request_timeout_s
@@ -435,7 +437,11 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         reasoning_parts: list[str] = []
         tool_blocks: dict[str, dict[str, Any]] = {}
         thinking_buffers: dict[str, dict[str, Any]] = {}
-        finish_reason = "stop"
+        # ``None`` finché il server non dice perché ha smesso: uno stream che
+        # si chiude senza ``stop_reason`` né ``message_stop`` è troncato, non
+        # finito, e non deve diventare ``stop`` per default.
+        finish_reason: str | None = None
+        saw_message_stop = False
         raw_usage: dict[str, Any] = {}
 
         try:
@@ -558,6 +564,16 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
                         if delta.get("stop_reason"):
                             finish_reason = delta["stop_reason"]
                         merge_raw_usage(raw_usage, event.get("usage"))
+                    elif event_type == "message_stop":
+                        saw_message_stop = True
+                    elif event_type == "error":
+                        # ``event: error`` a stream aperto (``overloaded_error``
+                        # sotto carico): lo status era 200, quindi senza questo
+                        # ramo il testo arrivato fin lì passava per completo.
+                        return stream_error_response(
+                            event.get("error") or event,
+                            partial_content="".join(content_parts) or None,
+                        )
 
         except asyncio.TimeoutError:
             waited_s = idle_timeout_s if saw_output else first_output_timeout_s
@@ -586,6 +602,13 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
                 **metadata,
             )
 
+        if finish_reason is None and not saw_message_stop:
+            # Chiuso prima della fine: i ``tool_use`` aperti hanno argomenti a
+            # metà e non vanno eseguiti, il testo è un frammento. Basta uno dei
+            # due segnali di fine: ``message_delta`` porta lo ``stop_reason``
+            # dopo l'ultimo ``content_block_stop``, quindi tutto è già arrivato.
+            return stream_truncated_response("".join(content_parts) or None)
+        finish_reason = finish_reason or "stop"
         stop_map = {"tool_use": "tool_calls", "end_turn": "stop", "max_tokens": "length"}
         bufs = list(tool_blocks.values())
         # ``parse_tool_arguments``, non la variante "for_replay": queste tool

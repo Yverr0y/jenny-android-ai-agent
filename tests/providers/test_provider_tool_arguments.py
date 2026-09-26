@@ -43,6 +43,11 @@ async def test_anthropic_stream_does_not_repair_arguments_it_is_about_to_run() -
     eseguita significherebbe eseguire parametri indovinati. Qui lo stream si
     interrompe a metà dell'``input_json_delta``: gli argomenti devono restare la
     stringa grezza, che il registry rifiuta.
+
+    Lo stream arriva comunque fino a ``message_stop``: uno stream che si chiude
+    *prima* è un errore di troncamento e non produce tool call affatto (v.
+    ``test_anthropic_stream_error_and_truncation.py``). Resta il caso di un
+    gateway che dichiara finito un JSON rotto.
     """
     events = [
         ("content_block_start", {
@@ -53,6 +58,9 @@ async def test_anthropic_stream_does_not_repair_arguments_it_is_about_to_run() -
             "type": "content_block_delta", "index": 0,
             "delta": {"type": "input_json_delta", "partial_json": '{"path":"a.txt","content":"tron'},
         }),
+        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "tool_use"}}),
+        ("message_stop", {"type": "message_stop"}),
     ]
     body = "".join(
         f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in events
