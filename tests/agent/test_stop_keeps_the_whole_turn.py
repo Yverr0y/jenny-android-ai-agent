@@ -103,3 +103,45 @@ async def test_a_message_injected_mid_turn_survives_the_stop(tmp_path):
     users = [str(m.get("content")) for m in session.messages if m.get("role") == "user"]
     assert any("la cartella nuova" in text for text in users)
     assert _tool_call_ids(session.messages) == ["c1", "c2", "c3"]
+
+
+async def test_a_message_injected_after_the_last_checkpoint_survives_the_stop(tmp_path):
+    """Il messaggio arriva mentre gira l'ultimo tool, e lo /stop cade sulla chiamata dopo.
+
+    Nessuna risposta del modello arriva fra l'iniezione e lo /stop, quindi
+    nessun checkpoint di fine iterazione lo porterebbe: lo salva solo il
+    checkpoint scritto al momento dell'iniezione.
+    """
+    (tmp_path / "a.txt").write_text("A", encoding="utf-8")
+    provider = make_provider()
+    step = {"n": 0}
+    hang = asyncio.Event()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=20)
+
+    async def chat(**_kw):
+        step["n"] += 1
+        if step["n"] == 1:
+            queue.put_nowait(InboundMessage(channel="websocket", sender_id="u",
+                                            chat_id="default", content="MESSAGGIO-TARDIVO"))
+            return LLMResponse(content="passo 1", finish_reason="tool_calls",
+                               tool_calls=[ToolCallRequest(id="c1", name="list_dir",
+                                                           arguments={"path": "."})])
+        await hang.wait()
+        return LLMResponse(content="mai")
+
+    provider.chat_with_retry = chat
+    provider.chat_stream_with_retry = chat
+    loop = make_loop(tmp_path, provider=provider)
+    loop._pending_queues[KEY] = queue
+    msg = InboundMessage(channel="websocket", sender_id="u", chat_id="default", content="vai")
+    task = asyncio.create_task(loop._dispatch(msg, queue))
+    loop._active_tasks.setdefault(KEY, []).append(task)
+    await wait_until(lambda: step["n"] >= 2, timeout=5.0)
+
+    await loop._cancel_active_tasks(KEY)
+    loop._restore_cancelled_turn(KEY)
+
+    session = loop.sessions.get_or_create(KEY)
+    users = [str(m.get("content")) for m in session.messages if m.get("role") == "user"]
+    assert any("MESSAGGIO-TARDIVO" in text for text in users), users
+    assert _tool_call_ids(session.messages) == ["c1"]
