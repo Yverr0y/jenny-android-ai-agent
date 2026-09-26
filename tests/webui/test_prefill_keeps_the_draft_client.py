@@ -27,12 +27,15 @@ const wsManager = { sendToChat: (key, text) => { sent.push(text); return true; }
 const sessionManager = { currentKey: 'websocket:default', ensureAttached() {} };
 const i18n = { t: (k) => k };
 globalThis.document = {
-  createElement: () => ({ className: '', textContent: '', appendChild() {} }),
+  createElement: () => ({
+    className: '', textContent: '', isConnected: false,
+    appendChild() {}, remove() { this.isConnected = false; },
+  }),
 };
 class Chat {
   constructor() {
     this.input = { value: '', style: {}, focus() {}, setSelectionRange() {} };
-    this.chatArea = { appendChild() {} };
+    this.chatArea = { appendChild(node) { node.isConnected = true; } };
     this.imageHandler = { getImages: () => [], getAttachmentEntries: () => [], clear() {} };
     this._draftAfterSend = null;
   }
@@ -53,6 +56,8 @@ class Chat {
     + member(CHAT_SRC, "_sendCommandLine")
     + "\n"
     + member(CHAT_SRC, "sendMessage")
+    + "\n"
+    + member(CHAT_SRC, "_takeBackPendingSend")
     + """
 }
 const chat = new Chat();
@@ -109,5 +114,40 @@ def test_an_empty_composer_has_nothing_to_keep() -> None:
       chat.input.value = '/model x';
       await chat.sendMessage();
       assert.equal(chat.input.value, '');
+    """
+    )
+
+
+def test_a_rejected_prefill_gives_its_text_back_and_keeps_the_draft() -> None:
+    """Il testo precompilato parte, la bozza torna nel campo, e il gateway lo
+    rifiuta: il testo rifiutato torna nel campo, e la bozza torna da parte
+    per l'invio dopo."""
+    run_js(
+        _HARNESS
+        + """
+      chat.input.value = 'la mia bozza';
+      chat.prefillComposer('Insegnami una skill');
+      await chat.sendMessage();
+      assert.equal(chat.input.value, 'la mia bozza');
+      assert.equal(chat._takeBackPendingSend(), true);
+      assert.equal(chat.input.value, 'Insegnami una skill', 'il testo rifiutato e\\u2019 perso');
+      await chat.sendMessage();
+      assert.deepEqual(sent, ['Insegnami una skill', 'Insegnami una skill']);
+      assert.equal(chat.input.value, 'la mia bozza', 'la bozza e\\u2019 persa');
+    """
+    )
+
+
+def test_a_rejection_does_not_overwrite_what_you_typed_after_the_prefill() -> None:
+    run_js(
+        _HARNESS
+        + """
+      chat.input.value = 'la mia bozza';
+      chat.prefillComposer('Insegnami una skill');
+      await chat.sendMessage();
+      chat.input.value = 'la mia bozza, cambiata';
+      chat._takeBackPendingSend();
+      assert.equal(chat.input.value, 'la mia bozza, cambiata');
+      assert.equal(chat._draftAfterSend, null);
     """
     )

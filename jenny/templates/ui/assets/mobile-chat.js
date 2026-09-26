@@ -3377,9 +3377,17 @@ export class ChatController {
     this._pendingSend = null;
     if (!pending?.node?.isConnected) return false;
     pending.node.remove();
-    // Se nel frattempo hai già scritto altro, quello vince: non si sovrascrive
-    // mai il campo con del testo vecchio.
-    if (!this.input.value.trim() && pending.text) {
+    /* Se nel frattempo hai già scritto altro, quello vince: non si sovrascrive
+       mai il campo con del testo vecchio.
+
+       Un campo che contiene **solo la bozza** tornata con l'invio non conta
+       come «scritto altro»: e' `sendMessage` che ce l'ha rimessa, appena
+       partito un testo precompilato (`prefillComposer`). Senza questo caso un
+       rifiuto lasciava la bozza e perdeva il testo rifiutato. Il testo torna
+       nel campo e la bozza torna da parte, per il prossimo invio riuscito. */
+    const onlyDraft = pending.draft != null && this.input.value === pending.draft;
+    if ((!this.input.value.trim() || onlyDraft) && pending.text) {
+      if (onlyDraft && !this._draftAfterSend) this._draftAfterSend = pending.draft;
       this.input.value = pending.text;
       this._updateSendState();
       this._updateActions();
@@ -3559,8 +3567,10 @@ export class ChatController {
     /* La bozza messa da parte da `prefillComposer` torna adesso: il testo
        precompilato e' partito. Non sulla strada dei comandi, che rimette gia'
        la sua (`_sendCommandLine`) e la scriverebbe sopra. */
+    let draft = null;
     if (attachments && this._draftAfterSend) {
-      this.input.value = this._draftAfterSend;
+      draft = this._draftAfterSend;
+      this.input.value = draft;
       this._draftAfterSend = null;
       this._autoResize();
     }
@@ -3572,7 +3582,7 @@ export class ChatController {
        allegato che non riesce ad aprire). Finché non arriva niente che dimostri
        il contrario, questa bolla è "in sospeso" — ed è così che un rifiuto sa
        *quale* bolla togliere, senza bisogno di un identificativo sul filo. */
-    this._pendingSend = { node: msg, text };
+    this._pendingSend = { node: msg, text, draft };
   }
 
   _showChatError(text) {
