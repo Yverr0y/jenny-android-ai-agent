@@ -167,8 +167,12 @@ class SshBackend(Protocol):
     ) -> int:
         """Scarica ``remote`` in ``local`` via SFTP. Ritorna i byte trasferiti.
 
-        La dimensione va verificata **prima** di iniziare: un cap applicato
-        mentre si scrive lascerebbe sul telefono un file troncato a metà.
+        Il tetto vale due volte. Sulla dimensione dichiarata, **prima** di
+        iniziare, così un file troppo grande non costa un byte di rete; e sui
+        byte che arrivano, perché quella dimensione la dice il server. La copia
+        si scrive su un ``.part`` e si rinomina solo a trasferimento completo:
+        fermata dal tetto o dalla rete, non lascia sul telefono un file troncato
+        a metà, indistinguibile da uno buono.
         """
         ...
 

@@ -189,10 +189,13 @@ class AndroidSshBackend:
         self, target: SshTarget, remote: str, local: Path, *, max_bytes: int
     ) -> int:
         payload = _target_payload(target)
-        # Il cap viaggia con la richiesta perché il confronto con la dimensione
-        # remota va fatto dove si apre il file, PRIMA di scrivere: applicarlo
-        # qui, a trasferimento finito, lascerebbe sul telefono un file troncato
-        # a metà e indistinguibile da uno buono.
+        # Il cap viaggia con la richiesta perché va applicato dove si apre il
+        # file: il ponte confronta la dimensione remota prima di cominciare, e
+        # poi conta i byte che arrivano davvero (``CappedOutputStream`` in
+        # ``SshBridge.kt``), perché la dimensione è solo quella che il server
+        # dichiara. Scrive su un ``.part`` e rinomina a copia completa, quindi
+        # un download fermato dal tetto non lascia un file troncato. Applicarlo
+        # qui, a trasferimento finito, sarebbe troppo tardi per entrambe.
         payload.update(remotePath=remote, localPath=str(local), maxBytes=max_bytes)
         data = await _call("get", payload, timeout_s=_TRANSFER_TIMEOUT_S)
         return int(data.get("bytes", 0))
