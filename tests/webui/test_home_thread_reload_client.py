@@ -118,3 +118,17 @@ await back;
 await tick(300);
 assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
 """)
+
+
+def test_a_refusal_note_does_not_follow_you_into_another_conversation() -> None:
+    """HJ10: la riga di rifiuto e' della conversazione in cui e' nata."""
+    _run("""
+const app = await boot();
+await app.showConversation('project:orto');
+await tick(20);
+app.chat.noteRefusal('too_many_images');
+assert.ok(thread().some((row) => row.startsWith('note: ')), 'la nota non e\\u2019 comparsa');
+await app.showConversation('websocket:default');
+await tick(20);
+assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+""")

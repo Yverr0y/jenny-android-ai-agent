@@ -69,8 +69,13 @@ const STICK_PX = 24;
    i record grezzi che il gateway rigioca a ogni apertura sulla CPU del telefono. */
 const HISTORY_PAGE_SIZE = 50;
 
-/* I nodi che fanno il filo: quel che una rilettura butta e ridisegna. */
-const THREAD_NODES = '.home-msg, .home-boundary';
+/* I nodi che fanno il filo: quel che una rilettura butta e ridisegna. Le
+   righe di rifiuto (`.home-note`) comprese: sono un fatto della conversazione
+   in cui sono nate, e senza restavano nel filo di quella dopo (HJ10). La
+   storia non le porta, quindi una rilettura della stessa le perde — ed e' il
+   prezzo giusto: quel rifiuto l'hai gia' letto, e il messaggio e' tornato nel
+   campo. */
+const THREAD_NODES = '.home-msg, .home-boundary, .home-note';
 
 function mediaKind(entry) {
   if (entry.kind) return entry.kind;
