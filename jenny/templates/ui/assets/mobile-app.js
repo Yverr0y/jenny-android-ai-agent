@@ -4,7 +4,7 @@ import { AppState } from './shared/state.js';
 import { sessionManager } from './shared/session-manager.js';
 import { scopeChip } from './shared/scope-chip.js';
 import { writeSwitch } from './shared/write-switch.js';
-import { showToast } from './shared/utils.js';
+import { isNetworkFailure, showToast } from './shared/utils.js';
 import { i18n } from './shared/i18n.js';
 import { api } from './shared/api-client.js';
 import { ViewTitleController } from './mobile-header.js';
@@ -44,7 +44,8 @@ window.addEventListener('unhandledrejection', (e) => {
   console.error('Unhandled rejection:', e.reason);
   const detail = e.reason && e.reason.stack ? e.reason.stack : String(e.reason);
   api.clientLog('error', 'unhandledrejection', detail);
-  showToast(i18n.t('common.networkError'), 'error');
+  // Non ogni rifiuto e' la rete (WJ23): un difetto del codice si dice tale.
+  showToast(i18n.t(isNetworkFailure(e.reason) ? 'common.networkError' : 'common.genericError'), 'error');
 });
 
 /* ── Keyboard Helper ── */
@@ -835,7 +836,19 @@ class MobileApp {
        vorrebbe dire un frame col cassetto di prima. */
     next.setDrawer?.(VIEW_OF[mode] === 'settings' ? mode : null);
     if (next.ready) {
-      next.ready.then(() => next.activate());
+      /* Il `ready` puo' risolvere dopo che si e' gia' andati altrove (WJ4 della
+         terza revisione): attivare allora vorrebbe dire una chat attiva su una
+         vista nascosta, che chiama `chatOpened` e cancella avvisi che nessuno
+         ha visto. Si attiva solo se il modo e' ancora questo. E un `ready`
+         rifiutato non resta un rifiuto non gestito. */
+      next.ready
+        .then(() => {
+          if (this.currentMode === mode) next.activate();
+        })
+        .catch((err) => {
+          console.error(`Controller for ${mode} failed to start:`, err);
+          if (this.currentMode === mode) showToast(i18n.t('common.genericError'), 'error');
+        });
     } else {
       next.activate();
     }

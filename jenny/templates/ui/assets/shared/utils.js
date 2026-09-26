@@ -137,3 +137,18 @@ export async function copyToClipboard(text) {
     return false;
   }
 }
+
+/** Vero se *reason* e' un fallimento della rete, e non un errore qualunque.
+ *
+ *  `fetch` rifiuta con un `TypeError` quando la richiesta non parte o non
+ *  torna: «Failed to fetch» in Chromium (la WebView), «NetworkError when
+ *  attempting to fetch resource» in Firefox, «Load failed» in Safari. Tutto il
+ *  resto — un `TypeError` del codice, un `Error('Cron failed: 500')` — non e'
+ *  la rete, e dire «errore di rete» a chi ha il Wi-Fi acceso lo manda a
+ *  cercare il guasto nel posto sbagliato (WJ23 della terza revisione). */
+export function isNetworkFailure(reason) {
+  if (!reason || reason.name !== 'TypeError') return reason?.name === 'NetworkError';
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(
+    String(reason.message || ''),
+  );
+}

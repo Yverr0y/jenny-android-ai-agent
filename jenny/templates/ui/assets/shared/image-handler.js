@@ -87,7 +87,19 @@ export class ImageHandler {
         continue;
       }
 
-      const dataUrl = await this._readAsDataUrl(file);
+      /* Un file che il `FileReader` non riesce a leggere (un contenuto di un
+         provider che sparisce, un permesso revocato) e' un rifiuto come gli
+         altri, detto con la parola del server (`decode`): prima il rifiuto
+         saliva senza padrone e si portava via anche i file dopo di lui, e il
+         `onChange` finale non arrivava mai (WJ23 della terza revisione). */
+      let dataUrl;
+      try {
+        dataUrl = await this._readAsDataUrl(file);
+      } catch (err) {
+        console.warn('Attachment could not be read:', err);
+        this.onReject?.('decode');
+        continue;
+      }
       this._items.push({
         data_url: dataUrl,
         name: file.name,
@@ -103,7 +115,7 @@ export class ImageHandler {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
+      reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
       reader.readAsDataURL(file);
     });
   }
