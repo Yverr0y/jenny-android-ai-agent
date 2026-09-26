@@ -911,6 +911,21 @@ object FloatingOverlayController {
         // che guarda `flight != null`, e la spegnerebbe appena riaccesa.
         flight?.cancel()
         flight = null
+        // Gli animator prima delle viste. Il respiro è `INFINITE` e resta
+        // registrato presso l'AnimationHandler del main anche con la vista
+        // staccata: senza `cancel` chiede un fotogramma a ogni vsync finché il
+        // GC non raccoglie la colonna (l'ObjectAnimator la tiene solo
+        // debolmente, e solo allora si ferma da sé). `sliding` si
+        // spegne prima: il `cancel` dello scivolamento chiama `onAnimationEnd`,
+        // che altrimenti ricollocherebbe la colonna e farebbe ripartire il
+        // respiro su viste che stanno per sparire.
+        sliding = false
+        slide?.cancel()
+        slide = null
+        breath?.cancel()
+        breath = null
+        column?.animate()?.cancel()
+        sendButton?.animate()?.cancel()
         val wm = windowManager
         if (wm != null) {
             for (v in listOfNotNull(grip, mascotWin, root)) {
@@ -934,6 +949,8 @@ object FloatingOverlayController {
         scrim = null
         inputRow = null
         input = null
+        inputBar = null
+        sendButton = null
         column = null
         historyScroll = null
         historyList = null

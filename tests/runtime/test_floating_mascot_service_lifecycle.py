@@ -69,3 +69,25 @@ def test_the_service_flag_goes_down_before_the_teardown() -> None:
     assert on_destroy.index("isRunning = false") < on_destroy.index(
         "FloatingOverlayController.teardown()"
     )
+
+
+def test_detach_stops_every_animator_before_the_views_go() -> None:
+    """Il respiro è ``INFINITE`` e resta registrato presso l'AnimationHandler
+    anche con la vista staccata: ``detach`` lo lasciava chiedere un fotogramma
+    a ogni vsync finché il GC non raccoglieva la colonna, e uno scivolamento in
+    corso finiva ricollocando viste appena tolte (voce AN12 della terza
+    revisione)."""
+    body = function_body(_controller(), "detach")
+    removal = body.index("wm.removeView(v)")
+    for stop in (
+        "slide?.cancel()",
+        "breath?.cancel()",
+        "column?.animate()?.cancel()",
+        "sendButton?.animate()?.cancel()",
+    ):
+        assert stop in body, f"detach non ferma {stop.split('?')[0]}"
+        assert body.index(stop) < removal
+    # `onAnimationEnd` dello scivolamento guarda `sliding`: va spento prima del
+    # `cancel`, o ricolloca la colonna e fa ripartire il respiro.
+    assert body.index("sliding = false") < body.index("slide?.cancel()")
+    assert "breath = null" in body and "slide = null" in body
