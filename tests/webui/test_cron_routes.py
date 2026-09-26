@@ -163,6 +163,32 @@ def test_the_payload_is_built_off_the_event_loop(workspace, monkeypatch):
     assert seen, "il payload e' stato costruito sul loop del gateway"
 
 
+def test_the_store_is_read_on_the_loop_not_in_the_thread(workspace, monkeypatch):
+    """RC3: ``list_jobs`` in un thread riassegnava ``CronService._store`` sotto al
+    loop. Un giro del timer in corso salvava poi la copia vecchia, e il job appena
+    eseguito tornava dovuto e ripartiva. Il payload lavora su una copia."""
+    import threading
+
+    from jenny.cron.service import CronService
+
+    cron = CronService(workspace / "cron" / "jobs.json")
+    loop_thread = threading.current_thread()
+    readers: list[threading.Thread] = []
+    real_load_store = cron._load_store
+
+    def _spy():
+        readers.append(threading.current_thread())
+        return real_load_store()
+
+    monkeypatch.setattr(cron, "_load_store", _spy)
+    handler = _make_handler(workspace, get_cron_service=lambda: cron)
+
+    response = _dispatch(handler)
+
+    assert response.status_code == 200
+    assert readers and all(t is loop_thread for t in readers), readers
+
+
 # ── pausa, ripresa, eliminazione dall'officina ──────────────────────────────
 
 from jenny.cron.service import CronService  # noqa: E402

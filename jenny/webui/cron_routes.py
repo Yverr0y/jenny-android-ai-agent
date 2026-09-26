@@ -40,7 +40,7 @@ from websockets.http11 import Request as WsRequest
 from websockets.http11 import Response
 
 from jenny.channels.http_utils import http_error, http_json_response
-from jenny.webui.cron_api import webui_cron_payload
+from jenny.webui.cron_api import snapshot_cron, webui_cron_payload
 
 _PATH = "/api/webui/cron"
 _ACTION_RE = re.compile(r"^/api/webui/cron/([^/]+)/(pause|resume|remove)$")
@@ -122,11 +122,13 @@ class CronRoutes:
             self._log.exception("Cron routes: il getter del servizio ha sollevato")
             cron = None
         try:
-            # In un thread: ``webui_cron_payload`` legge lo store del cron sotto
-            # il lock del file — lo stesso che prende un ``add_job`` del tool — la
-            # config da disco e ``HEARTBEAT.md``. Sul loop del gateway quel lock
-            # bloccherebbe la chat e la WebSocket, non solo questa risposta.
-            payload = await asyncio.to_thread(webui_cron_payload, cron)
+            # Lo store si legge qui, sul loop, come lo leggono il timer, il tool
+            # e i gesti qui sopra: in un thread ``list_jobs`` riassegnava
+            # ``CronService._store`` sotto di loro, e un giro del timer salvava
+            # poi la copia vecchia (il job appena eseguito ripartiva).
+            snapshot = snapshot_cron(cron)
+            # Il resto in un thread: la config da disco e ``HEARTBEAT.md``.
+            payload = await asyncio.to_thread(webui_cron_payload, snapshot)
         except Exception:
             self._log.exception("Cron status failed")
             return http_error(500, "cron status failed")

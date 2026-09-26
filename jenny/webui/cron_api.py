@@ -3,10 +3,12 @@
 Neutro rispetto al trasporto, come ``skills_api``: costruisce un dizionario e non
 sa niente di HTTP. La route che lo serve sta in ``webui/cron_routes.py``.
 
-**Sincrona e con I/O: il chiamante la mette in un thread.** Legge lo store del
-cron (sotto il lock del file, lo stesso che prende un ``add_job`` del tool), la
-config da disco e ``HEARTBEAT.md``. Sul loop del gateway quel lock bloccherebbe
-la chat e la WebSocket.
+**Sincrona e con I/O: il chiamante la mette in un thread.** Legge la config da
+disco e ``HEARTBEAT.md``. Lo store del cron invece **no**: lo legge il chiamante
+sul loop, con :func:`snapshot_cron`, e qui arriva una copia. ``list_jobs`` in un
+thread ricaricava lo store e riassegnava ``CronService._store`` sotto al loop:
+un giro del timer in corso salvava poi la copia vecchia, e il job appena eseguito
+tornava dovuto e ripartiva (RC3 della terza revisione).
 
 Il pannello non rende lo store: lo **riconcilia**. Un job di sistema sopravvive
 alla configurazione che lo ha creato — ``register_system_job`` non ha una
@@ -26,6 +28,7 @@ worker appena spento dall'utente.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -275,6 +278,39 @@ def _job_payload(
         ],
         "heartbeat": heartbeat,
     }
+
+
+class CronSnapshot:
+    """Una copia di cio' che il payload legge dal servizio cron: stato e job.
+
+    Stessa forma delle due chiamate che :func:`webui_cron_payload` fa al servizio,
+    cosi' il payload non sa se ha in mano l'uno o l'altra.
+    """
+
+    def __init__(self, status: dict[str, Any], jobs: list[CronJob]) -> None:
+        self._status = status
+        self._jobs = jobs
+
+    def status(self) -> dict[str, Any]:
+        return self._status
+
+    def list_jobs(self, include_disabled: bool = False) -> list[CronJob]:
+        return self._jobs if include_disabled else [j for j in self._jobs if j.enabled]
+
+
+def snapshot_cron(cron: Any | None) -> CronSnapshot | None:
+    """Fotografa il servizio **sul loop**, dove girano anche il timer e i suoi gesti.
+
+    Una lettura dello store, sotto il lock del file: la stessa che fa il tool
+    ``cron`` a ogni ``list``. La copia e' profonda perche' il payload si
+    costruisce poi in un thread, mentre il loop continua a mutare i job veri.
+    """
+    if cron is None:
+        return None
+    return CronSnapshot(
+        status=dict(cron.status()),
+        jobs=copy.deepcopy(cron.list_jobs(include_disabled=True)),
+    )
 
 
 def webui_cron_payload(
