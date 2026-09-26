@@ -186,6 +186,20 @@ def read_file(path: Path, max_size: int = 1_000_000) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def read_download(path: Path) -> bytes:
+    """I byte di *path* per ``/api/workspace/download``, o l'errore che lo dice.
+
+    ``FileNotFoundError`` se non c'e' (anche un link pendente o un loop:
+    ``exists`` dice di no), ``IsADirectoryError`` se e' una cartella. Una sola
+    funzione perche' la rotta la chiama in un thread (terza revisione, WA10).
+    """
+    if not path.exists():
+        raise FileNotFoundError(errno.ENOENT, "path not found")
+    if path.is_dir():
+        raise IsADirectoryError(errno.EISDIR, "cannot download a directory")
+    return path.read_bytes()
+
+
 def write_file(path: Path, content: str) -> None:
     """Write content to file."""
     # Salvataggio dall'editor della WebUI: riscrive il file intero, quindi un

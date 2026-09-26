@@ -130,6 +130,42 @@ async def test_delete_refuses_a_project(
     assert (workspace_root / "wikis" / "orto" / "wiki").is_dir()
 
 
+@pytest.mark.parametrize(
+    ("method", "params", "fn"),
+    [
+        ("workspace.delete", {"path": "cartella"}, "rmtree"),
+        ("workspace.copy", {"path": "cartella", "dest": "copia"}, "copytree"),
+    ],
+)
+async def test_the_tree_work_runs_off_the_event_loop(
+    ctx: CommandContext,
+    workspace_root: Path,
+    config_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    params: dict,
+    fn: str,
+) -> None:
+    """``rmtree``/``copytree`` di una cartella grande sul loop fermavano il
+    gateway (terza revisione, WA10)."""
+    import shutil
+    import threading
+
+    (workspace_root / "cartella").mkdir()
+    (workspace_root / "cartella" / "f.txt").write_text("z", encoding="utf-8")
+    loop_thread = threading.get_ident()
+    seen: list[int] = []
+    real = getattr(shutil, fn)
+
+    def spy(*args, **kwargs):
+        seen.append(threading.get_ident())
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(shutil, fn, spy)
+    await dispatch_command(ctx, method, params)
+    assert seen and all(ident != loop_thread for ident in seen)
+
+
 # ---------------------------------------------------------------------------
 # workspace.rename
 # ---------------------------------------------------------------------------

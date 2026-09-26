@@ -524,3 +524,45 @@ async def test_download_rejects_path_traversal(
         "/api/workspace/download",
     )
     assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# WA10: il disco fuori dall'event loop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "fn"),
+    [
+        ("/api/workspace/list", "list_directory"),
+        ("/api/workspace/read?path=a.txt", "read_file"),
+        ("/api/workspace/download?path=a.txt", "read_download"),
+    ],
+)
+async def test_the_disk_work_runs_off_the_event_loop(
+    routes: WorkspaceRoutes,
+    workspace_root: Path,
+    config_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    url: str,
+    fn: str,
+) -> None:
+    """Leggere fino a un file intero (``read_bytes``) o elencare una cartella
+    grande sul loop fermava il gateway per tutti (terza revisione, WA10)."""
+    import threading
+
+    from jenny.webui import workspace_files
+
+    (workspace_root / "a.txt").write_text("ciao", encoding="utf-8")
+    loop_thread = threading.get_ident()
+    seen: list[int] = []
+    real = getattr(workspace_files, fn)
+
+    def spy(*args, **kwargs):
+        seen.append(threading.get_ident())
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(workspace_files, fn, spy)
+    response = await routes.dispatch(_request(url), url.split("?")[0])
+    assert response.status_code == 200
+    assert seen and all(ident != loop_thread for ident in seen)

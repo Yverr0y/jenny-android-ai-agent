@@ -18,6 +18,7 @@ della terza revisione). Resta ``mkdir``, un parametro corto e idempotente.
 
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from collections.abc import Callable
 from pathlib import Path
@@ -122,7 +123,12 @@ class WorkspaceRoutes:
         rel_path = query_first(query, "path") or ""
         workspace_root = self._get_workspace_root()
         full_path = validate_path(workspace_root, rel_path)
-        items = list_directory(full_path, workspace_root=workspace_root)
+        # Il disco fuori dal loop (terza revisione, WA10): una cartella grande
+        # sono centinaia di ``stat``, e un file da aprire fino a ``max_size`` di
+        # ``read_bytes`` — in cui il gateway non risponderebbe a nessuno.
+        items = await asyncio.to_thread(
+            list_directory, full_path, workspace_root=workspace_root
+        )
         return http_json_response({"items": items, "path": rel_path})
 
     async def _read(self, request: WsRequest) -> Response:
@@ -141,7 +147,7 @@ class WorkspaceRoutes:
             max_size = load_config().workspace.max_file_size
         except Exception:
             max_size = 1_000_000
-        content = read_file(full_path, max_size=max_size)
+        content = await asyncio.to_thread(read_file, full_path, max_size=max_size)
         return http_json_response({"content": content, "path": rel_path})
 
     async def _mkdir(self, request: WsRequest) -> Response:
@@ -160,17 +166,16 @@ class WorkspaceRoutes:
         return http_json_response({"success": True, "path": rel_path})
 
     async def _download(self, request: WsRequest) -> Response:
-        from jenny.webui.workspace_files import validate_path
+        from jenny.webui.workspace_files import read_download, validate_path
 
         query = parse_query(request.path)
         rel_path = query_first(query, "path") or ""
         workspace_root = self._get_workspace_root()
         full_path = validate_path(workspace_root, rel_path)
-        if not full_path.exists():
-            return http_error(404, "path not found")
-        if full_path.is_dir():
+        try:
+            data = await asyncio.to_thread(read_download, full_path)
+        except IsADirectoryError:
             return http_error(400, "cannot download a directory")
-        data = full_path.read_bytes()
 
         content_type = mimetypes.guess_type(full_path.name)[0] or "application/octet-stream"
         headers = Headers(
