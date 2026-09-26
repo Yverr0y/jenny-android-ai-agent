@@ -76,6 +76,13 @@ logger = logging.getLogger(__name__)
 # `sys.modules`/`os.sys` regardless), and provided no real containment given
 # `os`/`sys` are allowed. It only added a global-state hazard. Removed.
 #
+# I MODULI SONO CONDIVISI FRA LE SESSIONI. I globali del codice guardato sono
+# per session key (``PythonNamespace._globals_for``), ma ``sys.modules`` è
+# quello dell'interprete: un attributo messo su un modulo importato da un
+# quaderno si legge dalla chat personale, da un job e dal gateway stesso.
+# Limite accettato per la stessa ragione di sopra — non c'è un isolamento
+# in-process che regga — e dichiarato nella descrizione del tool.
+#
 # THE READ-ONLY TURN IS ON THIS SIDE OF THE BOUNDARY TOO, and that is the half
 # the older notes left out. The accepted open door is a raw thread reached
 # through an allowed module's internals — `asyncio.base_events.threading.Thread`,
@@ -3229,7 +3236,18 @@ async def run_python_async(
     )
 )
 class PythonExecTool(PythonExecGateMixin, Tool):
-    """Execute Python code or call registered functions."""
+    """Execute Python code or call registered functions.
+
+    **I globali sono per sessione, i moduli no.** Ogni session key ha il suo
+    dizionario di globali, ma ``sys.modules`` è uno solo per l'interprete:
+    un modulo importato da una sessione è lo stesso oggetto nelle altre e nel
+    gateway, e un attributo assegnato su di lui (``json.x = ...``,
+    ``math.pi = 3``) lo vedono tutti. Non è isolabile in-process — importare
+    una copia per sessione romperebbe i moduli con stato globale e le
+    estensioni C — e resta un limite accettato: ``python_exec`` non è una
+    sandbox (v. il commento TRUST BOUNDARY in testa al file). La descrizione
+    per il modello lo dice, perché è lui che può evitarlo.
+    """
 
     _scopes = {"core", "subagent"}
 
@@ -3295,7 +3313,10 @@ class PythonExecTool(PythonExecGateMixin, Tool):
             "Use function='name' with args/kwargs to call registered functions. "
             "Prefer dedicated tools (read_file, grep, apply_patch, web_search, web_fetch) for file/search/web tasks. "
             "Use python_exec for tests, builds, calculations, data processing, "
-            f"and other logic. Output is truncated at {self._default_max_output()} chars."
+            f"and other logic. Output is truncated at {self._default_max_output()} chars. "
+            "Variables persist within this conversation only; imported modules are "
+            "shared with other conversations, so changing a module (e.g. setting an "
+            "attribute on it) is visible to all of them."
         )
 
     def _default_max_output(self) -> int:
