@@ -71,64 +71,14 @@ def set_android_context(context: Any) -> None:
     get_runtime_context().android_context = context
 
 
-def run_gateway(
-    data_dir: str,
-    android_context: Any = None,
-    *,
-    host: str = "127.0.0.1",
-    port: int = 18790,
-) -> None:
-    """Start the jenny gateway.
+def _reset_loop_bound_state() -> None:
+    """Rimette a nuovo lo stato di modulo legato a un event loop.
 
-    This is the single entry point for the Android runtime (called from
-    Java/Kotlin via Chaquopy). The same function can be invoked manually for
-    local testing, but the execution path is identical to the Android runtime.
-    The WebSocket and HTTP surfaces share the same port so the WebView can
-    reach both from one origin.
-
-    Args:
-        data_dir: Runtime data directory. The workspace is created at
-            ``<data_dir>/workspace``.
-        android_context: Optional Android Context object passed from Kotlin.
-            When provided, Android-only tools can use native Android APIs.
-
-    Raises:
-        Exception: If the gateway fails to start after all retries.
+    Va chiamata prima di **ogni** ``asyncio.run`` del gateway, non una volta
+    sola: un tentativo che muore lascia lock, bridge e loop del suo giro nelle
+    globali, e il tentativo successivo li erediterebbe (``RuntimeError: ...
+    bound to a different event loop`` alla prima contesa).
     """
-    # Per primo: prima di qualunque riga di log che possa portare un traceback.
-    configure_log_sinks()
-
-    if android_context is not None:
-        set_android_context(android_context)
-
-    # Rileva la timezone del device (best-effort) prima di ogni load_config:
-    # il loader la usa come default quando la config non ne fissa una.
-    try:
-        from jenny.runtime.context import get_runtime_context
-        from jenny.utils.device_timezone import detect_device_timezone
-        from jenny.utils.helpers import tzdata_available
-
-        device_tz = detect_device_timezone()
-        get_runtime_context().device_timezone = device_tz
-        logger.info(
-            "Device timezone: {} (tzdata available: {})",
-            device_tz or "unknown",
-            tzdata_available(),
-        )
-    except Exception:
-        logger.opt(exception=True).debug("Could not detect device timezone")
-
-    # Capture logs in-memory so the get_recent_logs tool can surface them
-    # without adb/logcat access.
-    try:
-        from jenny.agent.tools.diagnostics import install_log_buffer
-
-        install_log_buffer()
-    except Exception:
-        # Non-fatale: la cattura log in-memory è best-effort (il tool
-        # get_recent_logs resta degradato). Logghiamo invece di ingoiare muto.
-        logger.opt(exception=True).debug("Could not install in-memory log buffer")
-
     # Reset Android-only bridge state so a fresh gateway start cannot inherit
     # a stale bridge or locked asyncio state from a previous crashed loop.
     # Tutti i bridge (web-search + installed-apps + notifier + location + power
@@ -190,6 +140,65 @@ def run_gateway(
     except Exception:
         # Non-fatale: al peggio si eredita un bridge stale (verrà ricreato).
         logger.opt(exception=True).debug("Could not reset Android bridge state")
+
+
+def run_gateway(
+    data_dir: str,
+    android_context: Any = None,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 18790,
+) -> None:
+    """Start the jenny gateway.
+
+    This is the single entry point for the Android runtime (called from
+    Java/Kotlin via Chaquopy). The same function can be invoked manually for
+    local testing, but the execution path is identical to the Android runtime.
+    The WebSocket and HTTP surfaces share the same port so the WebView can
+    reach both from one origin.
+
+    Args:
+        data_dir: Runtime data directory. The workspace is created at
+            ``<data_dir>/workspace``.
+        android_context: Optional Android Context object passed from Kotlin.
+            When provided, Android-only tools can use native Android APIs.
+
+    Raises:
+        Exception: If the gateway fails to start after all retries.
+    """
+    # Per primo: prima di qualunque riga di log che possa portare un traceback.
+    configure_log_sinks()
+
+    if android_context is not None:
+        set_android_context(android_context)
+
+    # Rileva la timezone del device (best-effort) prima di ogni load_config:
+    # il loader la usa come default quando la config non ne fissa una.
+    try:
+        from jenny.runtime.context import get_runtime_context
+        from jenny.utils.device_timezone import detect_device_timezone
+        from jenny.utils.helpers import tzdata_available
+
+        device_tz = detect_device_timezone()
+        get_runtime_context().device_timezone = device_tz
+        logger.info(
+            "Device timezone: {} (tzdata available: {})",
+            device_tz or "unknown",
+            tzdata_available(),
+        )
+    except Exception:
+        logger.opt(exception=True).debug("Could not detect device timezone")
+
+    # Capture logs in-memory so the get_recent_logs tool can surface them
+    # without adb/logcat access.
+    try:
+        from jenny.agent.tools.diagnostics import install_log_buffer
+
+        install_log_buffer()
+    except Exception:
+        # Non-fatale: la cattura log in-memory è best-effort (il tool
+        # get_recent_logs resta degradato). Logghiamo invece di ingoiare muto.
+        logger.opt(exception=True).debug("Could not install in-memory log buffer")
 
     data_path = Path(data_dir)
     workspace_path = data_path / "workspace"
@@ -258,6 +267,7 @@ def run_gateway(
 
     # Run the gateway with retry loop
     for attempt in range(1, MAX_RETRIES + 1):
+        _reset_loop_bound_state()
         try:
             asyncio.run(
                 _run_gateway(
