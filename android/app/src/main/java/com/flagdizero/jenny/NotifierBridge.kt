@@ -77,7 +77,14 @@ class NotifierBridge(context: Context) {
          *  `FLAG_IMMUTABLE` — che è ciò che il content intent usa, e
          *  correttamente — il bundle di `RemoteInput` arriva **vuoto**, senza
          *  alcun errore. La risposta sembra inviata e non esiste.
-         *  Sotto API 31 la costante non c'è e il default è già mutabile. */
+         *  Sotto API 31 la costante non c'è e il default è già mutabile.
+         *
+         *  Il prezzo, da non dimenticare: mutabile vuol dire che **chiunque tenga
+         *  il PendingIntent** ne riempie gli extra. Il componente è esplicito e
+         *  non si dirotta, ma un'app con l'accesso alle notifiche può mandarlo
+         *  con un testo suo, che arriva a Jenny come dell'utente (v. il KDoc di
+         *  `ReplyReceiver`). È il contratto della risposta diretta di Android,
+         *  non un buco da chiudere qui. */
         private fun replyIntentFlags(): Int =
             PendingIntent.FLAG_UPDATE_CURRENT or
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0

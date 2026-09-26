@@ -1197,9 +1197,15 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Riceve i comandi della SPA. Chromium lo chiama solo per i frame di
-     * [GATEWAY_ORIGIN]; qui si esige in più il frame principale, perché nessuna
-     * cornice dentro la SPA — nemmeno una della stessa origine — ha motivo di
-     * parlare col nativo.
+     * [GATEWAY_ORIGIN]: è **questa** la barriera, e ferma le cornici delle Jenny
+     * App (origine opaca) e la vista esterna (altra porta).
+     *
+     * Il controllo in più sul frame principale è difesa in profondità, non una
+     * seconda barriera: nessuna cornice dentro la SPA ha motivo di parlare col
+     * nativo, ma una della **stessa origine** non ne ha bisogno — raggiunge
+     * `parent.JennyNativePort` e lo chiama da lì, e il messaggio arriva col
+     * frame principale come mittente. Una pagina servita da [GATEWAY_ORIGIN] è
+     * quindi fidata quanto la SPA, qualunque frame la contenga.
      *
      * Protocollo (JSON in una stringa): `{"m": metodo, "a": [argomenti]}`, più
      * `"id"` quando il chiamante aspetta una risposta, che torna come
