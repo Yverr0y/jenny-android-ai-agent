@@ -562,6 +562,22 @@ async def test_download_names_any_file_safely(
     assert disposition.isascii() and "\r" not in disposition and "\n" not in disposition
 
 
+def test_a_name_that_is_not_utf8_still_gets_a_header() -> None:
+    """Su Linux (e su Android) un nome di file e' una sequenza di byte: quelli che
+    non sono UTF-8 Python li porta come surrogati (``surrogateescape``), e
+    ``quote`` li rifiutava con ``UnicodeEncodeError`` — 500 invece del file. Il
+    byte che non si decodifica diventa U+FFFD nel ``filename*`` e ``_`` nel
+    ripiego. Diretto sulla funzione: macOS un nome cosi' non lo crea."""
+    from jenny.webui.workspace_routes import content_disposition
+
+    name = b"foto-\xe9t\xe9.jpg".decode("utf-8", "surrogateescape")
+    disposition = content_disposition(name)
+    assert disposition == (
+        "attachment; filename=\"foto-_t_.jpg\"; filename*=UTF-8''foto-%EF%BF%BDt%EF%BF%BD.jpg"
+    )
+    assert disposition.isascii()
+
+
 @pytest.mark.parametrize("url", ["/api/workspace/read?path=adir", "/api/workspace/list?path=ciclo"])
 async def test_a_filesystem_error_does_not_leak_the_absolute_path(
     routes: WorkspaceRoutes, workspace_root: Path, config_path: Path, url: str

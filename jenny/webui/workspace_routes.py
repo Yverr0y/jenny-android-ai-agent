@@ -203,8 +203,14 @@ def content_disposition(name: str) -> str:
     in UTF-8 percent-encodato, che e' quello che i browser usano, e ``filename``
     in ASCII stampabile per chi non lo capisce, con ``\\`` e ``"`` escapati e
     tutto il resto sostituito da ``_``.
+
+    Un nome che non e' UTF-8 — su Linux un nome e' fatto di byte, e Python porta
+    quelli che non decodifica come surrogati — faceva sollevare ``quote``
+    (``UnicodeEncodeError``, cioe' un 500). Quei byte diventano U+FFFD: l'header
+    dichiara UTF-8, e i byte grezzi percent-encodati non lo sarebbero.
     """
     fallback = "".join(
         ("\\" + ch if ch in '"\\' else ch) if " " <= ch <= "~" else "_" for ch in name
     )
-    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(name, safe='')}"
+    readable = name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(readable, safe='')}"
