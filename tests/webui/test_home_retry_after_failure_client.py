@@ -21,7 +21,7 @@ pytestmark = requires_jsdom
 
 _HEAD = """
 import assert from 'node:assert/strict';
-import { boot, tick, routes, hooks, ok, failed, $ } from './boot.mjs';
+import { boot, tick, routes, hooks, ok, failed, rpcAnswers, rpcFailed, $ } from './boot.mjs';
 routes['/api/settings'] = {
   agent: { bot_name: 'Jenny', model: 'm' }, default_provider: 'anthropic',
   providers: [{ name: 'anthropic' }], version: {}, backup: {},
@@ -31,11 +31,12 @@ routes['/api/settings'] = {
 
 def test_a_model_list_that_failed_is_asked_again_on_the_next_opening() -> None:
     run_home(_HEAD + """
+// Il catalogo e' un comando sul socket (`settings.provider.models`), non piu'
+// una GET: la chiave che puo' portare non deve stare in una query.
 let asked = 0;
-hooks.fetch = async (u) => {
-  if (u.pathname !== '/api/settings/provider-models') return undefined;
+rpcAnswers['settings.provider.models'] = () => {
   asked += 1;
-  return asked === 1 ? failed(502) : ok({ status: 'available', models: [{ id: 'claude-x' }] });
+  return asked === 1 ? rpcFailed() : { status: 'available', models: [{ id: 'claude-x' }] };
 };
 const app = await boot();
 app.homePages.goToId('settings');

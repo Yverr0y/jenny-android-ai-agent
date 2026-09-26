@@ -131,9 +131,13 @@ globalThis.fetch = async (url, init) => {
 /* Il socket: ricorda cosa gli si manda, e si apre al giro dopo. Un comando
    (`rpc`) il cui metodo sta in `rpcAnswers` riceve la risposta al giro dopo,
    col risultato che la funzione calcola dai parametri; gli altri restano
-   senza, come un gateway che non risponde. */
+   senza, come un gateway che non risponde. Una funzione che torna
+   `rpcFailed(...)` fa rispondere un rifiuto (`ok: false`), come un comando
+   che il gateway non ha potuto eseguire. */
 export const sent = [];
 export const rpcAnswers = {};
+const RPC_FAILED = Symbol('rpcFailed');
+export const rpcFailed = (code = 'unavailable', message = 'failed') => ({ [RPC_FAILED]: { code, message } });
 export class FakeWS {
   constructor(u) {
     this.url = u;
@@ -146,9 +150,11 @@ export class FakeWS {
     sent.push(msg);
     const answer = msg.type === 'rpc' ? rpcAnswers[msg.method] : null;
     if (answer) {
-      setTimeout(() => this.onmessage?.({ data: JSON.stringify({
-        event: 'rpc_result', id: msg.id, ok: true, result: answer(msg.params || {}),
-      }) }), 0);
+      const out = answer(msg.params || {});
+      const reply = out && out[RPC_FAILED]
+        ? { event: 'rpc_result', id: msg.id, ok: false, error: out[RPC_FAILED] }
+        : { event: 'rpc_result', id: msg.id, ok: true, result: out };
+      setTimeout(() => this.onmessage?.({ data: JSON.stringify(reply) }), 0);
     }
   }
   close() {}
