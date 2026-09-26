@@ -208,6 +208,9 @@ export class WorkspaceController {
     // Monotonic navigation token: guards against stale-response races when the
     // user navigates rapidly (only the latest navigateTo() writes the grid).
     this._navToken = 0;
+    // Lo stesso per `openFile`: due tocchi in fila fanno due letture, e vince
+    // l'ultimo tocco, non l'ultima risposta (terza revisione, WJ1).
+    this._openToken = 0;
     // Object URL delle thumbnail correnti, revocati a ogni re-render della
     // griglia per non accumulare blob in memoria.
     this._thumbUrls = [];
@@ -399,9 +402,18 @@ export class WorkspaceController {
   async navigateTo(dirPath) {
     const token = ++this._navToken;
     this.currentDir = dirPath;
-    this.viewMode = 'explorer';
-    this.showExplorerView();
-    this._syncHeaderBack();
+    /* **Un editor sporco resta l'editor.** Di qui passa anche il ridisegno
+       della scheda di Memoria (`mount`), che non e' una richiesta di chiudere
+       niente: riportare la vista a `explorer` rendeva il file modificato
+       irraggiungibile — `activate` rimanda a Memoria — e il testo restava in un
+       viewer nascosto, perso alla prossima apertura (terza revisione, WJ1). La
+       griglia si disegna lo stesso; chi apre un altro file passa dalla
+       conferma di `openFile`. Un editor pulito si lascia andare come prima. */
+    if (!(this.viewMode === 'editor' && this._dirty)) {
+      this.viewMode = 'explorer';
+      this.showExplorerView();
+      this._syncHeaderBack();
+    }
     // Chiuso l'editor si passa di qui anche quando la scheda non e' ancora
     // stata ridisegnata: la cartella e' registrata, il disegno lo fara'
     // `mount()`. Andare avanti a DOM staccato riempirebbe nodi gia' buttati:
@@ -854,10 +866,22 @@ export class WorkspaceController {
       return;
     }
 
+    // Il file che si sta modificando: si torna al suo editor, con dentro quel
+    // che c'e'. Rileggerlo dal disco butterebbe via le modifiche.
+    if (this._dirty && this.viewMode === 'editor' && fullPath === this.currentPath) {
+      this.showEditorView();
+      window.mobileApp?.switchMode('workspace');
+      return;
+    }
+    // Un altro file al posto di un buffer sporco: prima si chiede (WJ1).
+    if (this._dirty && !(await this._mayReplaceBuffer())) return;
+
+    const token = ++this._openToken;
     let data;
     try {
       data = await api.readWorkspaceFile(fullPath);
     } catch (err) {
+      if (token !== this._openToken) return;  // superata da un'apertura piu' nuova
       // 415 = il backend ha sniffato contenuto binario → app di sistema.
       if (err.status === 415) {
         this.openWithSystemApp(fullPath, name);
@@ -867,9 +891,29 @@ export class WorkspaceController {
       this.renderError(err.message);
       return;
     }
+    if (token !== this._openToken) return;  // superata da un'apertura piu' nuova
+    // Durante la lettura si puo' aver scritto nell'editor ancora aperto.
+    if (this._dirty && !(await this._mayReplaceBuffer())) return;
 
     this._enterEditorView(fullPath, name);
     this.renderCodeViewer(name, data.content, ext);
+  }
+
+  /** Si puo' buttare il buffer dell'editor? Se e' pulito si', senza chiedere;
+   *  se e' sporco lo decide l'utente, con la stessa conferma dell'uscita
+   *  dall'editor (`_confirmDiscard`). A risposta si' il buffer vale pulito.
+   *
+   *  Lo chiamano le strade che **riempiono** l'editor con un altro file —
+   *  `openFile`, e il ripiego di `openWithSystemApp` — perche'
+   *  `_enterEditorView` il buffer lo azzera: prima lo facevano senza chiedere
+   *  (terza revisione, WJ1). */
+  async _mayReplaceBuffer() {
+    if (!this._dirty) return true;
+    // La tastiera giu' prima della modale: v. `_confirmDiscard`.
+    this.editor?.getInputField?.()?.blur();
+    const confirmed = await confirmDialog(i18n.t('workspace.discardConfirm'));
+    if (confirmed) this._dirty = false;
+    return confirmed;
   }
 
   /** Apre il file: e' l'unico gesto che porta fuori da Memoria.
@@ -878,6 +922,7 @@ export class WorkspaceController {
    *  schermata sua, come in qualunque gestore file — ed e' l'unica cosa
    *  rimasta in `view-workspace`. */
   _enterEditorView(fullPath, name) {
+    // Azzera il buffer: chi arriva qui ha gia' chiesto (`_mayReplaceBuffer`).
     this._dirty = false;
     this.currentPath = fullPath;
     this.viewMode = 'editor';
@@ -902,6 +947,8 @@ export class WorkspaceController {
         if (await bridge.openFile(fullPath)) return;
       } catch (e) { /* bridge rotto: si ripiega sul download */ }
     }
+    // Il ripiego occupa la vista dell'editor: non sopra un buffer sporco (WJ1).
+    if (this._dirty && !(await this._mayReplaceBuffer())) return;
     this._enterEditorView(fullPath, name);
     this.renderBinary(name, fullPath);
   }
@@ -1000,10 +1047,19 @@ export class WorkspaceController {
     const confirmed = await confirmDialog(i18n.t('workspace.saveConfirm', { path: this.currentPath }));
     if (!confirmed) return;
     const content = this.editor.getValue();
+    const path = this.currentPath;
     try {
       const btn = document.querySelector('.ws-save-btn');
       if (btn) btn.disabled = true;
-      await rpc.writeWorkspaceFile(this.currentPath, content);
+      await rpc.writeWorkspaceFile(path, content);
+      /* Pulito solo se nell'editor c'e' ancora **quel** testo di **quel** file.
+         Quel che si e' scritto durante l'`await` non e' salvato, e azzerare il
+         flag lo faceva credere: la conferma di uscita non sarebbe comparsa
+         (terza revisione, WJ22). Il bottone torna attivo per salvarlo. */
+      if (this.currentPath !== path || this.editor?.getValue() !== content) {
+        if (btn) { btn.textContent = i18n.t('workspace.save'); btn.disabled = false; }
+        return;
+      }
       this._dirty = false;
       if (btn) { btn.textContent = i18n.t('workspace.saved'); btn.classList.remove('dirty'); }
       setTimeout(() => { if (btn) btn.textContent = i18n.t('workspace.save'); }, 2000);
@@ -1058,17 +1114,46 @@ export class WorkspaceController {
     });
   }
 
+  /* «Scarica» era un `<a download>` verso `/api/workspace/download`: un link
+     nudo non porta il Bearer, e il gateway rispondeva 401 — sempre (terza
+     revisione, WJ10). Adesso e' un bottone che passa da `_downloadBinary`. */
   renderBinary(filename, path) {
     this.viewerEl.innerHTML = `
       <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--text-faint);">
         <div style="font-size: 48px; opacity: 0.5;">&#128196;</div>
         <div>${i18n.t('workspace.binaryFile')}</div>
-        <a href="${escapeHtml(api.getWorkspaceDownloadUrl(path))}" download="${escapeHtml(filename)}"
-           style="padding: 8px 20px; background: var(--accent); color: var(--on-accent); text-decoration: none; border-radius: var(--radius); font-size: 12px;">
+        <button type="button" class="ws-binary-download"
+           style="padding: 8px 20px; background: var(--accent); color: var(--on-accent); border: 0; border-radius: var(--radius); font-size: 12px;">
           ${i18n.t('workspace.download')}
-        </a>
+        </button>
       </div>
     `;
+    this.viewerEl.querySelector('.ws-binary-download')
+      ?.addEventListener('click', () => this._downloadBinary(path, filename));
+  }
+
+  /** Il file sul telefono, per le due strade che hanno le credenziali: il
+   *  ponte nativo (lo stesso «Salva in Download» del foglio azioni) e, dove il
+   *  ponte non c'e' (il browser del Mac), una lettura autenticata
+   *  (`downloadWorkspaceBlob`, col Bearer) consegnata come link locale. */
+  async _downloadBinary(path, filename) {
+    if (typeof window.JennyNative?.saveToDownloads === 'function') {
+      await this.saveToDownloads(path);
+      return;
+    }
+    try {
+      const blob = await api.downloadWorkspaceBlob(path);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      showToast(i18n.t('workspace.actionFailed'), 'error');
+    }
   }
 
   renderError(message) {

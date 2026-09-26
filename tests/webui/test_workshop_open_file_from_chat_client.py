@@ -97,11 +97,13 @@ class WorkspaceController {{
     this.viewMode = 'explorer';
     this.currentDir = '';
     this.currentPath = '';
+    this._openToken = 0;
     this.viewerEl = {{ classList: {{ add() {{}}, remove() {{}} }} }};
     this.previews = [];
   }}
 {member(WS_SRC, "activate")}
 {member(WS_SRC, "openFile")}
+{member(WS_SRC, "_mayReplaceBuffer")}
 {member(WS_SRC, "_enterEditorView")}
   showEditorView() {{}}
   _syncHeaderBack() {{}}

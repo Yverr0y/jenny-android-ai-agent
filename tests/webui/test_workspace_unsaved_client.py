@@ -1,0 +1,310 @@
+"""Il testo non salvato dell'editor del workspace non si perde per strada.
+
+Terza revisione, tre voci dell'officina, in node sui metodi veri di
+``mobile-workspace.js`` (gli altri sono stub: il DOM finto misurerebbe se'
+stesso):
+
+* **WJ1** — il buffer sporco si perdeva senza una domanda. Il cassetto di
+  Memoria ridisegna la scheda (``mount`` → ``navigateTo``), ``navigateTo``
+  riportava la vista a ``explorer`` e l'editor diventava irraggiungibile;
+  aprire un altro file (``openFile`` → ``_enterEditorView``) lo sovrascriveva.
+  E ``openFile`` non aveva un token: la risposta di una lettura vecchia poteva
+  arrivare dopo quella nuova e aprire il file sbagliato.
+* **WJ22** — ``saveFile`` rimetteva ``_dirty = false`` dopo l'``await``: quel
+  che si era scritto *durante* il salvataggio risultava salvato e non lo era.
+* **WJ10** — il «Scarica» dei binari era un ``<a download>`` verso
+  ``/api/workspace/download``, senza il Bearer: 401, sempre.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from support.js_harness import member, requires_node, run_js
+
+ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_JS = ROOT / "jenny" / "templates" / "ui" / "assets" / "mobile-workspace.js"
+I18N_DIR = ROOT / "jenny" / "templates" / "ui" / "assets" / "i18n"
+
+pytestmark = requires_node
+
+# I metodi veri. Quelli che la correzione aggiunge ci sono solo dopo: il banco li
+# prende se ci sono, cosi' prima della correzione i test falliscono sul
+# comportamento e non su un metodo che manca.
+_REAL = (
+    "mount",
+    "navigateTo",
+    "_explorerOnScreen",
+    "openFile",
+    "_enterEditorView",
+    "openWithSystemApp",
+    "saveFile",
+    "renderBinary",
+    "saveToDownloads",
+    "_mayReplaceBuffer",
+    "_downloadBinary",
+)
+
+_HARNESS = """
+import assert from 'node:assert/strict';
+const T = __IT__;
+const i18n = { t: (k, p) => {
+  let s = k.split('.').reduce((o, x) => o?.[x], T) ?? k;
+  for (const [a, b] of Object.entries(p || {})) s = s.replace('{' + a + '}', b);
+  return s;
+} };
+const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const getFileExtension = (p) => (p.includes('.') ? p.split('.').pop() : '');
+const fileHelpText = () => '';
+const IMAGE_EXTS = new Set(['png']);
+const KNOWN_BINARY_EXTS = new Set(['zip']);
+const toasts = [];
+const showToast = (m, kind) => toasts.push([m, kind]);
+
+/* La conferma: il banco decide la risposta e conta le domande. */
+const dialog = { answer: true, asked: 0 };
+const confirmDialog = async () => { dialog.asked++; return dialog.answer; };
+
+/* Le letture dal gateway, risolte a mano dal banco nell'ordine che vuole. */
+const reads = [];
+const fetchedUrls = [];
+const api = {
+  listWorkspace: async () => ({ items: [] }),
+  readWorkspaceFile(path) {
+    return new Promise((resolve, reject) => reads.push({ path, resolve, reject }));
+  },
+  getWorkspaceDownloadUrl: (p) => `/api/workspace/download?path=${encodeURIComponent(p)}`,
+  downloadWorkspaceBlob: async (p) => { fetchedUrls.push(p); return new Blob(['x']); },
+};
+const saves = [];
+const rpc = {
+  writeWorkspaceFile(path, content) {
+    return new Promise((resolve) => saves.push({ path, content, resolve }));
+  },
+};
+
+const clicks = [];
+const created = [];
+globalThis.document = {
+  querySelector: () => null,
+  createElement: () => {
+    const a = { click() { clicks.push({ href: a.href, download: a.download }); }, remove() {} };
+    created.push(a);
+    return a;
+  },
+  body: { appendChild() {} },
+};
+globalThis.URL.createObjectURL = () => 'blob:finto';
+globalThis.URL.revokeObjectURL = () => {};
+
+const shell = { modes: [] };
+globalThis.window = { mobileApp: { switchMode: (m) => shell.modes.push(m) } };
+
+/* Un editor finto: il testo e basta. */
+function fakeEditor(text) {
+  return { text, getValue() { return this.text; }, getInputField: () => ({ blur() {} }) };
+}
+
+class WorkspaceController {
+  constructor() {
+    this.currentDir = '';
+    this.currentPath = '';
+    this.viewMode = 'explorer';
+    this._navToken = 0;
+    this._openToken = 0;
+    this._dirty = false;
+    this.editor = null;
+    this.gridEl = { isConnected: true, innerHTML: '' };
+    this.emptyEl = { style: {}, querySelector: () => null };
+    this.viewerEl = { innerHTML: '', classList: { add() {}, remove() {} }, querySelector: () => null,
+      querySelectorAll: () => [] };
+    this.rendered = [];
+    this.shown = [];
+  }
+  renderBreadcrumb() {}
+  renderGrid() {}
+  showEditorView() { this.shown.push('editor'); }
+  showExplorerView() { this.shown.push('explorer'); }
+  _syncHeaderBack() {}
+  _showNewMenu() {}
+  showContextSheet() {}
+  previewImage() {}
+  renderCodeViewer(name, content) { this.rendered.push(content); this.editor = fakeEditor(content); }
+  renderError(m) { this.rendered.push('error:' + m); }
+__METHODS__
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+/* Un editor aperto su *path* e modificato. */
+async function dirtyEditorOn(c, path, text) {
+  const p = c.openFile(path);
+  await tick();
+  reads.shift().resolve({ content: 'originale' });
+  await p;
+  c.editor.text = text;
+  c._dirty = true;
+}
+"""
+
+
+def _harness() -> str:
+    source = WORKSPACE_JS.read_text(encoding="utf-8")
+    methods = []
+    for name in _REAL:
+        if re.search(rf"\n  (?:async )?{re.escape(name)}\(", source):
+            methods.append("  " + member(source, name))
+    it = json.loads((I18N_DIR / "it.json").read_text(encoding="utf-8"))
+    return _HARNESS.replace("__IT__", json.dumps(it, ensure_ascii=False)).replace(
+        "__METHODS__", "\n".join(methods)
+    )
+
+
+def _run(script: str) -> None:
+    run_js(_harness() + "\n" + script + "\nconsole.log('ok');")
+
+
+# -- WJ1 ---------------------------------------------------------------------
+
+
+def test_redrawing_the_card_keeps_a_dirty_editor_reachable() -> None:
+    """Il cassetto ridisegna la scheda e chiama ``mount``: la vista del file
+    modificato deve restare quella, o ``activate`` rimanda a Memoria e il testo
+    resta in un viewer nascosto che nessuno puo' piu' raggiungere."""
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'note/a.md', 'scritto a mano');
+c.mount({ querySelector: () => ({ isConnected: true, addEventListener() {} }) });
+await tick();
+assert.equal(c.viewMode, 'editor', 'il ridisegno della scheda ha chiuso l editor sporco');
+assert.equal(c._dirty, true);
+assert.equal(c.editor.getValue(), 'scritto a mano');
+assert.equal(dialog.asked, 0, 'un ridisegno automatico non fa domande');
+""")
+
+
+def test_opening_another_file_asks_before_dropping_the_edits() -> None:
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'a.md', 'scritto a mano');
+
+dialog.answer = false;
+await c.openFile('b.md');
+assert.equal(dialog.asked, 1, 'nessuna conferma prima di buttare le modifiche');
+assert.equal(reads.length, 0, 'ha letto il file nuovo nonostante il no');
+assert.equal(c.currentPath, 'a.md');
+assert.equal(c.editor.getValue(), 'scritto a mano');
+assert.equal(c._dirty, true);
+
+dialog.answer = true;
+const p = c.openFile('b.md');
+await tick();
+reads.shift().resolve({ content: 'bi' });
+await p;
+assert.equal(dialog.asked, 2);
+assert.equal(c.currentPath, 'b.md');
+assert.equal(c._dirty, false);
+""")
+
+
+def test_reopening_the_file_being_edited_keeps_the_edits() -> None:
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'a.md', 'scritto a mano');
+await c.openFile('a.md');
+assert.equal(dialog.asked, 0);
+assert.equal(reads.length, 0, 'ha riletto dal disco il file che si sta modificando');
+assert.equal(c.editor.getValue(), 'scritto a mano');
+assert.equal(c.viewMode, 'editor');
+""")
+
+
+def test_a_stale_read_does_not_open_the_wrong_file() -> None:
+    """Due tocchi in fila: la lettura del primo arriva dopo quella del secondo.
+    Vince l'ultimo tocco, non l'ultima risposta."""
+    _run("""
+const c = new WorkspaceController();
+const first = c.openFile('lento.md');
+const second = c.openFile('veloce.md');
+await tick();
+const [slow, fast] = reads.splice(0);
+fast.resolve({ content: 'veloce' });
+await second;
+slow.resolve({ content: 'lento' });
+await first;
+assert.equal(c.currentPath, 'veloce.md');
+assert.deepEqual(c.rendered, ['veloce']);
+""")
+
+
+def test_a_binary_fallback_asks_before_dropping_the_edits() -> None:
+    """Senza il ponte nativo l'apertura con l'app di sistema ripiega sulla vista
+    dell'editor: anche quella strada sovrascriveva il buffer."""
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'a.md', 'scritto a mano');
+dialog.answer = false;
+await c.openWithSystemApp('pacco.zip', 'pacco.zip');
+assert.equal(dialog.asked, 1);
+assert.equal(c.currentPath, 'a.md');
+assert.equal(c._dirty, true);
+""")
+
+
+# -- WJ22 --------------------------------------------------------------------
+
+
+def test_typing_during_a_save_keeps_the_buffer_dirty() -> None:
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'a.md', 'prima versione');
+const p = c.saveFile();
+await tick();
+assert.equal(saves.length, 1);
+c.editor.text = 'prima versione, e poi altro';
+saves.shift().resolve({});
+await p;
+assert.equal(c._dirty, true, 'il testo scritto durante il salvataggio risulta salvato');
+""")
+
+
+def test_a_save_of_the_current_text_cleans_the_buffer() -> None:
+    _run("""
+const c = new WorkspaceController();
+await dirtyEditorOn(c, 'a.md', 'versione');
+const p = c.saveFile();
+await tick();
+saves.shift().resolve({});
+await p;
+assert.equal(c._dirty, false);
+""")
+
+
+# -- WJ10 --------------------------------------------------------------------
+
+
+def test_the_binary_download_carries_the_credentials() -> None:
+    """Il link nudo verso ``/api/workspace/download`` non porta il Bearer: il
+    gateway risponde 401. Il «Scarica» deve passare dal ponte nativo, o da una
+    lettura autenticata quando il ponte non c'e'."""
+    _run("""
+const c = new WorkspaceController();
+c.renderBinary('pacco.zip', 'dir/pacco.zip');
+assert.ok(!/href="\\/api\\/workspace\\/download/.test(c.viewerEl.innerHTML),
+  'il link senza credenziali e ancora li');
+
+// Col ponte: la stessa strada del «Salva in Download» del foglio azioni.
+const saved = [];
+window.JennyNative = { saveToDownloads: async (p) => { saved.push(p); return true; } };
+await c._downloadBinary('dir/pacco.zip', 'pacco.zip');
+assert.deepEqual(saved, ['dir/pacco.zip']);
+
+// Senza ponte: blob letto col token, poi un link locale.
+delete window.JennyNative;
+await c._downloadBinary('dir/pacco.zip', 'pacco.zip');
+assert.deepEqual(fetchedUrls, ['dir/pacco.zip']);
+assert.deepEqual(clicks, [{ href: 'blob:finto', download: 'pacco.zip' }]);
+""")
