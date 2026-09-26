@@ -121,6 +121,28 @@ async def test_list_missing_subdir_returns_404(
     assert response.status_code == 404
 
 
+async def test_list_survives_a_dangling_symlink(
+    routes: WorkspaceRoutes, workspace_root: Path, config_path: Path
+) -> None:
+    """Un link verso niente e' una voce della cartella, non un 404 della cartella.
+
+    ``item.stat()`` segue il link: su un bersaglio che non c'e' solleva
+    ``FileNotFoundError``, e la rotta rispondeva «path not found» per l'intera
+    cartella — che invece c'e' (terza revisione, WA9). Stesso per un loop.
+    """
+    import os
+
+    (workspace_root / "note.txt").write_text("hello", encoding="utf-8")
+    os.symlink("non-esiste", workspace_root / "pendente")
+    os.symlink("ciclo", workspace_root / "ciclo")
+    response = await routes.dispatch(_request("/api/workspace/list"), "/api/workspace/list")
+    assert response.status_code == 200
+    items = {item["name"]: item for item in _json(response)["items"]}
+    assert set(items) == {"note.txt", "pendente", "ciclo"}
+    assert items["pendente"]["type"] == "file"
+    assert items["pendente"]["size"] is None
+
+
 async def test_list_marks_dotfiles_internal_without_manifest(
     routes: WorkspaceRoutes, workspace_root: Path, config_path: Path
 ) -> None:

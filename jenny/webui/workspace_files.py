@@ -115,7 +115,15 @@ def list_directory(path: Path, *, workspace_root: Path | None = None) -> list[di
     patterns = _load_internal_patterns(workspace_root) if workspace_root is not None else None
     items = []
     for item in sorted(path.iterdir()):
-        stat = item.stat()
+        try:
+            stat = item.stat()
+        except OSError:
+            # Un symlink pendente (o un loop): ``stat`` segue il link e non
+            # trova niente. E' una voce della cartella come le altre — prima
+            # faceva rispondere 404 all'intera cartella (terza revisione, WA9).
+            # I metadati sono quelli del link; ``is_file``/``is_dir`` qui sotto
+            # dicono entrambi di no, quindi figura come file senza dimensione.
+            stat = item.lstat()
         internal = False
         if patterns is not None and workspace_root is not None:
             rel = str(item.relative_to(workspace_root))
