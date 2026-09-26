@@ -749,6 +749,14 @@ async def run_dream_turn(
     rest = store.build_dream_prompt(
         gauge=render_gauge(report), scope=rest_scope, until_cursor=window_cursor,
     )
+    # Il primo batch è atterrato: il suo cursore si scrive adesso, non dopo il
+    # secondo. Se il secondo solleva (un errore, o il run cancellato) il
+    # cursore del primo resterebbe altrimenti non scritto, e il run dopo
+    # rifarebbe da capo un batch già scritto nei file. Si scrive *dopo* aver
+    # costruito il prompt del secondo, che legge il cursore da cui partire:
+    # così il secondo batch vede la stessa finestra di prima.
+    if first.last_cursor is not None:
+        store.set_last_dream_cursor(first.last_cursor)
     second = (
         await _run_dream_batch(agent, store, prologue, rest, before=report)
         if rest is not None else None
@@ -762,8 +770,6 @@ async def run_dream_turn(
             "Dream: the {} batch of the window did not land ({}); the cursor stops at {}",
             rest_scope, second.outcome.value, first.last_cursor,
         )
-    if first.last_cursor is not None:
-        store.set_last_dream_cursor(first.last_cursor)
     return first
 
 

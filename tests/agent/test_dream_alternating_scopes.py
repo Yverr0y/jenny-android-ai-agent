@@ -15,6 +15,7 @@ le voci che Dream deve ancora leggere.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -137,6 +138,39 @@ class TestTheRun:
         assert store.get_last_dream_cursor() == 1
         nxt = store.build_dream_prompt()
         assert nxt is not None and nxt.scope == "project"
+
+    @pytest.mark.parametrize(
+        "exc", [RuntimeError("boom"), asyncio.CancelledError()], ids=["error", "cancelled"],
+    )
+    async def test_a_second_batch_that_raises_keeps_the_first_cursor(
+        self, tmp_path: Path, exc: BaseException,
+    ):
+        """Il primo batch è atterrato nei file: il suo cursore non dipende dal secondo.
+
+        Scritto solo a fine run, un secondo batch che solleva — un errore, o il
+        run cancellato — lasciava il cursore dov'era, e il run dopo rifaceva da
+        capo il batch già scritto.
+        """
+        store = MemoryStore(tmp_path)
+        _alternate(store, 3)
+
+        class _Raising(_Agent):
+            async def process_direct(self, prompt: str, **kwargs: Any):
+                if len(self.prompts) == 1:
+                    self.prompts.append(prompt)
+                    raise exc
+                return await super().process_direct(prompt, **kwargs)
+
+        agent = _Raising()
+        with pytest.raises(type(exc)):
+            await run_dream_turn(agent, store, _prologue(), take_snapshot=None)
+
+        assert len(agent.prompts) == 2
+        assert store.get_last_dream_cursor() == 1
+        # Il secondo batch ha visto la stessa finestra di sempre: tutte le voci
+        # di progetto, nessuna personale.
+        second = MemoryStore.dream_prompt_history(agent.prompts[1])
+        assert "progetto 02" in second and "personale" not in second
 
     async def test_a_failed_first_batch_does_not_start_the_second(self, tmp_path: Path):
         store = MemoryStore(tmp_path)
