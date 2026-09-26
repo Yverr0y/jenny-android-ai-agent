@@ -36,8 +36,10 @@ from typing import Any
 
 from jenny.agent.tools.ssh_backends.base import SshError, SshHostKeyError
 from jenny.agent.tools.ssh_transport import (
+    decode_host_key_blob,
     forget_host,
     get_ssh_backend,
+    host_key_lines_match,
     is_host_pinned,
     pinned_host_key,
     record_host_key,
@@ -188,7 +190,7 @@ def _fingerprint_from_known_hosts_line(line: str | None) -> str | None:
     if len(parts) < 3:
         return None
     try:
-        blob = base64.b64decode(parts[2], validate=True)
+        blob = decode_host_key_blob(parts[2])
     except (ValueError, TypeError):
         return None
     digest = base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
@@ -504,7 +506,7 @@ async def probe_ssh_host_key(query: QueryParams) -> dict[str, Any]:
     _PENDING_PROBES[alias] = (line, fingerprint, time.monotonic())
 
     pinned = pinned_host_key(host_cfg.host, host_cfg.port)
-    already = pinned is not None and pinned.strip() == line.strip()
+    already = host_key_lines_match(pinned, line)
     payload = ssh_settings_payload(config)
     payload["probe"] = {
         "alias": alias,

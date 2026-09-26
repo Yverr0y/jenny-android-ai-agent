@@ -602,6 +602,58 @@ async def test_re_accepting_the_same_key_is_idempotent(env, monkeypatch) -> None
     assert pinned_host_key("example.com", 22) is not None
 
 
+def _ecdsa_line_without_padding() -> tuple[str, str]:
+    """Una chiave ECDSA vera, con e senza il ``=`` finale del base64.
+
+    Il blob di una nistp256 è di 104 byte, quindi il suo base64 finisce con un
+    ``=``: è la forma che i pin salvati da versioni vecchie del ponte non
+    avevano. Un ed25519 (51 byte) non ha padding e non mostrerebbe niente.
+    """
+    asyncssh = pytest.importorskip("asyncssh")
+    key = asyncssh.generate_private_key("ecdsa-sha2-nistp256")
+    padded = " ".join(key.export_public_key("openssh").decode().split()[:2])
+    assert padded.endswith("="), padded
+    return padded, padded.rstrip("=")
+
+
+async def test_a_pin_saved_without_base64_padding_is_the_same_key(env, monkeypatch) -> None:
+    """«Verify fingerprint» su un pin vecchio non deve gridare al cambio di chiave.
+
+    Il confronto era fra righe di testo: la stessa chiave, salvata senza il
+    ``=`` finale e riletta dal probe con, risultava «changed», e l'impronta
+    vecchia non si calcolava perché ``b64decode`` rifiuta il blob senza padding.
+    """
+    import base64
+    import hashlib
+
+    padded, unpadded = _ecdsa_line_without_padding()
+    blob = base64.b64decode(padded.split()[1])
+    fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
+    _backend(monkeypatch, line=padded, fingerprint=fingerprint)
+    await _add_host()
+    known_hosts_path().parent.mkdir(parents=True, exist_ok=True)
+    known_hosts_path().write_text(f"example.com {unpadded}\n", encoding="utf-8")
+
+    probe = (await ssh_api.probe_ssh_host_key(_q(alias="prod")))["probe"]
+    assert probe["changed"] is False
+    assert probe["already_accepted"] is True
+    assert probe["pinned_fingerprint"] == fingerprint
+
+    # Riaccettarla non chiede ``replace`` e riscrive il pin nella forma giusta.
+    await ssh_api.accept_ssh_host_key(_q(alias="prod", fingerprint=fingerprint))
+    assert known_hosts_path().read_text().splitlines() == [f"example.com {padded}"]
+
+
+def test_record_host_key_treats_padding_as_the_same_key(env) -> None:
+    padded, unpadded = _ecdsa_line_without_padding()
+    known_hosts_path().parent.mkdir(parents=True, exist_ok=True)
+    known_hosts_path().write_text(f"example.com {unpadded}\n", encoding="utf-8")
+
+    record_host_key(f"example.com {padded}")
+
+    assert known_hosts_path().read_text().splitlines() == [f"example.com {padded}"]
+
+
 # -- funnel della config -----------------------------------------------------
 
 
