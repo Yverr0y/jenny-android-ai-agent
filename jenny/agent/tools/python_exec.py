@@ -1213,11 +1213,21 @@ class PythonNamespace:
         # nel frattempo da un'altra, e scriveva nella sua cartella (TL2).
         # Nemmeno `self.working_dir` è una base: è un attributo di comodo che
         # di default vale la workspace globale del processo.
-        self._ns: dict[str, Any] = {
-            "__builtins__": self._safe_builtins(),
+        # Globali per sessione (TL8). Il tool è uno per processo, e con un solo
+        # dizionario una variabile assegnata in un quaderno si leggeva dalla
+        # chat personale, e un `def read_file(...)` sostituiva il builtin
+        # registrato per tutte le sessioni fino al riavvio. `_template` tiene
+        # ciò che ogni sessione riceve alla nascita (i builtin registrati);
+        # `_ns` resta il namespace delle chiamate senza chiave (test, host).
+        # Le chiavi sono le session key: poche e stabili (la chat, un quaderno,
+        # i job interni), quindi niente sfratto.
+        self._template: dict[str, Any] = {
             "__name__": "__python_exec__",
             "__file__": "<python_exec>",
         }
+        self._ns: dict[str, Any] = self._fresh_globals()
+        self._session_ns: dict[str | None, dict[str, Any]] = {None: self._ns}
+        self._session_ns_lock = threading.Lock()
 
     # Dunder dei builtins che il namespace guardato deve comunque avere.
     # Il filtro `name.startswith("_")` qui sotto è ereditato e cieco: toglie in
@@ -1244,6 +1254,18 @@ class PythonNamespace:
     # `__import__` NON va in questa lista: è reinstallato sotto come
     # `_guarded_import` e passare dal loop lo riporterebbe a quello vero.
     _ALLOWED_DUNDER_BUILTINS = frozenset({"__build_class__"})
+
+    def _fresh_globals(self) -> dict[str, Any]:
+        """Globali nuovi: builtin propri (una copia a testa) più il modello."""
+        return {"__builtins__": self._safe_builtins(), **self._template}
+
+    def _globals_for(self, session_key: str | None) -> dict[str, Any]:
+        """I globali della sessione *session_key*, creati al primo uso."""
+        with self._session_ns_lock:
+            ns = self._session_ns.get(session_key)
+            if ns is None:
+                ns = self._session_ns[session_key] = self._fresh_globals()
+            return ns
 
     @staticmethod
     def _compile(code: str, mode: str) -> types.CodeType:
@@ -2780,8 +2802,18 @@ class PythonNamespace:
             finally:
                 self._unload_exec_modules()
 
-    def execute(self, code: str, working_dir: str | None = None) -> tuple[str, str, Any]:
-        """Execute code and return (stdout, stderr, result)."""
+    def execute(
+        self,
+        code: str,
+        working_dir: str | None = None,
+        session_key: str | None = None,
+    ) -> tuple[str, str, Any]:
+        """Execute code and return (stdout, stderr, result).
+
+        *session_key* sceglie i globali (vedi ``_globals_for``): passata dal
+        chiamante, come la base, e mai letta dall'istanza condivisa.
+        """
+        ns = self._globals_for(session_key)
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         result = None
@@ -2797,10 +2829,10 @@ class PythonNamespace:
             with _capture_streams(stdout_buf, stderr_buf):
                 # Try eval first (for expressions)
                 try:
-                    result = eval(self._compile(code, "eval"), self._ns)
+                    result = eval(self._compile(code, "eval"), ns)
                 except SyntaxError:
                     # Fall back to exec (for statements)
-                    exec(self._compile(code, "exec"), self._ns)
+                    exec(self._compile(code, "exec"), ns)
         except (PythonExecInterrupted, _SessionStopped, asyncio.CancelledError):
             # Interrupt del sandbox (timeout / stop): non è un errore del
             # codice utente e deve risalire fino a _run / al chiamante.
@@ -2836,9 +2868,10 @@ class PythonNamespace:
         args: list | None = None,
         kwargs: dict | None = None,
         working_dir: str | None = None,
+        session_key: str | None = None,
     ) -> tuple[str, str, Any]:
-        """Call a registered function by name."""
-        func = self._ns.get(name)
+        """Call a registered function by name (in the globals of *session_key*)."""
+        func = self._globals_for(session_key).get(name)
         if func is None:
             return "", f"Function '{name}' not found in namespace", None
         if not callable(func):
@@ -2871,8 +2904,16 @@ class PythonNamespace:
         return stdout_buf.getvalue(), _with_exec_notes(stderr_buf.getvalue()), result
 
     def register_function(self, name: str, func: Any) -> None:
-        """Register a callable in the namespace."""
-        self._ns[name] = func
+        """Register a callable in the namespace.
+
+        Va nel modello e in ogni sessione già nata: una ridefinizione fatta dal
+        codice di una sessione resta sua, la registrazione dell'host vale per
+        tutte.
+        """
+        with self._session_ns_lock:
+            self._template[name] = func
+            for ns in self._session_ns.values():
+                ns[name] = func
 
 
 # ---------------------------------------------------------------------------
@@ -2957,8 +2998,15 @@ class _ContextBoundNamespace:
     **propria** copia del contesto, quindi non esiste il caso "già entrato".
     """
 
-    def __init__(self, namespace: Any, *, working_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        namespace: Any,
+        *,
+        working_dir: str | None = None,
+        session_key: str | None = None,
+    ) -> None:
         self._namespace = namespace
+        self._session_key = session_key
         self._execute = _carry_turn_across_thread(namespace.execute)
         self._call_function = _carry_turn_across_thread(namespace.call_function)
         # La base della chiamata che ha aperto la sessione, fissata qui: il
@@ -2968,7 +3016,11 @@ class _ContextBoundNamespace:
         self.working_dir = working_dir or namespace.working_dir
 
     def execute(self, code: str, working_dir: str | None = None) -> tuple[str, str, Any]:
-        return self._execute(code, working_dir if working_dir is not None else self._base)
+        return self._execute(
+            code,
+            working_dir if working_dir is not None else self._base,
+            self._session_key,
+        )
 
     def call_function(
         self,
@@ -2978,7 +3030,11 @@ class _ContextBoundNamespace:
         working_dir: str | None = None,
     ) -> tuple[str, str, Any]:
         return self._call_function(
-            function, args, kwargs, working_dir if working_dir is not None else self._base,
+            function,
+            args,
+            kwargs,
+            working_dir if working_dir is not None else self._base,
+            self._session_key,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -2994,8 +3050,12 @@ async def run_python_async(
     timeout: int | None,
     max_output_chars: int,
     working_dir: str | None = None,
+    session_key: str | None = None,
 ) -> str:
     """Execute Python code/function in a thread with timeout.
+
+    *session_key* sceglie i globali della sessione (TL8): come *working_dir*,
+    arriva per argomento.
 
     *working_dir* è la base di risoluzione per questa esecuzione (vedi
     ``PythonNamespace._enter_guard``): passata esplicitamente e mai letta dal
@@ -3039,9 +3099,11 @@ async def run_python_async(
         ident_cell[0] = threading.get_ident()
         try:
             if function:
-                return namespace.call_function(function, args, kwargs, working_dir)
+                return namespace.call_function(
+                    function, args, kwargs, working_dir, session_key,
+                )
             elif code:
-                return namespace.execute(code, working_dir)
+                return namespace.execute(code, working_dir, session_key)
             else:
                 return "", "Error: Provide 'code' or 'function'", None
         except PythonExecInterrupted:
@@ -3261,6 +3323,9 @@ class PythonExecTool(PythonExecGateMixin, Tool):
             resolved_working_dir = self.namespace._resolve_exec_base(working_dir)
         except OSError as exc:
             return f"Error: {exc}"
+        # I globali sono della sessione del turno (TL8): letta qui, sul thread
+        # del loop, e portata per argomento.
+        session_key = current_request_session_key()
 
         effective_timeout = self._resolve_timeout(timeout)
         effective_max = clamp_session_int(
@@ -3277,6 +3342,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
                 max_output_chars=effective_max,
                 timeout=effective_timeout,
                 working_dir=resolved_working_dir,
+                session_key=session_key,
             )
 
         return await run_python_async(
@@ -3288,6 +3354,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
             timeout=effective_timeout,
             max_output_chars=effective_max,
             working_dir=resolved_working_dir,
+            session_key=session_key,
         )
 
     async def _execute_session(
@@ -3301,6 +3368,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
         max_output_chars: int,
         timeout: int | None,
         working_dir: str | None,
+        session_key: str | None,
     ) -> str:
         try:
             session_id, poll = await self._session_manager.start_python(
@@ -3311,10 +3379,12 @@ class PythonExecTool(PythonExecGateMixin, Tool):
                 # Il turno non attraversa il thread grezzo della sessione:
                 # l'involucro costruisce il ponte qui, sul thread dell'event
                 # loop. Vedi `_ContextBoundNamespace`.
-                namespace=_ContextBoundNamespace(self.namespace, working_dir=working_dir),
+                namespace=_ContextBoundNamespace(
+                    self.namespace, working_dir=working_dir, session_key=session_key,
+                ),
                 timeout=timeout,
                 yield_time_ms=clamp_session_int(yield_time_ms, DEFAULT_YIELD_MS, 0, MAX_YIELD_MS),
-                owner_session_key=current_request_session_key(),
+                owner_session_key=session_key,
                 max_output_chars=max_output_chars,
             )
             return format_session_poll(session_id, poll)
