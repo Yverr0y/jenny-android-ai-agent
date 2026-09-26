@@ -16,14 +16,19 @@ _PAIRING = (ASSETS / "shared" / "telegram-pairing.js").read_text(encoding="utf-8
 _I18N = (ASSETS / "shared" / "i18n.js").read_text(encoding="utf-8")
 
 
-def _run(answer: bool) -> dict:
+def _run(answer: bool, *, busy_meanwhile: bool = False) -> dict:
     out = run_js(f"""
 const i18n = {{ locale: 'it', translations: {{ it: {json.dumps(locale("it"), ensure_ascii=False)} }},
 {member(_I18N, "t")} }};
 const calls = {{ unpair: 0, render: 0, asked: [] }};
 const api = {{ unpairTelegram: async () => {{ calls.unpair += 1; return {{ paired: false }}; }} }};
 const showToast = () => {{}};
-const confirmDialog = async (message, okText) => {{ calls.asked.push([message, okText]); return {str(answer).lower()}; }};
+let w = null;
+const confirmDialog = async (message, okText) => {{
+  calls.asked.push([message, okText]);
+  if ({str(busy_meanwhile).lower()}) w._busy = true;   // un'altra operazione partita a dialogo aperto
+  return {str(answer).lower()};
+}};
 
 class Widget {{
   constructor() {{
@@ -34,7 +39,7 @@ class Widget {{
 {member(_PAIRING, "_unpair")}
 }}
 
-const w = new Widget();
+w = new Widget();
 await w._unpair();
 calls.busyAfter = w._busy;
 console.log(JSON.stringify(calls));
@@ -67,3 +72,17 @@ def test_the_confirm_speaks_both_languages() -> None:
     for lang in ("it", "en"):
         text = locale(lang)["settings"]["telegram"]["unpairConfirm"]
         assert "{who}" in text, lang
+
+
+@requires_node
+def test_an_operation_started_during_the_question_is_not_overrun() -> None:
+    """RC6 della terza revisione: la domanda viene *prima* di ``_busy``, quindi
+    mentre e' aperta un'altra operazione del widget (l'interruttore) puo'
+    partire. Il secondo controllo di ``_busy`` dopo il si' e' quel che impedisce
+    di scollegare sopra di lei — e di rimettere ``_busy`` a falso sotto i suoi
+    piedi. Non aveva un test: toglierlo restava verde."""
+    calls = _run(True, busy_meanwhile=True)
+
+    assert calls["unpair"] == 0
+    assert calls["render"] == 0
+    assert calls["busyAfter"] is True, "il _busy dell'altra operazione e' stato azzerato"
