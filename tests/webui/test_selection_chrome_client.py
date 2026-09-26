@@ -174,3 +174,30 @@ def test_a_tap_on_the_text_itself_is_left_to_the_browser() -> None:
       assert.equal(prevented, 0);
       assert.equal(removedRanges, 0);
     """)
+
+
+def test_a_selection_inside_a_field_is_not_a_reading_selection() -> None:
+    """TD16 della terza revisione: ``activeElement`` era sempre ``null`` qui, e
+    ``inEditableField`` non girava mai — toglierlo lasciava tutto verde. Un
+    campo col fuoco (il composer, un input, un ``contenteditable``) ha una sua
+    selezione, che non e' la lettura di una bolla: niente chrome trasparente."""
+    _run_js("""
+      exposeSelectionState();
+      const contains = () => true;
+      for (const active of [
+        { tagName: 'TEXTAREA' }, { tagName: 'INPUT' }, { tagName: 'DIV', isContentEditable: true },
+      ]) {
+        document.activeElement = active;
+        select();
+        assert.equal(hasSelection(), false, JSON.stringify(active));
+        assert.equal(selectionInside({ contains }), false, JSON.stringify(active));
+        assert.equal(root.cls.has('has-selection'), false, JSON.stringify(active));
+        deselect();
+      }
+      // E fuori dal campo la stessa selezione torna a contare.
+      document.activeElement = { tagName: 'BODY' };
+      select();
+      assert.equal(hasSelection(), true);
+      assert.equal(selectionInside({ contains }), true);
+      assert.equal(root.cls.has('has-selection'), true);
+    """)
