@@ -259,10 +259,9 @@ class NotifierBridge(context: Context) {
             // intent da un rilancio qualunque dell'activity. Senza,
             // MainActivity.onNewIntent — che instrada solo CATEGORY_HOME — non
             // aveva niente da riconoscere e il tap riportava l'app dov'era,
-            // mini-app aperta compresa, invece che in chat.
-            val intent = Intent(context, MainActivity::class.java)
-                .setAction(MainActivity.ACTION_OPEN_CHAT)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // mini-app aperta compresa, invece che in chat. Porta anche il
+            // gettone che la distingue da un'action scritta da un'altra app.
+            val intent = MainActivity.openChatIntent(context)
             val pending = PendingIntent.getActivity(
                 context,
                 tag.hashCode(),

@@ -2809,10 +2809,7 @@ object FloatingOverlayController {
     private fun openChat(ctx: Context) {
         collapse()
         try {
-            val intent = Intent(ctx, MainActivity::class.java)
-                .setAction(MainActivity.ACTION_OPEN_CHAT)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            ctx.startActivity(intent)
+            ctx.startActivity(MainActivity.openChatIntent(ctx))
         } catch (e: Exception) {
             Log.i(TAG, "Could not open the chat: ${e.javaClass.simpleName}")
         }

@@ -68,6 +68,14 @@ def _fun_body(source: str, name: str) -> str:
     raise AssertionError(f"graffe non bilanciate in {name}")
 
 
+def _until_blank_line(source: str, name: str) -> str:
+    """Una funzione a espressione (``fun f(): T = ...``), fino alla riga vuota."""
+    match = re.search(rf"\bfun {re.escape(name)}\s*\(", source)
+    assert match, f"funzione {name} non trovata"
+    end = source.find("\n\n", match.end())
+    return source[match.start() : end if end >= 0 else len(source)]
+
+
 def _code_only(source: str) -> str:
     """Via i commenti: qui si asserisce su cosa il codice *fa*, e più di un
     commento nomina apposta la riga che è stata tolta."""
@@ -271,11 +279,38 @@ def test_the_alert_notification_carries_a_routable_action() -> None:
     proattivo non veniva mostrato.
     """
     notifier = read_source(NOTIFIER)
-    assert "setAction(MainActivity.ACTION_OPEN_CHAT)" in notifier
+    assert "MainActivity.openChatIntent(context)" in notifier
     kotlin = _main_activity()
-    assert re.search(r"\bconst val ACTION_OPEN_CHAT\b", kotlin), (
-        "l'action deve essere pubblica: NotifierBridge la legge da qui"
-    )
+    assert re.search(r"\bconst val ACTION_OPEN_CHAT\b", kotlin)
+    builder = _code_only(_until_blank_line(kotlin, "openChatIntent"))
+    assert ".setAction(ACTION_OPEN_CHAT)" in builder
+
+
+def test_only_our_open_chat_clears_the_alerts() -> None:
+    """L'activity è esportata (è il launcher): l'action la scrive chiunque, e il
+    ramo del tap **cancella gli avvisi**. Un'altra app poteva far sparire dalla
+    tendina i messaggi proattivi non letti (voce AN15 della terza revisione).
+    Ora l'intent nostro porta un gettone casuale tenuto nelle preferenze private,
+    e i due rami — ``onNewIntent`` e il gemello in ``onCreate`` — lo esigono."""
+    kotlin = _main_activity()
+    builder = _code_only(_until_blank_line(kotlin, "openChatIntent"))
+    assert ".putExtra(EXTRA_OPEN_CHAT_TOKEN, openChatToken(context))" in builder
+    check = _code_only(_fun_body(kotlin, "isOurOpenChat"))
+    assert "getStringExtra(EXTRA_OPEN_CHAT_TOKEN)" in check
+    assert "MessageDigest.isEqual(" in check
+    token = _code_only(_fun_body(kotlin, "openChatToken"))
+    assert "SecureRandom()" in token and "Context.MODE_PRIVATE" in token
+    for fun in ("onNewIntent", "onCreate"):
+        body = _code_only(_fun_body(kotlin, fun))
+        assert "isOurOpenChat(this, intent)" in body, f"{fun} non controlla il gettone"
+        assert "intent?.action == ACTION_OPEN_CHAT" not in body, (
+            f"{fun}: l'action da sola non basta più"
+        )
+    # Chi porta in chat dall'interno usa lo stesso costruttore, gettone compreso.
+    for sender in (NOTIFIER, JAVA / "FloatingOverlayController.kt"):
+        src = _code_only(read_source(sender))
+        assert "setAction(MainActivity.ACTION_OPEN_CHAT)" not in src
+        assert "MainActivity.openChatIntent(" in src
 
 
 def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
@@ -291,7 +326,7 @@ def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
     """
     kotlin = _main_activity()
     on_new_intent = _code_only(_fun_body(kotlin, "onNewIntent"))
-    assert "ACTION_OPEN_CHAT" in on_new_intent
+    assert "isOurOpenChat(this, intent)" in on_new_intent
     assert "OPEN_CHAT_JS" in on_new_intent
     open_chat_js = re.search(r"OPEN_CHAT_JS = \"\"\"(.*?)\"\"\"", kotlin, re.S)
     assert open_chat_js, "OPEN_CHAT_JS non trovato"

@@ -125,6 +125,50 @@ class MainActivity : AppCompatActivity() {
         const val ACTION_OPEN_CHAT = "com.flagdizero.jenny.action.OPEN_CHAT"
 
         /**
+         * Il gettone che dice «questo [ACTION_OPEN_CHAT] l'abbiamo fatto noi».
+         *
+         * L'activity è esportata (è il launcher), quindi l'action da sola
+         * l'arriva a mandare qualunque app con un intent esplicito — e il tap
+         * sull'alert **cancella gli avvisi**: un'altra app poteva far sparire
+         * dalla tendina i messaggi proattivi senza che nessuno li avesse letti.
+         * Il gettone è un segreto casuale nelle preferenze private dell'app,
+         * uguale fra un processo e l'altro (un `PendingIntent` di un alert
+         * sopravvive alla morte del processo che l'ha creato); senza, l'intent
+         * vale come un avvio qualunque: niente chat forzata, niente avvisi
+         * cancellati.
+         */
+        private const val EXTRA_OPEN_CHAT_TOKEN = "com.flagdizero.jenny.extra.OPEN_CHAT_TOKEN"
+        private const val PREF_OPEN_CHAT_TOKEN = "open_chat_token"
+
+        private fun openChatToken(context: Context): String = synchronized(this) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getString(PREF_OPEN_CHAT_TOKEN, null) ?: run {
+                val bytes = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+                val fresh = bytes.joinToString("") { "%02x".format(it) }
+                // commit(): il gettone deve essere quello su disco prima che un
+                // PendingIntent lo porti in giro.
+                prefs.edit().putString(PREF_OPEN_CHAT_TOKEN, fresh).commit()
+                fresh
+            }
+        }
+
+        /** L'intent con cui un nostro alert (o la mascotte) porta in chat. */
+        fun openChatIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java)
+                .setAction(ACTION_OPEN_CHAT)
+                .putExtra(EXTRA_OPEN_CHAT_TOKEN, openChatToken(context))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        /** È un [ACTION_OPEN_CHAT] fatto da noi? (v. [EXTRA_OPEN_CHAT_TOKEN]) */
+        private fun isOurOpenChat(context: Context, intent: Intent?): Boolean {
+            if (intent?.action != ACTION_OPEN_CHAT) return false
+            val presented = intent.getStringExtra(EXTRA_OPEN_CHAT_TOKEN) ?: return false
+            return java.security.MessageDigest.isEqual(
+                presented.toByteArray(), openChatToken(context).toByteArray()
+            )
+        }
+
+        /**
          * Porta la WebUI in chat da un tap sull'alert. `goHome()` è l'unico
          * punto che smonta *tutti* i livelli sopra la vista (mini-app compresa,
          * col suo cleanup); lo `switchMode` dopo serve perché la vista "home"
@@ -506,8 +550,9 @@ class MainActivity : AppCompatActivity() {
 
         // Tap sull'alert con l'activity morta: qui non c'è nessuna SPA da
         // instradare, la richiesta deve arrivare all'URL iniziale (v.
-        // buildGatewayUrl). La chat si aprirà: gli alert sono consumati.
-        if (intent?.action == ACTION_OPEN_CHAT) {
+        // buildGatewayUrl). La chat si aprirà: gli alert sono consumati. Solo
+        // per un intent nostro (v. EXTRA_OPEN_CHAT_TOKEN).
+        if (isOurOpenChat(this, intent)) {
             openChatOnLoad = true
             NotifierBridge.clearAlerts(this, "cold-start-alert-tap")
         }
@@ -678,8 +723,10 @@ class MainActivity : AppCompatActivity() {
         // davvero aperta. Stavano in onResume, che in un launcher scatta a
         // ogni ritorno alla home: l'alert veniva cancellato comunque, fosse
         // stato letto o no, e il messaggio proattivo restava senza alcun
-        // segnale.
-        if (intent?.action == ACTION_OPEN_CHAT) {
+        // segnale. Solo per un intent nostro: l'action la può scrivere
+        // chiunque (v. EXTRA_OPEN_CHAT_TOKEN), e senza gettone l'intent
+        // prosegue come un avvio qualunque.
+        if (isOurOpenChat(this, intent)) {
             webView?.evaluateJavascript(OPEN_CHAT_JS) { result ->
                 if (result?.trim() == "true") {
                     NotifierBridge.clearAlerts(this@MainActivity, "alert-tap")
