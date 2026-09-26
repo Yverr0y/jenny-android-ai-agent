@@ -867,7 +867,14 @@ class GatewayHTTPHandler:
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-                "font-src 'self'; connect-src 'self' ws: wss:; "
+                "font-src 'self'; "
+                # Solo 'self': in CSP3 ``'self'`` copre anche ws:/wss: verso lo
+                # stesso host:porta (misurato in Chromium 152: la WS dello
+                # stesso host si apre, un'altra porta di 127.0.0.1 e
+                # ``localhost`` sono bloccate). La shell apre solo quella
+                # (``ws-manager.js::_makeUrl`` usa ``location.host``); i vecchi
+                # ``ws: wss:`` aprivano un canale verso qualunque host.
+                "connect-src 'self'; "
                 # La vista esterna di una Jenny App e' servita dal proxy su
                 # loopback (``apps/proxy.py``) su una porta EFFIMERA, quindi e'
                 # un'altra origine e non e' 'self'. Senza questa direttiva
@@ -884,7 +891,9 @@ class GatewayHTTPHandler:
                 # del telefono non sono un canale di esfiltrazione — sono sulla
                 # stessa macchina su cui gia' gira. Le direttive che contano
                 # contro quello scenario (``script-src``, ``connect-src``,
-                # ``object-src``, ``base-uri``) restano intatte.
+                # ``object-src``, ``base-uri``) restano chiuse su 'self' o
+                # 'none': ``connect-src`` lo e' dal 26/09/2026, prima concedeva
+                # ``ws: wss:`` verso ogni host e questo commento lo taceva.
                 "frame-src 'self' http://127.0.0.1:*; "
                 "object-src 'none'; base-uri 'none'",
             ))

@@ -57,7 +57,10 @@ _EXPECTED_POLICY: dict[str, list[str]] = {
     "style-src": ["'self'", "'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:"],
     "font-src": ["'self'"],
-    "connect-src": ["'self'", "ws:", "wss:"],
+    # Solo 'self': in CSP3 copre anche ws:/wss: verso lo stesso host:porta
+    # (misurato in Chromium 152), l'unica WS che la shell apre. ``ws: wss:``
+    # aprivano un canale di esfiltrazione verso qualunque host.
+    "connect-src": ["'self'"],
     "frame-src": ["'self'", "http://127.0.0.1:*"],
     "object-src": ["'none'"],
     "base-uri": ["'none'"],
