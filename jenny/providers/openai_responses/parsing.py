@@ -285,27 +285,45 @@ async def _events_with_budget(
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Gli eventi di *events*, ciascuno atteso al più il budget in vigore.
 
-    Senza budget è un passante. Il primo evento ha il budget lungo (il modello
-    sta ancora ragionando), i successivi l'idle; allo scadere ``StreamTimeout``
-    dice quale dei due.
+    Senza budget è un passante. Finché il modello non ha prodotto output vale
+    il budget lungo (sta ancora ragionando), dopo l'idle; allo scadere
+    ``StreamTimeout`` dice quale dei due. Gli eventi di servizio che aprono lo
+    stream (``response.created``, ``in_progress``, l'annuncio di un item) non
+    contano: arrivano subito, e un ragionamento muto può durare minuti.
     """
     if idle_timeout_s is None:
         async for event in events:
             yield event
         return
     first_budget = first_output_timeout_s or idle_timeout_s
-    saw_event = False
+    saw_output = False
     iterator = events.__aiter__()
     while True:
-        budget = idle_timeout_s if saw_event else first_budget
+        budget = idle_timeout_s if saw_output else first_budget
         try:
             event = await asyncio.wait_for(iterator.__anext__(), timeout=budget)
         except StopAsyncIteration:
             return
         except asyncio.TimeoutError as exc:
-            raise StreamTimeout(budget, saw_output=saw_event) from exc
-        saw_event = True
+            raise StreamTimeout(budget, saw_output=saw_output) from exc
+        if not saw_output:
+            saw_output = _is_output_event(event)
         yield event
+
+
+def _is_output_event(event: dict[str, Any]) -> bool:
+    """Vero se *event* porta output del modello: testo, ragionamento, tool call."""
+    event_type = str(event.get("type") or "")
+    if event_type == "response.output_item.added":
+        item = event.get("item") or {}
+        return isinstance(item, dict) and item.get("type") == "function_call"
+    if event_type.startswith("response.function_call_arguments."):
+        return True
+    if event_type.endswith(".delta"):
+        return bool(event.get("delta"))
+    if event_type in {"response.output_text.done", "response.reasoning_summary_text.done"}:
+        return bool(event.get("text"))
+    return False
 
 
 def _extract_reasoning_summary_from_output(output: Any) -> str | None:
