@@ -21,7 +21,7 @@ from jenny.cron.service import CronService
 from jenny.cron.types import CronJob, CronPayload, CronSchedule, CronTaskCheckState
 from jenny.webui.cron_api import webui_cron_payload
 
-_WATERING = "- Ogni ciclo guarda l'umidita' del vaso e avvisami solo sotto il 15%."
+_RAIN = "- Ogni ciclo guarda la pioggia in citta' e avvisami solo sopra il 70%."
 _PILLS = "- Alle 9 ricordami le gocce."
 
 
@@ -175,7 +175,7 @@ def test_a_task_file_with_only_headings_is_also_checking_nothing(cron, tmp_path)
 def test_an_unreadable_task_file_is_a_third_state(cron, tmp_path, monkeypatch):
     """Il file che c'e' e non si legge e' un guasto, non un file mai creato."""
     path = tmp_path / "HEARTBEAT.md"
-    path.write_text(_heartbeat_file(_WATERING), encoding="utf-8")
+    path.write_text(_heartbeat_file(_RAIN), encoding="utf-8")
     original = type(path).read_text
 
     def _boom(self, *a, **kw):
@@ -194,7 +194,7 @@ def test_an_unreadable_task_file_is_a_third_state(cron, tmp_path, monkeypatch):
 
 def test_healthy_tasks_are_listed_with_no_check_entries(cron, tmp_path):
     (tmp_path / "HEARTBEAT.md").write_text(
-        _heartbeat_file(_WATERING, _PILLS), encoding="utf-8"
+        _heartbeat_file(_RAIN, _PILLS), encoding="utf-8"
     )
     cron.register_system_job(_system("heartbeat"))
 
@@ -210,7 +210,7 @@ def test_the_join_marks_broken_and_pending_and_leaves_the_rest_ok(cron, tmp_path
     """Le tre specie in una volta: il file dice quali esistono, lo store quali no."""
     from jenny.cron.heartbeat_tasks import parse_heartbeat_tasks
 
-    content = _heartbeat_file(_WATERING, _PILLS)
+    content = _heartbeat_file(_RAIN, _PILLS)
     (tmp_path / "HEARTBEAT.md").write_text(content, encoding="utf-8")
     tasks = parse_heartbeat_tasks(content)
 
@@ -243,7 +243,7 @@ def test_a_check_without_a_task_becomes_an_orphan_not_a_broken_check(cron, tmp_p
     Mostrarla fra i controlli rotti lo accuserebbe di un controllo che ha tolto;
     nasconderla lascerebbe i contatori del job senza causa visibile.
     """
-    (tmp_path / "HEARTBEAT.md").write_text(_heartbeat_file(_WATERING), encoding="utf-8")
+    (tmp_path / "HEARTBEAT.md").write_text(_heartbeat_file(_RAIN), encoding="utf-8")
     cron.register_system_job(_system("heartbeat"))
     job = cron.get_job("heartbeat")
     job.state.task_checks["un-id-che-non-e-piu-nel-file"] = CronTaskCheckState(
@@ -322,7 +322,7 @@ def test_the_display_timezone_is_the_job_s_own_then_the_default(cron, tmp_path):
 def test_the_monitor_mode_travels(cron, tmp_path):
     """Un monitor che tace ha funzionato: senza questo bit il client non lo sa."""
     cron.add_job(
-        "monitor", CronSchedule(kind="every", every_ms=60_000), _WATERING, mode="monitor"
+        "monitor", CronSchedule(kind="every", every_ms=60_000), _RAIN, mode="monitor"
     )
 
     assert webui_cron_payload(cron, config=_config(tmp_path))["jobs"][0]["mode"] == "monitor"

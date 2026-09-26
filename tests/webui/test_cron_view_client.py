@@ -433,10 +433,10 @@ def test_a_drawer_shows_only_its_own_jobs() -> None:
     out = _run_js(f"""
       const all = buildCronView({_payload(jobs=', '.join([
           _job('dream', 'system'), _job('gardener', 'system'),
-          _job('heartbeat', 'system'), _job('acqua-basilico', 'user')]))}, {{ tr }});
+          _job('heartbeat', 'system'), _job('pioggia-oslo', 'user')]))}, {{ tr }});
       const hands = buildCronView({_payload(jobs=', '.join([
           _job('dream', 'system'), _job('gardener', 'system'),
-          _job('heartbeat', 'system'), _job('acqua-basilico', 'user')]))},
+          _job('heartbeat', 'system'), _job('pioggia-oslo', 'user')]))},
         {{ tr, keep: (j) => j.kind !== 'system' || j.id === 'heartbeat' }});
       console.log(JSON.stringify({{
         all: all.rows.map((r) => r.id),
@@ -444,8 +444,8 @@ def test_a_drawer_shows_only_its_own_jobs() -> None:
       }}));
     """)
     visto = json.loads(out)
-    assert sorted(visto["all"]) == ["acqua-basilico", "dream", "gardener", "heartbeat"]
-    assert sorted(visto["hands"]) == ["acqua-basilico", "heartbeat"], (
+    assert sorted(visto["all"]) == ["dream", "gardener", "heartbeat", "pioggia-oslo"]
+    assert sorted(visto["hands"]) == ["heartbeat", "pioggia-oslo"], (
         "il cassetto Mani mostra lavori che appartengono a un altro cassetto"
     )
 
@@ -458,7 +458,7 @@ def test_the_banner_talks_about_the_jobs_you_can_see() -> None:
         _job('dream', 'system', effective='inert', next_ms='null'),
         _job('gardener', 'system', effective='inert', next_ms='null'),
         _job('heartbeat', 'system'),
-        _job('acqua-basilico', 'user'),
+        _job('pioggia-oslo', 'user'),
     ])
     out = _run_js(f"""
       const all = buildCronView({_payload(jobs=off)}, {{ tr }});
@@ -481,7 +481,7 @@ def test_the_count_describes_what_is_on_screen() -> None:
     lavori» sopra due righe si legge come un guasto."""
     jobs = ', '.join([
         _job('dream', 'system'), _job('gardener', 'system'),
-        _job('heartbeat', 'system'), _job('acqua-basilico', 'user'),
+        _job('heartbeat', 'system'), _job('pioggia-oslo', 'user'),
     ])
     out = _run_js(f"""
       const all = buildCronView({_payload(jobs=jobs)}, {{ tr }});
@@ -497,7 +497,7 @@ def test_the_count_describes_what_is_on_screen() -> None:
 def test_without_a_filter_nothing_changes() -> None:
     """Il filtro e' un parametro, non un cambio di comportamento: chi non lo
     passa deve vedere esattamente quel che vedeva prima."""
-    jobs = ', '.join([_job('dream', 'system'), _job('acqua-basilico', 'user')])
+    jobs = ', '.join([_job('dream', 'system'), _job('pioggia-oslo', 'user')])
     out = _run_js(f"""
       const a = buildCronView({_payload(jobs=jobs)}, {{ tr }});
       const b = buildCronView({_payload(jobs=jobs)}, {{ tr, keep: undefined }});
@@ -542,11 +542,11 @@ def test_the_hands_drawer_keeps_what_she_does_for_you() -> None:
         {{ id: 'gardener', kind: 'system' }},
         {{ id: 'update_check', kind: 'system' }},
         {{ id: 'heartbeat', kind: 'system' }},
-        {{ id: 'acqua-basilico', kind: 'user' }},
+        {{ id: 'pioggia-oslo', kind: 'user' }},
       ];
       console.log(JSON.stringify(jobs.filter(keep).map((j) => j.id)));
     """)
-    assert sorted(json.loads(out)) == ["acqua-basilico", "heartbeat"], json.loads(out)
+    assert sorted(json.loads(out)) == ["heartbeat", "pioggia-oslo"], json.loads(out)
 
 
 # ── un payload senza `jobs`, con un filtro attivo ───────────────────────────

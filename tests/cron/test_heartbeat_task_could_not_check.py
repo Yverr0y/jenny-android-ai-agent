@@ -1,7 +1,7 @@
 """L'heartbeat può ammettere che un suo task non è partito (B13).
 
 B8 aveva dato il terzo esito ai monitor, ma il guasto osservato sul telefono era
-un task di ``HEARTBEAT.md``: il controllo delle piante girava di lì. La
+un task di ``HEARTBEAT.md``: il controllo della pioggia girava di lì. La
 differenza è la granularità — un run copre N task, e un contatore solo per tutto
 il file direbbe "l'heartbeat è rotto" mentre tre quarti funziona.
 
@@ -10,7 +10,7 @@ Il vincolo che questi test difendono, nell'ordine:
 1. **Un giro senza novità non parla, e non vede un prompt diverso.** È il valore
    dell'heartbeat: costa zero quando non c'è niente da dire.
 2. Un task saltato *perché le sue istruzioni dicevano di saltarlo in silenzio*
-   ha fatto quello che doveva: non è un guasto (il task WaterBot reale dice "se
+   ha fatto quello che doveva: non è un guasto (il task RainCheck reale dice "se
    pibox è irraggiungibile salta il ciclo in silenzio").
 3. Tre fallimenti di fila di **un** task producono **un** messaggio, che nomina
    quel task e non gli altri.
@@ -41,8 +41,8 @@ from jenny.cron.service import CronService
 from jenny.cron.types import CronJob, CronJobState, CronPayload, CronSchedule
 from jenny.runtime.cron_dispatch import _HEARTBEAT_PREAMBLE, CronDispatcher
 
-_WATERBOT = (
-    "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo se una è sotto il 15%. "
+_RAINCHECK = (
+    "- Ogni ciclo, controlla la pioggia nelle città e avvisami solo se una è sopra il 70%. "
     "Se pibox è irraggiungibile salta il ciclo in silenzio."
 )
 _VITAMINS = "- Alle 9 ricordami le vitamine."
@@ -188,7 +188,7 @@ class _Harness:
 
 @pytest.fixture
 def two_tasks(tmp_path: Path) -> _Harness:
-    return _Harness(tmp_path, _heartbeat_md(_WATERBOT, _VITAMINS))
+    return _Harness(tmp_path, _heartbeat_md(_RAINCHECK, _VITAMINS))
 
 
 class TestSilenceStaysFree:
@@ -214,7 +214,7 @@ class TestSilenceStaysFree:
     async def test_an_instructed_silent_skip_is_not_a_failure(
         self, two_tasks: _Harness
     ) -> None:
-        """Il task WaterBot dice "se pibox è irraggiungibile salta il ciclo in
+        """Il task RainCheck dice "se pibox è irraggiungibile salta il ciclo in
         silenzio": saltare è ciò che gli è stato chiesto, e non deve contare come
         un controllo mancato — neanche dopo dieci cicli."""
         two_tasks.agent.silently_skipped = {1}
@@ -255,12 +255,12 @@ class TestTheStreakSpeaksOncePerTask:
         assert len(two_tasks.agent.messages) == 1
 
     async def test_the_message_names_the_broken_task(self, two_tasks: _Harness) -> None:
-        """"Il controllo delle piante non parte" è utile; "l'heartbeat è rotto" no."""
+        """"Il controllo della pioggia non parte" è utile; "l'heartbeat è rotto" no."""
         two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
-        assert "controlla l'umidità delle piante" in two_tasks.agent.messages[0]
+        assert "controlla la pioggia nelle città" in two_tasks.agent.messages[0]
 
     async def test_the_healthy_task_in_the_same_run_is_never_mentioned(
         self, two_tasks: _Harness
@@ -284,7 +284,7 @@ class TestTheStreakSpeaksOncePerTask:
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         assert len(two_tasks.agent.messages) == 1
-        assert "umidità delle piante" in two_tasks.agent.messages[0]
+        assert "pioggia nelle città" in two_tasks.agent.messages[0]
         assert "vitamine" in two_tasks.agent.messages[0]
 
     async def test_the_alert_is_not_repeated_while_the_task_stays_broken(
@@ -376,11 +376,11 @@ class TestTheFileKeepsChanging:
         È il modo di sbagliare scelto: un avviso in ritardo di K cicli è meglio
         di un avviso che parla di un controllo che l'utente ha appena cambiato.
         """
-        harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
+        harness = _Harness(tmp_path, _heartbeat_md(_RAINCHECK))
         harness.agent.broken = {1: "pibox non raggiungibile"}
         await harness.cycles(ESCALATE_AFTER_FAILURES - 1)
 
-        harness.rewrite(_heartbeat_md(_WATERBOT + " Soglia: 20%."))
+        harness.rewrite(_heartbeat_md(_RAINCHECK + " Soglia: 20%."))
         await harness.cycles(1)
 
         assert harness.agent.messages == []
@@ -405,12 +405,12 @@ class TestTheFileKeepsChanging:
         two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES - 1)
 
-        two_tasks.rewrite(_heartbeat_md(_VITAMINS, _WATERBOT))
+        two_tasks.rewrite(_heartbeat_md(_VITAMINS, _RAINCHECK))
         two_tasks.agent.broken = {2: "pibox non raggiungibile"}
         await two_tasks.cycles(1)
 
         assert len(two_tasks.agent.messages) == 1
-        assert "umidità delle piante" in two_tasks.agent.messages[0]
+        assert "pioggia nelle città" in two_tasks.agent.messages[0]
 
     async def test_an_unnumbered_marker_with_several_tasks_blames_nobody(
         self, two_tasks: _Harness
@@ -431,7 +431,7 @@ class TestTheFileKeepsChanging:
     ) -> None:
         """Un file con un task solo non ha niente da distinguere: chiedere il
         numero sarebbe solo un'occasione di sbagliarlo."""
-        harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
+        harness = _Harness(tmp_path, _heartbeat_md(_RAINCHECK))
         harness.agent.broken = {1: "pibox non raggiungibile"}
         harness.agent.omits_the_task_number = True
 
@@ -486,7 +486,7 @@ class TestPersistedState:
     async def test_the_run_summary_says_which_task_and_why(
         self, two_tasks: _Harness
     ) -> None:
-        """La risposta a "il controllo delle piante funziona?" senza aprire logcat."""
+        """La risposta a "il controllo della pioggia funziona?" senza aprire logcat."""
         two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(1)
 

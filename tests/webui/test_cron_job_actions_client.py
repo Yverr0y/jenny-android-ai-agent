@@ -50,7 +50,7 @@ class Fake {{
 }}
 
 const row = (over = {{}}) => ({{
-  id: 'ab12cd34', name: 'Acqua al basilico', purpose: null, message: 'annaffia',
+  id: 'ab12cd34', name: 'Pioggia a Oslo', purpose: null, message: 'controlla la pioggia',
   heartbeat: null, runs: [], actions: ['pause', 'remove'], pausedAtMs: null, ...over,
 }});
 const s = new Fake();
@@ -89,7 +89,7 @@ def test_pause_goes_straight_to_the_server_and_reloads() -> None:
 def test_delete_asks_first_and_a_no_touches_nothing() -> None:
     log = _run("dialogChoice = 'remove'; confirmAnswer = false; await s._showCronJobDialog(row());")
     assert log[1][0] == "confirm"
-    assert "Acqua al basilico" in log[1][1]
+    assert "Pioggia a Oslo" in log[1][1]
     assert log[1][2] == "Elimina"
     assert len(log) == 2, "dopo un no non deve partire niente"
 

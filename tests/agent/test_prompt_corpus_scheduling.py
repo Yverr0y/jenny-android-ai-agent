@@ -341,7 +341,7 @@ def _heartbeat_halves() -> dict[str, str]:
     from jenny.cron.heartbeat_tasks import HeartbeatTask, followup_block
     from jenny.runtime.cron_dispatch import _HEARTBEAT_PREAMBLE
 
-    pending = [HeartbeatTask(id="t1", index=1, label="controlla le piante", text="…")]
+    pending = [HeartbeatTask(id="t1", index=1, label="controlla la pioggia", text="…")]
     return {
         "_HEARTBEAT_PREAMBLE (jenny/runtime/cron_dispatch.py)": _HEARTBEAT_PREAMBLE,
         "followup_block (jenny/cron/heartbeat_tasks.py)": followup_block(pending, []),

@@ -37,8 +37,8 @@ from jenny.cron.heartbeat_tasks import (
 )
 from jenny.cron.types import CronJobState, CronTaskCheckState
 
-_WATERBOT = (
-    "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo sotto il 15%. "
+_RAINCHECK = (
+    "- Ogni ciclo, controlla la pioggia nelle città e avvisami solo sopra il 70%. "
     "Se pibox è irraggiungibile salta il ciclo in silenzio."
 )
 _VITAMINS = "- Alle 9 ricordami le vitamine."
@@ -51,15 +51,15 @@ def _file(*tasks: str) -> str:
 
 class TestReadingTheFile:
     def test_each_bullet_is_one_task(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
 
         assert [t.index for t in tasks] == [1, 2]
-        assert tasks[0].label.startswith("Ogni ciclo, controlla l'umidità")
+        assert tasks[0].label.startswith("Ogni ciclo, controlla la pioggia")
         assert tasks[1].label == "Alle 9 ricordami le vitamine."
 
     def test_an_indented_line_continues_the_task_above_it(self) -> None:
         """Un sotto-punto è parte del task, non un task suo."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, "  - solo se il sole è alto"))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, "  - solo se il sole è alto"))
 
         assert len(tasks) == 1
         assert "solo se il sole è alto" in tasks[0].text
@@ -91,15 +91,15 @@ class TestReadingTheFile:
 
 class TestTaskIdentity:
     def test_the_same_task_keeps_its_id_across_reads(self) -> None:
-        first = parse_heartbeat_tasks(_file(_WATERBOT))[0]
-        second = parse_heartbeat_tasks(_file(_WATERBOT))[0]
+        first = parse_heartbeat_tasks(_file(_RAINCHECK))[0]
+        second = parse_heartbeat_tasks(_file(_RAINCHECK))[0]
 
         assert first.id == second.id
 
     def test_moving_a_task_in_the_file_does_not_change_its_id(self) -> None:
         """Riordinare l'elenco è la modifica più frequente: non deve contare."""
-        before = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
-        after = parse_heartbeat_tasks(_file(_VITAMINS, _WATERBOT))
+        before = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
+        after = parse_heartbeat_tasks(_file(_VITAMINS, _RAINCHECK))
 
         assert before[0].id == after[1].id
         assert after[1].index == 2
@@ -162,7 +162,7 @@ class TestTheMarker:
 
 class TestAttributingAMarkToATask:
     def test_with_one_task_a_marker_without_a_number_is_unambiguous(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
 
         reasons, unattributed = attribute_marks(tasks, [CouldNotCheckMark(None, "pibox down")])
 
@@ -171,7 +171,7 @@ class TestAttributingAMarkToATask:
 
     def test_with_two_tasks_a_marker_without_a_number_blames_nobody(self) -> None:
         """Incolpare il task sbagliato produrrebbe un avviso su un controllo sano."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
 
         reasons, unattributed = attribute_marks(tasks, [CouldNotCheckMark(None, "boh")])
 
@@ -179,7 +179,7 @@ class TestAttributingAMarkToATask:
         assert unattributed == ["boh"]
 
     def test_a_number_that_does_not_exist_blames_nobody(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
 
         reasons, unattributed = attribute_marks(tasks, [CouldNotCheckMark("7", "boh")])
 
@@ -194,7 +194,7 @@ class TestTheStateSelfHeals:
         )
 
     def test_a_task_that_runs_again_loses_its_entry(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = self._state_with(tasks[0].id, 2)
 
         outcome = record_task_outcomes(
@@ -208,14 +208,14 @@ class TestTheStateSelfHeals:
         """Altrimenti lo store cresce a ogni task che l'utente cancella."""
         gone = parse_heartbeat_tasks(_file("- un task che non c'è più"))[0]
         state = self._state_with(gone.id, 2)
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
 
         record_task_outcomes(state, tasks, [], now_ms=1, escalating=[])
 
         assert state.task_checks == {}
 
     def test_the_streak_of_the_broken_task_grows_alone(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState()
 
         for _ in range(3):
@@ -234,7 +234,7 @@ class TestTheStateSelfHeals:
         assert entry.label.startswith("Ogni ciclo")
 
     def test_escalation_is_due_one_run_before_the_threshold(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = self._state_with(tasks[0].id, 1)
         assert tasks_due_for_escalation(state, tasks) == []
 
@@ -242,7 +242,7 @@ class TestTheStateSelfHeals:
         assert tasks_due_for_escalation(state, tasks) == [tasks[0]]
 
     def test_a_task_already_escalated_is_not_due_again(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(
@@ -269,7 +269,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
 
     def test_a_delegated_task_keeps_its_entry_instead_of_being_pruned(self) -> None:
         """Senza questo, ogni giro azzererebbe la sequenza prima del verdetto."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={tasks[0].id: CronTaskCheckState(consecutive_could_not_check=2)}
         )
@@ -290,7 +290,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
         assert entry.pending_since_ms == 11
 
     def test_the_verdict_from_the_announce_turn_counts_a_failure(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={tasks[0].id: CronTaskCheckState(pending_since_ms=11)}
         )
@@ -298,7 +298,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
         outcome = record_followup_outcomes(
             state,
             tasks,
-            [CouldNotCheckMark(None, "import di wb_probe fallito")],
+            [CouldNotCheckMark(None, "import di rc_probe fallito")],
             now_ms=12,
             escalating=[],
         )
@@ -311,7 +311,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
     def test_the_announce_turn_never_prunes(self) -> None:
         """Ha in mano un risultato, non il file: dedurre da qui che gli altri
         task sono sani cancellerebbe sequenze che nessuno ha smentito."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(pending_since_ms=11),
@@ -326,7 +326,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
         assert state.task_checks[tasks[1].id].consecutive_could_not_check == 2
 
     def test_a_verdict_that_never_arrives_is_resolved_in_favour_of_the_task(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(
@@ -340,7 +340,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
         assert pending_tasks(state, tasks) == []
 
     def test_the_announce_block_names_only_the_pending_checks(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
 
         block = followup_block([tasks[0]], [])
 
@@ -350,7 +350,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
         assert "EXACTLY ONCE" not in block
 
     def test_the_announce_block_carries_the_escalation_when_it_is_due(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
 
         block = followup_block([tasks[0]], [tasks[0]])
 
@@ -384,7 +384,7 @@ class TestOneFaultIsOneWarning:
         )
 
     def test_a_markerless_followup_does_not_erase_the_memory_of_having_spoken(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = self._broken_and_announced(tasks[0].id)
 
         assert resolve_pending_delegations(state) == ["Ogni ciclo"]
@@ -397,7 +397,7 @@ class TestOneFaultIsOneWarning:
 
     def test_the_streak_still_restarts_from_zero(self) -> None:
         """La direzione dell'errore non cambia: da uno stato vecchio non nasce un allarme."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = self._broken_and_announced(tasks[0].id)
 
         resolve_pending_delegations(state)
@@ -414,7 +414,7 @@ class TestOneFaultIsOneWarning:
 
     def test_a_pending_entry_with_nothing_to_remember_is_still_dropped(self) -> None:
         """Senza un avviso già dato non c'è niente da conservare, e lo store non deve crescere."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(
@@ -428,7 +428,7 @@ class TestOneFaultIsOneWarning:
         assert state.task_checks == {}
 
     def test_a_declared_success_closes_the_entry(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = self._broken_and_announced(tasks[0].id)
 
         outcome = record_followup_outcomes(
@@ -441,7 +441,7 @@ class TestOneFaultIsOneWarning:
 
     def test_an_anonymous_success_with_two_pending_closes_nothing(self) -> None:
         """Non toccare è la direzione sicura: al massimo si aspetta un ciclo in più."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(escalated=True, pending_since_ms=11),
@@ -459,7 +459,7 @@ class TestOneFaultIsOneWarning:
 
     def test_a_success_declared_for_a_task_nobody_delegated_is_ignored(self) -> None:
         """Un turno d'annuncio non può azzerare la sequenza di un controllo che non ha guardato."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(pending_since_ms=11),
@@ -475,7 +475,7 @@ class TestOneFaultIsOneWarning:
         assert state.task_checks[tasks[1].id].consecutive_could_not_check == 2
 
     def test_a_declared_failure_wins_over_a_declared_success(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={tasks[0].id: CronTaskCheckState(pending_since_ms=11)}
         )
@@ -502,7 +502,7 @@ class TestOneFaultIsOneWarning:
         ``CHECK_WARNED``, e il preambolo dell'heartbeat gli chiede quella riga
         anche per un avviso di propria iniziativa. Prima si deduceva da
         ``spoke``, che era vero anche per un messaggio su altro."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={tasks[0].id: CronTaskCheckState(pending_since_ms=11)}
         )
@@ -533,7 +533,7 @@ class TestOneFaultIsOneWarning:
         Con ``CHECK_WARNED`` il soggetto è scritto, quindi non c'è più niente da
         indovinare: si timbra il task nominato e nessun altro.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState()
 
         record_task_outcomes(
@@ -565,7 +565,7 @@ class TestOneFaultIsOneWarning:
         significa che l'avviso verrà richiesto di nuovo — rumore recuperabile —
         mentre timbrarli entrambi zittirebbe un guasto reale per sempre.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState()
 
         record_task_outcomes(
@@ -587,7 +587,7 @@ class TestOneFaultIsOneWarning:
         un'occasione di sbagliarlo. È la stessa regola, e lo stesso parametro
         ``default`` di :func:`attribute_marks`, che vale per i guasti.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState()
 
         record_task_outcomes(
@@ -610,7 +610,7 @@ class TestOneFaultIsOneWarning:
         un guasto zittito per sempre, ed è anche la direzione che
         ``jenny/cron/silence_watchdog.py`` presidia dall'altro lato.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={tasks[0].id: CronTaskCheckState(consecutive_could_not_check=2)}
         )
@@ -647,7 +647,7 @@ class TestOneFaultIsOneWarning:
         il suo ``CHECK_WARNED`` dice di quale controllo il messaggio parlava, e
         quello basta.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(
@@ -678,7 +678,7 @@ class TestOneFaultIsOneWarning:
     def test_the_same_shape_on_the_announce_turn(self) -> None:
         """Il turno d'annuncio porta gli stessi due blocchi condizionali del run,
         quindi può parlare del task già avvisato esattamente allo stesso modo."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(
@@ -699,7 +699,7 @@ class TestOneFaultIsOneWarning:
         """Il blocco di escalation chiede **un** messaggio per tutti i task che
         elenca, e una riga ``CHECK_WARNED`` per ciascuno di quelli che quel
         messaggio ha davvero nominato: un solo ``message`` li copre tutti."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState()
 
         record_task_outcomes(
@@ -713,7 +713,7 @@ class TestOneFaultIsOneWarning:
 
     def test_a_second_fault_after_a_recovery_warns_again(self) -> None:
         """Il test che vale tutti gli altri: il ciclo intero, dall'avviso al successivo."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = self._broken_and_announced(tasks[0].id)
 
         # Il controllo torna a funzionare e lo dichiara.
@@ -740,7 +740,7 @@ class TestOneFaultIsOneWarning:
     def test_a_task_that_runs_again_in_a_run_forgets_the_announcement(self) -> None:
         """La seconda via d'uscita, per un task che smette di essere delegato:
         nessun marcatore in un run e la voce sparisce con la sua regola di sempre."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={tasks[0].id: CronTaskCheckState(escalated=True, label="Ogni ciclo")}
         )
@@ -753,12 +753,12 @@ class TestOneFaultIsOneWarning:
 class TestTheSilenceInstruction:
     def test_a_healthy_run_has_no_silence_block(self) -> None:
         """Il prompt di un run sano resta byte-identico: niente voci, niente blocco."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
 
         assert tasks_already_warned(CronJobState(), tasks) == []
 
     def test_only_the_tasks_already_announced_are_listed(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(escalated=True, consecutive_could_not_check=5),
@@ -776,7 +776,7 @@ class TestTheSilenceInstruction:
 
     def test_a_task_is_never_both_due_and_already_warned(self) -> None:
         """I due blocchi si contraddirebbero. Sono disgiunti per costruzione."""
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(consecutive_could_not_check=9, escalated=True)
@@ -787,7 +787,7 @@ class TestTheSilenceInstruction:
         assert tasks_due_for_escalation(state, tasks) == []
 
     def test_the_announce_block_carries_the_silence_instruction_too(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
 
         block = followup_block([tasks[0]], [], [tasks[0]])
 
@@ -811,8 +811,8 @@ class TestRecognisingAMarkerFromOutside:
             assert is_only_markers(f"{marker} 1"), marker
 
     def test_a_real_sentence_is_not_a_marker(self) -> None:
-        assert not is_only_markers("Acerello è al 9%, dagli acqua")
-        assert not is_only_markers("Acerello è al 9%\nCHECK_WARNED 1")
+        assert not is_only_markers("A Oslo pioggia all'85%, prendi l'ombrello")
+        assert not is_only_markers("Oslo all'85%\nCHECK_WARNED 1")
 
     def test_empty_is_not_a_marker(self) -> None:
         """Vuoto è vuoto, e chi chiama lo distingue prima: un ``True`` qui
@@ -846,7 +846,7 @@ class TestTheRunTurnDeclaringItselfFine:
 
     def test_a_task_declared_fine_and_delegated_in_one_turn_stays_pending(self) -> None:
         tasks = parse_heartbeat_tasks(
-            "## Active Tasks\n\n- controlla l'umidità\n- ricordami le vitamine\n"
+            "## Active Tasks\n\n- controlla la pioggia\n- ricordami le vitamine\n"
         )
         state = CronJobState()
 
@@ -856,7 +856,7 @@ class TestTheRunTurnDeclaringItselfFine:
             [],
             now_ms=1_000,
             escalating=[],
-            delegated=[CouldNotCheckMark("1", "letture umidità")],
+            delegated=[CouldNotCheckMark("1", "letture pioggia")],
         )
 
         assert [t.index for t in outcome.pending] == [1]
@@ -876,7 +876,7 @@ class TestTheModelQuotingItsOwnInstructions:
 
     # Le tre righe esatte lette dal dispositivo, verbatim.
     ECHOED = (
-        "CHECK_DELEGATED 1: reading all plants' soil humidity via the waterbot skill\n"
+        "CHECK_DELEGATED 1: reading every city's rain forecast via the raincheck skill\n"
         "\n"
         "[This is a scheduled background check. It is SILENT by default: whatever you "
         "write as your answer is NOT delivered to the user and nobody reads it.\n"
@@ -923,7 +923,7 @@ class TestThePositiveMarker:
         assert could_not_check_reason("CHECK_OK") is None
 
     def test_the_announce_block_asks_for_a_verdict_in_both_directions(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
 
         block = followup_block([tasks[0]], [])
 
@@ -934,7 +934,7 @@ class TestThePositiveMarker:
         self,
     ) -> None:
         """Misurato sul device il 2026-08-16, ed è il motivo per cui questa
-        frase esiste. Il task WaterBot dice "se pibox è irraggiungibile non
+        frase esiste. Il task RainCheck dice "se pibox è irraggiungibile non
         ritentare, riporta UNREACHABLE e fermati"; il subagent ha riportato
         correttamente ``UNREACHABLE``; e il turno d'annuncio ha scritto
         ``CHECK_OK``. Una versione precedente di questo blocco diceva che un
@@ -942,7 +942,7 @@ class TestThePositiveMarker:
         una frase innocua finché significava "non scrivere niente", ma che
         trasformata in un'affermazione di salute copriva esattamente il guasto.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
 
         block = followup_block([tasks[0]], [])
 
@@ -954,7 +954,7 @@ class TestThePositiveMarker:
 
 class TestThePromptFragments:
     def test_the_index_block_names_every_task_by_number(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
 
         block = task_index_block(tasks)
 
@@ -962,7 +962,7 @@ class TestThePromptFragments:
         assert "2. Alle 9 ricordami le vitamine." in block
 
     def test_the_index_block_says_the_numbers_are_not_for_the_user(self) -> None:
-        block = task_index_block(parse_heartbeat_tasks(_file(_WATERBOT)))
+        block = task_index_block(parse_heartbeat_tasks(_file(_RAINCHECK)))
 
         assert "never in a message to the user" in block
 
@@ -975,7 +975,7 @@ class TestThePromptFragments:
         mancati davvero — passargli dei task grezzi qui vorrebbe dire misurare
         una chiamata che non esiste.
         """
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT, _VITAMINS))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK, _VITAMINS))
         state = CronJobState(
             task_checks={
                 task.id: CronTaskCheckState(consecutive_could_not_check=streak)
@@ -1050,7 +1050,7 @@ class TestTheAskStopsInsteadOfRepeatingForever:
         )
 
     def test_the_ask_covers_exactly_the_window(self) -> None:
-        tasks = parse_heartbeat_tasks(_file(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_file(_RAINCHECK))
         first = ESCALATE_AFTER_FAILURES - 1
 
         asked = [

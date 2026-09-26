@@ -54,7 +54,7 @@ async def test_a_reminder_named_like_a_worker_runs_as_a_reminder(routed, name) -
         name=name,
         payload=CronPayload(
             kind="agent_turn",
-            message="ricordami di annaffiare",
+            message="ricordami l'ombrello",
             session_key="websocket:chat-1",
             origin_channel="websocket",
             origin_chat_id="chat-1",

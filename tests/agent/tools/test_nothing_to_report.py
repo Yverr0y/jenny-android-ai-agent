@@ -3,7 +3,7 @@
 Il difetto che questi test presidiano è stato misurato sul Titan 2, non dedotto:
 fra il 21/08 e il 3/09/2026 quattordici bolle di riempimento sono arrivate nella
 chat dell'utente (``silent``, ``x``, ``noop``, ``placeholder``, ``silent-skip``,
-``CHECK_OK 1``, ``tutte le piante ok``, due bolle vuote…), e in una finestra di
+``CHECK_OK 1``, un «tutto a posto» in italiano, due bolle vuote…), e in una finestra di
 logcat di 11 ore le **uniche due** chiamate a ``message`` erano entrambe
 spazzatura. La causa non è il prompt: su un turno silenzioso "non ho niente da
 dire" era l'*assenza* di un'azione, e un modello piccolo la codifica come
@@ -98,7 +98,7 @@ class TestTheDeclarationItself:
     async def test_a_number_that_is_not_one_is_not_guessed(self) -> None:
         tool = _tool(silent=True)
 
-        result = await tool.execute(task="the waterbot one")
+        result = await tool.execute(task="the raincheck one")
 
         assert not result.startswith("Error")
         assert tool.declared_tasks() == []
@@ -221,7 +221,7 @@ class TestTheWholeTurn:
             side_effect=lambda msg: delivered.append(msg)
         )
         return await loop.process_direct_outcome(
-            "controlla le piante",
+            "controlla la pioggia",
             session_key=HEARTBEAT_SESSION_KEY,
             channel="websocket",
             chat_id="default",

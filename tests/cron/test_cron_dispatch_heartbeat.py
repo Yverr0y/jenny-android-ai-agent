@@ -42,7 +42,7 @@ _HEARTBEAT_MD = """# Heartbeat
 
 ## Active Tasks
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 """
 
 
@@ -153,7 +153,7 @@ async def _prompt_for(workspace: Path, content: str) -> str:
 # quel che sta fuori dalla sezione dei task.
 _BARE = """## Active Tasks
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 - Alle 8:00 dimmi se ci sono scadenze oggi.
 """
 
@@ -180,7 +180,7 @@ Completed tasks should be deleted, not kept.
 Un commento su più righe: è il caso che una regex ingenua si perde.
 -->
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 - Alle 8:00 dimmi se ci sono scadenze oggi.
 """
 
@@ -193,8 +193,12 @@ _TITAN2 = (Path(__file__).parent / "fixtures" / "heartbeat_titan2_2026-08-16.md"
 # stato ricalcolato il 26/09/2026, quando il nome di un host reale nel testo
 # del task e' stato sostituito con uno inventato: l'hash e' lo stesso di
 # prima (sul testo originale dava ancora ``ff28e76dc65c``), e' cambiato il
-# testo che hasha.
-_TITAN2_TASK_IDS = ["903dabc442ff", "8aa2cef88085", "113dc0426e58", "cc9811ac7f4c"]
+# testo che hasha. I primi tre, lo stesso giorno e per la stessa ragione: il
+# controllo reale dell'utente e' diventato un "RainCheck" inventato. Sul testo
+# precedente la funzione da' ancora ``903dabc442ff``, ``8aa2cef88085`` e
+# ``113dc0426e58``; il quarto bullet non e' stato toccato e il suo id e' quello
+# di prima.
+_TITAN2_TASK_IDS = ["8b2808ab834a", "8ef5a6515bba", "d734634b0fd9", "cc9811ac7f4c"]
 
 
 class TestThePromptCarriesTheTasksAndNotTheFile:
@@ -248,19 +252,19 @@ class TestThePromptCarriesTheTasksAndNotTheFile:
         """Il file vero del Titan 2, che è il solo input che conta davvero.
 
         I quattro bullet non si reggono da soli: "notifica una sola volta per
-        pianta" non dice di quali piante senza il titolo che ha scritto l'utente,
+        città" non dice di quali città senza il titolo che ha scritto l'utente,
         e togliere quel titolo insieme ai nostri commenti sarebbe stata una
         regressione sull'unico dispositivo installato.
         """
         prompt = await _prompt_for(tmp_path / "titan2", _TITAN2)
 
-        assert "### WaterBot: monitoraggio umidità piante" in prompt
+        assert "### RainCheck: allerta pioggia nelle città" in prompt
         assert "gateway.heartbeat.enabled=true" not in prompt
         assert "Add your periodic tasks below this line" not in prompt
         for bullet in (
-            "segui la skill `waterbot`",
-            "Avverti l'utente SOLO se almeno una pianta",
-            "Anti-spam: notifica una sola volta per pianta",
+            "segui la skill `raincheck`",
+            "Avverti l'utente SOLO se almeno una città",
+            "Anti-spam: notifica una sola volta per città",
             "Se pibox/Tailscale è irraggiungibile",
         ):
             assert bullet in prompt
@@ -432,7 +436,7 @@ class TestThePreambleContract:
         assert "Those lines reach nobody" in text
 
     def test_an_instructed_silent_skip_still_writes_the_line(self) -> None:
-        """Il task WaterBot reale dice "se pibox è irraggiungibile salta il ciclo in
+        """Il task RainCheck del Titan 2 dice "se pibox è irraggiungibile salta il ciclo in
         silenzio", e questo preambolo diceva che quello skip non è un guasto.
 
         Misurato sul Titan 2 il 2026-08-16, con Tailscale spento apposta: il run

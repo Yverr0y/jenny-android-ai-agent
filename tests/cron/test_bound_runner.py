@@ -46,7 +46,7 @@ def _bound_job(
     *,
     job_id: str = "job-1",
     name: str = "Promemoria",
-    message: str = "annaffia le piante",
+    message: str = "controlla la pioggia",
     origin_channel: str | None = "websocket",
     origin_chat_id: str | None = "chat-1",
     origin_metadata: dict[str, Any] | None = None,
@@ -179,7 +179,7 @@ class TestAReminderRunsInTheConversation:
         )
 
         assert (
-            await tool.execute(action="add", message="annaffia le piante", every_seconds=300)
+            await tool.execute(action="add", message="controlla la pioggia", every_seconds=300)
         ).startswith("Created job")
 
         job = CronService(store).list_jobs()[0]
@@ -216,25 +216,25 @@ class TestRunBoundCronJobValidation:
 
 class TestRunBoundCronJobSuccess:
     async def test_records_queued_then_ok_and_returns_response(self) -> None:
-        job = _bound_job(job_id="job-42", name="Annaffia", message="annaffia le piante")
-        agent = _FakeAgent(response="Fatto, annaffiato.")
+        job = _bound_job(job_id="job-42", name="Pioggia", message="controlla la pioggia")
+        agent = _FakeAgent(response="Fatto, controllato.")
         cron = _FakeCronRecorder()
 
         result = await run_bound_cron_job(job, agent=agent, cron=cron)
 
-        assert result == "Fatto, annaffiato."
+        assert result == "Fatto, controllato."
         statuses = [record["status"] for _run_id, record in cron.records]
         assert statuses == ["queued", "ok"]
         run_id_queued, _record_queued = cron.records[0]
         run_id_ok, record_ok = cron.records[1]
         assert run_id_queued == run_id_ok
         assert re.match(r"^job-42:\d+:[0-9a-f]{8}$", run_id_queued)
-        assert record_ok["response"] == "Fatto, annaffiato."
+        assert record_ok["response"] == "Fatto, controllato."
         assert record_ok["job_id"] == "job-42"
-        assert record_ok["job_name"] == "Annaffia"
+        assert record_ok["job_name"] == "Pioggia"
         assert record_ok["session_key"] == "unified:default"
         expected_prompt = render_template(
-            "agent/cron_reminder.md", strip=True, message="annaffia le piante"
+            "agent/cron_reminder.md", strip=True, message="controlla la pioggia"
         )
         assert record_ok["rendered_prompt"] == expected_prompt
 

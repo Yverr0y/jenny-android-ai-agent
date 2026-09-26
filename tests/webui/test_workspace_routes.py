@@ -219,13 +219,13 @@ async def test_list_marks_nested_pycache_internal(
     # __pycache__ nasce ovunque l'agente importi un modulo del workspace, non
     # solo nella radice: il pattern deve reggere a qualsiasi profondità, senza
     # nascondere gli script che l'utente ha scritto lì accanto.
-    scripts = workspace_root / "skills" / "waterbot" / "scripts"
+    scripts = workspace_root / "skills" / "raincheck" / "scripts"
     scripts.mkdir(parents=True)
     (scripts / "__pycache__").mkdir()
     (scripts / "bot.py").write_text("print(1)\n", encoding="utf-8")
 
     response = await routes.dispatch(
-        _request("/api/workspace/list?path=skills/waterbot/scripts"), "/api/workspace/list"
+        _request("/api/workspace/list?path=skills/raincheck/scripts"), "/api/workspace/list"
     )
     assert response.status_code == 200
     by_name = {item["name"]: item["internal"] for item in _json(response)["items"]}
@@ -237,11 +237,11 @@ async def test_list_marks_pycache_contents_internal(
 ) -> None:
     # Entrandoci in modalità avanzata, anche il contenuto va marcato: i nomi dei
     # bytecode sono arbitrari, quindi il match è sul path relativo.
-    cache = workspace_root / "skills" / "waterbot" / "scripts" / "__pycache__"
+    cache = workspace_root / "skills" / "raincheck" / "scripts" / "__pycache__"
     cache.mkdir(parents=True)
     (cache / "bot.cpython-311.pyc").write_bytes(b"\x00fake")
     response = await routes.dispatch(
-        _request("/api/workspace/list?path=skills/waterbot/scripts/__pycache__"),
+        _request("/api/workspace/list?path=skills/raincheck/scripts/__pycache__"),
         "/api/workspace/list",
     )
     assert response.status_code == 200

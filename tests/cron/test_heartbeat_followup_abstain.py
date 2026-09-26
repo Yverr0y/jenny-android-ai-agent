@@ -44,7 +44,7 @@ from jenny.providers.base import LLMResponse
 from jenny.runtime.cron_dispatch import CronDispatcher
 from jenny.session.keys import HEARTBEAT_SESSION_KEY
 
-_WATERBOT = "- Ogni ciclo controlla l'umidità delle piante e avvisami sotto il 15%."
+_RAINCHECK = "- Ogni ciclo controlla la pioggia nelle città e avvisami sopra il 70%."
 _VITAMINS = "- Alle 9 ricordami le vitamine."
 
 _T0_MS = 1_755_000_000_000
@@ -133,7 +133,7 @@ class _Harness:
                 channel="system",
                 sender_id="subagent",
                 chat_id="websocket:default",
-                content="[Subagent 'waterbot-check' completed successfully]\n\nResult:\nok",
+                content="[Subagent 'raincheck-probe' completed successfully]\n\nResult:\nok",
                 metadata={"subagent_task_id": f"sub-{self.announce_count}"},
                 session_key_override=HEARTBEAT_SESSION_KEY,
             )
@@ -152,15 +152,15 @@ class _Harness:
 
 @pytest.fixture
 def one_delegated(tmp_path: Path) -> _Harness:
-    harness = _Harness(tmp_path, _WATERBOT, _VITAMINS)
-    harness.agent.delegated = {1: "leggi l'umidità"}
+    harness = _Harness(tmp_path, _RAINCHECK, _VITAMINS)
+    harness.agent.delegated = {1: "leggi le previsioni"}
     return harness
 
 
 @pytest.fixture
 def two_delegated(tmp_path: Path) -> _Harness:
-    harness = _Harness(tmp_path, _WATERBOT, _VITAMINS)
-    harness.agent.delegated = {1: "leggi l'umidità", 2: "controlla le vitamine"}
+    harness = _Harness(tmp_path, _RAINCHECK, _VITAMINS)
+    harness.agent.delegated = {1: "leggi le previsioni", 2: "controlla le vitamine"}
     return harness
 
 
@@ -185,8 +185,8 @@ class TestABareAbstentionDeclaresNothing:
         await one_delegated.cycle()
         with_tool = one_delegated.entry_for(0)
 
-        silent = _Harness(tmp_path / "b", _WATERBOT, _VITAMINS)
-        silent.agent.delegated = {1: "leggi l'umidità"}
+        silent = _Harness(tmp_path / "b", _RAINCHECK, _VITAMINS)
+        silent.agent.delegated = {1: "leggi le previsioni"}
         silent.abstains = False
         await silent.cycle()
 

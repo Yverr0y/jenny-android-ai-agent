@@ -70,7 +70,7 @@ def _unusable_silent_alert(content: str, *, has_media: bool) -> str | None:
     forme osservate; una sesta le sfuggirà, ed è il prezzo giusto.
 
     **La sesta è arrivata, e cinque volte.** Fra il 26 agosto e il 3 settembre:
-    ``noop``, ``tutte le piante ok``, ``Silenzio: umidità ok.``, ``silent-skip``,
+    ``noop``, un «tutto a posto» in italiano, un ``Silenzio: … ok.``, ``silent-skip``,
     ``placeholder`` — nessuna intercettabile da una lista, tutte consegnate. La
     denylist non è stata allargata, perché allargarla è la gara che non si vince:
     è stata invece tolta di mezzo la causa. Un turno silenzioso ha ora

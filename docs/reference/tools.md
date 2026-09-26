@@ -434,7 +434,7 @@ Gotcha: if the model uses `message` instead of a normal reply for the current co
 
 ### nothing_to_report
 
-The counterpart to `message` on a silent scheduled run (Heartbeat, a monitor reminder, or the turn where a subagent's result comes back to one of them). On those turns Jenny's written answer is delivered nowhere, so `message` is the only way to reach you — which made "I have nothing to say" the *absence* of an action, and small models express that by sending a message with a placeholder in it. Real examples that reached the chat before this tool existed: `silent`, `noop`, `placeholder`, `tutte le piante ok`, and two empty bubbles.
+The counterpart to `message` on a silent scheduled run (Heartbeat, a monitor reminder, or the turn where a subagent's result comes back to one of them). On those turns Jenny's written answer is delivered nowhere, so `message` is the only way to reach you — which made "I have nothing to say" the *absence* of an action, and small models express that by sending a message with a placeholder in it. Real examples that reached the chat before this tool existed: `silent`, `noop`, `placeholder`, an Italian "all fine" line, and two empty bubbles.
 
 - `task` is optional: the number of the check being declared, as listed in that run's prompt. One call per number.
 - Nothing is delivered and no notification is raised. A run that calls it is still recorded as `silenced`, exactly like one that said nothing at all.

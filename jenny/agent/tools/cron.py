@@ -365,7 +365,7 @@ class CronTool(Tool, ContextAware):
         e i tre contatori del job qui sopra ne sono soltanto il riassunto ("almeno
         un controllo non è partito"). Quale sia stava in ``state.task_checks``, che
         lo store salva e ricarica da commit e che **non raggiungeva nessuna
-        superficie**: né questa, né la WebUI. "Il controllo delle piante sta
+        superficie**: né questa, né la WebUI. "Il controllo della pioggia sta
         funzionando?" si rispondeva solo leggendo logcat sul telefono.
 
         Le voci esistono solo per i controlli rotti (assente = sano), quindi su un

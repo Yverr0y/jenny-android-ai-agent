@@ -41,7 +41,7 @@ def test_detects_questions(text: str) -> None:
         "",
         "   ",
         "fatto: ho scritto app.json e index.html, passo alla validazione.",
-        "Ho annaffiato l'albinella. Prossimo step: il basilico.",
+        "Ho preso l'ombrello. Prossimo step: la giacca.",
     ],
 )
 def test_ignores_statements(text: str | None) -> None:

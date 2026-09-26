@@ -522,17 +522,17 @@ async def test_a_silent_turn_delivers_its_first_alert() -> None:
     sent: list[OutboundMessage] = []
     tool = _silent_tool(sent)
 
-    result = await tool.execute(content="umidità al 9%, sotto soglia")
+    result = await tool.execute(content="pioggia all'85%, sopra soglia")
 
     assert "Message sent" in result
-    assert [m.content for m in sent] == ["umidità al 9%, sotto soglia"]
+    assert [m.content for m in sent] == ["pioggia all'85%, sopra soglia"]
 
 
 @pytest.mark.asyncio
 async def test_a_silent_alert_is_marked_for_the_history() -> None:
     """L'avviso di un ciclo silenzioso gira su una sessione interna ma lo legge
     l'utente: senza questo marker il turno dopo non ne trova traccia (misurato
-    il 2026-08-12: avviso WaterBot alle 18:33, "sicura?" alle 18:39 senza
+    il 2026-08-12: avviso RainCheck alle 18:33, "sicura?" alle 18:39 senza
     contesto)."""
     sent: list[OutboundMessage] = []
     tool = _silent_tool(sent)
@@ -647,7 +647,7 @@ async def test_a_marker_inside_a_real_alert_is_still_delivered() -> None:
     sent: list[OutboundMessage] = []
     tool = _silent_tool(sent)
 
-    result = await tool.execute(content="Acerello è al 9%, dagli acqua\nCHECK_WARNED 1")
+    result = await tool.execute(content="A Oslo pioggia all'85%, prendi l'ombrello\nCHECK_WARNED 1")
 
     assert "Message sent" in result
     assert len(sent) == 1
@@ -669,7 +669,7 @@ async def test_a_bare_token_is_not_an_alert(junk: str) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("text", ["primo", "Innaffia", "acqua!", "Acerello 9%"])
+@pytest.mark.parametrize("text", ["primo", "Ombrello", "piove!", "Oslo 85%"])
 async def test_a_short_alert_is_still_an_alert(text: str) -> None:
     """Il filtro della parola nuda è una lista chiusa, non una regola di forma.
     Il primo tentativo ("una parola e nessuna cifra") rifiutava ``"first"``: una
@@ -718,10 +718,10 @@ async def test_a_refused_alert_does_not_burn_the_run_budget() -> None:
     tool = _silent_tool(sent)
 
     await tool.execute(content="CHECK_OK 1")
-    result = await tool.execute(content="Acerello è al 9%, dagli acqua")
+    result = await tool.execute(content="A Oslo pioggia all'85%, prendi l'ombrello")
 
     assert "Message sent" in result
-    assert [m.content for m in sent] == ["Acerello è al 9%, dagli acqua"]
+    assert [m.content for m in sent] == ["A Oslo pioggia all'85%, prendi l'ombrello"]
 
 
 # --- macchina del template: niente da consegnare -------------------------------
@@ -772,10 +772,10 @@ async def test_the_leak_refusal_does_not_burn_the_run_budget() -> None:
     tool = _silent_tool(sent)
 
     await tool.execute(content=_TEMPLATE_LEAK)
-    result = await tool.execute(content="Acerello è al 9%, dagli acqua")
+    result = await tool.execute(content="A Oslo pioggia all'85%, prendi l'ombrello")
 
     assert "Message sent" in result
-    assert [m.content for m in sent] == ["Acerello è al 9%, dagli acqua"]
+    assert [m.content for m in sent] == ["A Oslo pioggia all'85%, prendi l'ombrello"]
 
 
 @pytest.mark.asyncio
@@ -786,11 +786,11 @@ async def test_a_leaked_marker_before_a_real_alert_is_only_trimmed() -> None:
     tool = _silent_tool(sent)
 
     result = await tool.execute(
-        content="<｜end▁of▁thinking｜>\n\nAcerello è al 9%, dagli acqua"
+        content="<｜end▁of▁thinking｜>\n\nA Oslo pioggia all'85%, prendi l'ombrello"
     )
 
     assert "Message sent" in result
-    assert [m.content for m in sent] == ["Acerello è al 9%, dagli acqua"]
+    assert [m.content for m in sent] == ["A Oslo pioggia all'85%, prendi l'ombrello"]
 
 
 @pytest.mark.asyncio

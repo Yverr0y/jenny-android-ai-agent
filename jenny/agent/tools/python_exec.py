@@ -453,12 +453,12 @@ def _active_path_base() -> str | None:
 # trappola: ci si cade scrivendo codice del tutto ragionevole. Misurato sul
 # device un'ora dopo aver reso `working_dir` reale — il modello ha scritto da sé
 #
-#     sys.path.insert(0, os.path.join(os.getcwd(), "skills", "waterbot", "scripts"))
-#     import wb_probe
+#     sys.path.insert(0, os.path.join(os.getcwd(), "skills", "raincheck", "scripts"))
+#     import rc_probe
 #
 # dopo aver passato `working_dir=<workspace>`. `os.getcwd()` rispondeva `/`
 # (la cwd del processo su Android), quindi la `join` produceva
-# `/skills/waterbot/scripts`, che non esiste, e l'import moriva. Terza
+# `/skills/raincheck/scripts`, che non esiste, e l'import moriva. Terza
 # incarnazione dello stesso difetto sullo stesso device.
 #
 # Da qui la regola, e vale la pena scriverla come regola e non come elenco di

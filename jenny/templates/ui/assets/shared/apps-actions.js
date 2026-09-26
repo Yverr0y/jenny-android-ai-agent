@@ -551,7 +551,7 @@ export class AppsActions {
 /** La riga «Metti come pagina», o perche' non si puo'.
  *
  *  **Spenta, non assente**, quando l'app non puo' stare in una pagina: una
- *  riga che manca fa chiedere «perche' Todo si' e WaterBot no?», una spenta
+ *  riga che manca fa chiedere «perche' Todo si' e RainCheck no?», una spenta
  *  lo dice. Un'app *esterna* apre un indirizzo che il guscio non controlla;
  *  una *rotta* resterebbe li' a non funzionare tutti i giorni.
  */

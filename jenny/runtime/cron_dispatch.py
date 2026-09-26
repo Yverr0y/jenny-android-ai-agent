@@ -963,7 +963,7 @@ class CronDispatcher:
         #
         # Sparisce più dei commenti, e va detto: se ne va anche tutto ciò che sta
         # **fuori** dalla sezione ``## Active Tasks``, intestazioni comprese —
-        # nella sezione, invece, un ``### WaterBot`` dell'utente resta, perché è
+        # nella sezione, invece, un ``### RainCheck`` dell'utente resta, perché è
         # ciò che dice di cosa parlano le righe sotto.
         #
         # Cosa NON cambia, e sono due cose. Che cosa conta come task: lo decide
@@ -1065,7 +1065,7 @@ class CronDispatcher:
             )
 
         # Riassunto a livello di job: ``last_status='could_not_check'`` e il
-        # motivo, così "il controllo delle piante sta funzionando?" si risponde
+        # motivo, così "il controllo della pioggia sta funzionando?" si risponde
         # dallo stato del cron invece che da logcat. La mappa per-task, appena
         # aggiornata su ``job.state``, dice *quale*; il ``CronService`` la salva
         # insieme al resto dello store.

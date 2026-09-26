@@ -530,13 +530,13 @@ def test_the_draft_stays_with_the_conversation_it_was_written_in() -> None:
     dici finisce nel diario di un altro progetto — solo un attimo prima."""
     _run_js("""
       const app = home();
-      app.input.value = 'ricordami di annaffiare';
+      app.input.value = 'ricordami la giacca';
       await app.switchConversation(projectKey('piante'));
       assert.equal(app.input.value, '', 'la bozza ha seguito nel quaderno');
 
       app.input.value = 'le punte sono secche';
       await app.switchConversation(null);
-      assert.equal(app.input.value, 'ricordami di annaffiare');
+      assert.equal(app.input.value, 'ricordami la giacca');
 
       await app.switchConversation(projectKey('piante'));
       assert.equal(app.input.value, 'le punte sono secche');

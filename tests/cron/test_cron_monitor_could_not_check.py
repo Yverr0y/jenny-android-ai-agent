@@ -1,8 +1,8 @@
 """Il terzo esito di un monitor: "non ho potuto controllare" (B8).
 
 Prima di questo stato un monitor aveva due soli finali e producevano lo stesso
-identico output — niente. Un controllo delle piante rotto era indistinguibile da
-un giardino sano, e la skill aveva pure un motivo legittimo di tacere ("se pibox è
+identico output — niente. Un controllo della pioggia rotto era indistinguibile da
+un cielo sereno, e la skill aveva pure un motivo legittimo di tacere ("se pibox è
 irraggiungibile salta il ciclo in silenzio"), quindi il guasto era perfettamente
 mimetizzato.
 
@@ -43,7 +43,7 @@ from jenny.cron.service import CronService
 from jenny.cron.types import CronJobState, CronSchedule
 from jenny.utils.prompt_templates import render_template
 
-_MESSAGE = "controlla l'umidità delle piante e avvisami solo sotto il 15%"
+_MESSAGE = "controlla la pioggia nelle città e avvisami solo sopra il 70%"
 
 # Il caso della frase più ordinaria che ci sia: l'utente chiede il controllo e
 # nella stessa riga chiede di non essere disturbato quando l'host è giù.
@@ -101,10 +101,10 @@ class _FakeMonitorAgent:
     async def submit_cron_turn(self, msg: InboundMessage) -> TurnOutcome:
         self.prompts.append(msg.content)
         if self.healthy:
-            return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
+            return TurnOutcome.silent(final_text="Nessuna città sopra il 70%.")
         if not self._asked_to_warn(msg.content):
             return TurnOutcome.silent(final_text="CHECK_FAILED: pibox non raggiungibile")
-        self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
+        self.messages.append("Il controllo della pioggia non riesce a partire da un po'.")
         # E dichiara l'avviso: il timbro nello stato viene da questa riga, non
         # dal fatto che ``message`` sia stato chiamato — un messaggio può parlare
         # d'altro, e per tre commit è stato quello a zittire il guasto.
@@ -127,7 +127,7 @@ def _monitor(
 
     service.on_job = on_job
     job = service.add_job(
-        name="piante",
+        name="pioggia",
         schedule=CronSchedule(kind="every", every_ms=1_800_000),
         message=message,
         mode="monitor",
@@ -375,13 +375,13 @@ class _RepeatsItsOwnWarning(_FakeMonitorAgent):
     async def submit_cron_turn(self, msg: InboundMessage) -> TurnOutcome:
         self.prompts.append(msg.content)
         if self.healthy:
-            return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
+            return TurnOutcome.silent(final_text="Nessuna città sopra il 70%.")
         final = "CHECK_FAILED: pibox non raggiungibile"
         if _ALREADY_WARNED in msg.content:
             return TurnOutcome.silent(final_text=final)
         if not self._asked_to_warn(msg.content) and not self.messages:
             return TurnOutcome.silent(final_text=final)
-        self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
+        self.messages.append("Il controllo della pioggia non riesce a partire da un po'.")
         return TurnOutcome.spoke_via_tool(final_text=final + "\nCHECK_WARNED")
 
 
@@ -451,11 +451,11 @@ class _WarnsWithoutBeingAsked(_FakeMonitorAgent):
     async def submit_cron_turn(self, msg: InboundMessage) -> TurnOutcome:
         self.prompts.append(msg.content)
         if self.healthy:
-            return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
+            return TurnOutcome.silent(final_text="Nessuna città sopra il 70%.")
         final = "CHECK_FAILED: pibox non raggiungibile"
         if _ALREADY_WARNED in msg.content:
             return TurnOutcome.silent(final_text=final)
-        self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
+        self.messages.append("Il controllo della pioggia non riesce a partire da un po'.")
         return TurnOutcome.spoke_via_tool(final_text=final + "\nCHECK_WARNED")
 
 
@@ -470,8 +470,8 @@ class _WarnsAndNeverDeclaresIt(_FakeMonitorAgent):
     async def submit_cron_turn(self, msg: InboundMessage) -> TurnOutcome:
         self.prompts.append(msg.content)
         if self.healthy:
-            return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
-        self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
+            return TurnOutcome.silent(final_text="Nessuna città sopra il 70%.")
+        self.messages.append("Il controllo della pioggia non riesce a partire da un po'.")
         return TurnOutcome.spoke_via_tool(final_text="CHECK_FAILED: pibox non raggiungibile")
 
 
@@ -489,8 +489,8 @@ class _ReportsAFindingAndAlsoFails(_FakeMonitorAgent):
     async def submit_cron_turn(self, msg: InboundMessage) -> TurnOutcome:
         self.prompts.append(msg.content)
         if self.healthy:
-            return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
-        self.messages.append("Basilico all'11%.")
+            return TurnOutcome.silent(final_text="Nessuna città sopra il 70%.")
+        self.messages.append("Pioggia a Oslo all'85%.")
         return TurnOutcome.spoke_via_tool(final_text="CHECK_FAILED: pibox non raggiungibile")
 
 
@@ -511,7 +511,7 @@ class TestAMessageAboutSomethingElseDoesNotCountAsTheWarning:
 
         await _cycles(service, job_id, 1)
 
-        assert agent.messages == ["Basilico all'11%."]
+        assert agent.messages == ["Pioggia a Oslo all'85%."]
         state = _state(service, job_id)
         assert state.consecutive_could_not_check == 1
         assert state.could_not_check_escalated is False
@@ -679,7 +679,7 @@ class TestRecovery:
 
         async def found_something(msg: InboundMessage) -> TurnOutcome:
             agent.prompts.append(msg.content)
-            return TurnOutcome.spoke_via_tool(final_text="Basilico all'11%.")
+            return TurnOutcome.spoke_via_tool(final_text="Pioggia a Oslo all'85%.")
 
         agent.submit_cron_turn = found_something  # type: ignore[method-assign]
         await _cycles(service, job_id, 1)
@@ -761,7 +761,7 @@ class TestMarkerParsing:
         assert could_not_check_reason("CHECK_FAILED") == ""
 
     def test_an_ordinary_answer_has_no_marker(self) -> None:
-        assert could_not_check_reason("Tutte le piante sono sopra il 15%.") is None
+        assert could_not_check_reason("Nessuna città è sopra il 70%.") is None
 
     def test_no_answer_at_all_is_not_a_failure(self) -> None:
         assert could_not_check_reason("") is None

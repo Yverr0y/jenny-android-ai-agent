@@ -483,7 +483,7 @@ class TestThePerCheckStateIsReadable:
 
     ``state.task_checks`` è indicizzato per task, viene salvato e ricaricato dallo
     store da commit, e non raggiungeva **nessuna** superficie: non questo elenco,
-    non la WebUI. "Il controllo delle piante sta funzionando?" si rispondeva solo
+    non la WebUI. "Il controllo della pioggia sta funzionando?" si rispondeva solo
     leggendo logcat sul telefono — che su Android vuol dire non rispondere.
 
     I tre contatori del job sono soltanto il riassunto ("almeno un controllo non è
@@ -502,14 +502,14 @@ class TestThePerCheckStateIsReadable:
         state = CronJobState(
             task_checks={
                 "abc": CronTaskCheckState(
-                    consecutive_could_not_check=4, label="WaterBot: umidità piante"
+                    consecutive_could_not_check=4, label="RainCheck: pioggia nelle città"
                 )
             }
         )
 
         lines = tool._format_state(state, CronSchedule(kind="every", every_ms=1_800_000))
 
-        assert any("WaterBot: umidità piante" in line and "4 consecutive" in line for line in lines)
+        assert any("RainCheck: pioggia nelle città" in line and "4 consecutive" in line for line in lines)
 
     def test_it_says_whether_the_user_has_been_told(self, tmp_path) -> None:
         """La metà che serve di più: rotto e annunciato è un guasto diverso da
@@ -517,12 +517,12 @@ class TestThePerCheckStateIsReadable:
         tool = _make_tool(tmp_path)
         schedule = CronSchedule(kind="every", every_ms=1_800_000)
         quiet = CronJobState(
-            task_checks={"a": CronTaskCheckState(consecutive_could_not_check=4, label="piante")}
+            task_checks={"a": CronTaskCheckState(consecutive_could_not_check=4, label="pioggia")}
         )
         warned = CronJobState(
             task_checks={
                 "a": CronTaskCheckState(
-                    consecutive_could_not_check=4, label="piante", escalated=True
+                    consecutive_could_not_check=4, label="pioggia", escalated=True
                 )
             }
         )

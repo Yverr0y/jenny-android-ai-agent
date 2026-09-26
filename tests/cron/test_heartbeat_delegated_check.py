@@ -2,7 +2,7 @@
 
 Il caso è quello osservato sul Titan 2 il 2026-08-11 e riprodotto qui per intero.
 L'agente principale gira in ``orchestrator_mode`` e non ha ``python_exec``:
-il task WaterBot — quello che ha motivato tutto il terzo esito — *deve* essere
+il task RainCheck — quello che ha motivato tutto il terzo esito — *deve* essere
 delegato con ``spawn``, che ritorna subito. Il turno dell'heartbeat finiva quindi
 senza marcatori (logcat: ``Heartbeat: check completed`` alle 12:48:02) mentre il
 subagent eseguiva il suo ``python_exec`` alle 12:48:08. Per B13, "nessun
@@ -45,8 +45,8 @@ from jenny.providers.base import LLMResponse
 from jenny.runtime.cron_dispatch import CronDispatcher
 from jenny.session.keys import HEARTBEAT_SESSION_KEY, UNIFIED_SESSION_KEY
 
-_WATERBOT = (
-    "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo se una è sotto il 15%. "
+_RAINCHECK = (
+    "- Ogni ciclo, controlla la pioggia nelle città e avvisami solo se una è sopra il 70%. "
     "Se pibox è irraggiungibile salta il ciclo in silenzio."
 )
 _VITAMINS = "- Alle 9 ricordami le vitamine."
@@ -237,7 +237,7 @@ class _Harness:
                 channel="system",
                 sender_id="subagent",
                 chat_id="websocket:default",
-                content="[Subagent 'waterbot-check' completed successfully]\n\nResult:\nvedi sopra",
+                content="[Subagent 'raincheck-probe' completed successfully]\n\nResult:\nvedi sopra",
                 metadata={"subagent_task_id": f"sub-{self.announce_count}"},
                 session_key_override=session_key,
             )
@@ -260,18 +260,18 @@ class _Harness:
 
 @pytest.fixture
 def two_tasks(tmp_path: Path) -> _Harness:
-    harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT, _VITAMINS))
-    harness.agent.delegated = {1: "leggi l'umidità da pibox"}
+    harness = _Harness(tmp_path, _heartbeat_md(_RAINCHECK, _VITAMINS))
+    harness.agent.delegated = {1: "leggi le previsioni da pibox"}
     return harness
 
 
 class TestTheDeviceCase:
-    """Il controllo delle piante è delegato per forza: deve poter fallire."""
+    """Il controllo della pioggia è delegato per forza: deve poter fallire."""
 
     async def test_a_delegated_failure_is_recorded_at_all(self, two_tasks: _Harness) -> None:
         """Prima di questa correzione la voce restava vuota: il turno che
         delegava non aveva marcatori e il task passava per eseguito."""
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
 
         await two_tasks.cycles(1)
 
@@ -283,7 +283,7 @@ class TestTheDeviceCase:
         self, two_tasks: _Harness
     ) -> None:
         """Il turno che delega non deve azzerare ciò che il ritorno ha scritto."""
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
 
         await two_tasks.cycles(2)
 
@@ -294,13 +294,13 @@ class TestTheDeviceCase:
     async def test_three_delegated_failures_produce_exactly_one_message(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         assert len(two_tasks.agent.messages) == 1
         # E nomina il controllo, non l'heartbeat.
-        assert "controlla l'umidità delle piante" in two_tasks.agent.messages[0]
+        assert "controlla la pioggia nelle città" in two_tasks.agent.messages[0]
         entry = two_tasks.entry_for(0)
         assert entry is not None
         assert entry.consecutive_could_not_check == ESCALATE_AFTER_FAILURES
@@ -309,7 +309,7 @@ class TestTheDeviceCase:
     async def test_the_alert_is_not_repeated_while_the_check_stays_broken(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
 
         await two_tasks.cycles(12)
 
@@ -360,7 +360,7 @@ class TestTheDeviceCase:
         *silenzioso* non basterebbe — potrebbe essere il subagent di un altro
         task, o lo stesso che si è dimenticato di dire che è ancora rotto.
         """
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
         await two_tasks.cycles(2)
 
         two_tasks.subagent_failure = None
@@ -372,7 +372,7 @@ class TestTheDeviceCase:
     async def test_the_healthy_task_in_the_same_file_is_left_alone(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
@@ -384,7 +384,7 @@ class TestTheDeviceCase:
         self, two_tasks: _Harness
     ) -> None:
         """Il file ha due task, ma in sospeso ce n'è uno: non c'è ambiguità."""
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
         two_tasks.announces_the_number = False
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
@@ -583,12 +583,12 @@ class TestTheOptimismIsPreserved:
         due sequenze da uno e due, non tre di fila. L'utente non deve sentire
         niente, e il prompt del run che segue la ripresa non deve chiedere di
         avvisarlo."""
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES - 1)
 
         two_tasks.subagent_failure = None
         await two_tasks.cycles(1)
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
         await two_tasks.cycles(1)
 
         assert two_tasks.agent.messages == []
@@ -600,7 +600,7 @@ class TestTheOptimismIsPreserved:
     async def test_an_instructed_silent_skip_by_the_subagent_is_not_a_failure(
         self, two_tasks: _Harness
     ) -> None:
-        """Il task WaterBot dice "se pibox è irraggiungibile salta il ciclo in
+        """Il task RainCheck dice "se pibox è irraggiungibile salta il ciclo in
         silenzio". Delegato, quel silenzio arriva dal subagent — e resta un
         successo: chi salta perché gli è stato chiesto ha fatto il suo lavoro,
         e il prompt gli chiede infatti di dichiararlo con ``CHECK_OK``."""
@@ -618,7 +618,7 @@ class TestTheOptimismIsPreserved:
         prima: silenzioso. Mai un avviso su un controllo che nessuno ha
         dichiarato rotto."""
         two_tasks.agent.declares_the_delegation = False
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
 
         await two_tasks.cycles(6)
 
@@ -632,7 +632,7 @@ class TestTheBlockOnlyAppearsWhereItBelongs:
     async def test_no_block_when_the_heartbeat_delegated_nothing(
         self, tmp_path: Path
     ) -> None:
-        harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
+        harness = _Harness(tmp_path, _heartbeat_md(_RAINCHECK))
         await harness.cycles(1)
 
         assert _FOLLOWUP_HEAD not in harness.announce_prompts[0]
@@ -664,7 +664,7 @@ class TestTheBlockOnlyAppearsWhereItBelongs:
     ) -> None:
         """Lo stato si autoripara anche per una delega: se il task non c'è più
         nel file, la voce in attesa non resta appesa."""
-        two_tasks.subagent_failure = (1, "import di wb_probe fallito")
+        two_tasks.subagent_failure = (1, "import di rc_probe fallito")
         await two_tasks.cycles(1)
         assert two_tasks.state.task_checks != {}
 

@@ -50,7 +50,7 @@ _HEARTBEAT_MD = """# Heartbeat
 
 ## Active Tasks
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 """
 
 

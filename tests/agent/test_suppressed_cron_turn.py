@@ -345,7 +345,7 @@ class TestSilentTurnsInstallNoBusCallbacks:
 
         ctx = await self._built_ctx(loop, suppress=True)
         assert ctx.on_progress is not None
-        await ctx.on_progress("sto guardando l'umidità")
+        await ctx.on_progress("sto guardando la pioggia")
         assert ctx.on_retry_wait is not None
         await ctx.on_retry_wait("retry")
 

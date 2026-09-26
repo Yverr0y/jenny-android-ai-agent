@@ -81,7 +81,7 @@ async def test_a_silent_turn_projects_no_run_status_into_the_chat(tmp_path) -> N
     loop = _make_loop(tmp_path)
 
     response = await loop.process_direct(
-        "controlla l'umidità",
+        "controlla la pioggia",
         session_key=HEARTBEAT_SESSION_KEY,
         channel="websocket",
         chat_id="default",

@@ -6,12 +6,12 @@ heartbeat, questa chiamata::
 
     {"working_dir": "/data/data/com.flagdizero.jenny/files/workspace",
      "code": "import sys, os\\n"
-             "sys.path.insert(0, os.path.join(os.getcwd(), 'skills', 'waterbot', 'scripts'))\\n"
-             "import re, wb_probe\\n..."}
+             "sys.path.insert(0, os.path.join(os.getcwd(), 'skills', 'raincheck', 'scripts'))\\n"
+             "import re, rc_probe\\n..."}
 
 Passa `working_dir` e poi assume che `os.getcwd()` lo rifletta. Non lo
 rifletteva: `getcwd` non era patchata e su quella piattaforma risponde ``/``,
-quindi la `join` produceva ``/skills/waterbot/scripts`` — una directory che non
+quindi la `join` produceva ``/skills/raincheck/scripts`` — una directory che non
 esiste — e l'`import` moriva. È la TERZA incarnazione dello stesso difetto sullo
 stesso device: prima la skill prometteva una cwd che il parametro non spostava,
 poi il parametro esisteva solo in prosa, ora il parametro funziona ma la
@@ -50,7 +50,7 @@ def workspace(tmp_path):
     osservabile QUALE base è stata usata.
     """
     ws = tmp_path / "ws"
-    scripts = ws / "skills" / "waterbot" / "scripts"
+    scripts = ws / "skills" / "raincheck" / "scripts"
     scripts.mkdir(parents=True)
     (ws / "data.txt").write_text("from-root")
     (scripts / "data.txt").write_text("from-scripts")
@@ -124,12 +124,12 @@ class TestDeviceFailure:
         """
         ws, scripts = workspace
         skill = scripts.parent
-        (scripts / "wb_probe.py").write_text("VALUE = 'probe'\n")
+        (scripts / "rc_probe.py").write_text("VALUE = 'probe'\n")
         code = (
             "import sys, os\n"
             "sys.path.insert(0, os.path.join(os.getcwd(), 'scripts'))\n"
-            "import wb_probe\n"
-            "print(wb_probe.VALUE)\n"
+            "import rc_probe\n"
+            "print(rc_probe.VALUE)\n"
         )
         stdout, stderr, _ = _namespace(ws).execute(code, str(skill))
         assert stderr == ""
@@ -143,12 +143,12 @@ class TestDeviceFailure:
         È la chiamata copiata dal log del device, con i soli nomi cambiati.
         """
         ws, scripts = workspace
-        (scripts / "wb_probe.py").write_text("VALUE = 'probe'\n")
+        (scripts / "rc_probe.py").write_text("VALUE = 'probe'\n")
         code = (
             "import sys, os\n"
-            "sys.path.insert(0, os.path.join(os.getcwd(), 'skills', 'waterbot', 'scripts'))\n"
-            "import re, wb_probe\n"
-            "print(re.sub('e$', '!', wb_probe.VALUE))\n"
+            "sys.path.insert(0, os.path.join(os.getcwd(), 'skills', 'raincheck', 'scripts'))\n"
+            "import re, rc_probe\n"
+            "print(re.sub('e$', '!', rc_probe.VALUE))\n"
         )
         stdout, stderr, _ = _namespace(ws).execute(code, str(ws))
         assert stderr == ""

@@ -179,7 +179,7 @@ def test_a_pinned_app_offers_to_unpin_it() -> None:
 @pytest.mark.parametrize(
     ("app", "state", "why"),
     [
-        ({"slug": "waterbot", "name": "WaterBot", "view_kind": "external"}, "free", "apps.pageExternal"),
+        ({"slug": "raincheck", "name": "RainCheck", "view_kind": "external"}, "free", "apps.pageExternal"),
         ({"slug": "rotta", "name": "Rotta", "broken": True}, "free", "apps.pageBroken"),
         (GARDEN, "full", "apps.pageFull"),
     ],
@@ -187,7 +187,7 @@ def test_a_pinned_app_offers_to_unpin_it() -> None:
 )
 def test_a_row_that_cannot_be_used_is_shown_off_with_its_reason(app, state, why) -> None:
     """**Spenta, non assente**: una riga che manca fa chiedere «perche' Todo si'
-    e WaterBot no?», una spenta lo dice."""
+    e RainCheck no?», una spenta lo dice."""
     _run(
         "const r = rows()[1];\n"
         "assert.equal(r.action, 'pin');\n"
