@@ -52,6 +52,25 @@ _BOUNDARY_ERROR = "WorkspaceBoundaryError"
 # carichi ed esegua** da dentro un progetto, non cosa stampa. Uno script finto
 # rende il test veloce e indipendente dal contenuto del lint.
 _FAKE_LINT = "def lint(root):\n    print(f'linted {root}')\n    return 0\n"
+_FAKE_SCAFFOLD = "def scaffold(root, title):\n    print(f'scaffolded {root}')\n"
+
+
+@pytest.fixture(autouse=True)
+def fake_scripts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lo script finto si inietta nella copia **impacchettata**.
+
+    Da TL10 (terza revisione) gli script si leggono dal pacchetto, mai dal
+    workspace: scriverli in ``<workspace>/skills`` non li farebbe più girare.
+    """
+    from jenny.agent.tools import python_exec_builtins as builtins_mod
+
+    real = builtins_mod._read_packaged_wiki_script
+    fakes = {"lint_wiki.py": _FAKE_LINT, "scaffold.py": _FAKE_SCAFFOLD}
+    monkeypatch.setattr(
+        builtins_mod,
+        "_read_packaged_wiki_script",
+        lambda name: fakes[name].encode() if name in fakes else real(name),
+    )
 
 
 @pytest.fixture
@@ -70,7 +89,6 @@ def scoped_project(tmp_path: Path):
     scripts = ws / "skills" / "llm-wiki" / "scripts"
     for d in (project / "wiki", project / "raw" / "journal", scripts):
         d.mkdir(parents=True)
-    (scripts / "lint_wiki.py").write_text(_FAKE_LINT, encoding="utf-8")
 
     previous = None
     try:
@@ -226,7 +244,6 @@ async def test_wiki_lint_runs_when_the_workspace_was_given_by_an_alias(
     scripts = ws / "skills" / "llm-wiki" / "scripts"
     for d in (project / "wiki", scripts):
         d.mkdir(parents=True)
-    (scripts / "lint_wiki.py").write_text(_FAKE_LINT, encoding="utf-8")
     alias = tmp_path / "alias"
     alias.symlink_to(real, target_is_directory=True)
 
@@ -317,9 +334,6 @@ async def test_the_bypass_does_not_open_writes(scoped_project) -> None:
     ``_wiki_root``, col confine di scrittura, a fermarlo sul bersaglio.
     """
     ws, project = scoped_project
-    (ws / "skills" / "llm-wiki" / "scripts" / "scaffold.py").write_text(
-        "def scaffold(root, title):\n    print(f'scaffolded {root}')\n", encoding="utf-8"
-    )
 
     out = await _subagent_tool(project).execute(
         code=f"print(wiki_scaffold({str(ws / 'wikis' / 'nuova')!r}, 'Nuova'))"

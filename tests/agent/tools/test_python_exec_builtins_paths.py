@@ -30,7 +30,6 @@ un altro da un'altra*:
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 import os
 from typing import Any
@@ -270,41 +269,33 @@ def lint(root):
 
 @pytest.fixture
 def wiki_workspace(tmp_path, monkeypatch):
-    """Workspace con uno script di skill ``lint_wiki.py`` pronto da caricare."""
+    """Workspace il cui ``lint_wiki.py`` impacchettato è ``_WIKI_SCRIPT``.
+
+    Gli script si leggono dal pacchetto, mai dal workspace (TL10 della terza
+    revisione): lo script finto si inietta lì, sostituendo la lettura.
+    """
+    from jenny.agent.tools import python_exec_builtins as builtins_mod
+
     ws = tmp_path / "ws"
-    scripts = ws / "skills" / "llm-wiki" / "scripts"
-    scripts.mkdir(parents=True)
-    (scripts / "lint_wiki.py").write_text(_WIKI_SCRIPT)
+    ws.mkdir()
+    real = builtins_mod._read_packaged_wiki_script
     monkeypatch.setattr(
-        "jenny.agent.tools.python_exec_builtins.get_workspace_path", lambda: ws
+        builtins_mod,
+        "_read_packaged_wiki_script",
+        lambda name: _WIKI_SCRIPT.encode() if name == "lint_wiki.py" else real(name),
     )
     return ws
 
 
-@pytest.fixture
-def importlib_broken(monkeypatch):
-    """Forza il ramo di fallback: ``importlib`` non deve riuscire."""
-
-    def _boom(*args, **kwargs):
-        raise RuntimeError("importlib unavailable")
-
-    monkeypatch.setattr(importlib.util, "spec_from_file_location", _boom)
-
-
 class TestWikiScriptLoading:
-    def test_importlib_route_still_works(self, wiki_workspace):
-        out = _builtins(wiki_workspace)["wiki_lint"](str(wiki_workspace))
-        assert "annotation: type" in out
-        assert "item: ok" in out
-
-    def test_exec_fallback_does_not_inherit_pep_563(self, wiki_workspace, importlib_broken):
+    def test_the_script_does_not_inherit_pep_563(self, wiki_workspace):
         """Pre-fix: ``@dataclass`` esplodeva con
         "AttributeError: 'NoneType' object has no attribute '__dict__'"."""
         out = _builtins(wiki_workspace)["wiki_lint"](str(wiki_workspace))
         assert "annotation: type" in out
         assert "item: ok" in out
 
-    def test_exec_fallback_gives_the_module_a_file(self, wiki_workspace, importlib_broken):
+    def test_the_module_has_a_file(self, wiki_workspace):
         """Gli script di skill ricavano da ``__file__`` la propria directory."""
         out = _builtins(wiki_workspace)["wiki_lint"](str(wiki_workspace))
         assert "file: lint_wiki.py" in out

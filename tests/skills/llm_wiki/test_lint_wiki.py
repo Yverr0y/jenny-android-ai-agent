@@ -1430,17 +1430,13 @@ def test_two_namesakes_do_not_share_their_outbound_links(lint_wiki, tmp_path, ca
 
 
 def test_the_builtin_returns_the_error_and_not_the_words_no_output(tmp_path, monkeypatch):
-    import shutil
     from typing import Any
 
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 
+    # Gli script veri: il builtin li legge dal pacchetto (TL10).
     workspace = tmp_path / "ws"
-    scripts = workspace / "skills" / "llm-wiki" / "scripts"
-    scripts.mkdir(parents=True)
-    for name in ("lint_wiki.py", "reindex_wikis.py"):
-        shutil.copy(_SCRIPTS_DIR / name, scripts / name)
-    monkeypatch.setattr(builtins_mod, "get_workspace_path", lambda: workspace)
+    workspace.mkdir()
 
     class _Recorder:
         def __init__(self) -> None:
@@ -1646,27 +1642,28 @@ def test_the_builtin_returns_the_findings_it_already_had(tmp_path, monkeypatch):
     difetto che T6.6 ha chiuso: un report senza riepilogo si legge come un
     report, perché nessuno conta i passi che si aspettava.
     """
-    import shutil
     from typing import Any
 
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 
     workspace = tmp_path / "ws"
-    scripts = workspace / "skills" / "llm-wiki" / "scripts"
-    scripts.mkdir(parents=True)
-    for name in ("lint_wiki.py", "reindex_wikis.py"):
-        shutil.copy(_SCRIPTS_DIR / name, scripts / name)
+    workspace.mkdir()
     # Uno script che stampa dei risultati e **poi** scoppia: è la forma esatta
     # del difetto, e iniettarla è l'unico modo di non dipendere da quale bug
-    # sopravvive nello script vero.
-    (scripts / "lint_wiki.py").write_text(
+    # sopravvive nello script vero. Si inietta nella copia impacchettata, da cui
+    # il builtin legge (mai dal workspace: TL10 della terza revisione).
+    exploding = (
         "def lint(root):\n"
         "    print('🔴 Dead wikilinks (2):')\n"
         "    print('   wiki/a.md → [[b]]')\n"
-        "    raise RuntimeError('boom')\n",
-        encoding="utf-8",
+        "    raise RuntimeError('boom')\n"
     )
-    monkeypatch.setattr(builtins_mod, "get_workspace_path", lambda: workspace)
+    real = builtins_mod._read_packaged_wiki_script
+    monkeypatch.setattr(
+        builtins_mod,
+        "_read_packaged_wiki_script",
+        lambda name: exploding.encode() if name == "lint_wiki.py" else real(name),
+    )
 
     class _Recorder:
         def __init__(self) -> None:
