@@ -402,6 +402,45 @@ async def test_transfer_round_trip(tmp_path, monkeypatch):
         assert (env.workspace / "back" / "copy.txt").read_text() == "contenuto da caricare"
 
 
+async def test_transfer_in_a_project_writes_only_in_the_project(tmp_path, monkeypatch):
+    """Da dentro un progetto, ``down`` scrive nella sua cartella e non in ``SOUL.md``.
+
+    La radice era il workspace dell'installazione: un ``local_path="SOUL.md"``
+    sovrascriveva l'anima personale da una sessione di progetto, che per ogni
+    altro tool di scrittura è fuori confine. ``up`` legge, e la lettura resta
+    aperta sull'installazione come per ``read_file``.
+    """
+    from jenny.security.workspace_access import build_workspace_scope, enter_workspace_scope
+
+    async with tool_env(tmp_path, monkeypatch) as env:
+        (env.workspace / "SOUL.md").write_text("io\n")
+        project = env.workspace / "wikis" / "p"
+        (project / "wiki").mkdir(parents=True)
+        remote = tmp_path / "remote.txt"
+        remote.write_text("REMOTO\n")
+
+        with enter_workspace_scope(build_workspace_scope(project, "restricted")):
+            down = await _transfer_tool(env).execute(
+                host=ALIAS, direction="down", local_path="SOUL.md", remote_path=str(remote),
+            )
+            assert "Downloaded" in down, down
+            refused = await _transfer_tool(env).execute(
+                host=ALIAS, direction="down",
+                local_path=str(env.workspace / "SOUL.md"), remote_path=str(remote),
+            )
+            up = await _transfer_tool(env).execute(
+                host=ALIAS, direction="up",
+                local_path=str(env.workspace / "SOUL.md"),
+                remote_path=str(tmp_path / "soul_copy.txt"),
+            )
+
+    assert (env.workspace / "SOUL.md").read_text() == "io\n"
+    assert (project / "SOUL.md").read_text() == "REMOTO\n"
+    assert refused.startswith("Error:"), refused
+    assert "Uploaded" in up, up
+    assert (tmp_path / "soul_copy.txt").read_text() == "io\n"
+
+
 async def test_transfer_refuses_a_local_path_outside_the_workspace(tmp_path, monkeypatch):
     """La directory SSH (chiave privata, known_hosts) vive fuori dal workspace."""
     async with tool_env(tmp_path, monkeypatch) as env:

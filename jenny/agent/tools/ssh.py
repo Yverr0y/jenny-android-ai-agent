@@ -52,7 +52,11 @@ from jenny.agent.tools.ssh_transport import (
     resolve_target,
 )
 from jenny.runtime.power import keep_awake
-from jenny.security.workspace_access import READONLY_TOOL_REFUSAL, current_turn_is_readonly
+from jenny.security.workspace_access import (
+    READONLY_TOOL_REFUSAL,
+    current_turn_is_readonly,
+    current_workspace_scope,
+)
 from jenny.security.workspace_policy import (
     WorkspaceBoundaryError,
     _safe_expanduser,
@@ -528,8 +532,9 @@ class SshTransferTool(_SshToolMixin, Tool):
         "Copy ONE file between the workspace on this phone and a registered remote machine "
         "(direction=up to send, direction=down to fetch). Transfers go over SFTP on the same "
         "SSH connection. The local side is always inside the workspace — a path outside it "
-        "is refused — and the transfer is capped by the configured size limit, checked "
-        "before anything is written."
+        "is refused, and in a project a download can only land in the project's folder — "
+        "and the transfer is capped by the configured size limit, checked before anything "
+        "is written."
     )
 
     def __init__(
@@ -543,6 +548,15 @@ class SshTransferTool(_SshToolMixin, Tool):
     @classmethod
     def create(cls, ctx: Any) -> Tool:
         return cls(workspace=ctx.workspace)
+
+    def _turn_root(self) -> Path:
+        """La cartella del turno: ``write_root()`` dello scope legato, o il workspace.
+
+        Senza uno scope legato — sessioni interne, test — resta il workspace del
+        costruttore, che in quel caso è anche la radice del turno.
+        """
+        scope = current_workspace_scope()
+        return scope.write_root() if scope is not None else self._workspace
 
     async def execute(
         self,
@@ -565,11 +579,22 @@ class SshTransferTool(_SshToolMixin, Tool):
             return "Error: remote_path is empty."
 
         try:
-            # La radice è il workspace e basta: nessuna extra root. La directory
-            # SSH (chiave privata, known_hosts) vive fuori dal workspace proprio
-            # perché un tool come questo non possa esfiltrarla.
+            # Le radici sono quelle dei tool file, nessuna extra root. La
+            # directory SSH (chiave privata, known_hosts) vive fuori dal
+            # workspace proprio perché un tool come questo non possa esfiltrarla.
+            #
+            # `down` scrive sul telefono: il confine è quello di scrittura del
+            # turno (`WorkspaceScope.write_root()`, come `download_file` e i tool
+            # file), e un percorso relativo parte da lì. Con la radice
+            # dell'installazione, da dentro un progetto si sovrascriveva
+            # `SOUL.md`. `up` legge, e la lettura resta aperta
+            # sull'installazione come per `read_file`; il percorso relativo
+            # parte comunque dalla cartella del turno.
+            base = self._turn_root()
             local = resolve_allowed_path(
-                local_path, workspace=self._workspace, allowed_root=self._workspace
+                local_path,
+                workspace=base,
+                allowed_root=base if direction == "down" else self._workspace,
             )
         except WorkspaceBoundaryError as exc:
             return f"Error: {exc}"

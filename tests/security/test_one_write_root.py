@@ -239,6 +239,38 @@ async def _root_journal(env: Env) -> Path:
     return created[0].parents[2]
 
 
+async def _root_ssh_transfer(env: Env) -> Path:
+    """``ssh_transfer`` in discesa: scrive sul telefono il file del remoto."""
+    from types import SimpleNamespace
+
+    from jenny.agent.tools import ssh as ssh_mod
+    from jenny.agent.tools.ssh import SshTransferTool
+
+    class _Backend:
+        async def get(self, target, remote, local, max_bytes):
+            Path(local).write_text("x", encoding="utf-8")
+            return 1
+
+    class _Tool(SshTransferTool):
+        def _resolve(self, alias):
+            return SimpleNamespace(max_transfer_bytes=10**6), None, object()
+
+    tool = _Tool(workspace=env.ws, validate=lambda _h: (True, ""))
+    original = ssh_mod.get_ssh_backend
+    ssh_mod.get_ssh_backend = lambda: _Backend()  # type: ignore[assignment]
+    try:
+        async def accepts(d: Path) -> bool:
+            out = await tool.execute(
+                host="lab", direction="down", local_path=str(d / "probe-ssh.txt"),
+                remote_path="/x",
+            )
+            return out.startswith("Downloaded")
+
+        return await _only_accepted(env, accepts)
+    finally:
+        ssh_mod.get_ssh_backend = original  # type: ignore[assignment]
+
+
 # Nome della superficie → sonda. Il MODULO è la chiave del controllo
 # strutturale qui sotto: una superficie nuova senza sonda fa fallire quello.
 _SURFACES: dict[str, tuple[str, Callable[[Env], Awaitable[Path]]]] = {
@@ -251,6 +283,7 @@ _SURFACES: dict[str, tuple[str, Callable[[Env], Awaitable[Path]]]] = {
     "python_exec superficie os": ("python_exec.py", _root_python_exec_os),
     "download_file": ("download.py", _root_download),
     "journal_append": ("journal.py", _root_journal),
+    "ssh_transfer (down)": ("ssh.py", _root_ssh_transfer),
 }
 
 
