@@ -95,6 +95,30 @@ def test_parallel_tool_calls_without_index_are_not_merged() -> None:
     assert names == ["a", "b"]
 
 
+def test_a_call_opened_with_an_index_continues_by_its_id_alone() -> None:
+    """Il primo chunk ha ``index`` e id, i successivi solo l'id.
+
+    L'id visto col suo ``index`` non era registrato: il chunk dopo, senza
+    index, lo trovava nuovo e apriva una seconda chiamata, spezzando gli
+    argomenti in due metà che nessuna delle due sapeva leggere.
+    """
+    def _chunk(tool_call: dict) -> dict:
+        return {"choices": [{"delta": {"tool_calls": [tool_call]}}]}
+
+    chunks = [
+        _chunk({"index": 0, "id": "c1",
+                "function": {"name": "read_file", "arguments": '{"path":'}}),
+        _chunk({"id": "c1", "function": {"arguments": '"a.txt"}'}}),
+        {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+    ]
+
+    result = OpenAICompatProvider._parse_chunks(chunks)
+
+    assert [(tc.id, tc.name, tc.arguments) for tc in result.tool_calls] == [
+        ("c1", "read_file", {"path": "a.txt"}),
+    ]
+
+
 def test_custom_provider_parse_deduplicates_parallel_tool_call_ids() -> None:
     """Un provider che riusa un id lo fa anche fuori dallo streaming.
 

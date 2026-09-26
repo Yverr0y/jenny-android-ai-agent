@@ -225,8 +225,9 @@ class ResponseParsingMixin:
         tc_bufs: dict[Any, dict[str, Any]] = {}
         finish_reason = "stop"
         usage: dict[str, int] = {}
-        # Solo per i delta senza ``index``: a quale buffer va un id già visto, e
-        # quale buffer ha ricevuto l'ultimo frammento.
+        # Per i delta senza ``index``: a quale buffer va un id già visto (anche
+        # se visto accanto al suo ``index``), e quale buffer ha ricevuto l'ultimo
+        # frammento.
         key_by_id: dict[str, Any] = {}
         last_key: list[Any] = []
 
@@ -239,9 +240,14 @@ class ResponseParsingMixin:
             un frammento senza id continua l'ultimo aperto.
             """
             raw_index = _get(tc, "index")
-            if raw_index is not None:
-                return raw_index
             tc_id = _get(tc, "id")
+            if raw_index is not None:
+                # L'id visto col suo ``index`` resta legato a quel buffer: un
+                # chunk successivo che ripete solo l'id continua la stessa
+                # chiamata invece di aprirne un'altra.
+                if tc_id:
+                    key_by_id.setdefault(str(tc_id), raw_index)
+                return raw_index
             if tc_id:
                 key = key_by_id.get(str(tc_id))
                 if key is None:
