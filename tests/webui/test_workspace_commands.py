@@ -377,3 +377,91 @@ async def test_copy_does_not_overwrite_a_file(
     err = await _refused(ctx, "workspace.copy", {"path": "a.txt", "dest": "b.txt"})
     assert err.code == "name_taken"
     assert (workspace_root / "b.txt").read_text(encoding="utf-8") == "b"
+
+
+# ---------------------------------------------------------------------------
+# WA5: cancellare e rinominare un link agisce sul link, non su cosa indica
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def linked(workspace_root: Path, tmp_path: Path) -> dict[str, Path]:
+    """Una cartella vera dentro, una fuori, e un link verso ciascuna."""
+    import os
+
+    inside = workspace_root / "vera"
+    inside.mkdir()
+    (inside / "dato.txt").write_text("resta", encoding="utf-8")
+    outside = tmp_path / "fuori"
+    outside.mkdir()
+    (outside / "segreto.txt").write_text("resta", encoding="utf-8")
+    os.symlink(inside, workspace_root / "link-dentro")
+    os.symlink(outside, workspace_root / "link-fuori")
+    os.symlink(tmp_path / "non-esiste", workspace_root / "link-pendente-fuori")
+    return {"inside": inside, "outside": outside}
+
+
+@pytest.mark.parametrize("name", ["link-dentro", "link-fuori", "link-pendente-fuori"])
+async def test_delete_removes_the_link_not_its_target(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, linked, name: str
+) -> None:
+    """La ``rmtree`` seguiva il link: cancellare ``link-dentro`` svuotava la
+    cartella vera (terza revisione, WA5); un link verso fuori non si poteva
+    cancellare affatto, perche' il gate risolveva il bersaglio."""
+    import os
+
+    await dispatch_command(ctx, "workspace.delete", {"path": name})
+    assert not os.path.lexists(workspace_root / name)
+    assert (linked["inside"] / "dato.txt").read_text(encoding="utf-8") == "resta"
+    assert (linked["outside"] / "segreto.txt").read_text(encoding="utf-8") == "resta"
+
+
+async def test_rename_moves_the_link_not_its_target(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, linked
+) -> None:
+    import os
+
+    await dispatch_command(
+        ctx, "workspace.rename", {"old_path": "link-dentro", "new_path": "altro-link"}
+    )
+    assert not os.path.lexists(workspace_root / "link-dentro")
+    assert os.path.islink(workspace_root / "altro-link")
+    assert (linked["inside"] / "dato.txt").exists()
+    assert [p.name for p in workspace_root.iterdir() if p.name == "vera"] == ["vera"]
+
+
+async def test_rename_of_a_link_pointing_outside_is_the_link(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, linked
+) -> None:
+    import os
+
+    await dispatch_command(
+        ctx, "workspace.rename", {"old_path": "link-fuori", "new_path": "rinominato"}
+    )
+    assert os.path.islink(workspace_root / "rinominato")
+    assert (linked["outside"] / "segreto.txt").exists()
+
+
+async def test_the_link_path_still_cannot_climb_out(
+    ctx: CommandContext, workspace_root: Path, tmp_path: Path, config_path: Path
+) -> None:
+    """Agire sul link non apre il confine: il *genitore* passa dal gate."""
+    (tmp_path / "vittima.txt").write_text("resta", encoding="utf-8")
+    for path in ("../vittima.txt", "link-nessuno/../../vittima.txt"):
+        err = await _refused(ctx, "workspace.delete", {"path": path})
+        assert err.code in ("bad_request", "not_found")
+    assert (tmp_path / "vittima.txt").exists()
+
+
+async def test_copying_a_folder_keeps_its_links_as_links(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, linked
+) -> None:
+    """``copytree`` seguiva i link: una cartella con un link verso fuori portava
+    dentro il workspace una copia di quel che c'era fuori."""
+    import os
+
+    folder = workspace_root / "album"
+    folder.mkdir()
+    os.symlink(linked["outside"], folder / "scorciatoia")
+    await dispatch_command(ctx, "workspace.copy", {"path": "album", "dest": "album2"})
+    assert os.path.islink(workspace_root / "album2" / "scorciatoia")

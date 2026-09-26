@@ -394,7 +394,7 @@ async def workspace_delete(ctx: CommandContext, params: Mapping[str, Any]) -> di
     ``project.delete``. La ``rmtree`` sta in un thread: una cartella grande su
     una CPU Android sono secondi in cui il gateway non risponderebbe a nessuno.
     """
-    from jenny.webui.workspace_files import delete_path, validate_path
+    from jenny.webui.workspace_files import delete_path, validate_entry_path
 
     rel_path = _require_str(params, "path")
     _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
@@ -402,7 +402,8 @@ async def workspace_delete(ctx: CommandContext, params: Mapping[str, Any]) -> di
 
     root = ctx.get_workspace_root()
     with _fs_errors():
-        full_path = validate_path(root, rel_path)
+        # La voce, non il suo bersaglio: un link si cancella come link (WA5).
+        full_path = validate_entry_path(root, rel_path)
         refusal = _delete_refusal(root, full_path)
         if refusal:
             raise CommandError("forbidden", refusal)
@@ -416,7 +417,7 @@ async def workspace_rename(ctx: CommandContext, params: Mapping[str, Any]) -> di
     Non un quaderno (:func:`_rename_refusal`, la strada e' ``project.rename``) e
     mai sopra qualcosa che c'e' gia': la destinazione occupata e' ``name_taken``.
     """
-    from jenny.webui.workspace_files import rename_path, validate_path
+    from jenny.webui.workspace_files import rename_path, validate_entry_path
 
     old_rel = _require_str(params, "old_path")
     new_rel = _require_str(params, "new_path")
@@ -427,8 +428,9 @@ async def workspace_rename(ctx: CommandContext, params: Mapping[str, Any]) -> di
 
     root = ctx.get_workspace_root()
     with _fs_errors():
-        old_path = validate_path(root, old_rel)
-        new_path = validate_path(root, new_rel)
+        # Le voci, non i bersagli: un link si rinomina come link (WA5).
+        old_path = validate_entry_path(root, old_rel)
+        new_path = validate_entry_path(root, new_rel)
         refusal = _rename_refusal(root, old_path)
         if refusal:
             raise CommandError("forbidden", refusal)

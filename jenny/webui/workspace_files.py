@@ -80,6 +80,27 @@ def validate_path(workspace_root: Path, requested_path: str) -> Path:
         raise ValueError("Path traversal detected") from exc
 
 
+def validate_entry_path(workspace_root: Path, requested_path: str) -> Path:
+    """Il percorso della **voce** *requested_path*, senza seguire il suo ultimo link.
+
+    ``validate_path`` risolve tutto, ultimo componente compreso: per un symlink
+    restituisce il bersaglio. Per leggere e' quel che serve; per cancellare o
+    rinominare no — ``delete`` di un link faceva la ``rmtree`` della cartella
+    vera, e un link verso fuori non si poteva toccare affatto, perche' il gate
+    rifiutava il bersaglio (terza revisione, WA5).
+
+    Qui passa dal gate il **genitore**, risolto; il nome resta com'e'. Il confine
+    tiene: il genitore e' dentro, e un solo componente che non sia ``.``/``..``
+    non puo' risalire. Se l'ultimo componente e' ``.`` o ``..`` la voce e' una
+    cartella nominata per via, non un link: si risolve per intero, come prima.
+    Una voce che non e' un link esce identica a quella di ``validate_path``.
+    """
+    parent_rel, _, name = str(requested_path).rstrip("/").rpartition("/")
+    if name in ("", ".", ".."):
+        return validate_path(workspace_root, requested_path)
+    return validate_path(workspace_root, parent_rel or ".") / name
+
+
 def _load_internal_patterns(workspace_root: Path) -> list[str]:
     """Legge <workspace_root>/.jenny/internal.json.
 
@@ -207,8 +228,10 @@ def rename_path(old_path: Path, new_path: Path) -> None:
 
 
 def delete_path(path: Path) -> None:
-    """Delete a file or directory."""
-    if path.is_dir():
+    """Delete a file or directory; a symlink is removed itself, never followed."""
+    # ``is_dir`` segue il link: la ``rmtree`` finiva sulla cartella vera
+    # (terza revisione, WA5). ``rmtree`` dentro l'albero i link non li segue.
+    if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path)
     else:
         path.unlink()
@@ -238,6 +261,9 @@ def copy_path(src: Path, dest: Path) -> None:
     """Copy a file or directory, never over an existing one."""
     _refuse_taken(src, dest)
     if src.is_dir():
-        shutil.copytree(src, dest)
+        # ``symlinks=True``: i link dentro la cartella si copiano come link.
+        # Seguirli portava dentro il workspace una copia di quel che c'era
+        # fuori, dove il file manager poi la mostrava (terza revisione, WA5).
+        shutil.copytree(src, dest, symlinks=True)
     else:
         shutil.copy2(src, dest)
