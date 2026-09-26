@@ -67,10 +67,15 @@ def test_parse_rejects_non_object_params() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_no_secret_configured_means_no_extra_gate() -> None:
-    """Senza secret la WebUI locale non ha un token da presentare."""
-    ws_rpc.authorize(secret="", connection_authenticated=False)
-    ws_rpc.authorize(secret="   ", connection_authenticated=False)
+@pytest.mark.parametrize("secret", ["", "   "])
+@pytest.mark.parametrize("authenticated", [False, True])
+def test_no_secret_configured_refuses_every_command(secret: str, authenticated: bool) -> None:
+    """Come ``/api/``, che senza secret risponde 401 a chiunque: le scritture non
+    stanno dietro un cancello piu' debole delle letture. Una WebUI che funziona
+    il secret ce l'ha sempre (il bootstrap lo genera al primo avvio)."""
+    with pytest.raises(CommandError) as exc:
+        ws_rpc.authorize(secret=secret, connection_authenticated=authenticated)
+    assert exc.value.code == "forbidden"
 
 
 def test_secret_configured_requires_an_authenticated_connection() -> None:

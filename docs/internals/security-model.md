@@ -140,12 +140,12 @@ Operations that carry content — saving a workspace file, closing an audit with
 because the HTTP surface cannot carry a request body at all. So do the workspace writes
 (`workspace.delete`, `workspace.rename`, `workspace.copy`), which do not belong on a surface of
 reads, and every setting that carries a secret (`settings.provider.models`,
-`settings.provider.update`, `telegram.save`, `ssh.host.save`), which in a URL would end up
-wherever a request line is logged. Their authorization is the
-handshake's verdict, recorded per connection: with a secret configured, only a connection that
-presented it may run a command, even when `websocket_requires_token` is off. Without that rule
-a file write would sit behind a weaker gate than an HTTP call, which fails closed when no
-secret is set.
+`settings.provider.update`, `telegram.save`, `ssh.host.save`, `onboarding.save`), which in a
+URL would end up wherever a request line is logged. Their authorization is the handshake's
+verdict, recorded per connection: only a connection that presented the secret may run a
+command, even when `websocket_requires_token` is off, and with no secret configured no command
+runs at all — the same fail-closed rule as an HTTP call. Without it a file write would sit
+behind a weaker gate than a read.
 
 The gateway listens on `127.0.0.1:18790` by default (WebSocket and HTTP share the same host/port). If you were to reconfigure `websocket.host` to `0.0.0.0` (all interfaces) without setting `tokenIssueSecret`, the config itself refuses to validate — this is rejected before the gateway can even start, specifically to prevent an unauthenticated gateway from being exposed to the rest of your network.
 

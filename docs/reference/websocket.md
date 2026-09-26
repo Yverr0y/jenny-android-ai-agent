@@ -425,10 +425,11 @@ correlate a reply to.
 | `ssh.host.save` | `alias`, `host`, `port`, `username`, `auth`, `password`, `description`, `job_log_dir` | Create or update an SSH host. A missing `password` keeps the saved one. |
 | `onboarding.save` | `provider_name`, `format`, `api_key`, `api_base`, `model`, `bot_name`, `bot_icon`, `locale` | The first-run setup: save the provider with its API key, the model and Jenny's name, then wake the agent that was waiting for it and write the welcome message into the conversation. Replies `{status, chat_id, welcome_message}`. A missing provider or model is `bad_request` and nothing is saved. |
 
-**Authorization is the handshake's, not the frame's.** When `token_issue_secret` is set, only
-a connection that presented the token at handshake time may run a command, even if
-`websocket_requires_token` is `false` — otherwise a mutation would sit on a weaker gate than
-`/api/`, which fails closed without a secret. Commands live in `jenny/webui/commands.py`
+**Authorization is the handshake's, not the frame's.** Only a connection that presented
+`token_issue_secret` at handshake time may run a command, even if `websocket_requires_token`
+is `false` — otherwise a mutation would sit on a weaker gate than `/api/`. And like `/api/`,
+which answers `401` to everyone when no secret is set, without a secret every command is
+refused with `forbidden`. Commands live in `jenny/webui/commands.py`
 (transport-agnostic); the frame handling is `jenny/channels/ws_rpc.py`.
 
 ## Configuration Reference

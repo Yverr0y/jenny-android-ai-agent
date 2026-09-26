@@ -43,7 +43,10 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def _channel(workspace: Path, *, secret: str = "") -> WebSocketChannel:
+_SECRET = "s3cr3t"
+
+
+def _channel(workspace: Path, *, secret: str = _SECRET) -> WebSocketChannel:
     bus = MagicMock()
     bus.publish_inbound = AsyncMock()
     cfg = {
@@ -64,9 +67,16 @@ def _channel(workspace: Path, *, secret: str = "") -> WebSocketChannel:
     return WebSocketChannel(cfg, bus, gateway=gateway)
 
 
+def _authed_connection(channel: WebSocketChannel) -> _FakeConnection:
+    """Una connessione che ha superato l'handshake col token, come la WebView."""
+    conn = _FakeConnection()
+    assert channel._authorize_websocket_handshake(conn, {"token": [_SECRET]}) is None
+    return conn
+
+
 async def test_rpc_writes_the_file_and_answers_ok(workspace: Path) -> None:
     channel = _channel(workspace)
-    conn = _FakeConnection()
+    conn = _authed_connection(channel)
     # Contenuto che il vecchio trasporto (header HTTP) non poteva spedire.
     content = "riga con emoji 😏 e accenti: perché città\n" * 300
 
@@ -88,7 +98,7 @@ async def test_rpc_writes_the_file_and_answers_ok(workspace: Path) -> None:
 
 async def test_rpc_error_comes_back_as_a_result_frame(workspace: Path) -> None:
     channel = _channel(workspace)
-    conn = _FakeConnection()
+    conn = _authed_connection(channel)
 
     await channel._dispatch_envelope(conn, "client-1", {
         "type": "rpc",
@@ -105,7 +115,7 @@ async def test_rpc_error_comes_back_as_a_result_frame(workspace: Path) -> None:
 
 async def test_unknown_method_answers_instead_of_raising(workspace: Path) -> None:
     channel = _channel(workspace)
-    conn = _FakeConnection()
+    conn = _authed_connection(channel)
 
     await channel._dispatch_envelope(conn, "client-1", {
         "type": "rpc", "id": "rpc-3", "method": "workspace.explode", "params": {},
@@ -117,7 +127,7 @@ async def test_unknown_method_answers_instead_of_raising(workspace: Path) -> Non
 async def test_frame_without_a_usable_id_is_dropped_silently(workspace: Path) -> None:
     """Nessun id valido = nessuna risposta possibile: solo un log, non un crash."""
     channel = _channel(workspace)
-    conn = _FakeConnection()
+    conn = _authed_connection(channel)
 
     await channel._dispatch_envelope(conn, "client-1", {
         "type": "rpc", "method": "workspace.write", "params": {},
@@ -128,7 +138,7 @@ async def test_frame_without_a_usable_id_is_dropped_silently(workspace: Path) ->
 
 async def test_bad_method_still_gets_a_reply_when_the_id_is_valid(workspace: Path) -> None:
     channel = _channel(workspace)
-    conn = _FakeConnection()
+    conn = _authed_connection(channel)
 
     await channel._dispatch_envelope(conn, "client-1", {
         "type": "rpc", "id": "rpc-4", "params": {},
@@ -142,8 +152,9 @@ async def test_unauthenticated_connection_cannot_write_when_a_secret_is_set(
     workspace: Path,
 ) -> None:
     """L'autorizzazione è il verdetto dell'handshake, non un campo del frame."""
-    channel = _channel(workspace, secret="s3cr3t")
+    channel = _channel(workspace)
     conn = _FakeConnection()
+    channel._conn_authed[conn] = False
 
     await channel._dispatch_envelope(conn, "client-1", {
         "type": "rpc",
@@ -166,6 +177,26 @@ async def test_unauthenticated_connection_cannot_write_when_a_secret_is_set(
     })
     assert conn.frames[0]["ok"] is True
     assert (workspace / "a.txt").read_text(encoding="utf-8") == "x"
+
+
+async def test_without_a_secret_no_connection_can_run_a_command(workspace: Path) -> None:
+    """``/api/`` senza secret risponde 401 a tutti; l'RPC lasciava passare ogni
+    comando, cioe' le scritture stavano dietro un cancello piu' debole delle
+    letture. Con ``websocket_requires_token`` spento la connessione nasce anche
+    senza token: e' li' che il rifiuto deve arrivare."""
+    channel = _channel(workspace, secret="")
+    conn = _FakeConnection()
+    assert channel._authorize_websocket_handshake(conn, {}) is None
+
+    await channel._dispatch_envelope(conn, "client-1", {
+        "type": "rpc",
+        "id": "rpc-7",
+        "method": "workspace.write",
+        "params": {"path": "a.txt", "content": "x"},
+    })
+
+    assert conn.frames[0]["error"]["code"] == "forbidden"
+    assert not (workspace / "a.txt").exists()
 
 
 def test_handshake_records_the_verdict_and_cleanup_forgets_it(workspace: Path) -> None:
