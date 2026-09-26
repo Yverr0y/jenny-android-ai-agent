@@ -424,9 +424,36 @@ class TestRetryWaitDelivery:
                 pass
 
         sent = manager.channels["websocket"]._send_mock.await_args_list[0].args[0]
-        assert sent.content == "Model request failed, retry in 60s (attempt 1)."
+        # Nella lingua dell'agente (italiano di default), non nell'inglese del log.
+        assert sent.content == "Il modello non risponde: riprovo fra 60 s (tentativo 1)."
         assert sent.metadata.get("_progress") is True
         assert not sent.metadata.get("_tool_hint")
+
+    @pytest.mark.asyncio
+    async def test_retry_wait_stays_english_for_an_english_agent(self, manager, bus):
+        manager.config.agents.defaults.language = "en"
+        await bus.publish_outbound(OutboundMessage(
+            channel="websocket",
+            chat_id="chat1",
+            content="Model request failed after 4 attempts, giving up.",
+            metadata={"_retry_wait": True},
+        ))
+        task = asyncio.create_task(manager._dispatch_outbound())
+        try:
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        sent = manager.channels["websocket"]._send_mock.await_args_list[0].args[0]
+        assert sent.content == "Model request failed after 4 attempts, giving up."
 
     @pytest.mark.asyncio
     async def test_retry_wait_is_dropped_where_progress_is_off(self, manager, bus):

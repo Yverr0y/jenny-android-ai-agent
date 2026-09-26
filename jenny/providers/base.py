@@ -15,6 +15,7 @@ import httpx
 import json_repair
 from loguru import logger
 
+from jenny.providers import retry_notice
 from jenny.providers.message_repair import (
     SYNTHETIC_USER_CONTENT,
     enforce_role_alternation,
@@ -852,11 +853,9 @@ class LLMProvider(ABC):
         remaining = max(0.0, delay)
         while remaining > 0:
             if on_retry_wait:
-                kind = "persistent retry" if persistent else "retry"
-                await on_retry_wait(
-                    f"Model request failed, {kind} in {max(1, int(round(remaining)))}s "
-                    f"(attempt {attempt})."
-                )
+                await on_retry_wait(retry_notice.waiting(
+                    max(1, int(round(remaining))), attempt, persistent=persistent,
+                ))
             chunk = min(remaining, self._RETRY_HEARTBEAT_CHUNK)
             await asyncio.sleep(chunk)
             remaining -= chunk
@@ -986,9 +985,7 @@ class LLMProvider(ABC):
                     (response.content or "")[:120].lower(),
                 )
                 if on_retry_wait:
-                    await on_retry_wait(
-                        f"Persistent retry stopped after {identical_error_count} identical errors."
-                    )
+                    await on_retry_wait(retry_notice.stopped(identical_error_count))
                 return response
 
             if not persistent and attempt > len(delays):
@@ -998,9 +995,7 @@ class LLMProvider(ABC):
                     (response.content or "")[:120].lower(),
                 )
                 if on_retry_wait:
-                    await on_retry_wait(
-                        f"Model request failed after {attempt} attempts, giving up."
-                    )
+                    await on_retry_wait(retry_notice.gave_up(attempt))
                 break
 
             base_delay = delays[min(attempt - 1, len(delays) - 1)]

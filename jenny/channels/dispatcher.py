@@ -21,6 +21,7 @@ from jenny.bus.events import (
 )
 from jenny.bus.queue import MessageBus
 from jenny.config.schema import Config
+from jenny.providers import retry_notice
 from jenny.runtime.notifier import notify_delivery
 from jenny.webui.metadata import WEBUI_DEFAULT_CHAT_ID
 
@@ -365,13 +366,17 @@ class WebSocketDispatcher:
                     # ammessi: scartato, con un ``Retry-After`` lungo lasciava
                     # una bolla ferma senza spiegazione. Mai come risposta:
                     # ``_progress`` lo rende una riga subordinata nella WebUI.
+                    # Il provider la scrive in inglese (anche per i log): qui si
+                    # traduce nella lingua dell'agente.
                     target = self._route_channel(msg)
                     if not self._channel_allows_progress(target):
                         continue
                     msg = OutboundMessage(
                         channel=msg.channel,
                         chat_id=msg.chat_id,
-                        content=msg.content,
+                        content=retry_notice.localize(
+                            msg.content, self.config.agents.defaults.language,
+                        ),
                         metadata={**msg.metadata, "_progress": True, "_tool_hint": False},
                     )
 
