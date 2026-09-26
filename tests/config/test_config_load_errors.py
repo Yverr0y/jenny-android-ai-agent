@@ -83,3 +83,28 @@ def test_load_config_prefers_the_backup_over_defaults(tmp_path) -> None:
     again = load_config(config_path)
     assert [p.name for p in again.providers.providers] == ["deepseek"]
     assert get_runtime_context().config_recovered_from is None
+
+
+def test_the_file_promoted_from_the_backup_is_private(tmp_path) -> None:
+    """TD21: il file rimesso al suo posto dal ``.bak`` porta gli stessi segreti.
+
+    ``write_text`` qui sotto lascia il file rotto e il backup con i permessi di
+    default (644 con l'umask comune): il file promosso deve uscire comunque 600.
+    """
+    import os
+    import stat
+
+    _reset_recovery_flags()
+    old_umask = os.umask(0o022)
+    try:
+        config_path = tmp_path / "config.json"
+        _backup_path(config_path).write_text(json.dumps({"agents": {}}), encoding="utf-8")
+        config_path.write_text("{troncato", encoding="utf-8")
+
+        load_config(config_path)
+    finally:
+        os.umask(old_umask)
+
+    assert get_runtime_context().config_recovered_from == "backup"
+    assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
+    _reset_recovery_flags()
