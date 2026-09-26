@@ -16,8 +16,10 @@ vero, e poi i tre posti che lo usano girando in node il loro codice vero.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from support.home_dom import requires_jsdom, run_home
 from support.js_harness import member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
@@ -110,12 +112,19 @@ const toasts = [];
 const showToast = (msg, kind) => toasts.push([msg, kind]);
 const i18n = { t: (key) => key };
 
-function anchor(href, inside = true) {
+/* Un link finto: risponde a `closest` come un elemento vero, cioe' a ogni
+   selettore della lista che lo prende — `a[href]` di un tempo e quello di
+   `contentLinkOf`, che vuole anche `<area href>` e i link SVG. */
+function anchor(href, inside = true, tag = 'a') {
   return {
-    tag: 'a',
+    tag,
     inside,
     getAttribute: (name) => (name === 'href' ? href : null),
-    closest(sel) { return sel === 'a[href]' ? this : null; },
+    getAttributeNS: () => null,
+    closest(sel) {
+      const parts = sel.split(',').map((p) => p.trim());
+      return parts.includes(`${tag}[href]`) || parts.includes('[href]') ? this : null;
+    },
   };
 }
 function click(target) {
@@ -140,10 +149,12 @@ def _home_chat() -> str:
         _click_harness()
         + """
 const copied = [];
+const scrolled = [];
+const heading = { scrollIntoView() { scrolled.push('h2'); } };
 const chat = {
   el: {
     contains: (node) => node.inside !== false,
-    querySelector: () => null,
+    querySelector: (sel) => (sel.startsWith('#user-content-sezione') ? heading : null),
   },
   _copy(node) { copied.push(node); },
   """
@@ -180,6 +191,34 @@ def test_the_home_chat_opens_the_web_outside() -> None:
       chat._onClick(e);
       assert.equal(e.prevented, 1);
       assert.deepEqual(window.opened, ['https://example.org/x']);
+      assert.deepEqual(toasts, []);
+    """
+    )
+
+
+def test_the_home_chat_does_not_let_an_image_map_navigate() -> None:
+    """Un ``<area href>`` non e' un ``a[href]``: il tocco passava e navigava il
+    frame principale (WJ3). Oggi il sanificatore toglie ``<area>``; questo e' il
+    secondo cancello."""
+    run_js(
+        _home_chat()
+        + """
+      const e = click(anchor('workshop.html', true, 'area'));
+      chat._onClick(e);
+      assert.equal(e.prevented, 1, 'il tocco su un <area> non e\u2019 stato annullato');
+      assert.deepEqual(toasts, [['common.linkNotOpenable', 'info']]);
+    """
+    )
+
+
+def test_the_home_chat_scrolls_to_the_sanitized_anchor() -> None:
+    """``#sezione`` porta al titolo che il sanificatore ha chiamato
+    ``user-content-sezione`` (HJ8)."""
+    run_js(
+        _home_chat()
+        + """
+      chat._onClick(click(anchor('#sezione')));
+      assert.deepEqual(scrolled, ['h2']);
       assert.deepEqual(toasts, []);
     """
     )
@@ -234,4 +273,63 @@ const chat = {
       chat._handleContentLink(click(anchor('https://example.org/')), anchor('https://example.org/'));
       assert.deepEqual(window.opened, ['https://example.org/']);
     """
+    )
+
+
+# ── La chat della casa vera, in jsdom, con DOMPurify e marked veri ───────────
+
+_VENDOR = ASSETS / "vendor"
+_HOME_WITH_LIBS = f"""
+import assert from 'node:assert/strict';
+import {{ createRequire }} from 'node:module';
+import {{ boot, tick, frame, toasts }} from './boot.mjs';
+const require = createRequire(import.meta.url);
+globalThis.DOMPurify = require({json.dumps(str(_VENDOR / "dompurify@3" / "purify.min.js"))})(window);
+globalThis.marked = require({json.dumps(str(_VENDOR / "marked@15.0.7" / "marked.min.js"))});
+window.DOMPurify = globalThis.DOMPurify;
+window.marked = globalThis.marked;
+const scrolled = [];
+window.HTMLElement.prototype.scrollIntoView = function () {{ scrolled.push(this); }};
+const app = await boot();
+const tap = (node) => {{
+  const e = new window.MouseEvent('click', {{ bubbles: true, cancelable: true }});
+  node.dispatchEvent(e);
+  return e;
+}};
+"""
+
+
+@requires_jsdom
+def test_an_anchor_in_a_home_answer_scrolls_to_its_heading() -> None:
+    run_home(
+        _HOME_WITH_LIBS
+        + """
+frame({ event: 'stream_end', chat_id: 'default', turn_id: 't1',
+        text: '<h2 id="semina">Semina</h2>\\n\\n[vai](#semina)' });
+await tick(10);
+const thread = document.getElementById('home-thread');
+const heading = thread.querySelector('h2');
+assert.equal(heading?.id, 'user-content-semina', thread.innerHTML);
+const e = tap(thread.querySelector('a[href="#semina"]'));
+assert.equal(e.defaultPrevented, true);
+assert.equal(scrolled.length, 1, 'l\u2019ancora non ha fatto scorrere: ' + JSON.stringify(toasts()));
+assert.equal(scrolled[0], heading);
+"""
+    )
+
+
+@requires_jsdom
+def test_a_home_image_map_that_got_through_does_not_navigate() -> None:
+    """Il sanificatore toglie ``<area>``; se una sua versione futura lo lasciasse
+    passare, il tocco non deve comunque navigare il frame principale."""
+    run_home(
+        _HOME_WITH_LIBS
+        + """
+frame({ event: 'stream_end', chat_id: 'default', turn_id: 't2', text: 'Mappa' });
+await tick(10);
+const block = document.querySelector('#home-thread .home-block');
+block.insertAdjacentHTML('beforeend', '<map name="m"><area shape="rect" coords="0,0,9,9" href="workshop.html"></map>');
+const e = tap(block.querySelector('area'));
+assert.equal(e.defaultPrevented, true, 'il tocco su un <area> naviga il frame principale');
+"""
     )

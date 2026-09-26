@@ -40,7 +40,13 @@ import { HistoryPager } from './shared/history-pager.js';
 import { renderRich } from './shared/rich-content.js';
 import { renderMarkdown } from './shared/markdown.js';
 import { describeWireError } from './shared/wire-error.js';
-import { contentLinkTarget, openOutsideWebView } from './shared/content-link.js';
+import {
+  contentLinkHref,
+  contentLinkOf,
+  contentLinkTarget,
+  findContentAnchor,
+  openOutsideWebView,
+} from './shared/content-link.js';
 
 /* Da dove e' entrato un messaggio che non hai scritto qui dentro. La chat e' il
    registro completo di tutte le superfici — l'app, Telegram, la tendina delle
@@ -211,7 +217,9 @@ export class HomeChat {
       this._openMediaFile(this._files.get(file) || { url: file.getAttribute('href') });
       return;
     }
-    const link = e.target.closest('a[href]');
+    /* Non solo `a[href]`: un `<area href>` o un link SVG sono link anche loro,
+       e un tocco lasciato passare navigava il frame principale (WJ3). */
+    const link = contentLinkOf(e.target);
     if (link && this.el.contains(link)) {
       if (!e.defaultPrevented) this._openLink(e, link);
       return;
@@ -224,12 +232,11 @@ export class HomeChat {
      origine si apre fuori dalla WebView, il resto lo dice. */
   _openLink(e, a) {
     e.preventDefault();
-    const target = contentLinkTarget(a.getAttribute('href'), window.location);
+    const target = contentLinkTarget(contentLinkHref(a), window.location);
     if (target?.kind === 'hash') {
-      let anchor = null;
-      try {
-        anchor = target.id ? this.el.querySelector(`#${CSS.escape(target.id)}`) : null;
-      } catch (_) { anchor = null; }
+      /* L'id del titolo e' quello sanificato (`user-content-…`, HJ8), e si
+         cerca solo dentro il filo: un id del guscio non e' un bersaglio. */
+      const anchor = findContentAnchor(this.el, target.id);
       if (anchor) anchor.scrollIntoView({ block: 'start' });
       else showToast(i18n.t('common.linkNotOpenable'), 'info');
       return;
