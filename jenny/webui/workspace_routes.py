@@ -22,6 +22,7 @@ import asyncio
 import mimetypes
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import quote
 
 from websockets.datastructures import Headers
 from websockets.http11 import Request as WsRequest
@@ -181,7 +182,27 @@ class WorkspaceRoutes:
         headers = Headers(
             [
                 ("Content-Type", content_type),
-                ("Content-Disposition", f'attachment; filename="{full_path.name}"'),
+                ("Content-Disposition", content_disposition(full_path.name)),
+                # Il tipo lo decide l'estensione: che il browser non ne indovini
+                # un altro dal contenuto (un ``.txt`` che «sembra» HTML).
+                ("X-Content-Type-Options", "nosniff"),
             ]
         )
         return Response(200, "OK", headers, data)
+
+
+def content_disposition(name: str) -> str:
+    """``attachment`` con il nome del file, per qualunque nome (RFC 6266).
+
+    Il nome finiva crudo fra virgolette (terza revisione, WA11): un'emoji o un
+    accento facevano rifiutare l'header a ``websockets`` — 500 invece del file —,
+    un ``"`` chiudeva il valore prima del tempo, e su POSIX un nome puo'
+    contenere un a-capo, cioe' un header in piu'. Due parametri: ``filename*``
+    in UTF-8 percent-encodato, che e' quello che i browser usano, e ``filename``
+    in ASCII stampabile per chi non lo capisce, con ``\\`` e ``"`` escapati e
+    tutto il resto sostituito da ``_``.
+    """
+    fallback = "".join(
+        ("\\" + ch if ch in '"\\' else ch) if " " <= ch <= "~" else "_" for ch in name
+    )
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(name, safe='')}"

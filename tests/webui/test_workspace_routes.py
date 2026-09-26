@@ -526,6 +526,42 @@ async def test_download_rejects_path_traversal(
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize(
+    ("name", "fallback", "encoded"),
+    [
+        ("città 😏.txt", "citt_ _.txt", "citt%C3%A0%20%F0%9F%98%8F.txt"),
+        ('dice "ciao".md', 'dice \\"ciao\\".md', "dice%20%22ciao%22.md"),
+        ("a\r\nSet-Cookie: x=1.txt", "a__Set-Cookie: x=1.txt", "a%0D%0ASet-Cookie%3A%20x%3D1.txt"),
+        ("back\\slash.txt", "back\\\\slash.txt", "back%5Cslash.txt"),
+    ],
+)
+async def test_download_names_any_file_safely(
+    routes: WorkspaceRoutes,
+    workspace_root: Path,
+    config_path: Path,
+    name: str,
+    fallback: str,
+    encoded: str,
+) -> None:
+    """Il nome del file finiva crudo fra virgolette nell'header: un'emoji o un
+    accento facevano rifiutare l'header a ``websockets`` (500), un ``"`` lo
+    chiudeva prima, e un a-capo nel nome ne apriva un altro (terza revisione,
+    WA11). Ora c'e' il ``filename*`` di RFC 6266 in UTF-8 percent-encodato, e un
+    ``filename`` ASCII di ripiego con ``"`` e ``\\`` escapati."""
+    from urllib.parse import quote
+
+    (workspace_root / name).write_bytes(b"x")
+    url = f"/api/workspace/download?path={quote(name, safe='')}"
+    response = await routes.dispatch(_request(url), "/api/workspace/download")
+    assert response.status_code == 200
+    disposition = response.headers["Content-Disposition"]
+    assert disposition == f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    # L'header deve passare il controllo di ``websockets`` (16.1 lo fa gia' nel
+    # costruttore di ``Headers``, 16.0 no): ASCII stampabile e niente a-capo.
+    assert disposition.isascii() and "\r" not in disposition and "\n" not in disposition
+
+
 # ---------------------------------------------------------------------------
 # WA10: il disco fuori dall'event loop
 # ---------------------------------------------------------------------------
