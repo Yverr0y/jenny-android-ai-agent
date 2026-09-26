@@ -832,6 +832,12 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
                     if partial:
                         exc.partial_content = partial
             raise
+        finally:
+            # httpx chiude da sé solo lo stream letto fino in fondo. Su uno
+            # stallo, un'eccezione, un ``/stop`` (cancellazione) o un chunk
+            # d'errore la connessione restava aperta e l'upstream continuava a
+            # generare — e a fatturare — una risposta che nessuno leggeva.
+            await self._release(response)
         return self._parse_chunks(chunks)
 
     async def _http_responses_chat(
@@ -874,15 +880,21 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         # Gli stessi due budget del ramo Chat Completions: senza, uno stream
         # Responses muto restava appeso fino alla read timeout di httpx.
         idle_timeout_s = resolve_stream_idle_timeout_s()
-        content, tool_calls, finish_reason, usage, reasoning_content = await consume_sse_with_reasoning(
-            response,
-            on_content_delta=on_content_delta,
-            on_tool_call_delta=on_tool_call_delta,
-            idle_timeout_s=idle_timeout_s,
-            first_output_timeout_s=max(
-                resolve_first_output_timeout_s(local=self._is_local), idle_timeout_s,
-            ),
-        )
+        try:
+            content, tool_calls, finish_reason, usage, reasoning_content = (
+                await consume_sse_with_reasoning(
+                    response,
+                    on_content_delta=on_content_delta,
+                    on_tool_call_delta=on_tool_call_delta,
+                    idle_timeout_s=idle_timeout_s,
+                    first_output_timeout_s=max(
+                        resolve_first_output_timeout_s(local=self._is_local), idle_timeout_s,
+                    ),
+                )
+            )
+        finally:
+            # Come per Chat Completions: chiusa anche se lo stream non finisce.
+            await self._release(response)
         return LLMResponse(
             content=content or None,
             tool_calls=tool_calls,
