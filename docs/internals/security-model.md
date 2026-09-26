@@ -165,8 +165,10 @@ refactor.
   lives in Kotlin: `shouldInterceptRequest` for HTTP, a document-start script
   (`res/raw/browser_network_guard.js`) that makes `WebSocket`, `WebSocketStream` and
   `WebTransport` ask the native verdict and disables `RTCPeerConnection`, and a service-worker
-  client on the session's own profile. The verdict cache holds at most 256 hosts; a name that
-  is not cached waits at most 2 seconds for DNS, and a timeout counts as blocked. Not covered:
+  client on the session's own profile. The verdict cache holds at most 256 hosts. On the
+  page-side check a name that is not cached waits at most 2 seconds for DNS, and a timeout
+  counts as blocked; an HTTP request waits for the system resolver on a WebView worker thread,
+  with no cap of its own, and a failed resolution counts as blocked. Not covered:
   `WebSocket` inside a worker, DNS rebinding between the check and the connection, and WebViews
   too old for document-start scripts or multiple profiles. It stops an ordinary page, not one
   written against it.

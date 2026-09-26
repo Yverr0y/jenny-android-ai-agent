@@ -18,6 +18,7 @@ piccolo con un'attesa massima — oltre, «bloccato», come per un DNS che falli
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from support.kotlin_source import block_after, function_body, read_code, read_source
 
@@ -86,3 +87,19 @@ def test_the_guard_pool_is_small_and_bounded() -> None:
     assert "ThreadPoolExecutor(" in pool
     assert "ArrayBlockingQueue(" in pool, "una coda senza tetto è un'altra cache senza tetto"
     assert "isDaemon = true" in pool
+
+
+def test_the_security_model_puts_the_dns_cap_where_the_code_has_it() -> None:
+    """Il tetto di 2 secondi c'e' solo sulla domanda della guardia lato pagina;
+    una richiesta HTTP risolve con ``isBlockedHost`` diretto, senza tetto. Il
+    modello di sicurezza lo diceva di ogni nome non in cache."""
+    http = function_body(_code(), "blockedResponseFor")
+    assert "isBlockedHost(host)" in http
+    assert "GUARD_DNS_TIMEOUT_MS" not in http and "guardDns" not in http
+    doc = (Path(__file__).resolve().parents[2] / "docs/internals/security-model.md").read_text(
+        encoding="utf-8"
+    )
+    section = doc[doc.index("**The agent browser's WebView.**") :].split("\n- ", 1)[0]
+    browser = " ".join(section.split())
+    assert "On the page-side check a name that is not cached waits at most 2 seconds" in browser
+    assert "an HTTP request waits for the system resolver" in browser
