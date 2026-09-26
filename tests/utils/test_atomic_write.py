@@ -40,9 +40,19 @@ class TestAtomicWrite:
         assert list(tmp_path.glob(".clean*")) == []
 
     def test_fsync_dir_failure_is_tolerated(self, tmp_path: Path) -> None:
+        import os
+
         path = tmp_path / "ok.txt"
-        with patch("os.open") as mock_open:
-            mock_open.side_effect = OSError("android fuse")
+        real_open = os.open
+
+        # Solo l'apertura della cartella fallisce: il temporaneo si apre anche
+        # lui con ``os.open``, per nascere coi permessi giusti.
+        def _dir_open_fails(file, flags, *args, **kwargs):
+            if os.path.isdir(file):
+                raise OSError("android fuse")
+            return real_open(file, flags, *args, **kwargs)
+
+        with patch("os.open", side_effect=_dir_open_fails):
             atomic_write(path, "data")
         assert path.read_text(encoding="utf-8") == "data"
 
@@ -97,3 +107,61 @@ class TestAtomicWrite:
         # Nessun temp orfano e il file finale è uno dei payload integri.
         assert list(tmp_path.glob("*.tmp")) == []
         assert path.read_text(encoding="utf-8") in payloads
+
+
+def _modes_of_temps_while_written(tmp_path: Path, **kwargs) -> list[int]:
+    """I permessi del temporaneo quando il contenuto c'e' gia': al ``fsync``."""
+    import os
+    import stat
+
+    import jenny.utils.path as path_mod
+
+    seen: list[int] = []
+    real_fsync = os.fsync
+
+    def _spy(fd: int) -> None:
+        for tmp in tmp_path.glob("*.tmp"):
+            if tmp.stat().st_size:
+                seen.append(stat.S_IMODE(tmp.stat().st_mode))
+        real_fsync(fd)
+
+    old_umask = os.umask(0o022)
+    try:
+        with patch.object(path_mod.os, "fsync", _spy):
+            atomic_write(tmp_path / "config.json", '{"apiKey": "sk-segreta"}', **kwargs)
+    finally:
+        os.umask(old_umask)
+    return seen
+
+
+def test_a_private_file_is_never_readable_by_others_not_even_as_a_temp(tmp_path: Path) -> None:
+    """Col ``chmod`` applicato dopo la scrittura il temporaneo, chiavi dentro,
+    esisteva per un momento con i permessi di default (0644 con umask 022)."""
+    import stat
+
+    seen = _modes_of_temps_while_written(tmp_path, chmod=0o600)
+
+    assert seen == [0o600]
+    assert stat.S_IMODE((tmp_path / "config.json").stat().st_mode) == 0o600
+
+
+def test_without_chmod_the_file_keeps_the_default_permissions(tmp_path: Path) -> None:
+    """Il permesso stretto e' per chi lo chiede: gli altri file restano come
+    li farebbe ``open``, secondo l'umask."""
+    import stat
+
+    seen = _modes_of_temps_while_written(tmp_path)
+
+    assert seen == [0o644]
+    assert stat.S_IMODE((tmp_path / "config.json").stat().st_mode) == 0o644
+
+
+def test_a_wider_chmod_is_applied_once_the_content_is_complete(tmp_path: Path) -> None:
+    """Il temporaneo nasce comunque non piu' largo di 0600; il modo chiesto
+    arriva prima della rename, come prima."""
+    import stat
+
+    seen = _modes_of_temps_while_written(tmp_path, chmod=0o640)
+
+    assert seen == [0o600]
+    assert stat.S_IMODE((tmp_path / "config.json").stat().st_mode) == 0o640
