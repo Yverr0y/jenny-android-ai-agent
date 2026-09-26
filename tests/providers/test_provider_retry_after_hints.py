@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from jenny.providers.anthropic_provider import AnthropicProvider
+from jenny.providers.base import LLMProvider, LLMResponse
 from jenny.providers.openai_compat_provider import OpenAICompatProvider
 
 
@@ -26,3 +27,37 @@ def test_anthropic_error_captures_retry_after_from_headers() -> None:
     response = AnthropicProvider._handle_error(err)
 
     assert response.retry_after == 20.0
+
+
+# ── PC7 della terza revisione: il Retry-After ha un tetto anche in standard ──
+
+
+async def test_a_huge_retry_after_is_capped_in_standard_mode(monkeypatch) -> None:
+    """``Retry-After: 3600`` in modalità standard bloccava la sessione ~3 ore.
+
+    La modalità persistente aveva già il suo tetto (``_PERSISTENT_MAX_DELAY``);
+    la standard aspettava alla lettera, tre volte. Ora ogni attesa si ferma a
+    ``_STANDARD_MAX_DELAY``.
+    """
+
+    class _RateLimited(LLMProvider):
+        async def chat(self, **_kwargs):
+            return LLMResponse(
+                content="Error: rate limited", finish_reason="error",
+                error_status_code=429, error_retry_after_s=3600.0,
+            )
+
+        def get_default_model(self) -> str:
+            return "m"
+
+    slept: list[float] = []
+
+    async def _fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr("jenny.providers.base.asyncio.sleep", _fake_sleep)
+    response = await _RateLimited().chat_with_retry(messages=[{"role": "user", "content": "x"}])
+
+    assert response.finish_reason == "error"
+    # Prima: 3 × 3600 s. Ora ogni attesa si ferma a un minuto al massimo.
+    assert sum(slept) <= 60 * len(LLMProvider._CHAT_RETRY_DELAYS)

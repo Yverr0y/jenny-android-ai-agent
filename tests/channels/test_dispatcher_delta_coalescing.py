@@ -391,18 +391,51 @@ class TestProgressFiltering:
         assert send_mock.await_args_list[0].args[0].content == "read_file(foo.py)"
 
 
-class TestRetryWaitFiltering:
-    """Internal provider retry heartbeats must never reach channels."""
+class TestRetryWaitDelivery:
+    """L'avviso d'attesa del provider arriva come riga di progresso, mai come risposta.
+
+    Era scartato del tutto: con un ``Retry-After`` lungo l'utente guardava una
+    bolla ferma senza sapere perché (PC7 della terza revisione). Il difetto
+    più vecchio che lo scarto correggeva — il diagnostico recapitato come se
+    fosse una risposta — resta corretto: l'avviso diventa ``_progress``, quindi
+    la WebUI lo rende come riga subordinata, e un canale che non vuole progress
+    (Telegram) non lo riceve.
+    """
 
     @pytest.mark.asyncio
-    async def test_retry_wait_message_dropped(self, manager, bus):
-        """A ``_retry_wait`` message must be filtered before channel dispatch.
+    async def test_retry_wait_reaches_the_webui_as_progress(self, manager, bus):
+        await bus.publish_outbound(OutboundMessage(
+            channel="websocket",
+            chat_id="chat1",
+            content="Model request failed, retry in 60s (attempt 1).",
+            metadata={"_retry_wait": True},
+        ))
+        task = asyncio.create_task(manager._dispatch_outbound())
+        try:
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        Regression: provider retry diagnostics like
-        ``Model request failed, retry in 1s (attempt 1).`` were being
-        delivered to end-user channels because the runner bound
-        ``on_retry_wait`` to the progress callback.
+        sent = manager.channels["websocket"]._send_mock.await_args_list[0].args[0]
+        assert sent.content == "Model request failed, retry in 60s (attempt 1)."
+        assert sent.metadata.get("_progress") is True
+        assert not sent.metadata.get("_tool_hint")
+
+    @pytest.mark.asyncio
+    async def test_retry_wait_is_dropped_where_progress_is_off(self, manager, bus):
+        """Un canale con ``send_progress`` spento (Telegram) non lo riceve.
+
+        Il messaggio vero che segue passa, l'avviso no.
         """
+        manager.channels["websocket"].send_progress = False
         retry_msg = OutboundMessage(
             channel="websocket",
             chat_id="chat1",

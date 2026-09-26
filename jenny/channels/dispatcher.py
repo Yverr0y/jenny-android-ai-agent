@@ -348,7 +348,20 @@ class WebSocketDispatcher:
                         continue
 
                 if msg.metadata.get("_retry_wait"):
-                    continue
+                    # L'avviso «il modello non risponde, riprovo fra N s» arriva
+                    # all'utente come riga di progresso, dove i progress sono
+                    # ammessi: scartato, con un ``Retry-After`` lungo lasciava
+                    # una bolla ferma senza spiegazione. Mai come risposta:
+                    # ``_progress`` lo rende una riga subordinata nella WebUI.
+                    target = self._route_channel(msg)
+                    if not self._channel_allows_progress(target):
+                        continue
+                    msg = OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=msg.content,
+                        metadata={**msg.metadata, "_progress": True, "_tool_hint": False},
+                    )
 
                 if msg.metadata.get("_stream_delta") and not msg.metadata.get("_stream_end"):
                     msg, extra_pending = self._coalesce_stream_deltas(msg)

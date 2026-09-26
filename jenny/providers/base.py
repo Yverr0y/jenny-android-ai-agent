@@ -325,6 +325,8 @@ class LLMProvider(ABC):
 
     _CHAT_RETRY_DELAYS = (1, 2, 4)
     _PERSISTENT_MAX_DELAY = 60
+    # Tetto di una singola attesa in modalità standard (v. ``_run_with_retry``).
+    _STANDARD_MAX_DELAY = 60
     _PERSISTENT_IDENTICAL_ERROR_LIMIT = 10
     _RETRY_HEARTBEAT_CHUNK = 30
     # Classificazione retry estratta in ``providers/retry_policy.py``.
@@ -896,8 +898,12 @@ class LLMProvider(ABC):
 
             base_delay = delays[min(attempt - 1, len(delays) - 1)]
             delay = self._extract_retry_after_from_response(response) or base_delay
-            if persistent:
-                delay = min(delay, self._PERSISTENT_MAX_DELAY)
+            # Il ``Retry-After`` del server ha un tetto in entrambe le modalità:
+            # in standard si prendeva alla lettera, e un ``3600`` teneva la
+            # sessione ferma tre ore (tre tentativi) prima dell'errore.
+            delay = min(
+                delay, self._PERSISTENT_MAX_DELAY if persistent else self._STANDARD_MAX_DELAY,
+            )
 
             logger.warning(
                 "LLM transient error (attempt {}{}), retrying in {}s: {}",
