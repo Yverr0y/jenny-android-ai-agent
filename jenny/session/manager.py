@@ -34,6 +34,33 @@ DIARY_HARVEST_METADATA_KEY = "_diary_harvested"
 _MESSAGE_TIME_PREFIX_RE = re.compile(r"^\[Message Time: [^\]]+\]\n?")
 _LOCAL_IMAGE_BREADCRUMB_RE = re.compile(r"^\[image: (?:/|~)[^\]]+\]\s*$")
 _TOOL_CALL_ECHO_RE = re.compile(r'^\s*message\([^)]*\)\s*$')
+# Un code point surrogato in una ``str`` e' sempre isolato: una coppia valida,
+# decodificata, e' gia' un carattere solo. In UTF-8 non esiste, e ``json.loads``
+# lo produce da un frame tagliato a meta' di un'emoji (``"\\ud83d"``).
+_LONE_SURROGATE_RE = re.compile("[\ud800-\udfff]")
+
+
+def scrub_lone_surrogates(text: str) -> str:
+    """*text* con ogni surrogato isolato sostituito da U+FFFD (AC5 della terza revisione).
+
+    Un surrogato in un messaggio faceva fallire **ogni** salvataggio della
+    sessione da li' in poi — ``encode("utf-8")`` lo rifiuta — e anche i turni
+    puliti rispondevano con l'errore generico fino al riavvio. Si ripulisce
+    all'ingresso del messaggio (``AgentLoop._process_message``) e, come rete, in
+    :meth:`SessionManager.save`.
+    """
+    return _LONE_SURROGATE_RE.sub("\ufffd", text)
+
+
+def _scrub_value(value: Any) -> Any:
+    """:func:`scrub_lone_surrogates` applicata a ogni stringa di una struttura JSON."""
+    if isinstance(value, str):
+        return scrub_lone_surrogates(value)
+    if isinstance(value, list):
+        return [_scrub_value(item) for item in value]
+    if isinstance(value, dict):
+        return {_scrub_value(k): _scrub_value(v) for k, v in value.items()}
+    return value
 
 
 def _sanitize_assistant_replay_text(content: str) -> str:
@@ -555,6 +582,23 @@ class SessionManager:
         the most recent writes.
         """
         path = self._get_session_path(session.key)
+        try:
+            atomic_write(path, self._serialize(session), fsync_file=fsync, fsync_dir=fsync)
+        except UnicodeEncodeError:
+            # Un surrogato isolato arrivato da una porta che non ripulisce
+            # (AC5 della terza revisione): si ripulisce la sessione **in
+            # memoria**, cosi' cache e disco restano uguali, e si riscrive.
+            # Senza, ogni salvataggio successivo falliva allo stesso modo.
+            logger.warning(
+                "Session {} carried a lone UTF-16 surrogate; replaced with U+FFFD", session.key,
+            )
+            session.messages = _scrub_value(session.messages)
+            session.metadata = _scrub_value(session.metadata)
+            atomic_write(path, self._serialize(session), fsync_file=fsync, fsync_dir=fsync)
+        self._cache[session.key] = session
+
+    @staticmethod
+    def _serialize(session: Session) -> str:
         metadata_line = {
             "_type": "metadata",
             "key": session.key,
@@ -566,8 +610,7 @@ class SessionManager:
         lines = [json.dumps(metadata_line, ensure_ascii=False) + "\n"]
         for msg in session.messages:
             lines.append(json.dumps(msg, ensure_ascii=False) + "\n")
-        atomic_write(path, "".join(lines), fsync_file=fsync, fsync_dir=fsync)
-        self._cache[session.key] = session
+        return "".join(lines)
 
     def flush_all(self) -> int:
         """Re-save every cached session with fsync for durable shutdown.

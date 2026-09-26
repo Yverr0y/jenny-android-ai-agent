@@ -88,7 +88,7 @@ from jenny.session.keys import (
     is_valid_project_name,
     session_key_for_channel,
 )
-from jenny.session.manager import Session, SessionManager
+from jenny.session.manager import Session, SessionManager, scrub_lone_surrogates
 from jenny.session.project_rename import (
     follow_renamed_project,
     pending_project_renames,
@@ -1360,7 +1360,11 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 return []
 
             def _to_user_message(pending_msg: InboundMessage) -> dict[str, Any]:
+                # La stessa pulizia di ``_process_message``: un messaggio iniettato
+                # a meta' turno non passa di li'.
                 content = pending_msg.content
+                if isinstance(content, str):
+                    content = scrub_lone_surrogates(content)
                 media = pending_msg.media if pending_msg.media else None
                 if media:
                     content, media = self._prepare_message_media(content, media)
@@ -2123,6 +2127,13 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         turn_token: TurnToken | None = None,
     ) -> TurnOutcome:
         """Process a single inbound message and return its outcome."""
+        # Un surrogato UTF-16 isolato (un frame tagliato dentro un'emoji) diventa
+        # U+FFFD qui, al confine del turno: arrivato in sessione, faceva fallire
+        # ogni salvataggio fino al riavvio (AC5 della terza revisione).
+        if isinstance(msg.content, str):
+            clean = scrub_lone_surrogates(msg.content)
+            if clean != msg.content:
+                msg = dataclasses.replace(msg, content=clean)
         if msg.channel == "system":
             return await self._process_system_message(
                 msg,
