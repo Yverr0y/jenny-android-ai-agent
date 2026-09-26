@@ -20,11 +20,11 @@ Start here if you just want to install and use the app.
 
 | Page | Description |
 |---|---|
-| [Tour of the WebUI](using/webui-tour.md) | The 5-tab dock, swipe navigation between views, Android back-button behavior, and the session info popover. |
+| [Tour of the WebUI](using/webui-tour.md) | The home's swipeable pages (Apps, Jenny, Notebooks, Settings), the workshop's four-tab dock (Console, Brain, Hands, Memory), Android back-button behavior, and the session info popover. |
 | [Chat basics](using/chat.md) | Sending messages, streaming replies, tool call pills, the reasoning block, the changed-files pill, and inline file previews. |
 | [Files and attachments](using/attachments.md) | Sending images, files, and camera captures from chat; the exact size limits and what the model actually gets to see. |
 | [Memory and Dream](using/memory.md) | How session history, idle compaction, and the two-phase Dream consolidation build Jenny's long-term memory — and how the list of your wikis reaches every prompt. |
-| [Projects](using/projects.md) | Project conversations: a chat bound to one folder that remembers by writing pages instead of by feeding Jenny's personal memory — the scope chip, the Writes/Read-only switch, capture, and the map. |
+| [Projects](using/projects.md) | Project conversations: a chat bound to one folder that remembers by writing pages, and passes only facts about you on to Jenny's personal memory — the scope chip, the Writes/Read-only switch, capture, and the map. |
 | [The gardener](using/gardener.md) | The background pass that turns a project's journal lines into pages and keeps its map true: when it runs, what it refuses to touch, and how to turn it off. |
 | [Scheduling and proactivity](using/scheduling.md) | Reminders (one-shot, recurring, cron), the heartbeat loop, goals/long tasks, and subagents — and what silently breaks when the app is killed. |
 | [Mini-apps (Jenny Apps)](using/mini-apps.md) | Chat-authored mini web apps backed by native tools, how they differ from skills, and their sandboxing limits. |

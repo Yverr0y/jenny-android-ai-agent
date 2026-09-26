@@ -10,6 +10,7 @@ For the product-level mental model, read [Concepts](./concepts.md) first.
 flowchart LR
     WS["WebSocket Channel<br/>WebUI"] --> Bus["MessageBus<br/>InboundMessage"]
     TG["Telegram Channel<br/>(optional, paired)"] --> Bus
+    NF["Notification + Floating<br/>(Android only)"] --> Bus
     Bus --> Loop["AgentLoop<br/>session, workspace, context"]
     Loop --> Runner["AgentRunner<br/>provider/tool loop"]
     Runner --> Provider["Provider<br/>LLM backend"]
@@ -21,6 +22,7 @@ flowchart LR
     Outbound --> Dispatcher["WebSocketDispatcher<br/>fan-out + retry + coalescing"]
     Dispatcher --> WS
     Dispatcher --> TG
+    Dispatcher --> NF
 
     Loop -. reads/writes .-> State["Session, memory,<br/>hooks, skills, templates"]
 ```
@@ -99,7 +101,7 @@ Useful docs:
 
 The gateway (started by the Android runtime via `jenny.android_entry.run_gateway(data_dir, android_context, port=18790)`) starts:
 
-- the WebSocket channel and, if configured, the Telegram channel (via `WebSocketDispatcher`);
+- the WebSocket channel, the Telegram channel if configured, and — when an Android context is present — the notification and floating channels (all via `WebSocketDispatcher`);
 - the workspace-scoped cron service;
 - system jobs such as Dream and the heartbeat;
 - the HTTP API routes under `/api/` (settings, apps, media, skills, wiki, transcript, backup...) served from the same asyncio process.
@@ -115,7 +117,7 @@ Useful docs:
 
 ## Tools
 
-Tools are **explicitly registered**, not discovered by scanning the filesystem. `jenny/agent/tools/loader.py` imports a fixed list of 22 modules (`_HARDCODED_TOOL_MODULES`); each module declares a module-level `TOOLS = [...]` list of `Tool` subclasses. `ToolLoader.discover()` imports every module in the list, in order, and collects each module's `TOOLS`; a module with no `TOOLS` attribute at all raises at startup rather than silently contributing nothing, and a name collision between two registered tools also raises at startup instead of one silently overwriting the other.
+Tools are **explicitly registered**, not discovered by scanning the filesystem. `jenny/agent/tools/loader.py` imports a fixed list of 23 modules (`_HARDCODED_TOOL_MODULES`); each module declares a module-level `TOOLS = [...]` list of `Tool` subclasses. `ToolLoader.discover()` imports every module in the list, in order, and collects each module's `TOOLS`; a module with no `TOOLS` attribute at all raises at startup rather than silently contributing nothing, and a name collision between two registered tools also raises at startup instead of one silently overwriting the other.
 
 | # | Module | `TOOLS` | Tool area |
 |---|---|---|---|
@@ -134,19 +136,20 @@ Tools are **explicitly registered**, not discovered by scanning the filesystem. 
 | 13 | `memory_recall.py` | `MemoryRecallTool`, `HistoryRecallTool` | Search the memory archive (`recall`) and the verbatim conversation log (`recall_history`). `core` + `orchestrator` only |
 | 14 | `search.py` | `FindFilesTool`, `GrepTool` | Filename and content search inside the workspace |
 | 15 | `message.py` | `MessageTool` | Sends a proactive message (with attachments/buttons) outside the current turn |
-| 16 | `apply_patch.py` | `ApplyPatchTool` | Atomic multi-file patch application with rollback |
-| 17 | `exec_session.py` | `ListExecSessionsTool`, `WriteStdinTool` | Manage long-running `python_exec` sessions (poll/stdin/terminate) |
-| 18 | `introspect.py` | `GetSourceTool` | Read-only access to Jenny's own bundled Python source |
-| 19 | `diagnostics.py` | `GetRecentLogsTool` | Reads the in-memory log ring buffer |
-| 20 | `ui_view.py` | `UiViewTool` | Pull-based view of what's on screen right now; fails from Telegram, cron, or with the screen off |
-| 21 | `ssh.py` | `SshHostsTool`, `SshExecTool`, `SshJobTool`, `SshTransferTool` | Remote machines over SSH. Scope `remote`, which no agent loads by default — only the `sysadmin` subagent type asks for it |
-| 22 | `app_update.py` | `UpdateStatusTool`, `InstallUpdateTool` | Report a pending app update and install it. Android-only; `install_update` kills the process by design |
+| 16 | `nothing_to_report.py` | `NothingToReportTool` | Lets a silent scheduled run declare that there is nothing for the user to see, instead of sending an empty message. `core` + `orchestrator` |
+| 17 | `apply_patch.py` | `ApplyPatchTool` | Atomic multi-file patch application with rollback |
+| 18 | `exec_session.py` | `ListExecSessionsTool`, `WriteStdinTool` | Manage long-running `python_exec` sessions (poll/stdin/terminate) |
+| 19 | `introspect.py` | `GetSourceTool` | Read-only access to Jenny's own bundled Python source |
+| 20 | `diagnostics.py` | `GetRecentLogsTool` | Reads the in-memory log ring buffer |
+| 21 | `ui_view.py` | `UiViewTool` | Pull-based view of what's on screen right now; fails from Telegram, cron, or with the screen off |
+| 22 | `ssh.py` | `SshHostsTool`, `SshExecTool`, `SshJobTool`, `SshTransferTool` | Remote machines over SSH. Scope `remote`, which no agent loads by default — only the `sysadmin` subagent type asks for it |
+| 23 | `app_update.py` | `UpdateStatusTool`, `InstallUpdateTool` | Report a pending app update and install it. Android-only; `install_update` kills the process by design |
 
 The numbering is the load order in `_HARDCODED_TOOL_MODULES`, which is the order `discover()` walks.
 
-`self.py`'s module-level `TOOLS` list is deliberately empty. `MyTool` (the `my` introspection/self-check tool) needs a live reference to the running `AgentLoop`, which the generic loader can't provide, so it is instantiated and registered by hand in `AgentLoop._register_default_tools()`, gated on `tools.my.enable`. Two other tools reach the registry the same way and for the same reason — `memory` (`MemoryEntryTool`) needs the memory store, and the per-app action tool is synced per turn — so this list is not a complete inventory of the tool surface.
+`self.py`'s module-level `TOOLS` list is deliberately empty. `MyTool` (the `my` introspection/self-check tool) needs a live reference to the running `AgentLoop`, which the generic loader can't provide, so it is instantiated and registered by hand in `AgentLoop._register_default_tools()`, gated on `tools.my.enable`. Two other tool classes are built outside the loader for the same reason — `memory` (`MemoryEntryTool`) needs the memory store, and is registered only in Dream's own registry (`MemoryStore.build_dream_tools`), never in a conversation agent's; and `AppActionTool` (`app_actions.py`) is instantiated once per declared app action and synced per turn by `AppToolsSyncer` — so this list is not a complete inventory of the tool surface.
 
-`ToolLoader.discover()` therefore returns 41 tool classes across those 23 modules, plus the manually-registered `MyTool` — 42 built-in tool classes in total. Not all of them are necessarily *registered* at runtime, and no single agent ever sees all 42: `ToolLoader.load()` filters by the caller's `scope` against each tool's `_scopes` (`core`, `orchestrator`, `subagent`, `remote`), then optionally by an `allow` list of names (that is how agent types narrow their toolset), then checks each tool's `enabled(ctx)` against the current config. The live tool count for a given install therefore depends on the config toggles *and* on which agent is asking. On top of the built-ins, Jenny Apps register their own dynamic `<slug>_<action>` tools per turn (`AppToolsSyncer`) — see [Mini-apps](../using/mini-apps.md) and [Tool reference](../reference/tools.md) for the full, toggle-aware picture.
+`ToolLoader.discover()` therefore returns 41 tool classes across those 23 modules, plus the manually-registered `MyTool` — 42 built-in tools a conversation agent can draw on. Not all of them are necessarily *registered* at runtime, and no single agent ever sees all 42: `ToolLoader.load()` filters by the caller's `scope` against each tool's `_scopes` (`core`, `orchestrator`, `subagent`, `remote`), then optionally by an `allow` list of names (that is how agent types narrow their toolset), then checks each tool's `enabled(ctx)` against the current config. The live tool count for a given install therefore depends on the config toggles *and* on which agent is asking. On top of the built-ins, Jenny Apps register their own dynamic `<slug>_<action>` tools per turn (`AppToolsSyncer`) — see [Mini-apps](../using/mini-apps.md) and [Tool reference](../reference/tools.md) for the full, toggle-aware picture.
 
 Tool behavior is part of the model contract: user-visible tool names, schemas, and error messages should be treated as an interface — changing them affects how the model uses the tool, so keep changes intentional and covered by tests.
 
@@ -169,7 +172,7 @@ Defaults (all relative to the workspace root unless noted):
 | Runtime data (media, WebUI display threads) | `<workspace>/.jenny/` (`media/`, `webui/`) — migrated automatically from the legacy `.minijenny/`/`.nanobot/` names if found. Runtime logs are **not** written here; they only live in the in-memory ring buffer the `get_recent_logs` tool reads (see Tools below) |
 | Snapshots (workspace version history) | Sibling of the workspace directory, so a restore's atomic swap doesn't take snapshot history with it |
 
-The schema accepts both camelCase and snake_case keys on read, but `Config.save()` always writes `config.json` back out with camelCase aliases.
+The schema accepts both camelCase and snake_case keys on read, but every write (`jenny/config/store.py::mutate()`, which serialises through `save_config()` in `loader.py`) puts `config.json` back out with camelCase aliases — the free-form `websocket` block is the one exception, kept as written.
 
 ## Memory and Sessions
 
@@ -215,7 +218,7 @@ Common checks:
 
 ```bash
 ruff check jenny/ tests/
-npx pyright jenny/bus jenny/command jenny/runtime jenny/session
+npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py
 pytest -q
 ```
 

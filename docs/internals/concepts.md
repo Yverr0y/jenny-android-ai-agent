@@ -10,7 +10,7 @@ Use this page when you want to understand how Jenny works before touching advanc
 |---|---|
 | Agent loop | Builds context, selects the session, calls the provider, runs tools, and publishes replies |
 | Providers | User-defined LLM endpoints, each using the OpenAI-compatible or Anthropic wire format — no built-in provider catalog |
-| Channels | Two: the built-in WebSocket channel (the WebUI, always on) and an optional paired Telegram bot |
+| Channels | Four: the built-in WebSocket channel (the WebUI, always on), an optional paired Telegram bot, and two Android-only ones — a reply typed into a notification, and the floating mascot's bubble |
 | Tools | Capabilities the model may call — files, `python_exec`, Android web search/fetch, location, cron, subagents, mini-app actions, and more |
 | Memory | Workspace files and session history that keep useful context across turns, consolidated periodically by Dream |
 | Gateway | The single long-running process that serves every channel and the HTTP API behind the WebUI |
@@ -30,7 +30,7 @@ Because the workspace is app-private storage, nothing outside the Jenny app can 
 
 ## Config format
 
-`config.json` accepts both camelCase and snake_case keys on read, but Jenny always writes the file back out with camelCase aliases — for example `apiKey`, `modelPresets`, `restrictToWorkspace`, and `maxToolResultChars`. The docs use camelCase for the same reason.
+`config.json` accepts both camelCase and snake_case keys on read, but Jenny always writes the file back out with camelCase aliases — for example `apiKey`, `modelPresets`, `restrictToWorkspace`, and `maxToolResultChars`. The docs use camelCase for the same reason. The one exception is the free-form `websocket` block, which is kept as written: its keys (such as `token_issue_secret`) stay snake_case.
 
 `config.json` is created automatically on first boot with a per-install secret and no provider configured; you normally never hand-edit it (the file is even hidden from the in-app file browser). See [First run](../start/first-run.md) for the onboarding flow, and [Configuration reference](../reference/configuration.md) if you do need the full key-by-key reference.
 
@@ -82,7 +82,7 @@ Jenny has four channels: the built-in WebSocket channel (always active — it's 
 
 Every inbound message from any channel routes into the same single unified conversation session (`unified:default`) — Jenny is a single-user assistant with one continuous thread, not a per-channel or per-device conversation. This has a sharp edge worth knowing up front: because there is only one session, `/new` issued from Telegram resets the WebUI's conversation too, and vice versa — whoever has access to the paired bot can reset the chat on the phone. Internal work (cron, Dream, heartbeat) runs under separate internal session keys so it never pollutes the user-visible conversation.
 
-There is one user-visible exception to "a single session": a **project** conversation (`project:<name>`), opened from the scope chip and bound to one folder under `<workspace>/wikis/`. It has its own session file, its own transcript, and its own memory rules — its content is never archived into `history.jsonl`, so Dream cannot see it. Only the WebSocket channel can name a project; a Telegram message stays personal whatever it contains. Session keys are therefore classified three ways, not two — `personal`, `project`, `internal` — and anything unrecognised is treated as internal rather than personal, so an unregistered kind can never reach `MEMORY.md`. See [Projects](../using/projects.md) for the user-facing design.
+There is one user-visible exception to "a single session": a **project** conversation (`project:<name>`), opened from the scope chip and bound to one folder under `<workspace>/wikis/`. It has its own session file, its own transcript, and its own memory rules — it is archived into `history.jsonl` under its own key, never enters the personal chat's prompt, and Dream digests it in a separate batch that can write only to `USER.md` (identity facts about you), never to `MEMORY.md` or `SOUL.md`. Only the WebSocket channel can name a project; a Telegram message stays personal whatever it contains. Session keys are therefore classified three ways, not two — `personal`, `project`, `internal` — and anything unrecognised is treated as internal rather than personal, so an unregistered kind can never reach the memory files. See [Projects](../using/projects.md) for the user-facing design.
 
 See [Telegram bridge](../using/telegram.md) for the channel-specific asymmetries (Telegram doesn't see WebUI-only turns, has no streaming, etc.).
 
@@ -96,11 +96,11 @@ Jenny uses three related stores:
 | Memory | `<workspace>/memory/MEMORY.md` and `<workspace>/memory/history.jsonl` | Long-term facts and consolidated history that survive session compaction |
 | Wikis | `<workspace>/wikis/<name>/` | Your own knowledge bases; the personal prompt lists them by name and scope, read from disk, and opens pages on demand |
 
-Dream is a periodic consolidation job (`jenny/agent/memory.py`): every 2 hours by default, it reads accumulated `history.jsonl` entries (capped at 1000, oldest dropped first) and rewrites `MEMORY.md`, `SOUL.md`, `USER.md`, and skill files — it prunes stale material as well as adding new material, and it takes a workspace snapshot right before running so a bad consolidation can be rolled back. Dream's interval restarts from zero every time the app (and its gateway process) restarts; it is not anchored to wall-clock time.
+Dream is a periodic consolidation job (`jenny/agent/memory.py`): every 2 hours by default, it reads accumulated `history.jsonl` entries (capped at 1000, oldest dropped first) and rewrites `MEMORY.md`, `SOUL.md`, `USER.md`, and skill files — it prunes stale material as well as adding new material, and it takes a workspace snapshot right before running so a bad consolidation can be rolled back. Dream's deadline survives an app restart: a run missed while the app was down is caught up shortly after the gateway comes back.
 
 ## Tools and safety
 
-Tools are **not** discovered by scanning the filesystem — they are registered explicitly. A fixed list of 16 modules under `jenny/agent/tools/` each declare a `TOOLS = [...]` list of tool classes, collected once at startup by `jenny/agent/tools/loader.py`; a module missing that declaration, or a name collision between two tools, is a startup error rather than a silent gap. Common tool groups include:
+Tools are **not** discovered by scanning the filesystem — they are registered explicitly. A fixed list of 23 modules under `jenny/agent/tools/` each declare a `TOOLS = [...]` list of tool classes (41 in all), collected once at startup by `jenny/agent/tools/loader.py` — plus `my`, `memory` and the per-app action tools, which are built outside the loader because each needs a live reference it cannot provide; a module missing that declaration, or a name collision between two tools, is a startup error rather than a silent gap. Common tool groups include:
 
 - file read/write/edit, search, and multi-file patching, scoped to the workspace;
 - Python code execution (`python_exec`), in-process, with a module allowlist that is explicitly not a security sandbox;
@@ -110,7 +110,7 @@ Tools are **not** discovered by scanning the filesystem — they are registered 
 - long-running goals and subagent spawning;
 - dynamic per-mini-app tools, registered and unregistered as apps are created or removed.
 
-Tool behavior is part of the model contract: names, schemas, and error messages are effectively an interface the model has learned to use, so changing them is a compatibility-affecting change, not just a refactor. See [Architecture — Tools](./architecture.md#tools) for the full 16-module table and [Tool reference](../reference/tools.md) for per-tool behavior and limits.
+Tool behavior is part of the model contract: names, schemas, and error messages are effectively an interface the model has learned to use, so changing them is a compatibility-affecting change, not just a refactor. See [Architecture — Tools](./architecture.md#tools) for the full module table and [Tool reference](../reference/tools.md) for per-tool behavior and limits.
 
 ## Further reading
 

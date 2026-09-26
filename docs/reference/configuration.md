@@ -8,7 +8,7 @@ Most people never need this page: the [Settings screen](./settings.md) covers th
 
 On Android the file is `<data_dir>/workspace/config.json`, inside the app's private storage (`<filesDir>/workspace/`). It is created on first boot with a minimal skeleton — a `gateway.host` and a per-install `websocket.token_issue_secret` — and then filled in by the onboarding wizard.
 
-The Workspace file browser **hides `config.json` by default**, along with its backup and any quarantined copy (see below) — they carry the same secrets. That is deliberate: the file holds your API keys and the WebUI bootstrap secret. Turn on **Developer mode** in Settings → System to see them.
+The in-app file browser **never lists `config.json`**, along with its backup and any quarantined copy (see below) — they carry the same secrets. That is deliberate: the file holds your API keys and the WebUI bootstrap secret. There is no switch to reveal them: the old developer-mode toggle was removed.
 
 Three things to know before you hand-edit it:
 
@@ -88,7 +88,7 @@ Everything about how the agent talks to the model and manages its own context.
 | `agents.defaults.consolidationRatio` | float 0.1–0.95 | `0.5` | Fraction of the live context consolidated when a consolidation runs. |
 | `agents.defaults.dream.enabled` | bool | `true` | Registers the periodic Dream memory-consolidation job at startup. |
 | `agents.defaults.dream.intervalH` | int ≥ 1 | `2` | Hours between Dream runs. The deadline survives an app restart; a run missed while the app was down happens at the next tick. |
-| `agents.defaults.gardener.enabled` | bool | `true` | Registers the periodic [gardener](../using/gardener.md) job, which turns a project's journal lines into wiki pages. With no projects, or with no unread journal lines, a tick exits before reaching the provider. The switch in Settings → Wiki and projects writes this. |
+| `agents.defaults.gardener.enabled` | bool | `true` | Registers the periodic [gardener](../using/gardener.md) job, which turns a project's journal lines into wiki pages. With no projects, or with no unread journal lines, a tick exits before reaching the provider. The switch in the workshop's Memory drawer («Gardener — who fills the notebooks») writes this. |
 | `agents.defaults.gardener.intervalMin` | int 1–1440 | `30` | Minutes between ticks — how often it *looks* for a project to garden. Past a day the pass has stopped being periodic; `enabled: false` is the way to say never. |
 | `agents.defaults.gardener.idleMin` | int 0–1440 | `30` | How long that project's conversation must have been silent before a pass starts. `0` lets a pass begin while you are talking in it (it can promote half a conversation, and rewrite the map while you read it). A project with a turn actually in flight is skipped regardless. |
 | `agents.defaults.gardener.minHoursBetweenPasses` | int 0–8760 | `6` | Minimum gap before returning to the *same* project, counted from the last **attempt** rather than the last success. `0` lets it come straight back, which is the measured Dream degradation written as a number. |
@@ -97,9 +97,9 @@ Everything about how the agent talks to the model and manages its own context.
 | `agents.defaults.maxToolResultChars` | int | `16000` | Tool output above this is truncated before it reaches the model. |
 | `agents.defaults.contextBlockLimit` | int \| null | `null` | Optional cap on context blocks; unset means no extra limit. |
 
-`dream` has **six** fields — `enabled`, `intervalH`, and the four budget/cadence knobs documented in [Memory and Dream](../using/memory.md): `memoryBudgetChars`, `userBudgetChars`, `soulBudgetChars`, `reviewEveryRuns`. All six are settable from Settings → Memory. Older docs mentioned `cron`, `modelOverride` and `maxBatchSize`; none of them exist. See [Memory and Dream](../using/memory.md).
+`dream` has **six** fields — `enabled`, `intervalH`, and the four budget/cadence knobs documented in [Memory and Dream](../using/memory.md): `memoryBudgetChars`, `userBudgetChars`, `soulBudgetChars`, `reviewEveryRuns`. All six are settable from the workshop's Memory drawer. Older docs mentioned `cron`, `modelOverride` and `maxBatchSize`; none of them exist. See [Memory and Dream](../using/memory.md).
 
-**Both periodic workers are settable from the app**, and this is the only block on this page where that is true: Dream and the memory budgets in **Settings → Memory**, the gardener — plus `compactProjectsWhenIdle` — in **Settings → Wiki and projects**. The ranges above are the ones those screens carry and the server enforces; a value outside one is refused with the range named.
+**Both periodic workers are settable from the app**, and this is the only block on this page where that is true: Dream and the memory budgets, and the gardener plus `compactProjectsWhenIdle`, all in the workshop's **Memory** drawer. The ranges above are the ones those screens carry and the server enforces; a value outside one is refused with the range named.
 
 What applies when: `enabled` and the intervals re-arm the periodic job immediately, so neither turning a worker off nor changing its schedule needs a restart — including turning one back on after the gateway started with it off, which is the case a plain config edit cannot fix. `idleMin`, `minHoursBetweenPasses` and the Dream budgets are read on each run. `compactProjectsWhenIdle` takes effect at the next gateway start, and the screen says so.
 
@@ -199,7 +199,7 @@ Toggles for the built-in tool groups. Only web search and location have UI contr
 |---|---|---|---|
 | `tools.pythonExec.enable` | bool | `true` | Registers `python_exec` and the exec-session tools. |
 | `tools.pythonExec.timeout` | int ≥ 0 | `60` | Seconds per execution. `0` means no limit. |
-| `tools.pythonExec.maxOutputChars` | int 1000–50000 | `10000` | Output truncation threshold. |
+| `tools.pythonExec.maxOutputChars` | int 1000–50000 | `10000` | Default output cap of `python_exec`, stated in the tool's description. A single call can ask for a different cap with its own `max_output_chars` (1000–50000). `write_stdin` polls keep a fixed default of 10000 and do not read this key. |
 | `tools.pythonExec.allowedModules` | string[] | see below | Import allowlist. |
 | `tools.pythonExec.blockedModules` | string[] | see below | Import denylist. |
 
@@ -314,19 +314,19 @@ Full threat model: [Security model](../internals/security-model.md).
 
 ## power
 
-Anti-doze: the wake lock, the scheduled wake-ups, and the outage log behind **Settings → Background activity**.
+Anti-doze: the wake lock, the scheduled wake-ups, and the outage log behind **Background activity** in the workshop's Brain drawer.
 
 The problem this section exists for is worth stating plainly, because it is not obvious: **a foreground service keeps the *process* alive, not the *processor*.** With the screen off the phone suspends, the agent's own timers stop advancing, and anything waiting on one waits with them. A job that fires late isn't late because the code was slow — it's late because the clock it was sleeping on was frozen. Only a `PARTIAL_WAKE_LOCK` prevents the CPU suspending, and only an alarm registered with Android can wake it up again at a known moment. These keys decide how much of each Jenny asks for.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `power.keepAwake` | `"off"` \| `"turns"` \| `"always"` | **`"turns"`** | How much of the time Jenny holds a wake lock. `turns` takes one around real work — an agent turn, a cron/Dream/heartbeat job, an SSH command, a Telegram update being processed — and releases it immediately after. `always` holds one for the entire life of the gateway service: nothing drifts, and it costs real battery, so it's the setting for a phone that lives on a charger. `off` is the pre-0.6.6 behaviour, kept as an escape hatch if the lock misbehaves on some device. A value that isn't one of the three is a typo, not a reason to refuse to boot: it's logged and treated as `turns`. **This is the one key here with a UI control** (Settings → Background activity), and it takes effect at the next gateway restart — the service-lifetime lock is taken once, at startup. |
+| `power.keepAwake` | `"off"` \| `"turns"` \| `"always"` | **`"turns"`** | How much of the time Jenny holds a wake lock. `turns` takes one around real work — an agent turn, a cron/Dream/heartbeat job, an SSH command, a Telegram update being processed — and releases it immediately after. `always` holds one for the entire life of the gateway service: nothing drifts, and it costs real battery, so it's the setting for a phone that lives on a charger. `off` is the pre-0.6.6 behaviour, kept as an escape hatch if the lock misbehaves on some device. A value that isn't one of the three is a typo, not a reason to refuse to boot: it's logged and treated as `turns`. **This is the one key here with a UI control** (Background activity, in the workshop's Brain drawer), and it takes effect at the next gateway restart — the service-lifetime lock is taken once, at startup. |
 | `power.wakelockRotateMin` | int 0–240 | `50` | Minutes after which the service-lifetime lock (`keepAwake: "always"` only) is released and immediately re-acquired. `0` disables rotation. This is not hygiene for its own sake: PowerGenie, the battery manager on Honor/Huawei, kills an app that has held a wake lock for more than 60 minutes, so the default sits deliberately under that line. Per-turn locks are short-lived and never rotated. |
 | `power.watchdogEnabled` | bool | `true` | A self-chaining alarm that checks whether the gateway is still alive and starts it again if it isn't. It exists because the gateway can be killed without anything noticing — nothing in the app is in a position to report its own death. Setting this to `false` is also how you dismantle a chain armed by an earlier run: the alarms live in Android's `AlarmManager`, not in Jenny's process, so nothing disarms them on their own. |
 | `power.watchdogIntervalMin` | int 5–120 | `15` | Base interval between watchdog checks. The interval adapts rather than holding steady: ×2 with the screen off, ×4 in deep Doze. Spacing them out there is not battery thrift — an app that wakes the system on a fixed beat while it should be idle is exactly what OEM battery managers flag and then kill. The gateway is considered dead once its heartbeat is three (worst-case) periods stale; a false positive costs one no-op start, a false negative leaves the agent down until you notice. |
 | `power.alarmDrivenCron` | bool | `true` | Arms an OS alarm for the scheduler's next real deadline, alongside the ordinary in-process timer. The timer sleeps on a clock that stops while the SoC is suspended; the alarm doesn't. The alarm targets the true next deadline, not the scheduler's shorter internal poll, so an idle phone isn't woken every few minutes for nothing. |
 | `power.alarmClockFallback` | bool | `true` | An 8-hourly wake-up registered as an *alarm clock* — the one alarm category no ROM dares suppress. It is the last net under everything else, but only where it can actually register as one: measured on-device, `setAlarmClock` still needs the exact-alarm permission, and without it this net degrades to the same inexact alarm as the rest rather than outranking them. It has a flag of its own for a cosmetic reason that is nonetheless real: on many ROMs a pending alarm-clock lights the alarm icon in the status bar. Three wake-ups a day, rather than one every quarter hour, is what keeps it under any "this app wakes the system too much" heuristic. Switching it off *cancels* the queued alarm rather than merely not re-arming it — otherwise the icon you wanted gone would linger for up to eight hours. |
-| `power.gapWarningMin` | int ≥ 5 | `60` | How long a stretch of downtime has to be before it's recorded as an outage and shown in Settings → Background activity. The measurement is taken across the gateway's own death, on the wall clock, because that's the only clock that survives both the process and a reboot; implausible values (a clock that jumped, anything over a month) are discarded rather than reported as a ten-year outage. At most 20 outages are kept, in `<workspace>/state/power_gaps.json`. |
+| `power.gapWarningMin` | int ≥ 5 | `60` | How long a stretch of downtime has to be before it's recorded as an outage and shown under Background activity in the workshop's Brain drawer. The measurement is taken across the gateway's own death, on the wall clock, because that's the only clock that survives both the process and a reboot; implausible values (a clock that jumped, anything over a month) are discarded rather than reported as a ten-year outage. At most 20 outages are kept, in `<workspace>/state/power_gaps.json`. |
 
 Two things worth being clear about:
 
@@ -337,14 +337,14 @@ The defaults above are reasoned from Android's documented behaviour and from wha
 
 ## workspace
 
-These govern the **WebUI Workspace tab**, not the agent's file tools — the agent is bounded by `security.restrictToWorkspace` instead.
+These govern the **WebUI file browser** (and the WebUI's other workspace writes), not the agent's file tools — the agent is bounded by `security.restrictToWorkspace` instead.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `workspace.enabled` | bool | `true` | Off makes every `/api/workspace/*` route answer `503 workspace is disabled` — the Workspace tab stops working. |
+| `workspace.enabled` | bool | `true` | Off makes the `/api/workspace/*` HTTP routes (list, read, mkdir, download) answer `503 workspace is disabled`, and the WebSocket write commands (`workspace.write`, `workspace.delete`, `workspace.rename`, `workspace.copy`, `soul.rules.write`, `page.write`) fail as unavailable — the file browser stops working. |
 | `workspace.maxFileSize` | int | `1000000` | Max bytes the file viewer will read (1 MB). |
-| `workspace.allowWrite` | bool | `true` | Off makes write, mkdir, rename and copy answer `403 workspace writes are disabled`. |
-| `workspace.allowDelete` | bool | `true` | Off makes delete answer `403 workspace deletes are disabled`. |
+| `workspace.allowWrite` | bool | `true` | Off refuses every write — the `mkdir` route with `403`, and `workspace.write`, `workspace.rename`, `workspace.copy`, `soul.rules.write` and `page.write` over the WebSocket — with `workspace writes are disabled`. |
+| `workspace.allowDelete` | bool | `true` | Off makes the `workspace.delete` command fail with `workspace deletes are disabled`. |
 
 ## snapshots
 
