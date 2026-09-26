@@ -90,6 +90,7 @@ def _reset_loop_bound_state() -> None:
         from jenny.agent.tools.browser import reset_browser_state
         from jenny.agent.tools.ssh_jobs import reset_job_store
         from jenny.agent.tools.ssh_transport import reset_ssh_backend
+        from jenny.apps.storage import reset_storage_locks
         from jenny.config.store import reset_config_store_state
         from jenny.runtime.floating import reset_floating_state
         from jenny.runtime.location import reset_location_state
@@ -137,6 +138,9 @@ def _reset_loop_bound_state() -> None:
         # il loop muore lì in mezzo, la guardia ``locked()`` risponde ``busy``
         # per sempre e il bottone resta morto.
         reset_update_check_state()
+        # I lock per collezione delle Jenny App: stessa sorte del lock di
+        # config.json, legati al loop del tentativo che li ha creati.
+        reset_storage_locks()
     except Exception:
         # Non-fatale: al peggio si eredita un bridge stale (verrà ricreato).
         logger.opt(exception=True).debug("Could not reset Android bridge state")

@@ -187,3 +187,20 @@ def test_ensure_minimal_config_is_idempotent(tmp_path: Path):
     assert path.read_text(encoding="utf-8") == original
 
 
+
+
+def test_loop_bound_reset_includes_the_app_storage_locks(monkeypatch: pytest.MonkeyPatch):
+    """CF8: anche i lock per collezione delle Jenny App si rimettono a nuovo.
+
+    Sono ``asyncio.Lock`` di modulo come quello di ``config.store``: un
+    tentativo morto li lascerebbe legati al suo loop.
+    """
+    from jenny.android_entry import _reset_loop_bound_state
+    from jenny.apps import storage
+
+    calls: list[str] = []
+    monkeypatch.setattr(storage, "reset_storage_locks", lambda: calls.append("apps"))
+
+    _reset_loop_bound_state()
+
+    assert calls == ["apps"]
