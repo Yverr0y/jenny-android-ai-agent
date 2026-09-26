@@ -82,6 +82,21 @@ def _as_user_turn(msg: dict[str, Any]) -> dict[str, Any]:
     return recovered
 
 
+def _as_content_blocks(content: Any) -> list[Any]:
+    """*content* come lista di blocchi: una stringa diventa un blocco ``text``.
+
+    Lista nuova, così unire due turni non muta quella del messaggio originale.
+    Una stringa vuota non produce blocchi (un ``text`` vuoto è rifiutato).
+    """
+    if isinstance(content, list):
+        return list(content)
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}] if content.strip() else []
+    if content is None:
+        return []
+    return [{"type": "text", "text": str(content)}]
+
+
 def enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Merge consecutive same-role messages and drop trailing assistant messages.
 
@@ -115,6 +130,13 @@ def enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, A
             curr_content = msg.get("content") or ""
             if isinstance(prev_content, str) and isinstance(curr_content, str):
                 prev["content"] = (prev_content + "\n\n" + curr_content).strip()
+            elif role == "user":
+                # Testo + blocchi (una foto dopo un messaggio rimasto senza
+                # risposta): si uniscono in una lista di blocchi. Prima vinceva
+                # l'ultimo, e il primo turno dell'utente spariva dalla richiesta.
+                prev["content"] = _as_content_blocks(prev_content) + _as_content_blocks(
+                    curr_content
+                )
             else:
                 merged[-1] = dict(msg)
         else:
