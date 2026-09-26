@@ -16,7 +16,6 @@ events); qui resta solo il turn-id nei metadata inbound per correlare le righe.
 from __future__ import annotations
 
 import asyncio
-import hmac
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -30,6 +29,7 @@ from loguru import logger
 from jenny.bus.events import COORDINATION_FLAGS, InboundMessage, OutboundMessage
 from jenny.bus.queue import MessageBus
 from jenny.bus.runtime_events import TurnRunStatusChanged
+from jenny.channels.http_utils import secret_matches
 from jenny.channels.non_streaming import NonStreamingChannelMixin
 from jenny.channels.telegram_api import TelegramAPI, TelegramAPIError
 from jenny.channels.telegram_format import markdown_to_telegram_html, split_message
@@ -232,22 +232,6 @@ class _TypingHeartbeat:
                 await self._api.send_chat_action(chat_id, action)
             await asyncio.sleep(self._interval_s)
         logger.debug("Telegram: typing heartbeat expired on its own cap")
-
-
-def _secret_matches(supplied: str, secret: str) -> bool:
-    """Confronto a tempo costante di due testi, che non solleva mai.
-
-    ``hmac.compare_digest`` su due ``str`` solleva ``TypeError`` appena uno dei
-    due non è ASCII: un messaggio qualunque («ciao è») scritto durante la
-    finestra di pairing abbatteva la gestione dell'update. Il confronto si fa
-    sui byte UTF-8, con ``surrogatepass`` perché un surrogato solitario non
-    faccia sollevare nemmeno la codifica. All'unione dei rami si può usare
-    ``jenny.channels.http_utils.secret_matches``, che fa la stessa cosa.
-    """
-    return hmac.compare_digest(
-        supplied.encode("utf-8", errors="surrogatepass"),
-        secret.encode("utf-8", errors="surrogatepass"),
-    )
 
 
 class TelegramChannel(NonStreamingChannelMixin):
@@ -731,7 +715,11 @@ class TelegramChannel(NonStreamingChannelMixin):
             logger.warning("Telegram: pairing attempt table full, ignoring chat {}", chat_id)
             return
 
-        if candidate and _secret_matches(candidate, self._pairing_code):
+        # ``secret_matches`` e non ``hmac.compare_digest`` sui ``str``: quello
+        # solleva ``TypeError`` appena uno dei due non è ASCII, e un messaggio
+        # qualunque («ciao è») scritto durante la finestra di pairing abbatteva
+        # la gestione dell'update. Il confronto condiviso lavora sui byte.
+        if candidate and secret_matches(candidate, self._pairing_code):
             username = sender.get("username")
             self._paired_chat_id = chat_id
             self._pairing_code = None
