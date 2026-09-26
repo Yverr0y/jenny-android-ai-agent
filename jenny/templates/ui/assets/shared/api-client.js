@@ -150,8 +150,9 @@ class ApiClient {
 
 
   /** Stato della programmazione: cosa e' armato, e cosa fa davvero.
-   *  Sola lettura — le scritture passano dal tool `cron`, che e' l'unico imbuto
-   *  sullo store dei job. */
+   *  Questa e' la lettura. Da qui un job dell'utente si mette in pausa, si
+   *  riprende o si elimina (`cronJobAction`), sullo stesso servizio che usa il
+   *  tool `cron`; crearne uno o cambiarlo resta del tool. */
   async getCron() {
     const res = await this._fetch('/api/webui/cron');
     if (!res.ok) throw new Error(`Cron failed: ${res.status}`);
