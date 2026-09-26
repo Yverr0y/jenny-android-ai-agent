@@ -256,9 +256,9 @@ class TestAppsGateFailsClosed:
 
 VIEW_MANIFEST = {
     "name": "Telecomando",
-    "description": "Il telecomando di hps",
+    "description": "Il telecomando di pibox",
     "icon": "ti-device-tv",
-    "server": {"baseUrl": "http://hps:8091"},
+    "server": {"baseUrl": "http://pibox:8091"},
     "view": {"kind": "external"},
 }
 

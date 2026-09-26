@@ -7,7 +7,7 @@ chiave del client, non trovava il file e ripiegava sulla storia ricostruita dall
 sessione. Misurato sul telefono su tutti gli 11 quaderni: niente tool, niente
 ragionamento, e i rientri dei subagent registrati prima del marcatore
 ``injected_event`` (05/09) disegnati come messaggi dell'utente — «Summarize this
-naturally for the user…» nella chat di viaggio-pazzo.
+naturally for the user…» nella chat di viaggio-lento.
 
 Nello stesso blocco ``run_started_at`` si leggeva sempre per ``default``: un
 quaderno riaperto a turno in corso non lo sapeva, e uno aperto mentre girava la
@@ -157,7 +157,7 @@ def test_run_started_at_belongs_to_the_open_conversation(
     ("key", "chat_id", "transcript"),
     [
         ("websocket:default", "default", "websocket:default"),
-        ("project:viaggio-pazzo", "project:viaggio-pazzo", "websocket:project:viaggio-pazzo"),
+        ("project:viaggio-lento", "project:viaggio-lento", "websocket:project:viaggio-lento"),
         ("websocket:project:x", "project:x", "websocket:project:x"),
     ],
 )

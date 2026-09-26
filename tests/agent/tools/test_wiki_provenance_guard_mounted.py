@@ -6,7 +6,7 @@ la passata con **meno** contesto — nomi di pagina, non corpi — era l'unica
 trattenuta, e la conversazione, che ha i corpi, la giornata intera e la libertà
 di ristrutturare, non era trattenuta affatto.
 
-Quel giorno in ``wikis/salute`` una richiesta di sistemare la wiki ha fatto un
+Quel giorno in ``wikis/sartoria`` una richiesta di sistemare la wiki ha fatto un
 buon lavoro e, dentro, ha riscritto la ``source:`` di ``riattivazione-fisica.md``
 come lista YAML a due voci. I due lettori che la interpretano hanno dato due
 risposte diverse — ``_page_frontmatter`` la prima voce **col trattino attaccato**
@@ -56,7 +56,7 @@ def ws(tmp_path: Path):
     la riga non regge.
     """
     root = tmp_path / "workspace"
-    project = root / "wikis" / "salute"
+    project = root / "wikis" / "sartoria"
     (project / "wiki").mkdir(parents=True)
     (project / "raw" / "journal").mkdir(parents=True)
     (project / "raw" / "research").mkdir(parents=True)
@@ -67,7 +67,7 @@ def ws(tmp_path: Path):
     (project / "raw" / "research" / "evidenze.md").write_text(
         "# Evidenze\n\nCopiato verbatim da fuori.\n", encoding="utf-8"
     )
-    (project / "wiki" / "index.md").write_text("# Salute\n\n## Pages\n", encoding="utf-8")
+    (project / "wiki" / "index.md").write_text("# Sartoria\n\n## Pages\n", encoding="utf-8")
     (root / "memory").mkdir()
     return root, project
 
@@ -181,7 +181,7 @@ class TestThePossibleAdvice:
     """Un rifiuto su cui non si può agire si riprova identico.
 
     Il 26/08 lo stesso difetto è stato trovato in due lettori: il lint diceva
-    «aggiungi un ``#HH:MM``» a cinque pagine su cinque di ``salute``, la cui
+    «aggiungi un ``#HH:MM``» a cinque pagine su cinque di ``sartoria``, la cui
     ``source:`` è un documento di ``raw/research/`` dove quel minuto non esiste. Il
     gancio in scrittura diceva la stessa cosa. Vanno corretti entrambi, ed è per
     questo che il test è qui e non solo in ``test_lint_wiki.py``.

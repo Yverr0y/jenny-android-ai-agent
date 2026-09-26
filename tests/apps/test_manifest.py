@@ -105,8 +105,8 @@ class TestLoadApp:
         poteva dire "questo schermo sta altrove".
         """
         manifest = {
-            "name": "Telecomando", "description": "Il telecomando di hps",
-            "server": {"baseUrl": "http://hps:8091"},
+            "name": "Telecomando", "description": "Il telecomando di pibox",
+            "server": {"baseUrl": "http://pibox:8091"},
             "view": {"kind": "external"},
         }
         app = load_app(_write_app(tmp_path, "telecomando", manifest))

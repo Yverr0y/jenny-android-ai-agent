@@ -6,7 +6,7 @@ Il confine di scrittura era ricalcolato in sei posti: i tool file
 (``_project_write_boundary`` / ``_mutation_boundary``), ``download`` e
 ``journal``. Nessuno sbagliato da solo; l'insieme sì — «che cosa può cambiare
 questo turno» è UNA domanda, e sei risposte non possono che divergere. Ci erano
-già divergiti: con uno scope su ``wikis/patreon``, ``open('<ws>/SOUL.md', 'w')``
+già divergiti: con uno scope su ``wikis/palestra``, ``open('<ws>/SOUL.md', 'w')``
 veniva rifiutata e ``os.remove('<ws>/SOUL.md')`` passava.
 
 Questo file è il guardiano di quell'unificazione, ed è fatto di due metà che
@@ -91,8 +91,8 @@ class Env:
 @pytest.fixture
 def env(tmp_path: Path):
     ws = tmp_path / "workspace"
-    project = ws / "wikis" / "patreon"
-    other = ws / "wikis" / "etf"
+    project = ws / "wikis" / "palestra"
+    other = ws / "wikis" / "etna"
     outside = tmp_path / "outside"
     for d in (project / "wiki", project / "raw" / "journal", other / "wiki", outside):
         d.mkdir(parents=True)

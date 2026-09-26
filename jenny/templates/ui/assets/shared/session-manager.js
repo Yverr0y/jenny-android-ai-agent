@@ -75,10 +75,10 @@ export class SessionManager extends EventTarget {
    *  Sale a ogni `switchTo` che va a effetto, e serve a una domanda sola:
    *  *«questa cosa che ho iniziato prima di un'attesa vale ancora?»*. Aprire
    *  una conversazione dura — un bootstrap, la fetch del thread — e le attese
-   *  non sono in fila: due tocchi ravvicinati (`patreon`, poi `bordi` dopo
+   *  non sono in fila: due tocchi ravvicinati (`ricette`, poi `bordi` dopo
    *  200 ms) lasciano vincere **chi risponde per ultimo**, che non è chi è
    *  stato toccato per ultimo. Il risultato è la cosa peggiore che questa
-   *  vista possa fare: il chip dice `patreon`, la chiave è `bordi`, e il fatto
+   *  vista possa fare: il chip dice `ricette`, la chiave è `bordi`, e il fatto
    *  che l'utente enuncia finisce nel diario dell'altro progetto — dove il
    *  gardener lo promuove in pagina, cioè in modo durevole e non ritirabile.
    *

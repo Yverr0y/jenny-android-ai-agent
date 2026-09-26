@@ -335,14 +335,14 @@ def test_a_superseded_failure_paints_no_error_row() -> None:
     """
     _run_js("""
       const chat = makeChat();
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
 
       pending('project:bordi').resolve(thread('bordi', 'da bordi'));
       await tick();
-      pending('project:patreon').reject(new Error('rete'));
+      pending('project:palestra').reject(new Error('rete'));
       await tick();
       await Promise.all([first, second]);
 
@@ -359,12 +359,12 @@ def test_the_open_conversation_still_gets_its_own_error() -> None:
     anche se un'altra, lasciata prima, era andata a buon fine."""
     _run_js("""
       const chat = makeChat();
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
 
-      pending('project:patreon').resolve(thread('patreon', 'da patreon'));
+      pending('project:palestra').resolve(thread('palestra', 'da palestra'));
       await tick();
       pending('project:bordi').reject(new Error('rete'));
       await tick();

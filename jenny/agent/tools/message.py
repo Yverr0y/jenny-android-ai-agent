@@ -396,7 +396,7 @@ class MessageTool(Tool, ContextAware):
         # e non in quella unificata. Senza questa registrazione l'utente vede
         # l'avviso (transcript WebUI + notifica Android) e al turno dopo il
         # modello non ne ha traccia. Misurato sul dispositivo il 2026-08-12:
-        # avviso "hps non è raggiungibile" alle 18:33 dall'heartbeat, "sicura?"
+        # avviso "il server non è raggiungibile" alle 18:33 dall'heartbeat, "sicura?"
         # alle 18:39 su ``unified:default`` — risposto come se non fosse mai
         # stato detto, perché nel contesto di quel turno non c'era.
         # La registrazione segue l'intento proattivo, che è la ragione vera:

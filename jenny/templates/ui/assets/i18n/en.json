@@ -823,7 +823,7 @@
     "loadFailed": "Could not read the project list: what you see may be incomplete",
     "newProject": "New project...",
     "newProjectName": "Project name:",
-    "newProjectPlaceholder": "e.g. patreon",
+    "newProjectPlaceholder": "e.g. recipes",
     "newProjectSeed": "What is “{name}” about?",
     "newProjectSeedPlaceholder": "one line: what belongs here and what does not",
     "seedRequired": "One line about the project is needed — without it the chat starts on nothing.",

@@ -1,7 +1,7 @@
 """Una pagina non può certificare ciò che nessuno ha detto. **Fase 3, D1.**
 
 Il caso che ha prodotto questo file è registrato sul dispositivo e riproducibile.
-Il 24/08, nella wiki `viaggio-pazzo`:
+Il 24/08, nella wiki `viaggio-lento`:
 
 * Jenny chiede «l'ogoh-ogoh te lo porti in macchina, **o quello resta a casa**?»
 * l'utente risponde «l ogoh ogoh che cenrtra?» — una domanda, nessuna scelta
@@ -22,7 +22,7 @@ La regola non è stata ignorata, era inapplicabile per costruzione.
 prova che il marcatore dica il vero: quel bit lo dichiara un modello. Tre varianti
 di «verifica la citazione contro le parole dell'utente» sono state provate su
 questo stesso caso e cadono tutte; l'ultima boccia la fabbricazione **e** boccia
-`starlink.md`, che registra una decisione vera e detta chiaramente, solo
+`fibra.md`, che registra una decisione vera e detta chiaramente, solo
 parafrasata. La parafrasi è legittima e pervasiva, quindi nessun controllo a
 livello di stringa le separa. Il ragionamento sta in
 `roadmap/memory-scope-and-journal-provenance.md`, T3.0b: chi vuole «rafforzare»
@@ -44,7 +44,7 @@ JOURNAL = (
     "# 2026-08-24\n"
     "\n"
     "- 19:19 — [inferred] L'ogoh-ogoh non c'entra col viaggio — resta a casa.\n"
-    "- 19:20 — [said] La connessione la risolve con Starlink.\n"
+    "- 19:20 — [said] La connessione la risolve con la fibra.\n"
     "- 19:21 — [recovered] Base Roma.\n"
     "- 19:22 — Una riga di prima che i marcatori esistessero.\n"
     # Il minuto misto, nell'ordine che fa danno: la riga detta **prima** di quella
@@ -87,13 +87,13 @@ def test_a_page_cannot_be_decided_on_a_line_the_assistant_concluded(project, gua
 
 
 def test_a_page_can_be_decided_on_a_line_the_user_said(project, guard) -> None:
-    """Starlink: la decisione **c'era**, ed era parafrasata.
+    """La fibra: la decisione **c'era**, ed era parafrasata.
 
     Questo test è il più importante del file, e non è ridondante col precedente:
     senza di lui un rifiuto può essere corretto per il motivo sbagliato — bocciare
     tutto — ed è esattamente l'errore in cui è caduta la terza variante scartata.
     """
-    assert guard(project / "wiki" / "starlink.md", _page("decided", "raw/journal/20260824.md#19:20")) is None
+    assert guard(project / "wiki" / "fibra.md", _page("decided", "raw/journal/20260824.md#19:20")) is None
 
 
 def test_a_recovered_line_counts_as_said(project, guard) -> None:
@@ -236,7 +236,7 @@ def test_the_ordinal_also_works_where_it_is_not_needed(project, guard) -> None:
     """`.1` su un minuto con una riga sola non è un errore: è la forma generale, e
     un modello che la scrive sempre non deve trovarsi rifiutato per questo."""
     assert guard(
-        project / "wiki" / "starlink.md", _page("decided", "raw/journal/20260824.md#19:20.1")
+        project / "wiki" / "fibra.md", _page("decided", "raw/journal/20260824.md#19:20.1")
     ) is None
 
 

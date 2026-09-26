@@ -5,7 +5,7 @@ Passo **7** di ``roadmap/progetti-passi.md``, strada **B**.
 L'indirizzo di una conversazione di progetto resta il **nome della cartella**, e
 non diventa un id: la cartella continua a dedursi dalla chiave, cosi' come
 deciso il 21/08, e i file di sessione continuano a chiamarsi
-``project_patreon.jsonl`` invece di ``project_3f9a2c1b7e04.jsonl`` — che su
+``project_ricette.jsonl`` invece di ``project_3f9a2c1b7e04.jsonl`` — che su
 questo progetto non e' estetica, e' lo strumento con cui si guarda cosa e'
 successo davvero.
 
@@ -45,9 +45,9 @@ l'ultimo. Uno stato a meta' non e' piu' silenzioso: il giornale rimasto lo dice,
 
 **E non si insegue dentro un nome che nessuno puo' riaprire.** La cartella la
 rinomina l'utente **fuori** da Jenny, quindi il nome nuovo non e' passato da
-nessun controllo: ``wikis/Ricerca ETF`` non supera
+nessun controllo: ``wikis/Ricerca ETNA`` non supera
 :func:`~jenny.session.keys.is_valid_project_name`, e una chat spostata su
-``project:Ricerca ETF`` non la apre ne' il canale (``session_key_for_channel``
+``project:Ricerca ETNA`` non la apre ne' il canale (``session_key_for_channel``
 la rifiuta) ne' il chip (non la elenca). Sarebbe uno spostamento riuscito verso
 il nulla — peggio del non spostare, perche' sotto il nome vecchio la chat c'e'
 ancora. Il rifiuto sta **prima** del giornale: se aprisse una voce,

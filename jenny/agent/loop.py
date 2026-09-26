@@ -1009,7 +1009,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         **Un nome che non puo' essere una conversazione ferma l'inseguimento**, e
         lo ferma *prima* di ``invalidate`` e prima del giornale. Il rinomino lo fa
         l'utente fuori da Jenny, quindi il nome nuovo non e' passato da nessun
-        controllo: portare la chat su ``project:Ricerca ETF`` la consegnerebbe a
+        controllo: portare la chat su ``project:Ricerca ETNA`` la consegnerebbe a
         una chiave che il canale rifiuta (``session_key_for_channel``) e che il
         chip non elenca — cioe' uno spostamento riuscito verso il nulla, mentre
         sotto il nome vecchio la chat funziona ancora. Il rifiuto e' anche il modo
@@ -1227,7 +1227,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         Il chiamante subito sotto confronta questo valore con ``msg.session_key``
         e, se differiscono, *riscrive il messaggio* con un override: una costante
         qui non ignorava la chiave del messaggio, la sovrascriveva. Un messaggio
-        mandato a ``project:patreon`` finiva percio' nella conversazione
+        mandato a ``project:ricette`` finiva percio' nella conversazione
         personale, e sul telefono si vedeva solo guardando quale file di sessione
         cresceva. Nessun test lo prendeva, perche' tutti provavano gli anelli e
         non la catena.

@@ -35,7 +35,7 @@ adesso c'è.
 
 E come si dice, quel rifiuto. `err.message` è il testo di un `CommandError`,
 quindi **inglese**: interpolato nel toast localizzato dava «Creazione fallita:
-project already exists: patreon». A schermo va la chiave che corrisponde al
+project already exists: palestra». A schermo va la chiave che corrisponde al
 *codice* — la sola parte della risposta pensata per un programma — e il messaggio
 va in console. Il complemento è la validazione: la regex del client era più larga
 di `keys.py::_PROJECT_NAME_RE` in tre modi (primo carattere, `..`, i 64
@@ -270,8 +270,8 @@ def test_the_chip_is_right_even_when_the_thread_never_loads() -> None:
     """
     _run_js("""
       const chip = makeChip();
-      chip.select({ kind: 'project', name: 'patreon' });
-      assert.equal(chip.scope.name, 'patreon');
+      chip.select({ kind: 'project', name: 'palestra' });
+      assert.equal(chip.scope.name, 'palestra');
 
       // Il caricamento del thread del prossimo progetto fallirà: chi possiede la
       // chat solleva e nessun `syncFromSession` arriverà mai.
@@ -402,14 +402,14 @@ def test_a_project_that_already_exists_is_a_refusal_as_well() -> None:
     """L'altro rifiuto: non si entra da qui, si sceglie dalla tendina."""
     _run_js("""
       const chip = makeChip();
-      chip.select({ kind: 'project', name: 'patreon' });
+      chip.select({ kind: 'project', name: 'palestra' });
       AppState.published.length = 0;
       answers = ['bordi', 'qualcosa'];
       createOutcome = serverError('bad_request', 'project already exists: bordi');
 
       await chip._createProject();
 
-      assert.equal(chip.scope.name, 'patreon', 'un rifiuto ha spostato la conversazione');
+      assert.equal(chip.scope.name, 'palestra', 'un rifiuto ha spostato la conversazione');
       assert.deepEqual(AppState.published, []);
       assert.equal(chip.switched.length, 1, 'nessun cambio in più oltre a quello iniziale');
       assert.equal(toasts[0][0], 'i18n:scope.createRejected:bordi');
@@ -420,7 +420,7 @@ def test_a_project_that_already_exists_is_a_refusal_as_well() -> None:
 
 
 def test_no_server_english_reaches_the_toast() -> None:
-    """Il difetto: «Creazione fallita: project already exists: patreon».
+    """Il difetto: «Creazione fallita: project already exists: palestra».
 
     `err.message` e' un `CommandError`, quindi inglese: interpolato nel toast
     localizzato dava mezza frase in una lingua che l'utente non ha scelto. A
@@ -508,7 +508,7 @@ def test_every_name_the_server_accepts_gets_through() -> None:
     """
     _run_js("""
       const accepted = [
-        'patreon', 'a', 'A1', 'zz-bordi', 'con.punto', 'con_underscore',
+        'palestra', 'a', 'A1', 'zz-bordi', 'con.punto', 'con_underscore',
         '9-inizia-con-cifra', 'a'.repeat(64),   // esattamente il tetto
       ];
       for (const name of accepted) {

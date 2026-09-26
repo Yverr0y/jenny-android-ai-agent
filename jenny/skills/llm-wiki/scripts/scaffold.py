@@ -135,7 +135,7 @@ def _is_existing_notebook(root: str) -> bool:
       intero, che e' il motivo per cui si chiama questo script.
     - Senza ``raw/journal/`` non e' un taccuino nemmeno se le pagine sono piatte:
       una biblioteca di ricerca con la tassonomia ancora vuota — la deriva
-      misurata su ``patreon-creator``, che e' proprio il caso che si viene a
+      misurata su una wiki reale, che e' proprio il caso che si viene a
       riparare — ha esattamente quella forma, e negarle ``outputs/queries`` la
       lascerebbe rotta. Sul telefono il diario ce l'hanno tutte (lo crea la
       migrazione all'avvio), quindi da solo non distingue niente: qui conta la
@@ -429,7 +429,7 @@ def _warn_if_unopenable(root: str) -> bool:
 
     Il nome di una cartella sotto ``wikis/`` e' anche il nome di una sessione
     (``project:<nome>``), e la sessione la puo' aprire solo un nome che passa la
-    regex qui sopra: ``Ricerca ETF``, ``universita``-con-l'accento,
+    regex qui sopra: ``Ricerca ETNA``, ``universita``-con-l'accento,
     ``project (2026)`` no. Una wiki con un nome cosi' funziona come wiki —
     ingest, lint, grafo — ma la sua chat non si apre: il chip non la offre, e un
     frame che la nomina viene rifiutato.

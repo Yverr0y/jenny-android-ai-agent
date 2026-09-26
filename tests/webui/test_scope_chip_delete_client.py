@@ -135,10 +135,10 @@ def _run_js(script: str) -> None:
 
 def test_a_project_row_carries_a_delete_button() -> None:
     it = locale("it")
-    expected = it["scope"]["deleteProject"].replace("{name}", "patreon")
+    expected = it["scope"]["deleteProject"].replace("{name}", "palestra")
     _run_js(f"""
       const chip = new Chip();
-      const r = row(chip, 'patreon');
+      const r = row(chip, 'palestra');
       const del = byClass(r, 'scope-menu-del');
       assert.equal(del.length, 1, 'la riga non ha un tasto elimina');
       assert.equal(del[0].tag, 'button');
@@ -173,12 +173,12 @@ def test_the_click_does_not_reach_the_row_underneath() -> None:
     """Entrare nel progetto mentre si chiede se cancellarlo cambia chat sotto la finestra."""
     _run_js("""
       const chip = new Chip();
-      const r = row(chip, 'patreon');
+      const r = row(chip, 'palestra');
       const del = byClass(r, 'scope-menu-del')[0];
       let stopped = false;
       await del.handlers.click({ stopPropagation: () => { stopped = true; } });
       assert.equal(stopped, true, 'il click scende alla riga e apre il progetto');
-      assert.deepEqual(deleted, ['patreon']);
+      assert.deepEqual(deleted, ['palestra']);
     """)
 
 
@@ -187,7 +187,7 @@ def test_a_refusal_changes_nothing() -> None:
     _run_js("""
       const chip = new Chip();
       deleteAnswer = false;
-      const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
+      const del = byClass(row(chip, 'palestra'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
       assert.deepEqual(toasts, []);
       assert.equal(chip.reloaded, 0);
@@ -199,11 +199,11 @@ def test_deleting_the_open_project_leaves_its_scope() -> None:
     """Era la conversazione aperta: il chip deve smettere di nominarla."""
     _run_js("""
       const chip = new Chip();
-      chip.scope = { kind: 'project', name: 'patreon' };
-      chip._list.projects = [{ name: 'patreon' }];   // l'elenco letto prima
-      const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
+      chip.scope = { kind: 'project', name: 'palestra' };
+      chip._list.projects = [{ name: 'palestra' }];   // l'elenco letto prima
+      const del = byClass(row(chip, 'palestra'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
-      assert.deepEqual(chip.left, ['patreon']);
+      assert.deepEqual(chip.left, ['palestra']);
       assert.deepEqual(chip.scope, { kind: 'personal', name: null }, 'si torna nella personale');
       // Non serve ricaricare l'elenco: uscire dallo scope lo invalida già.
       assert.equal(chip.reloaded, 0);
@@ -216,7 +216,7 @@ def test_deleting_another_project_reloads_the_list() -> None:
     _run_js("""
       const chip = new Chip();
       chip.scope = { kind: 'project', name: 'altro' };
-      const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
+      const del = byClass(row(chip, 'palestra'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
       assert.deepEqual(chip.left, []);
       assert.equal(chip.reloaded, 1, 'l-elenco continua a nominare un progetto che non c-è più');

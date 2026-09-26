@@ -72,7 +72,7 @@ def test_a_real_message_is_left_alone():
     ``ProviderHTTPError`` nomina status, URL ed estratto del corpo, ed e' molto
     piu' utile di ``ProviderHTTPError``.
     """
-    assert describe_exc(httpx.ConnectError("Cannot resolve hostname: hps")) == (
-        "Cannot resolve hostname: hps"
+    assert describe_exc(httpx.ConnectError("Cannot resolve hostname: pibox")) == (
+        "Cannot resolve hostname: pibox"
     )
     assert describe_exc(RuntimeError("429 rate limited")) == "429 rate limited"

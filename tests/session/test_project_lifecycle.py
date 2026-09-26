@@ -405,6 +405,6 @@ def test_an_unopenable_wiki_is_not_protected_by_the_refusal(workspace: Path) -> 
     """Una cartella il cui nome non puo' essere una conversazione non ha una chat
     da orfanare — e ``project.delete`` la rifiuterebbe per il nome. Rifiutare
     anche la strada generica la renderebbe incancellabile da ogni porta."""
-    odd = workspace / "wikis" / "Ricerca ETF"
+    odd = workspace / "wikis" / "Ricerca ETNA"
     (odd / "wiki").mkdir(parents=True)
     assert _project_delete_refusal(workspace, odd) is None

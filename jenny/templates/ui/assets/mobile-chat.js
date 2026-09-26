@@ -1417,7 +1417,7 @@ export class ChatController {
      *conversazioni*, e prima delle sessioni-progetto non c'era niente da
      distinguere — una chat sola, quindi un filtro assente era un filtro
      inutile. Con i progetti diventa il punto in cui la risposta data in
-     `project:patreon` si dipinge nel thread personale: delta, righe di
+     `project:ricette` si dipinge nel thread personale: delta, righe di
      `file_edit` e `turn_end` compresi, sotto un composer che può perfino
      dichiarare un'altra modalità di scrittura.
 

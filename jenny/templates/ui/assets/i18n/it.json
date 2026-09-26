@@ -823,7 +823,7 @@
     "loadFailed": "Elenco progetti non letto: quel che vedi può essere incompleto",
     "newProject": "Nuovo progetto...",
     "newProjectName": "Nome del progetto:",
-    "newProjectPlaceholder": "es. patreon",
+    "newProjectPlaceholder": "es. ricette",
     "newProjectSeed": "Di cosa si occupa “{name}”?",
     "newProjectSeedPlaceholder": "una riga: cosa ci va e cosa no",
     "seedRequired": "Serve una riga su cosa e' il progetto: senza, la chat parte a vuoto.",

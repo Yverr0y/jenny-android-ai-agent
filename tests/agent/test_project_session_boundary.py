@@ -39,8 +39,8 @@ from jenny.session.keys import (
 from jenny.session.manager import Session
 
 PERSONAL = "unified:default"
-PROJECT = "project:patreon"
-OTHER_PROJECT = "project:etf-finance"
+PROJECT = "project:palestra"
+OTHER_PROJECT = "project:etna-guide"
 CRON = "cron:job-1"
 OTHER_CRON = "cron:job-2"
 
@@ -161,7 +161,7 @@ class TestTheClassificationIsTernary:
         assert not is_personal_session_key(PROJECT)
 
     def test_the_key_is_composed_in_a_single_place(self):
-        assert project_session_key("patreon") == PROJECT
+        assert project_session_key("palestra") == PROJECT
         assert is_project_session_key(project_session_key("qualunque-cosa"))
 
     def test_the_legacy_key_migration_does_not_touch_a_project(self):
@@ -316,7 +316,7 @@ class TestTheReadIsAnAbsence:
         """
         store.append_history("conversazione personale", session_key=PERSONAL)
         store.append_history("roba del progetto", session_key=PROJECT)
-        gardener = "gardener:patreon-20260908"
+        gardener = "gardener:palestra-20260908"
         store.append_history("la mia passata", session_key=gardener)
 
         contents = [

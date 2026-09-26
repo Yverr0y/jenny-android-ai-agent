@@ -20,7 +20,7 @@ non passa dai builtin).
 `python_exec` c'erano due confini di scrittura che non si parlavano:
 `_resolve_workspace_write` restringeva alla cartella del progetto, i wrapper di
 `os` validavano contro la radice con cui il tool era stato costruito. Con uno
-scope su `wikis/patreon`, `open('<ws>/SOUL.md', 'w')` veniva rifiutata e
+scope su `wikis/palestra`, `open('<ws>/SOUL.md', 'w')` veniva rifiutata e
 `os.remove('<ws>/SOUL.md')` cancellava. Le prove stanno in
 `TestAsyncOsSurface`, che passa dal tool VERO — vedi lì perché non basta
 chiamare il namespace.
@@ -51,8 +51,8 @@ _REFUSED = "outside allowed directory"
 def scoped(tmp_path: Path):
     """Un workspace con una skill, due wiki, e lo scope legato alla prima."""
     ws = tmp_path / "workspace"
-    project = ws / "wikis" / "patreon"
-    other = ws / "wikis" / "etf"
+    project = ws / "wikis" / "palestra"
+    other = ws / "wikis" / "etna"
     skill = ws / "skills" / "llm-wiki"
     for d in (project, other, skill):
         d.mkdir(parents=True)
@@ -228,10 +228,10 @@ class TestRawOpen:
 class TestWithoutProject:
     async def test_the_personal_session_writes_across_the_whole_workspace(self, tmp_path: Path):
         ws = tmp_path / "workspace"
-        (ws / "wikis" / "patreon").mkdir(parents=True)
+        (ws / "wikis" / "palestra").mkdir(parents=True)
         tool = WriteFileTool(workspace=ws, allowed_dir=ws, restrict_to_workspace=True)
 
-        result = await tool.execute(path=str(ws / "wikis" / "patreon" / "x.md"), content="ok")
+        result = await tool.execute(path=str(ws / "wikis" / "palestra" / "x.md"), content="ok")
 
         assert "Successfully wrote" in result
 

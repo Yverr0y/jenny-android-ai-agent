@@ -155,7 +155,7 @@ def test_the_same_notebook_gets_the_same_names_every_time() -> None:
 
 def test_a_title_that_is_a_sentence_gets_cut() -> None:
     _run("""
-      const long = 'Coltivazione-Monstera-Roma \\u2014 Sostegno, fertilizzazione, crescita';
+      const long = 'Ricette-Pane-Lievito-Madre \\u2014 Rinfresco, impasto, cottura';
       const short = shortLabel(long);
       assert.ok(short.length <= LABEL_CHARS, short);
       assert.ok(short.endsWith('\\u2026'), short);
@@ -817,7 +817,7 @@ def test_letting_go_writes_the_arrangement() -> None:
     il dito, che è l'unico momento in cui uno spillo nasce o si sposta."""
     _run_swipes("""
 const m = new MapStub('piante');
-const d = { id: 'Monstera.md', x: 10, y: 10 };
+const d = { id: 'Ficus.md', x: 10, y: 10 };
 const t = m._drag([d]);
 t.handlers.start({ active: 0 }, d);
 t.handlers.drag({ x: 240.4, y: 91.6 }, d);
@@ -827,7 +827,7 @@ await new Promise((r) => setTimeout(r, 0));
 assert.equal(writes.length, 1, 'alzando il dito non si salva niente');
 const [path, text] = writes[0];
 assert.equal(path, PINS_FILE);
-assert.deepEqual(JSON.parse(text), { piante: { 'Monstera.md': [240, 92] } },
+assert.deepEqual(JSON.parse(text), { piante: { 'Ficus.md': [240, 92] } },
   'la posizione salvata non e\\' quella dove il dito ha lasciato il pallino');
 """)
 
@@ -873,16 +873,16 @@ def test_a_page_that_left_the_notebook_leaves_the_file_too() -> None:
     è aggiunto. Così una pagina cancellata sparisce al primo trascinamento
     successivo, senza che nessuno debba ricordarsene."""
     _run_swipes("""
-letto = JSON.stringify({ piante: { 'Monstera.md': [1, 2], 'Sparita.md': [3, 4] } });
+letto = JSON.stringify({ piante: { 'Ficus.md': [1, 2], 'Sparita.md': [3, 4] } });
 const m = new MapStub('piante');
 await m._readPins();
-// Nel disegno di oggi c'e' solo Monstera, ed e' spillata.
-const live = { id: 'Monstera.md', x: 7, y: 8, ax: 7, ay: 8 };
+// Nel disegno di oggi c'e' solo Ficus, ed e' spillata.
+const live = { id: 'Ficus.md', x: 7, y: 8, ax: 7, ay: 8 };
 const t = m._drag([live]);
 t.handlers.start({ active: 0 }, live);
 t.handlers.end({ active: 0 }, live);
 await new Promise((r) => setTimeout(r, 0));
-assert.deepEqual(Object.keys(JSON.parse(writes[0][1]).piante), ['Monstera.md'],
+assert.deepEqual(Object.keys(JSON.parse(writes[0][1]).piante), ['Ficus.md'],
   'lo spillo di una pagina che non esiste piu\\u2019 resta nel file per sempre');
 """)
 

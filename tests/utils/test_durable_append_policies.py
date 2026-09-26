@@ -51,18 +51,18 @@ async def test_a_project_copy_that_cannot_be_synced_keeps_the_session(tmp_path: 
         context_window_tokens=1000, build_messages=MagicMock(return_value=[]),
         get_tool_definitions=MagicMock(return_value=[]), max_completion_tokens=100,
     )
-    (tmp_path / "wikis" / "patreon" / "wiki").mkdir(parents=True)
-    session = sessions.get_or_create("project:patreon")
+    (tmp_path / "wikis" / "palestra" / "wiki").mkdir(parents=True)
+    session = sessions.get_or_create("project:palestra")
     for i in range(10):
         session.add_message("user", f"user msg {i}")
         session.add_message("assistant", f"assistant msg {i}")
     sessions.save(session)
     failed = _fail_fsync_for(monkeypatch, "raw/compacted")
 
-    await consolidator.compact_idle_session("project:patreon", max_suffix=4)
+    await consolidator.compact_idle_session("project:palestra", max_suffix=4)
 
     assert failed, "la copia nel progetto non e' passata dal fsync"
-    reloaded = SessionManager(store.workspace).get_or_create("project:patreon")
+    reloaded = SessionManager(store.workspace).get_or_create("project:palestra")
     assert len(reloaded.messages) == 20, "senza la copia su disco la coda non si tronca"
 
 

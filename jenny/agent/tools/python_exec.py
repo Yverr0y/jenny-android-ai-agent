@@ -1373,7 +1373,7 @@ class PythonNamespace:
         ``self.workspace``, cioè la radice con cui il tool è stato COSTRUITO,
         senza mai consultare lo scope del turno. Due confini di scrittura che
         non si parlavano dentro lo stesso file: con uno scope su
-        ``wikis/patreon`` e il tool costruito sulla radice,
+        ``wikis/ricette`` e il tool costruito sulla radice,
         ``open('<ws>/SOUL.md', 'w')`` veniva rifiutata e
         ``os.remove('<ws>/SOUL.md')`` passava.
 

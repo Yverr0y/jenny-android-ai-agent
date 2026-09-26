@@ -715,7 +715,7 @@ class TestDreamTools:
         )
         user_result = await tools.execute(
             "edit_file",
-            {"path": "USER.md", "old_text": "(unset)", "new_text": "Ludovico"},
+            {"path": "USER.md", "old_text": "(unset)", "new_text": "Marco"},
         )
 
         assert "Successfully edited" in soul_result, soul_result
@@ -723,7 +723,7 @@ class TestDreamTools:
         assert "Successfully edited" in user_result, user_result
         assert "Precise" in store.soul_file.read_text(encoding="utf-8")
         assert "Project Y active" in store.memory_file.read_text(encoding="utf-8")
-        assert "Ludovico" in store.user_file.read_text(encoding="utf-8")
+        assert "Marco" in store.user_file.read_text(encoding="utf-8")
 
 
 class TestWriteFileSaysWhatThePromptSays:

@@ -60,8 +60,8 @@ export function sanitizeGroup(group) {
  *  **Tranne l'indice.** `wiki/index.md` entra nell'elenco apposta (e' il nodo
  *  centrale della mappa, e la ricerca lo deve trovare: v. `iter_page_files` in
  *  `webui/wiki.py`), ma di solito porta come titolo il nome del quaderno — che
- *  e' anche il titolo della sua pagina principale. Sul telefono viaggio-pazzo
- *  mostrava cosi' due righe «Viaggio Pazzo» identiche, e due nodi uguali nella
+ *  e' anche il titolo della sua pagina principale. Sul telefono un quaderno
+ *  mostrava cosi' due righe identiche col suo nome, e due nodi uguali nella
  *  mappa. L'indice si chiama per quello che e'. */
 export function labelOf(node) {
   if (node.path === 'index.md') return i18n.t('home.notebookPages.index');

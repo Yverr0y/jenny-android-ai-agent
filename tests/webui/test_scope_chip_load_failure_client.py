@@ -172,16 +172,16 @@ def test_a_failed_read_does_not_erase_a_list_that_was_good() -> None:
     _run_js("""
       const chip = new Chip();
       nextProjects = { dir: 'wikis', projects: [
-        { name: 'bordi', modified: 200 }, { name: 'patreon', modified: 100 },
+        { name: 'bordi', modified: 200 }, { name: 'palestra', modified: 100 },
       ] };
       await chip._loadProjects();
-      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'patreon']);
+      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'palestra']);
       assert.equal(chip._loadFailed, false);
 
       // Seconda apertura, gateway caduto.
       nextProjects = 'fail';
       await chip._loadProjects();
-      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'patreon'],
+      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'palestra'],
                        'un 401 ha cancellato i progetti dell\\'utente');
       assert.equal(chip._loadFailed, true);
       assert.equal(chip._dir, 'wikis',
@@ -242,7 +242,7 @@ def test_the_cached_list_is_still_offered_with_a_note_on_top() -> None:
     _run_js("""
       const chip = new Chip();
       nextProjects = { dir: 'wikis', projects: [
-        { name: 'bordi', modified: 200 }, { name: 'patreon', modified: 100 },
+        { name: 'bordi', modified: 200 }, { name: 'palestra', modified: 100 },
       ] };
       await chip._loadProjects();
       nextProjects = 'fail';
@@ -251,7 +251,7 @@ def test_the_cached_list_is_still_offered_with_a_note_on_top() -> None:
 
       const written = texts(chip.menu);
       assert.equal(written.includes('bordi'), true, 'i progetti in cache sono spariti');
-      assert.equal(written.includes('patreon'), true);
+      assert.equal(written.includes('palestra'), true);
       assert.equal(written.includes('i18n:scope.loadFailed'), true);
       assert.equal(written.includes('i18n:scope.noProjects'), false);
       // La nota sta *sopra* le righe che mette in dubbio.

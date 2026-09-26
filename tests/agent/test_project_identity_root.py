@@ -25,7 +25,7 @@ pytestmark = pytest.mark.usefixtures("_configure_jenny_workspace")
 _SOUL = "# Chi sono\n\nSono Jenny e parlo come parlo io.\n"
 _USER = "# Utente\n\n- Vive a Bologna\n- Preferisce l'italiano\n"
 _INSTALL_AGENTS = "# Istruzioni\n\nQueste sono le istruzioni della radice.\n"
-_PROJECT_AGENTS = "# Istruzioni\n\nQui si scrive una wiki su Patreon.\n"
+_PROJECT_AGENTS = "# Istruzioni\n\nQui si scrive una wiki su Palestra.\n"
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def install_root(tmp_path: Path) -> Path:
 @pytest.fixture
 def project_root(install_root: Path) -> Path:
     """Una wiki legata: ha le proprie istruzioni e nient'altro."""
-    root = install_root / "wikis" / "patreon"
+    root = install_root / "wikis" / "palestra"
     root.mkdir(parents=True)
     (root / "AGENTS.md").write_text(_PROJECT_AGENTS, encoding="utf-8")
     return root
@@ -64,7 +64,7 @@ class TestInsideAProject:
 
         prompt = builder.build_system_prompt(workspace=project_root)
 
-        assert "si scrive una wiki su Patreon" in prompt
+        assert "si scrive una wiki su Palestra" in prompt
         assert "istruzioni della radice" not in prompt
 
     def test_a_project_without_own_instructions_does_not_inherit_the_home_ones(

@@ -27,10 +27,10 @@ from jenny.webui.transcript import append_transcript_object, build_webui_thread_
 
 KEY = "websocket:default"
 NOTICES = (
-    "Ciao papi, il monitoraggio delle piante non sta girando",
-    "papi, ti segnalo che il controllo WaterBot non sta girando",
-    "ehi papi, ti dico che il check non sta girando da un po'",
-    "Papi, il monitoraggio automatico non funziona piu",
+    "Ciao boss, il monitoraggio delle piante non sta girando",
+    "boss, ti segnalo che il controllo WaterBot non sta girando",
+    "ehi boss, ti dico che il check non sta girando da un po'",
+    "Boss, il monitoraggio automatico non funziona piu",
 )
 
 

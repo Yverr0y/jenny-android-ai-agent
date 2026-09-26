@@ -3,7 +3,7 @@
 Il porto dello scope esisteva già ed era collaudato — risolto a ogni turno, i
 subagent lo ereditano, le viste lo rispettano — ma **nessuno in produzione lo
 scriveva**. Questo è il produttore, e la forma scelta è la più stretta possibile:
-`project:patreon` → `<workspace>/wikis/patreon`, punto.
+`project:palestra` → `<workspace>/wikis/palestra`, punto.
 
 Il nome viaggia nel messaggio (come `chat_id`), la cartella la deduce il server.
 Le alternative erano peggiori in modo istruttivo: se il client mandasse un
@@ -33,8 +33,8 @@ PERSONAL = "unified:default"
 @pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "workspace"
-    (ws / "wikis" / "patreon").mkdir(parents=True)
-    (ws / "wikis" / "etf").mkdir(parents=True)
+    (ws / "wikis" / "palestra").mkdir(parents=True)
+    (ws / "wikis" / "etna").mkdir(parents=True)
     return ws
 
 
@@ -60,14 +60,14 @@ def _turn(resolver: WorkspaceScopeResolver, key: str | None, channel: str = "web
 
 class TestTheFolderComesFromTheKey:
     def test_a_project_works_in_its_own_wiki(self, resolver, workspace):
-        scope = _turn(resolver, project_session_key("patreon"))
+        scope = _turn(resolver, project_session_key("palestra"))
 
-        assert scope.project_path == (workspace / "wikis" / "patreon").resolve()
+        assert scope.project_path == (workspace / "wikis" / "palestra").resolve()
         assert scope.access_mode == "restricted"
 
     def test_two_projects_do_not_touch(self, resolver, workspace):
-        assert _turn(resolver, project_session_key("patreon")).project_path != _turn(
-            resolver, project_session_key("etf")
+        assert _turn(resolver, project_session_key("palestra")).project_path != _turn(
+            resolver, project_session_key("etna")
         ).project_path
 
     def test_the_personal_conversation_stays_on_the_root(self, resolver, workspace):
@@ -80,16 +80,16 @@ class TestTheFolderComesFromTheKey:
         trova — cioè ogni progetto legato punterebbe a una cartella mancante.
         """
         ws = tmp_path / "workspace"
-        (ws / "kb" / "patreon").mkdir(parents=True)
+        (ws / "kb" / "palestra").mkdir(parents=True)
         resolver = WorkspaceScopeResolver(
             default_workspace=ws,
             default_restrict_to_workspace=True,
             projects_subdir="kb",
         )
 
-        scope = _turn(resolver, project_session_key("patreon"))
+        scope = _turn(resolver, project_session_key("palestra"))
 
-        assert scope.project_path == (ws / "kb" / "patreon").resolve()
+        assert scope.project_path == (ws / "kb" / "palestra").resolve()
 
 
 class TestWhenSomethingDoesNotAddUp:
@@ -120,7 +120,7 @@ class TestWhenSomethingDoesNotAddUp:
     def test_a_channel_other_than_the_webui_has_no_projects(self, resolver, workspace):
         """Un progetto è una sessione di lavoro alla tastiera: la vita fuori di
         Jenny — Telegram, cron, avvisi — non ci entra."""
-        scope = _turn(resolver, project_session_key("patreon"), channel="telegram")
+        scope = _turn(resolver, project_session_key("palestra"), channel="telegram")
 
         assert scope.project_path == workspace.resolve()
 
@@ -146,9 +146,9 @@ class TestWhenSomethingDoesNotAddUp:
         assert resolver.default().access_mode == "full"
         assert resolver.default().restrict_to_workspace is False
 
-        scope = resolver.for_project(project_session_key("patreon"))
+        scope = resolver.for_project(project_session_key("palestra"))
 
-        assert scope.project_path == (workspace / "wikis" / "patreon").resolve()
+        assert scope.project_path == (workspace / "wikis" / "palestra").resolve()
         assert scope.access_mode == "restricted"
         assert scope.restrict_to_workspace is True
 
@@ -161,8 +161,8 @@ class TestFromTheChatIdToTheKey:
         ("chat_id", "expected"),
         [
             ("default", PERSONAL),
-            ("project:patreon", "project:patreon"),
-            ("project:etf-finance", "project:etf-finance"),
+            ("project:palestra", "project:palestra"),
+            ("project:etna-guide", "project:etna-guide"),
             # Forme che un client non deve poter usare per farsi creare una
             # sessione: cadono sulla conversazione personale, non su una nuova.
             ("project:../fuori", PERSONAL),
@@ -177,13 +177,13 @@ class TestFromTheChatIdToTheKey:
         assert session_key_for_channel("websocket", chat_id) == expected
 
     def test_telegram_does_not_open_projects(self):
-        assert session_key_for_channel("telegram", "project:patreon") == PERSONAL
+        assert session_key_for_channel("telegram", "project:palestra") == PERSONAL
 
     @pytest.mark.parametrize(
         ("name", "ok"),
         [
-            ("patreon", True),
-            ("etf-finance", True),
+            ("palestra", True),
+            ("etna-guide", True),
             ("a_b.c", True),
             ("..", False),
             ("../x", False),
@@ -215,26 +215,26 @@ class TestTheChainIsReallyConnected:
         from jenny.bus.events import InboundMessage
 
         (workspace / "SOUL.md").write_text("sono fatta così", encoding="utf-8")
-        (workspace / "wikis" / "patreon" / "AGENTS.md").write_text(
-            "qui si scrive di Patreon", encoding="utf-8"
+        (workspace / "wikis" / "palestra" / "AGENTS.md").write_text(
+            "qui si scrive di Palestra", encoding="utf-8"
         )
 
         msg = InboundMessage(
             channel="websocket",
             sender_id="me",
-            chat_id="project:patreon",
+            chat_id="project:palestra",
             content="ciao",
         )
-        assert msg.session_key == "project:patreon"
+        assert msg.session_key == "project:palestra"
 
         scope = resolver.for_message(msg, session_metadata=None)
-        assert scope.project_path == (workspace / "wikis" / "patreon").resolve()
+        assert scope.project_path == (workspace / "wikis" / "palestra").resolve()
 
         prompt = ContextBuilder(workspace).build_system_prompt(
             workspace=scope.project_path, session_key=msg.session_key
         )
         # Le istruzioni del progetto ci sono, l'identità pure...
-        assert "qui si scrive di Patreon" in prompt
+        assert "qui si scrive di Palestra" in prompt
         assert "sono fatta così" in prompt
         # ...e la coda del diario personale no (il confine del 21/08).
         assert "# Recent History" not in prompt
@@ -261,7 +261,7 @@ class TestTheLoopUsesTheMessageKey:
     chiamante confronta il suo valore con `msg.session_key` e, se differiscono,
     **riscrive il messaggio** con un override: quella costante non ignorava la
     chiave del messaggio, la sovrascriveva. Un messaggio mandato a
-    `project:patreon` finiva nella conversazione personale — e tutti i test degli
+    `project:palestra` finiva nella conversazione personale — e tutti i test degli
     anelli restavano verdi, perché nessuno provava la catena.
     """
 
@@ -272,11 +272,11 @@ class TestTheLoopUsesTheMessageKey:
         msg = InboundMessage(
             channel="websocket",
             sender_id="me",
-            chat_id="project:patreon",
+            chat_id="project:palestra",
             content="ciao",
         )
 
-        assert AgentLoop._effective_session_key(None, msg) == "project:patreon"
+        assert AgentLoop._effective_session_key(None, msg) == "project:palestra"
 
     def test_the_personal_conversation_stays_where_it_was(self):
         from jenny.agent.loop import AgentLoop
@@ -296,7 +296,7 @@ class TestTheLoopUsesTheMessageKey:
         msg = InboundMessage(
             channel="websocket",
             sender_id="me",
-            chat_id="project:patreon",
+            chat_id="project:palestra",
             content="ciao",
             session_key_override="cron:job-1",
         )
@@ -310,7 +310,7 @@ class TestTheChannelReadsTheChatIdFromTheFrame:
     `WebSocketChannel._dispatch_envelope` sostituiva il `chat_id` del frame con
     la costante `default`: era così che la "sessione unica" era implementata, e
     va benissimo finché di conversazioni ce n'è una. Con i progetti diventa il
-    punto in cui un messaggio mandato a `project:patreon` finisce nella chat
+    punto in cui un messaggio mandato a `project:palestra` finisce nella chat
     personale — e dal lato client sembra partito, quindi non lo dice nessuno.
     """
 
@@ -318,7 +318,7 @@ class TestTheChannelReadsTheChatIdFromTheFrame:
         ("frame_chat_id", "expected"),
         [
             ("default", "default"),
-            ("project:patreon", "project:patreon"),
+            ("project:palestra", "project:palestra"),
             # Forme che non nominano nessun progetto: la chat personale è la sola
             # risposta sensata, perché *è* la conversazione e non c'è niente da
             # rifiutare.
@@ -331,7 +331,7 @@ class TestTheChannelReadsTheChatIdFromTheFrame:
             # conversazione vuole, e dargliene un'altra in silenzio era il difetto.
             ("project:../fuori", None),
             ("project:a/b", None),
-            ("project:Ricerca ETF", None),
+            ("project:Ricerca ETNA", None),
             ("project:università", None),
             ("project:progetto (2026)", None),
             ("project:.nascosto", None),

@@ -222,7 +222,7 @@ class _Harness:
 @pytest.fixture
 def broken(tmp_path: Path) -> _Harness:
     harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
-    harness.agent.broken = {1: "hps irraggiungibile"}
+    harness.agent.broken = {1: "pibox irraggiungibile"}
     return harness
 
 
@@ -374,7 +374,7 @@ class TestTheStoreOnTheDevice:
         )
 
         harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
-        harness.agent.broken = {1: "hps irraggiungibile"}
+        harness.agent.broken = {1: "pibox irraggiungibile"}
         harness.user_says()
         await harness.cycles(ESCALATE_AFTER_FAILURES + 3)
 
@@ -528,7 +528,7 @@ class TestTheLastUserMessageReader:
             {"role": "user", "content": "a", "timestamp": human.isoformat()},
             {
                 "role": "user",
-                "content": "[Subagent 'backup latest hps' completed successfully]…",
+                "content": "[Subagent 'backup latest pibox' completed successfully]…",
                 "timestamp": announce.isoformat(),
                 INJECTED_EVENT_META: SUBAGENT_RESULT_EVENT,
             },

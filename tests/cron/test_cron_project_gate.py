@@ -87,7 +87,7 @@ def _tool(session_key: str, jobs: list[CronJob] | None = None) -> tuple[CronTool
     ids=["add-at", "add-every", "list", "remove"],
 )
 async def test_no_action_gets_through_from_a_project(params: dict[str, Any]) -> None:
-    tool, service = _tool("project:patreon", jobs=[_PERSONAL_JOB])
+    tool, service = _tool("project:palestra", jobs=[_PERSONAL_JOB])
 
     result = await tool.execute(**params)
 
@@ -98,7 +98,7 @@ async def test_no_action_gets_through_from_a_project(params: dict[str, Any]) -> 
 
 async def test_list_does_not_leak_the_personal_schedule() -> None:
     """``list`` è una lettura, ma di cosa: «chi sei viaggia, dove altro lavori no»."""
-    tool, _ = _tool("project:patreon", jobs=[_PERSONAL_JOB])
+    tool, _ = _tool("project:palestra", jobs=[_PERSONAL_JOB])
 
     result = await tool.execute(action="list")
 

@@ -56,7 +56,7 @@ from jenny.agent.gardener import GardenerStore
 from jenny.agent.gardener_state import GardenerState, write_state
 from jenny.session.manager import SessionManager
 
-PROJECT = "project:patreon"
+PROJECT = "project:palestra"
 PERSONAL = "unified:default"
 
 
@@ -80,7 +80,7 @@ def autocompact(tmp_path: Path) -> AutoCompact:
     )
 
 
-def _project_folder(autocompact: AutoCompact, name: str = "patreon") -> Path:
+def _project_folder(autocompact: AutoCompact, name: str = "palestra") -> Path:
     """La cartella del progetto, dedotta come la deduce il codice.
 
     ``SessionManager.workspace`` è la radice del workspace, quindi il progetto
@@ -92,7 +92,7 @@ def _project_folder(autocompact: AutoCompact, name: str = "patreon") -> Path:
     return folder
 
 
-def _promoted(autocompact: AutoCompact, name: str = "patreon") -> Path:
+def _promoted(autocompact: AutoCompact, name: str = "palestra") -> Path:
     """Un progetto con almeno una pagina e nessuna riga di diario da leggere."""
     folder = _project_folder(autocompact, name)
     (folder / "wiki" / "canone.md").write_text(
@@ -101,7 +101,7 @@ def _promoted(autocompact: AutoCompact, name: str = "patreon") -> Path:
     return folder
 
 
-def _unread_journal(autocompact: AutoCompact, name: str = "patreon") -> Path:
+def _unread_journal(autocompact: AutoCompact, name: str = "palestra") -> Path:
     """Un progetto con una voce di diario che il giardiniere non ha ancora letto."""
     folder = _promoted(autocompact, name)
     journal = folder / "raw" / "journal"
@@ -296,12 +296,12 @@ def test_the_transcript_files_are_not_mistaken_for_sessions(
     tiene tale.
 
     **Si nega la forma, non una chiave.** La prima stesura negava esattamente
-    ``"websocket:project:patreon"`` — e con il glob allargato il transcript entra
-    come ``websocket:project_patreon``, che è una chiave *diversa*: l'asserzione
+    ``"websocket:project:palestra"`` — e con il glob allargato il transcript entra
+    come ``websocket:project_palestra``, che è una chiave *diversa*: l'asserzione
     passava e la mutazione sopravviveva. Quel che va escluso è qualunque
     candidato che non sia una sessione-progetto.
     """
-    _stale(switched_on, "websocket:project:patreon")
+    _stale(switched_on, "websocket:project:palestra")
     _stale(switched_on, PROJECT)
 
     candidates = switched_on._idle_candidates()
@@ -534,7 +534,7 @@ def test_the_shape_measured_on_the_device_is_the_shape_that_defers(
     (folder / "raw" / "journal").mkdir(parents=True)
 
     # Il cancello (a) da solo direbbe si': e' il punto della misura.
-    store = GardenerStore.for_project(switched_on.sessions.workspace, "patreon")
+    store = GardenerStore.for_project(switched_on.sessions.workspace, "palestra")
     assert store is not None
     assert store.read_delta().is_empty is True
 
@@ -561,7 +561,7 @@ def test_a_missing_project_folder_defers_instead_of_compacting(
         switched_on.check_expired(scheduled.append)
 
     assert scheduled == []
-    assert "no project folder at wikis/patreon" in "\n".join(lines)
+    assert "no project folder at wikis/palestra" in "\n".join(lines)
 
 
 def test_the_projects_subdir_is_configurable_and_not_hardcoded(tmp_path: Path) -> None:
@@ -579,7 +579,7 @@ def test_the_projects_subdir_is_configurable_and_not_hardcoded(tmp_path: Path) -
         compact_projects=True,
         projects_subdir="progetti",
     )
-    folder = tmp_path / "progetti" / "patreon"
+    folder = tmp_path / "progetti" / "palestra"
     (folder / "wiki").mkdir(parents=True)
     (folder / "wiki" / "canone.md").write_text("# Canone\n", encoding="utf-8")
 

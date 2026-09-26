@@ -32,7 +32,7 @@ from jenny.webui.commands import (
 # ISO-8859-1, `new Headers()` le rifiuta), accenti (surrogate escape lato
 # server → UnicodeEncodeError → 400) e più di 8192 byte (MAX_LINE_LENGTH).
 _SOUL_LIKE = (
-    "# Chi sono\n\nsono Jenny 😏 e parlo con papi — perché è così che è nata "
+    "# Chi sono\n\nsono Jenny 😏 e parlo con boss — perché è così che è nata "
     "questa cosa 💋\n\n" + "riempimento: però, città, già, ciò 🙄\n" * 400
 )
 

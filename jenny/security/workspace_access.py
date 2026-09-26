@@ -247,7 +247,7 @@ class WorkspaceScopeResolver:
         """Lo scope di questo turno.
 
         **Per una sessione-progetto la cartella si ricava dalla chiave**, e non
-        dai metadati: ``project:patreon`` -> ``<workspace>/wikis/patreon``. Cosi'
+        dai metadati: ``project:ricette`` -> ``<workspace>/wikis/ricette``. Cosi'
         la sessione e la sua cartella non possono divergere — non c'e' un secondo
         dato da tenere allineato, e nessun client puo' chiedere una cartella
         diversa da quella che il suo nome dichiara. I metadati restano la strada

@@ -480,7 +480,7 @@ The problem is that there is currently **no third state**. A cycle where the che
 found nothing, and a cycle where the check could not run at all, produce byte-identical
 output: nothing. Under B5/B6 the WaterBot check was failing its first import on every cycle;
 had the agent not self-healed, the user would have seen exactly what a healthy garden looks
-like. The skill even has a legitimate reason to be silent (*"se hps è irraggiungibile salta
+like. The skill even has a legitimate reason to be silent (*"se il server è irraggiungibile salta
 il ciclo in silenzio"*), which makes the broken state perfectly camouflaged.
 
 **Fix — minimum viable version.** Record an outcome per monitor/heartbeat run, and escalate

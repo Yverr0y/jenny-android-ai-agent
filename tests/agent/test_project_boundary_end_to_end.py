@@ -11,8 +11,8 @@ prendeva nessun test: *«tutti provavano gli anelli e non la catena»*.
 
 Le due direzioni non sono simmetriche, ed è il punto:
 
-- **da un progetto verso un altro:** niente. Un turno di ``patreon`` non deve
-  contenere una riga di ``etf``, né il suo nome;
+- **da un progetto verso un altro:** niente. Un turno di ``palestra`` non deve
+  contenere una riga di ``etna``, né il suo nome;
 - **da un progetto verso il personale:** niente. Il diario non deve contenere
   niente di nessun progetto;
 - **dal personale verso un progetto:** chi sei viaggia. ``SOUL.md`` e ``USER.md``
@@ -48,13 +48,13 @@ def install(tmp_path: pathlib.Path) -> pathlib.Path:
     dopo (già successo il 22/08, con un test caduto a tre cartelle di
     distanza).
     """
-    for name, secret in (("patreon", "PAROLA-PATREON"), ("etf", "PAROLA-ETF")):
+    for name, secret in (("palestra", "PAROLA-PALESTRA"), ("etna", "PAROLA-ETNA")):
         project = tmp_path / "wikis" / name
         (project / "wiki").mkdir(parents=True)
         (project / "AGENTS.md").write_text(
-            # Lo scope di ``etf`` porta il marcatore dell'elenco: e' quel che il
+            # Lo scope di ``etna`` porta il marcatore dell'elenco: e' quel che il
             # blocco ``## Wikis`` mostra alla chat personale e a nessun progetto.
-            f"---\nsummary: {name}{' PAROLA-RUBRICA' if name == 'etf' else ''}\n---\n\n"
+            f"---\nsummary: {name}{' PAROLA-RUBRICA' if name == 'etna' else ''}\n---\n\n"
             f"# {name}\n\n{secret}\n", encoding="utf-8"
         )
     (tmp_path / "SOUL.md").write_text("Sono Jenny. PAROLA-ANIMA\n", encoding="utf-8")
@@ -79,9 +79,9 @@ def _prompt(install: pathlib.Path, name: str | None) -> str:
 
 
 def test_a_project_turn_carries_nothing_of_the_other_project(install: pathlib.Path) -> None:
-    prompt = _prompt(install, "patreon")
-    assert "PAROLA-PATREON" in prompt, "le sue istruzioni ci devono essere"
-    assert "PAROLA-ETF" not in prompt, "quelle dell'altro no"
+    prompt = _prompt(install, "palestra")
+    assert "PAROLA-PALESTRA" in prompt, "le sue istruzioni ci devono essere"
+    assert "PAROLA-ETNA" not in prompt, "quelle dell'altro no"
 
 
 def test_a_project_turn_does_not_even_name_the_other(install: pathlib.Path) -> None:
@@ -91,15 +91,15 @@ def test_a_project_turn_does_not_even_name_the_other(install: pathlib.Path) -> N
     wiki è il catalogo di dove sta la roba, e dentro un progetto
     la scoperta è già finita — col chip l'hai scelto tu.
     """
-    prompt = _prompt(install, "patreon")
-    assert "etf" not in prompt.lower()
+    prompt = _prompt(install, "palestra")
+    assert "etna" not in prompt.lower()
     assert "PAROLA-RUBRICA" not in prompt
 
 
 def test_the_two_projects_do_not_leak_into_each_other(install: pathlib.Path) -> None:
     """Simmetrico, e vale per costruzione: nessuno dei due è privilegiato."""
-    assert "PAROLA-PATREON" not in _prompt(install, "etf")
-    assert "PAROLA-ETF" not in _prompt(install, "patreon")
+    assert "PAROLA-PALESTRA" not in _prompt(install, "etna")
+    assert "PAROLA-ETNA" not in _prompt(install, "palestra")
 
 
 # ── Dal personale verso un progetto: chi sei viaggia ─────────────────────
@@ -122,7 +122,7 @@ def test_who_she_is_travels_into_a_project(
     riguardava — la personalità e chi è l'utente — sta in questi due, quindi la
     regressione che questo test protegge resta protetta.
     """
-    assert marker in _prompt(install, "patreon"), f"{file} non è arrivato nel progetto"
+    assert marker in _prompt(install, "palestra"), f"{file} non è arrivato nel progetto"
 
 
 def test_the_long_term_memory_does_not_travel_but_says_where_it_is(
@@ -137,7 +137,7 @@ def test_the_long_term_memory_does_not_travel_but_says_where_it_is(
     """
     from jenny.agent.memory import MemoryStore
 
-    prompt = _prompt(install, "patreon")
+    prompt = _prompt(install, "palestra")
 
     assert "PAROLA-MEMORIA" not in prompt, "il contenuto è «dove altro lavori»"
     assert MemoryStore(install).get_memory_pointer_context() in prompt
@@ -156,8 +156,8 @@ def test_the_personal_chat_keeps_the_directory(install: pathlib.Path) -> None:
 def test_the_personal_chat_carries_no_project_instructions(install: pathlib.Path) -> None:
     """L'altro verso dell'asimmetria: il personale non eredita il lavoro."""
     prompt = _prompt(install, None)
-    assert "PAROLA-PATREON" not in prompt
-    assert "PAROLA-ETF" not in prompt
+    assert "PAROLA-PALESTRA" not in prompt
+    assert "PAROLA-ETNA" not in prompt
 
 
 # ── Il diario personale è di chi parla, non di dove si lavora ────────────
@@ -171,13 +171,13 @@ def test_only_the_personal_conversation_can_become_long_term_memory() -> None:
     ogni progetto sarebbe finito nel diario.
     """
     assert is_personal_session_key("unified:default") is True
-    for key in ("project:patreon", "project:etf", "cron:update_check", "dream:x"):
+    for key in ("project:palestra", "project:etna", "cron:update_check", "dream:x"):
         assert is_personal_session_key(key) is False, f"{key} non può diventare memoria"
 
 
 def test_a_project_key_is_neither_personal_nor_internal() -> None:
     """Il terzo tipo esiste, ed è riconosciuto in un punto solo."""
-    key = "project:patreon"
+    key = "project:palestra"
     assert is_project_session_key(key) is True
     assert is_personal_session_key(key) is False
     from jenny.session.keys import is_internal_session_key

@@ -66,7 +66,7 @@ class ProjectCreateError(Exception):
 
 
 def project_title(name: str) -> str:
-    """Titolo leggibile da un nome di cartella: ``patreon-creator`` -> ``Patreon Creator``.
+    """Titolo leggibile da un nome di cartella: ``diario-ricette`` -> ``Diario Ricette``.
 
     Il titolo finisce negli H1 del template e non e' un identificatore: l'utente
     lo puo' correggere nell'`AGENTS.md`, il nome della cartella no (e' l'indirizzo

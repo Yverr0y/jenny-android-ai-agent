@@ -77,7 +77,7 @@ _MAX_TEXT_CHARS = 500
 # citazione contro le parole dell'utente» sono state provate su quel caso e
 # cadono tutte, l'ultima in modo istruttivo: chiedere che le parole di contenuto
 # della pagina compaiano nei messaggi dell'utente boccia la fabbricazione **e**
-# boccia ``starlink.md``, che registra una decisione vera e detta chiaramente, solo
+# boccia ``fibra.md``, che registra una decisione vera e detta chiaramente, solo
 # parafrasata. La parafrasi e' legittima e pervasiva, quindi nessun controllo a
 # livello di stringa separa una parafrasi onesta da una fabbricazione. Il
 # ragionamento intero sta in ``roadmap/memory-scope-and-journal-provenance.md``

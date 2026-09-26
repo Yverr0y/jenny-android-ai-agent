@@ -392,7 +392,7 @@ def iter_wiki_pages(
 
     **Quel corpo non e' quello del telefono:** ricontato il 24/08 in sola lettura sono 8
     wiki / 274 pagine sotto wiki/ / la piu' grande (main) 65. La misura del 23/08 girava
-    su una copia nello scratchpad con alberi duplicati e una wiki blackberry che sul
+    su una copia nello scratchpad con alberi duplicati e una wiki in piu' che sul
     telefono non c'e', quindi i valori assoluti qui sopra non sono quelli del
     dispositivo: vale il prima/dopo, non il numero.
 

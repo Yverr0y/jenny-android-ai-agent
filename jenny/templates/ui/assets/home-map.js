@@ -88,7 +88,7 @@ const ANCHOR_FORCE = 0.3;
  *  **Il tetto e' una rete di sicurezza, non una regola di disegno** — e per due
  *  giorni e' stato il contrario. Nato a 10 il 19/09/2026 su una misura vera:
  *  un quaderno da 31 pagine, i titoli di una wiki sono frasi
- *  («Coltivazione-Monstera-Roma — Sostegno, fertilizzazione, crescita»), e su
+ *  («Ricette-Pane-Lievito-Madre — Rinfresco, impasto, cottura»), e su
  *  566 px scrivendoli tutti le etichette diventavano una macchia.
  *
  *  Quella misura resta giusta, il rimedio no. Il difetto l'ha visto l'utente il

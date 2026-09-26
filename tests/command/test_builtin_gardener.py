@@ -108,9 +108,9 @@ class TestPickingTheProject:
     async def test_inside_a_project_the_target_is_that_project(self, no_background):
         """Nessun argomento da scrivere: la conversazione in cui si è **è** il
         bersaglio. Il nome viene dalla chiave, come per lo scope di un turno."""
-        out = await cmd_gardener(_ctx("project:viaggio-pazzo"))
+        out = await cmd_gardener(_ctx("project:viaggio-lento"))
 
-        assert "viaggio-pazzo" in out.content
+        assert "viaggio-lento" in out.content
         assert no_background, "la passata deve partire, non solo essere annunciata"
 
     async def test_naming_another_project_is_not_a_way_in(self, no_background):

@@ -537,7 +537,7 @@ async def test_a_silent_alert_is_marked_for_the_history() -> None:
     sent: list[OutboundMessage] = []
     tool = _silent_tool(sent)
 
-    await tool.execute(content="hps non è raggiungibile")
+    await tool.execute(content="pibox non è raggiungibile")
 
     assert sent[0].metadata["_record_channel_delivery"] is True
 
@@ -606,7 +606,7 @@ async def test_a_visible_turn_is_not_capped() -> None:
     [
         "CHECK_OK 1",
         "CHECK_OK",
-        "CHECK_FAILED 2: hps non raggiungibile",
+        "CHECK_FAILED 2: pibox non raggiungibile",
         "CHECK_DELEGATED 1",
         "CHECK_WARNED 3",
         "- CHECK_OK 1",
@@ -799,7 +799,7 @@ async def test_an_alert_that_quotes_the_markers_is_still_delivered() -> None:
     tool consegna anche le spiegazioni che Jenny scrive all'utente."""
     sent: list[OutboundMessage] = []
     tool = _silent_tool(sent)
-    text = "papi, ieri sera è uscito un `<｜｜DSML｜｜tool_calls>` in chat: era il modello."
+    text = "boss, ieri sera è uscito un `<｜｜DSML｜｜tool_calls>` in chat: era il modello."
 
     result = await tool.execute(content=text)
 

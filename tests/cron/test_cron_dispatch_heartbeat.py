@@ -189,8 +189,12 @@ _TITAN2 = (Path(__file__).parent / "fixtures" / "heartbeat_titan2_2026-08-16.md"
 )
 
 # Gli id che ``parse_heartbeat_tasks`` produce oggi sul file del Titan 2,
-# calcolati **prima** di questo lavoro. V. il test che li usa.
-_TITAN2_TASK_IDS = ["903dabc442ff", "8aa2cef88085", "113dc0426e58", "ff28e76dc65c"]
+# calcolati **prima** di questo lavoro. V. il test che li usa. Il quarto e'
+# stato ricalcolato il 26/09/2026, quando il nome di un host reale nel testo
+# del task e' stato sostituito con uno inventato: l'hash e' lo stesso di
+# prima (sul testo originale dava ancora ``ff28e76dc65c``), e' cambiato il
+# testo che hasha.
+_TITAN2_TASK_IDS = ["903dabc442ff", "8aa2cef88085", "113dc0426e58", "cc9811ac7f4c"]
 
 
 class TestThePromptCarriesTheTasksAndNotTheFile:
@@ -257,7 +261,7 @@ class TestThePromptCarriesTheTasksAndNotTheFile:
             "segui la skill `waterbot`",
             "Avverti l'utente SOLO se almeno una pianta",
             "Anti-spam: notifica una sola volta per pianta",
-            "Se hps/Tailscale è irraggiungibile",
+            "Se pibox/Tailscale è irraggiungibile",
         ):
             assert bullet in prompt
 
@@ -428,13 +432,13 @@ class TestThePreambleContract:
         assert "Those lines reach nobody" in text
 
     def test_an_instructed_silent_skip_still_writes_the_line(self) -> None:
-        """Il task WaterBot reale dice "se hps è irraggiungibile salta il ciclo in
+        """Il task WaterBot reale dice "se pibox è irraggiungibile salta il ciclo in
         silenzio", e questo preambolo diceva che quello skip non è un guasto.
 
         Misurato sul Titan 2 il 2026-08-16, con Tailscale spento apposta: il run
         delle 09:18 ha letto quella frase, ha saltato il controllo senza scrivere
         nessun marcatore, e la voce è stata potata — sequenza di guasti di nuovo
-        a zero, con hps irraggiungibile da un'ora. L'istruzione dell'utente
+        a zero, con pibox irraggiungibile da un'ora. L'istruzione dell'utente
         riguarda il **messaggio**, non la contabilità: la riga non raggiunge
         nessuno, ed è l'unico motivo per cui qualcuno si accorgerà mai che
         quel controllo è morto da ore.

@@ -1,7 +1,7 @@
 """Un frame appartiene a *una* conversazione, e si rende solo in quella.
 
 ``mobile-chat.js`` filtrava i frame live per ``turn_id`` e mai per ``chat_id``:
-il turno di un'altra conversazione — la risposta data in ``project:patreon``,
+il turno di un'altra conversazione — la risposta data in ``project:palestra``,
 l'avviso proattivo consegnato sulla chat personale — si dipingeva nel thread che
 in quel momento era a schermo, delta, righe di ``file_edit`` e ``turn_end``
 compresi. Finché di conversazioni ce n'era una il filtro assente era un filtro
@@ -106,13 +106,13 @@ def _run_js(script: str) -> None:
 
 
 def test_a_turn_of_another_conversation_is_not_rendered() -> None:
-    """Il difetto: con la personale a schermo, un turno di ``project:patreon``
+    """Il difetto: con la personale a schermo, un turno di ``project:palestra``
     si dipingeva qui — testo, file toccati e chiusura."""
     _run_js("""
       const chat = makeChat();
       for (const ev of ['delta', 'reasoning_delta', 'stream_end', 'message',
                         'file_edit', 'turn_end', 'user', 'goal_status']) {
-        assert.equal(route(chat, frame(ev, 'project:patreon', 'p:1')), false,
+        assert.equal(route(chat, frame(ev, 'project:palestra', 'p:1')), false,
                      ev + " di un'altra conversazione è stato reso");
       }
     """)
@@ -127,10 +127,10 @@ def test_the_open_conversation_is_rendered_whichever_it_is() -> None:
         assert.equal(route(chat, frame(ev, 'default', 'a:1')), true, ev);
       }
 
-      sessionManager.currentChatId = 'project:patreon';
+      sessionManager.currentChatId = 'project:palestra';
       const other = makeChat();
       for (const ev of ['delta', 'message', 'file_edit', 'turn_end']) {
-        assert.equal(route(other, frame(ev, 'project:patreon', 'b:1')), true, ev);
+        assert.equal(route(other, frame(ev, 'project:palestra', 'b:1')), true, ev);
       }
       assert.equal(route(other, frame('delta', 'default', 'c:1')), false,
                    'con un progetto aperto la personale non deve dipingere qui');
@@ -165,7 +165,7 @@ def test_out_of_band_frames_are_never_filtered_by_chat() -> None:
       for (const ev of ['subagent_status', 'subagent_activity', 'subagent_unwatched',
                         'runtime_model_updated', 'error', 'app_data_changed',
                         'apps_list_changed', 'ui_query']) {
-        assert.equal(chat._belongsToOpenChat(frame(ev, 'project:patreon')), true,
+        assert.equal(chat._belongsToOpenChat(frame(ev, 'project:palestra')), true,
                      ev + ' è stato filtrato per chat: non è di una conversazione');
       }
     """)
@@ -186,7 +186,7 @@ def test_a_dropped_turn_leaves_no_turn_half_open() -> None:
 
       // Un intero turno di un'altra conversazione atterra in mezzo.
       for (const ev of ['message', 'file_edit', 'delta', 'stream_end', 'turn_end']) {
-        route(chat, frame(ev, 'project:patreon', 'altro:1'));
+        route(chat, frame(ev, 'project:palestra', 'altro:1'));
       }
       assert.equal(chat.resets, 0, 'un turno scartato ha azzerato la bolla in corso');
       assert.equal(chat._currentTurnId, 'mio:1', 'un turno scartato si è preso il turno corrente');
@@ -209,7 +209,7 @@ def test_filtering_after_the_turn_boundary_would_reopen_the_defect() -> None:
       chat._applyTurnBoundary(frame('delta', 'default', 'mio:1'));
 
       // L'ordine sbagliato: prima il confine di turno.
-      chat._applyTurnBoundary(frame('message', 'project:patreon', 'altro:1'));
+      chat._applyTurnBoundary(frame('message', 'project:palestra', 'altro:1'));
       assert.equal(chat._currentTurnId, 'altro:1');
       assert.equal(chat._applyTurnBoundary(frame('turn_end', 'default', 'mio:1')), false,
                    'questo test descrive il difetto: se passa, il difetto non c\\'è più ' +

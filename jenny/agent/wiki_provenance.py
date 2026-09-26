@@ -5,7 +5,7 @@ correzione. Fino a quel giorno questo gancio era montato in un posto solo — la
 passata del giardiniere (``run_gardener``) — e la conseguenza si è vista sul
 telefono: la passata con **meno** contesto era l'unica trattenuta, e la
 conversazione, che ha i corpi delle pagine, la giornata intera e la libertà di
-ristrutturare, non era trattenuta affatto. Il 26/08 in ``wikis/salute`` una
+ristrutturare, non era trattenuta affatto. Il 26/08 in una wiki di progetto una
 richiesta di sistemare la wiki ha riscritto la ``source:`` di una pagina come
 lista YAML, e i due lettori che la interpretano hanno dato due risposte diverse
 (``_page_frontmatter`` → ``'- raw/journal/...'``, trattino incluso e quindi

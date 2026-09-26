@@ -240,7 +240,7 @@ def test_policy_divergence_table(ip, url_target_ok, app_server_ok, label):
 @pytest.mark.parametrize(
     "ip,ssh_ok,label",
     [
-        ("100.124.67.77", True, "CGNAT: e l'indirizzo che assegna Tailscale"),
+        ("100.100.6.6", True, "CGNAT: e l'indirizzo che assegna Tailscale"),
         ("192.168.1.10", True, "RFC1918: il server di casa sulla LAN"),
         ("fd00::5", True, "IPv6 ULA: stesso caso della LAN"),
         ("93.184.216.34", True, "pubblico: un VPS qualunque"),
@@ -277,7 +277,7 @@ def test_tailscale_allowed_where_the_user_names_the_target_never_where_the_model
     configure_ssrf_whitelist([])
     with patch(
         "jenny.security.network.socket.getaddrinfo",
-        _fake_resolve("ts.example", ["100.124.67.77"]),
+        _fake_resolve("ts.example", ["100.100.6.6"]),
     ):
         assert validate_ssh_target("ts.example")[0], "host digitato dall'utente"
         assert validate_app_server_target("http://ts.example/x")[0], "baseUrl dichiarato"

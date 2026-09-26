@@ -2355,7 +2355,7 @@ def test_a_mixed_minute_is_yellow_and_says_what_to_add(lint_wiki, tmp_path, caps
 # ── passo 19, il lato muto: chi non potrà mai dichiararsi deciso ──────────────
 #
 # Il passo 19 guarda chi *si dichiara* deciso. Il 25/08 il caso di campo era
-# l'opposto: `wikis/viaggio-pazzo/wiki/viaggio-pazzo.md`, a `open`, ancorata al
+# l'opposto: `wikis/viaggio-lento/wiki/viaggio-lento.md`, a `open`, ancorata al
 # **giorno intero** del 24/08 — e le righe di quel giorno sono anteriori ai
 # marcatori. Quella pagina non potrà mai essere marcata `decided`: la guardia in
 # scrittura la rifiuterebbe. Ma la guardia parla solo quando una passata *prova* a
@@ -2426,7 +2426,7 @@ def test_a_page_sourced_at_a_document_is_counted_apart_and_never_asked_for_a_tim
 ):
     """**Il difetto del 26/08, e la ragione del terzo conteggio.**
 
-    Misurato su ``wikis/salute`` vero: cinque pagine su cinque con
+    Misurato su un progetto reale: cinque pagine su cinque con
     ``source: raw/research/<documento>.md`` — la forma che ``project.md`` chiede
     per il materiale che arriva da fuori — e il lint le mandava tutte e cinque ad
     «aggiungi un ``#HH:MM``», *nominate fra le riparabili*. Su un documento quel

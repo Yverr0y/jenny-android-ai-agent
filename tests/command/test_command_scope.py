@@ -22,7 +22,7 @@ from jenny.command.scope import available, refusal, spec_for_line, visible_specs
 from jenny.command.specs import BUILTIN_COMMAND_SPECS
 from jenny.session.keys import UNIFIED_SESSION_KEY
 
-_PROJECT = "project:patreon"
+_PROJECT = "project:palestra"
 
 
 @pytest.fixture()
@@ -231,7 +231,7 @@ def test_help_on_telegram_never_advertises_a_project_command() -> None:
     """
     from jenny.session.keys import session_key_for_channel
 
-    key = session_key_for_channel("telegram", "project:patreon")
+    key = session_key_for_channel("telegram", "project:palestra")
     text = build_help_text(key)
 
     assert "/tidy" not in text and "/init" not in text and "/gardener" not in text

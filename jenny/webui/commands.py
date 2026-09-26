@@ -397,7 +397,7 @@ def _notebook_at(workspace_root: Path, target: Path) -> str | None:
     Solo i figli diretti di ``wikis_dir``: ``is_wiki_root`` da solo direbbe di si'
     a qualunque cartella che contenga una ``wiki/``, e bloccherebbe operazioni
     legittime altrove nel workspace. E solo i nomi che possono essere il nome di
-    una conversazione (``wikis/Ricerca ETF`` no, v. ``_collect_projects``): una
+    una conversazione (``wikis/Ricerca ETNA`` no, v. ``_collect_projects``): una
     cartella che non ha una chat non ha niente da orfanare, e ``project.delete``/
     ``project.rename`` la rifiuterebbero proprio per quel nome — rifiutarla anche
     qui la renderebbe intoccabile da qualunque porta.

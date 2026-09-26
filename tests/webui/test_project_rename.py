@@ -155,7 +155,7 @@ def test_a_look_after_the_rename_does_not_resurrect_the_old_chat(workspace) -> N
 # ── Cosa si rifiuta, prima di toccare niente ────────────────────────────────
 
 
-@pytest.mark.parametrize("bad", ["Ricerca ETF", "a..b", "", "../fuori"])
+@pytest.mark.parametrize("bad", ["Ricerca ETNA", "a..b", "", "../fuori"])
 def test_a_name_that_would_not_open_is_refused(workspace, bad) -> None:
     """La stessa regola del canale: una chat spostata su un nome che nessuno
     riapre e' una chat perduta con l'apparenza di un successo."""
@@ -343,7 +343,7 @@ async def test_the_command_refuses_a_bad_name_before_any_thread(workspace, confi
     ctx = SimpleNamespace(get_workspace_root=lambda: workspace, invalidate_session=lambda k: None,
                           busy_session_keys=lambda: ())
     with pytest.raises(CommandError, match="invalid new name"):
-        await commands.project_rename(ctx, {"name": OLD, "new_name": "Ricerca ETF"})
+        await commands.project_rename(ctx, {"name": OLD, "new_name": "Ricerca ETNA"})
 
 
 @pytest.mark.parametrize("in_flight", [f"project:{OLD}", f"project:{NEW}"])

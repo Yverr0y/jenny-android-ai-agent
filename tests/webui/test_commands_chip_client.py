@@ -330,9 +330,9 @@ def test_changing_conversation_asks_again() -> None:
       await chip._load();
       assert.equal(requests.length, 1, 'la stessa conversazione non si richiede');
 
-      sessionManager.currentKey = 'project:patreon';
+      sessionManager.currentKey = 'project:palestra';
       await chip._load();
-      assert.deepEqual(requests, ['websocket:default', 'project:patreon']);
+      assert.deepEqual(requests, ['websocket:default', 'project:palestra']);
     """)
 
 

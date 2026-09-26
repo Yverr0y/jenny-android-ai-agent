@@ -70,16 +70,16 @@ def _install(root: pathlib.Path) -> None:
     (root / "memory").mkdir(parents=True, exist_ok=True)
     (root / "SOUL.md").write_text("# Jenny\n\nTono asciutto. SOULMARK\n", encoding="utf-8")
     (root / "USER.md").write_text(
-        "# Chi sei\n\n- Terapeuta: giovedì alle 18. USERMARK\n", encoding="utf-8"
+        "# Chi sei\n\n- Corso di nuoto: giovedì alle 18. USERMARK\n", encoding="utf-8"
     )
     (root / "memory" / "MEMORY.md").write_text(
         "# Long-term\n\n- MEMMARK: i piani di stipendio\n", encoding="utf-8"
     )
     # Un'altra wiki, con uno scope riconoscibile: e' quel che il blocco elenca.
-    terapia = root / "wikis" / "terapia"
-    (terapia / "wiki").mkdir(parents=True, exist_ok=True)
-    (terapia / "AGENTS.md").write_text(
-        "---\nsummary: le piante di casa, la Monstera in testa\n---\n\n# terapia\n",
+    balcone = root / "wikis" / "balcone"
+    (balcone / "wiki").mkdir(parents=True, exist_ok=True)
+    (balcone / "AGENTS.md").write_text(
+        "---\nsummary: le piante di casa, il Ficus in testa\n---\n\n# balcone\n",
         encoding="utf-8",
     )
 
@@ -352,7 +352,7 @@ def test_a_gardener_pass_does_not_see_the_other_projects(tmp_path) -> None:
     prompt = _gardener_system_prompt(root)
 
     assert WIKIS not in prompt
-    for other in ("terapia", "Monstera"):
+    for other in ("balcone", "Ficus"):
         assert other not in prompt, f"il prompt della passata su casa nomina {other}"
 
 

@@ -117,7 +117,7 @@ from jenny.session.keys import HEARTBEAT_SESSION_KEY, UNIFIED_SESSION_KEY  # noq
     [
         ("dream:20260825-120537", "dream"),
         ("dream:review-20260825-060415", "dream"),
-        ("gardener:viaggio-pazzo-20260824-195702", "gardener"),
+        ("gardener:viaggio-lento-20260824-195702", "gardener"),
         ("cron:update_check", "cron"),
         # Le due chiavi senza suffisso vengono dalle **costanti**, non da un
         # letterale: sono confronti per uguaglianza (v. ``_INTERNAL_KIND_BY_KEY``),

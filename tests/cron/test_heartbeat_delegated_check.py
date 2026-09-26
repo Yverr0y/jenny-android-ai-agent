@@ -47,7 +47,7 @@ from jenny.session.keys import HEARTBEAT_SESSION_KEY, UNIFIED_SESSION_KEY
 
 _WATERBOT = (
     "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo se una è sotto il 15%. "
-    "Se hps è irraggiungibile salta il ciclo in silenzio."
+    "Se pibox è irraggiungibile salta il ciclo in silenzio."
 )
 _VITAMINS = "- Alle 9 ricordami le vitamine."
 
@@ -261,7 +261,7 @@ class _Harness:
 @pytest.fixture
 def two_tasks(tmp_path: Path) -> _Harness:
     harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT, _VITAMINS))
-    harness.agent.delegated = {1: "leggi l'umidità da hps"}
+    harness.agent.delegated = {1: "leggi l'umidità da pibox"}
     return harness
 
 
@@ -405,7 +405,7 @@ class TestOneFaultIsOneWarning:
     async def test_a_forgotten_marker_does_not_bring_the_alert_back(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
         assert len(two_tasks.agent.messages) == 1
 
@@ -421,7 +421,7 @@ class TestOneFaultIsOneWarning:
     ) -> None:
         """Conservare il ricordo non vuol dire conservare il conteggio: da uno
         stato vecchio non deve poter nascere un allarme."""
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         two_tasks.forgets_the_marker = True
@@ -437,7 +437,7 @@ class TestOneFaultIsOneWarning:
     ) -> None:
         """Il test che vale tutti gli altri: un avviso per guasto, e un guasto
         nuovo è un guasto nuovo."""
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
         assert len(two_tasks.agent.messages) == 1
 
@@ -448,7 +448,7 @@ class TestOneFaultIsOneWarning:
         assert two_tasks.entry_for(0) is None
 
         # Settimane dopo si rompe di nuovo. L'utente deve saperlo.
-        two_tasks.subagent_failure = (1, "hps di nuovo irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox di nuovo irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         assert len(two_tasks.agent.messages) == 2
@@ -458,7 +458,7 @@ class TestOneFaultIsOneWarning:
     ) -> None:
         """Non chiedere di parlare non è chiedere di tacere: al quarto ciclo il
         modello sul device chiamava ``message`` di propria iniziativa."""
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         assert _ESCALATION_HEAD in two_tasks.agent.prompts[-1]
@@ -495,7 +495,7 @@ class TestTheUserComingBack:
         """Un ciclo intero ha due turni che possono parlare — quello del run e
         quello d'annuncio — e il riarmo li riguarda entrambi. Uno solo dei due
         deve consegnare."""
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
         assert len(two_tasks.agent.messages) == 1
 
@@ -507,7 +507,7 @@ class TestTheUserComingBack:
     async def test_the_alert_waits_for_the_streak_to_be_rebuilt(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
         two_tasks.user_says()
 
@@ -525,7 +525,7 @@ class TestTheUserComingBack:
         raggiunge mai la soglia e nessun messaggio dell'utente può farla
         arrivare. La direzione dell'errore del modulo, intatta.
         """
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         two_tasks.forgets_the_next(20)
@@ -544,7 +544,7 @@ class TestTheUserComingBack:
         era rappresentabile: ogni verdetto arrivato conta, e quelli saltati
         azzerano la sequenza senza cancellare il ricordo dell'avviso.
         """
-        two_tasks.subagent_failure = (1, "hps irraggiungibile")
+        two_tasks.subagent_failure = (1, "pibox irraggiungibile")
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         for _ in range(4):
@@ -600,7 +600,7 @@ class TestTheOptimismIsPreserved:
     async def test_an_instructed_silent_skip_by_the_subagent_is_not_a_failure(
         self, two_tasks: _Harness
     ) -> None:
-        """Il task WaterBot dice "se hps è irraggiungibile salta il ciclo in
+        """Il task WaterBot dice "se pibox è irraggiungibile salta il ciclo in
         silenzio". Delegato, quel silenzio arriva dal subagent — e resta un
         successo: chi salta perché gli è stato chiesto ha fatto il suo lavoro,
         e il prompt gli chiede infatti di dichiararlo con ``CHECK_OK``."""

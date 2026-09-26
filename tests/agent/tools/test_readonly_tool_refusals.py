@@ -159,7 +159,7 @@ async def test_inside_a_project_the_project_rule_speaks_first(readonly: Path) ->
     Dire "sola lettura" dentro un progetto manderebbe l'utente ad accendere
     l'interruttore per poi trovarsi rifiutato di nuovo.
     """
-    tool, _ = _cron_tool("project:patreon")
+    tool, _ = _cron_tool("project:palestra")
     result = await tool.execute(action="add", message="x", at="2026-09-01T09:00:00")
     assert "project" in result.lower()
     assert result != READONLY_TOOL_REFUSAL

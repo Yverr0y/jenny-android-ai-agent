@@ -105,8 +105,8 @@ _MAX_AGENTS_CHARS = 4000
 # soglia oltre la quale il blocco di progetto smette di iniettare la mappa
 # intera a ogni turno (``jenny/agent/context.py::_PROJECT_MAP_MAX_CHARS``, e il
 # lint di T5 tiene lo stesso numero). Oltre, il modello vede la testa della
-# mappa e nient'altro: su ``patreon-creator`` (12.298 caratteri, misurati il
-# 23/08) il troncamento lascia **5 pagine su 51** fra quelle che la mappa
+# mappa e nient'altro: su una wiki reale da 12.298 caratteri di mappa il
+# troncamento lascia **5 pagine su 51** fra quelle che la mappa
 # nomina. L'elenco nudo delle stesse 51 costerebbe 1.495 caratteri — il tetto è
 # giusto, ed è la prosa nella mappa a non doverci stare.
 #
@@ -886,8 +886,8 @@ class GardenerStore:
         righe vere; se non ha promosso niente **ha comunque bruciato il cursore
         su quelle righe**, e il diario è append-only, quindi nessun giro futuro
         le rivedrà. Quello è l'evento più consequenziale che questa passata possa
-        produrre, ed era l'unico a non lasciare traccia: il 25/08 tre passate su
-        ``viaggio-pazzo`` ne hanno lasciata **una**, e dal registro non si
+        produrre, ed era l'unico a non lasciare traccia: tre passate su
+        uno stesso progetto ne hanno lasciata **una**, e dal registro non si
         distingueva «non è mai passato» da «è passato e ha deciso di no».
 
         La regola era già stata forzata una volta, per le segnalazioni, con

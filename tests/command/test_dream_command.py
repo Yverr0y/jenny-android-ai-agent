@@ -32,7 +32,7 @@ from jenny.utils.helpers import sync_workspace_templates
 # plausibile: è lo stato reale sul device ed è il caso che la conferma deve
 # segnalare.
 _MEMORY_TEXT = "# Memory\n" + "".join(f"- fact number {i}\n" for i in range(40))
-_USER_TEXT = "# User\n- Name: Ludovico\n"
+_USER_TEXT = "# User\n- Name: Marco\n"
 _SOUL_TEXT = "# Soul\n- Helpful, concise.\n"
 
 

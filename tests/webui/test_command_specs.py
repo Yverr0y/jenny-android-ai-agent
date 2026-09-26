@@ -135,7 +135,7 @@ def test_the_route_serves_the_commands_of_that_conversation() -> None:
     cosmetica, perche' non c'e' autocomplete sullo ``/``.
     """
     _, personal = _commands_route_response("websocket:default")
-    _, project = _commands_route_response("project:patreon")
+    _, project = _commands_route_response("project:palestra")
 
     names = lambda payload: {row["command"] for row in payload["commands"]}  # noqa: E731
 

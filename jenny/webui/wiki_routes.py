@@ -101,7 +101,7 @@ def _collect_projects(wikis_dir: Path) -> tuple[list[dict[str, Any]], list[dict[
     sessione (``project:<nome>``), e i due lati non facevano la stessa domanda:
     questo elenco dava qualunque cartella, mentre
     ``channels/websocket.py::_envelope_chat_id`` accetta solo cio' che passa
-    ``is_valid_project_name``. Una wiki chiamata ``Ricerca ETF`` compariva nel
+    ``is_valid_project_name``. Una wiki chiamata ``Ricerca ETNA`` compariva nel
     chip e, aprendola, ne apriva un'altra. Un nome che il server elenca deve
     essere un nome che il server accetta.
 

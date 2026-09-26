@@ -7,8 +7,8 @@ secondo tap non è bloccato, e la prima fetch non viene annullata da nessuno), e
 la vecchia `loadThread` scriveva lo scope su un campo condiviso: vinceva **chi
 rispondeva per ultimo**, non chi era stato toccato per ultimo.
 
-Il caso concreto: tap su `patreon`, tap su `bordi` 200 ms dopo, e se `patreon`
-risponde per seconda il chip dice `patreon` mentre i messaggi vanno in `bordi`.
+Il caso concreto: tap su `palestra`, tap su `bordi` 200 ms dopo, e se `palestra`
+risponde per seconda il chip dice `palestra` mentre i messaggi vanno in `bordi`.
 Da lì l'utente enuncia un fatto credendo di essere in un progetto e il fatto
 finisce nel diario dell'altro, dove il gardener lo promuove in pagina: durevole
 e non ritirabile, cioè l'unico guasto irrecuperabile che quel modulo si impegna
@@ -215,10 +215,10 @@ def test_the_overtaken_switch_loses_even_when_it_answers_last() -> None:
       pending('websocket:default').resolve(thread(null, 'ciao'));
       await boot;
 
-      // Tap su patreon, tap su bordi: il secondo non aspetta il primo, e non
+      // Tap su palestra, tap su bordi: il secondo non aspetta il primo, e non
       // deve — un tap che resta senza risposta per una fetch è il difetto
       // opposto.
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
@@ -226,12 +226,12 @@ def test_the_overtaken_switch_loses_even_when_it_answers_last() -> None:
       assert.equal(inflight.length, 2, 'i due caricamenti si sovrappongono: è il caso');
       // Ogni caricamento chiede la *sua* chiave, non quella corrente al momento
       // dell'attesa.
-      assert.deepEqual(inflight.map((f) => f.key), ['project:patreon', 'project:bordi']);
+      assert.deepEqual(inflight.map((f) => f.key), ['project:palestra', 'project:bordi']);
 
-      // bordi risponde, poi patreon: lo scavalcato risponde per ultimo.
+      // bordi risponde, poi palestra: lo scavalcato risponde per ultimo.
       pending('project:bordi').resolve(thread('bordi', 'da bordi', { before_cursor: 'b-1' }));
       await tick();
-      pending('project:patreon').resolve(thread('patreon', 'da patreon', { before_cursor: 'p-1' }));
+      pending('project:palestra').resolve(thread('palestra', 'da palestra', { before_cursor: 'p-1' }));
       await tick();
       await Promise.all([first, second]);
 
@@ -310,14 +310,14 @@ def test_a_superseded_failure_does_not_steal_the_load_latch() -> None:
     thread già a schermo."""
     _run_js("""
       const chat = makeChat();
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
 
       pending('project:bordi').resolve(thread('bordi', 'da bordi'));
       await tick();
-      pending('project:patreon').reject(new Error('rete'));
+      pending('project:palestra').reject(new Error('rete'));
       await tick();
       await Promise.all([first, second]);
 
@@ -385,17 +385,17 @@ def test_a_thread_answered_after_a_switch_never_reaches_the_shared_state() -> No
     """`loadThread` da sola, senza la vista: la risposta scaduta si dichiara
     `stale` e non scrive né lo scope né il run in corso."""
     _run_js("""
-      const load = sessionManager.loadThread('project:patreon', 160);
+      const load = sessionManager.loadThread('project:palestra', 160);
       await tick();
       sessionManager.switchTo('project:bordi');
-      pending('project:patreon').resolve({
+      pending('project:palestra').resolve({
         messages: [], page: {},
-        workspace_scope: { project_path: '/w/projects/patreon' },
+        workspace_scope: { project_path: '/w/projects/palestra' },
         run_started_at: 111,
       });
       const out = await load;
       assert.equal(out.stale, true);
-      assert.equal(out.scope?.project_path, '/w/projects/patreon',
+      assert.equal(out.scope?.project_path, '/w/projects/palestra',
                    'il valore di ritorno resta quello di questa richiesta');
       assert.equal(sessionManager.currentScope, null,
                    'una risposta scaduta ha scritto lo scope condiviso');

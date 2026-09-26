@@ -215,7 +215,7 @@ def test_the_preference_stays_per_conversation() -> None:
       sw.toggle();                       // e ora anche bordi
       assert.equal(sw.readonly, true);
 
-      sw.syncFromSession('project:patreon');
+      sw.syncFromSession('project:palestra');
       assert.equal(sw.readonly, false);
 
       sw.syncFromSession('websocket:default');

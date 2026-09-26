@@ -110,9 +110,8 @@ class _ProjectPages(NamedTuple):
 
     Servono al template perche' l'istruzione piu' forte del blocco parlava delle
     pagine iniettate come se fossero *le* pagine del progetto. Misurato sulle
-    otto wiki vere il 23/08, dopo T3.2: adhd 1 su 13, allergie 2 su 23,
-    android-rom 4 su 31, etf-finance 1 su 20, main 2 su 52, memory 2 su 16,
-    patreon-creator 1 su 33. Il blocco che dice quanto e' non e' una scusa: e' il
+    otto wiki di un workspace reale, dopo T3.2: 1 su 13, 2 su 23, 4 su 31,
+    1 su 20, 2 su 52, 2 su 16, 1 su 33. Il blocco che dice quanto e' non e' una scusa: e' il
     solo modo perche' "aprine altre" sia un'istruzione e non un ripiego.
 
     ``here + left_out == total`` per costruzione, quindi ``left_out`` non e' un
@@ -283,8 +282,8 @@ def _pages_in_map_order(entries: Sequence[str], map_text: str) -> list[str]:
     modificando un file.
 
     E funziona sulle mappe **come sono oggi**, che era il requisito: le otto
-    mappe vere nominano 186 pagine su 188 (fuori solo una di ``allergie`` e una
-    di ``patreon-creator``), quindi il criterio ordina praticamente tutto e il
+    mappe di un workspace reale nominano 186 pagine su 188 (fuori solo due, in
+    due wiki diverse), quindi il criterio ordina praticamente tutto e il
     ripiego alfabetico tocca due pagine in tutto il corpus. Non dipende da un
     comportamento nuovo del giardiniere — quando la potatura della prosa (T3.4)
     passera', la mappa diventera' quasi solo un elenco di pagine, e un elenco ha
@@ -296,13 +295,13 @@ def _pages_in_map_order(entries: Sequence[str], map_text: str) -> list[str]:
     * ``state:`` nel frontmatter — **zero pagine su 188** ce l'hanno. Un criterio
       che oggi non distingue niente non e' un criterio, e' un rinvio.
     * ``mtime`` — le 188 pagine di ogni wiki hanno lo **stesso** mtime al
-      nanosecondo (verificato sul telefono il 23/08: sono state scritte in una
+      nanosecondo (verificato su un workspace reale: sono state scritte in una
       passata). E per costruzione sposterebbe tutte le pagine successive a ogni
       tocco, invalidando piu' prefisso di quanto ne cambi il contenuto.
-    * conteggio dei wikilink entranti — discrimina bene (su ``adhd`` premia
-      ``ADHD-Overview``, la pagina giusta), ma e' **derivato e non dichiarato**:
-      quando sbaglia — su ``main`` la pagina piu' linkata e' una pianta da
-      appartamento — non c'e' nessuna leva per correggerlo, mentre una riga della
+    * conteggio dei wikilink entranti — discrimina bene (di solito premia
+      la pagina di panoramica, quella giusta), ma e' **derivato e non dichiarato**:
+      quando sbaglia — su ``main`` la pagina piu' linkata e' una voce
+      marginale — non c'e' nessuna leva per correggerlo, mentre una riga della
       mappa si sposta. E costa la lettura integrale di tutte le pagine a ogni
       turno, che e' esattamente quel che T3.11 ha tolto.
 
@@ -325,9 +324,9 @@ def _pages_in_map_order(entries: Sequence[str], map_text: str) -> list[str]:
     in vetrina da nessuno.
 
     Il bersaglio si risolve in due modi perche' nelle mappe vere se ne trovano
-    due: il percorso dentro ``wiki/`` (``concepts/ADHD-Overview``) e il **nome
+    due: il percorso dentro ``wiki/`` (``concepts/Tides-Overview``) e il **nome
     nudo** (``[[Active-Memory]]`` per ``concepts/Active-Memory.md``, che e' come
-    scrivono le mappe di ``memory`` e ``patreon-creator``). A parita' di nome nudo
+    scrivono alcune delle mappe misurate). A parita' di nome nudo
     vince la prima in ordine di percorso: due pagine con lo stesso nome sotto
     cartelle diverse rendono ambiguo il link, ed e' una segnalazione del lint, non
     una ragione per tornare all'alfabeto.
@@ -362,7 +361,7 @@ def _map_cut_notice(total: int, listed: Sequence[str], unlisted: int) -> str:
     :func:`_pages_left_out_notice`: la sua lunghezza entra nel conto del tetto,
     e la misura deve venire dallo stesso posto del testo. Da qui anche il fatto
     che i ``[[ ]]`` li mette **lei**: il chiamante che li avesse messi prima di
-    passare la lista avrebbe prodotto ``[[[[Patreon]]]]``, e l'ha prodotto
+    passare la lista avrebbe prodotto ``[[[[Maree]]]]``, e l'ha prodotto
     davvero al primo giro.
 
     **L'elenco sta dentro l'avviso**, non in un blocco a parte con la sua
@@ -1288,10 +1287,10 @@ class ContextBuilder:
             # quindi dimostra "ci sta", mai "non ci sta", che e' il verso
             # sbagliato per saltare una lettura (il verso giusto lo usa
             # ``GardenerStore._page_chars_if_over``). Misurato sulle 11 wiki
-            # vere: su ``main`` (79 pagine) il ciclo ne apre 36 invece di 79 e il
-            # blocco passa da 2,1 a 1,3 ms, su ``etf-finance`` 7 invece di 20; su
-            # ``blackberry`` (139 pagine, dove le due che entrano stanno in coda
-            # alla mappa) non scatta mai. Vale quel che vale, e costa un ``if``.
+            # di un workspace reale: su ``main`` (79 pagine) il ciclo ne apre 36
+            # invece di 79 e il blocco passa da 2,1 a 1,3 ms, su una wiki da 20
+            # pagine 7 invece di 20; su una da 139 pagine (dove le due che
+            # entrano stanno in coda alla mappa) non scatta mai. Vale quel che vale, e costa un ``if``.
             floor = len(rel) + 23 + (2 if blocks else 0)
             if total + floor > _PROJECT_PAGES_MAX_CHARS:
                 left_out += 1

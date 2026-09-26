@@ -582,7 +582,7 @@ class WebSocketChannel(OutboundSenderMixin):
         ``WEBUI_DEFAULT_CHAT_ID``: era il modo in cui la collassata "una sola
         sessione" era stata implementata, e va bene finche' di conversazioni ce
         n'e' una. Con le sessioni-progetto diventa il punto in cui un messaggio
-        mandato a ``project:patreon`` finiva nella chat personale — e non lo
+        mandato a ``project:ricette`` finiva nella chat personale — e non lo
         diceva nessuno, perche' dal lato client sembrava partito.
 
         L'elenco delle forme accettate resta chiuso, e la verifica del nome e'
@@ -594,7 +594,7 @@ class WebSocketChannel(OutboundSenderMixin):
         **Ma per un ``chat_id`` che *e'* nella forma ``project:`` e sbaglia solo
         il nome, la caduta sulla chat personale era la risposta sbagliata**, e
         ritorna ``None`` — cioe' il frame va rifiutato. Un nome come
-        ``Ricerca ETF`` o ``citta``-con-l'accento non passa
+        ``Ricerca ETNA`` o ``citta``-con-l'accento non passa
         ``is_valid_project_name``, e il frame che lo portava finiva sulla
         conversazione personale: scope ``default()`` (l'installazione intera
         scrivibile), ``session_kind`` ``personal`` (quindi il contenuto alimenta

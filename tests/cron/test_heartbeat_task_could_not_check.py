@@ -11,7 +11,7 @@ Il vincolo che questi test difendono, nell'ordine:
    dell'heartbeat: costa zero quando non c'è niente da dire.
 2. Un task saltato *perché le sue istruzioni dicevano di saltarlo in silenzio*
    ha fatto quello che doveva: non è un guasto (il task WaterBot reale dice "se
-   hps è irraggiungibile salta il ciclo in silenzio").
+   pibox è irraggiungibile salta il ciclo in silenzio").
 3. Tre fallimenti di fila di **un** task producono **un** messaggio, che nomina
    quel task e non gli altri.
 
@@ -43,7 +43,7 @@ from jenny.runtime.cron_dispatch import _HEARTBEAT_PREAMBLE, CronDispatcher
 
 _WATERBOT = (
     "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo se una è sotto il 15%. "
-    "Se hps è irraggiungibile salta il ciclo in silenzio."
+    "Se pibox è irraggiungibile salta il ciclo in silenzio."
 )
 _VITAMINS = "- Alle 9 ricordami le vitamine."
 
@@ -214,7 +214,7 @@ class TestSilenceStaysFree:
     async def test_an_instructed_silent_skip_is_not_a_failure(
         self, two_tasks: _Harness
     ) -> None:
-        """Il task WaterBot dice "se hps è irraggiungibile salta il ciclo in
+        """Il task WaterBot dice "se pibox è irraggiungibile salta il ciclo in
         silenzio": saltare è ciò che gli è stato chiesto, e non deve contare come
         un controllo mancato — neanche dopo dieci cicli."""
         two_tasks.agent.silently_skipped = {1}
@@ -227,7 +227,7 @@ class TestSilenceStaysFree:
         assert two_tasks.state.last_status == "ok"
 
     async def test_a_single_failed_task_produces_no_message(self, two_tasks: _Harness) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(1)
 
@@ -237,7 +237,7 @@ class TestSilenceStaysFree:
     async def test_two_failed_runs_are_still_within_the_margin(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES - 1)
 
@@ -248,7 +248,7 @@ class TestTheStreakSpeaksOncePerTask:
     async def test_three_failures_of_one_task_produce_exactly_one_message(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
@@ -256,7 +256,7 @@ class TestTheStreakSpeaksOncePerTask:
 
     async def test_the_message_names_the_broken_task(self, two_tasks: _Harness) -> None:
         """"Il controllo delle piante non parte" è utile; "l'heartbeat è rotto" no."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
@@ -265,7 +265,7 @@ class TestTheStreakSpeaksOncePerTask:
     async def test_the_healthy_task_in_the_same_run_is_never_mentioned(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
@@ -279,7 +279,7 @@ class TestTheStreakSpeaksOncePerTask:
     ) -> None:
         """N task che cadono insieme — di solito per la stessa causa — devono
         costare un'interruzione sola, non N."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile", 2: "sveglia non impostata"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile", 2: "sveglia non impostata"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
@@ -291,7 +291,7 @@ class TestTheStreakSpeaksOncePerTask:
         self, two_tasks: _Harness
     ) -> None:
         """Un guasto che dura un giorno deve costare un messaggio, non quarantotto."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(12)
 
@@ -306,7 +306,7 @@ class TestTheStreakSpeaksOncePerTask:
     ) -> None:
         """Legare l'esito a "ha parlato" azzererebbe la sequenza proprio lì, e
         l'avviso tornerebbe ogni tre cicli per sempre."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
@@ -318,7 +318,7 @@ class TestTheStreakSpeaksOncePerTask:
         self, two_tasks: _Harness
     ) -> None:
         """L'avviso è "dato" solo se è uscito davvero."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         two_tasks.agent.obeys_the_escalation = False
 
         await two_tasks.cycles(5)
@@ -330,7 +330,7 @@ class TestTheStreakSpeaksOncePerTask:
     async def test_a_task_that_starts_working_again_stops_the_streak(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         two_tasks.agent.broken = {}
@@ -342,11 +342,11 @@ class TestTheStreakSpeaksOncePerTask:
         assert len(two_tasks.agent.messages) == 1
 
     async def test_a_second_outage_can_alert_again(self, two_tasks: _Harness) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
         two_tasks.agent.broken = {}
         await two_tasks.cycles(1)
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         assert len(two_tasks.agent.messages) == 2
@@ -355,7 +355,7 @@ class TestTheStreakSpeaksOncePerTask:
         self, two_tasks: _Harness
     ) -> None:
         """Non riuscire a eseguire un task non è un motivo per smettere di provarci."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
 
         await two_tasks.cycles(4)
 
@@ -377,7 +377,7 @@ class TestTheFileKeepsChanging:
         di un avviso che parla di un controllo che l'utente ha appena cambiato.
         """
         harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
-        harness.agent.broken = {1: "hps non raggiungibile"}
+        harness.agent.broken = {1: "pibox non raggiungibile"}
         await harness.cycles(ESCALATE_AFTER_FAILURES - 1)
 
         harness.rewrite(_heartbeat_md(_WATERBOT + " Soglia: 20%."))
@@ -389,7 +389,7 @@ class TestTheFileKeepsChanging:
 
     async def test_state_for_a_deleted_task_is_pruned(self, two_tasks: _Harness) -> None:
         """Altrimenti lo store cresce a ogni task che l'utente cancella."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile", 2: "sveglia non impostata"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile", 2: "sveglia non impostata"}
         await two_tasks.cycles(1)
         assert len(two_tasks.state.task_checks) == 2
 
@@ -402,11 +402,11 @@ class TestTheFileKeepsChanging:
 
     async def test_reordering_the_file_keeps_the_streak(self, two_tasks: _Harness) -> None:
         """L'identità è il testo del task, non la sua posizione."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES - 1)
 
         two_tasks.rewrite(_heartbeat_md(_VITAMINS, _WATERBOT))
-        two_tasks.agent.broken = {2: "hps non raggiungibile"}
+        two_tasks.agent.broken = {2: "pibox non raggiungibile"}
         await two_tasks.cycles(1)
 
         assert len(two_tasks.agent.messages) == 1
@@ -416,7 +416,7 @@ class TestTheFileKeepsChanging:
         self, two_tasks: _Harness
     ) -> None:
         """Attribuirlo a caso produrrebbe un avviso su un controllo sano."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         two_tasks.agent.omits_the_task_number = True
 
         await two_tasks.cycles(6)
@@ -432,7 +432,7 @@ class TestTheFileKeepsChanging:
         """Un file con un task solo non ha niente da distinguere: chiedere il
         numero sarebbe solo un'occasione di sbagliarlo."""
         harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
-        harness.agent.broken = {1: "hps non raggiungibile"}
+        harness.agent.broken = {1: "pibox non raggiungibile"}
         harness.agent.omits_the_task_number = True
 
         await harness.cycles(ESCALATE_AFTER_FAILURES)
@@ -444,7 +444,7 @@ class TestPersistedState:
     """Ciò che un lettore esterno (WebUI, tool ``cron``) troverà nello store."""
 
     async def test_the_streak_survives_a_restart(self, two_tasks: _Harness) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(2)
 
         reloaded = CronService(two_tasks.store_path).get_job("heartbeat")
@@ -460,11 +460,11 @@ class TestPersistedState:
     async def test_a_restart_does_not_re_alert_a_task_already_reported(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         restarted = _Harness(two_tasks.workspace, two_tasks.file.read_text(encoding="utf-8"))
-        restarted.agent.broken = {1: "hps non raggiungibile"}
+        restarted.agent.broken = {1: "pibox non raggiungibile"}
         await restarted.cycles(4)
 
         assert restarted.agent.messages == []
@@ -472,7 +472,7 @@ class TestPersistedState:
     async def test_the_state_is_written_in_camel_case_like_the_rest(
         self, two_tasks: _Harness
     ) -> None:
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(ESCALATE_AFTER_FAILURES)
 
         raw = json.loads(two_tasks.store_path.read_text(encoding="utf-8"))
@@ -487,9 +487,9 @@ class TestPersistedState:
         self, two_tasks: _Harness
     ) -> None:
         """La risposta a "il controllo delle piante funziona?" senza aprire logcat."""
-        two_tasks.agent.broken = {1: "hps non raggiungibile"}
+        two_tasks.agent.broken = {1: "pibox non raggiungibile"}
         await two_tasks.cycles(1)
 
         assert two_tasks.state.last_status == "could_not_check"
-        assert "hps non raggiungibile" in (two_tasks.state.last_error or "")
+        assert "pibox non raggiungibile" in (two_tasks.state.last_error or "")
         assert [r.status for r in two_tasks.state.run_history] == ["could_not_check"]

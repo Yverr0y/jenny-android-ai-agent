@@ -1,7 +1,7 @@
 """Un avviso proattivo deve finire nella cronologia della conversazione.
 
 Regressione misurata sul dispositivo il 2026-08-12: l'heartbeat consegna
-"hps non è raggiungibile" alle 18:33 dalla sessione interna ``heartbeat``;
+"pibox non è raggiungibile" alle 18:33 dalla sessione interna ``heartbeat``;
 alle 18:39 l'utente chiede "sicura?" su ``unified:default`` e il modello
 risponde come se non avesse mai detto nulla — perché nel contesto di quel
 turno non c'era. Il testo veniva persistito nel transcript WebUI (che l'utente
@@ -20,7 +20,7 @@ from jenny.bus.events import OutboundMessage
 from jenny.runtime.delivery import ChannelDeliverer
 from jenny.session.keys import UNIFIED_SESSION_KEY
 
-ALERT = "hps non è raggiungibile (Tailscale giù?) — controllo umidità non passato"
+ALERT = "pibox non è raggiungibile (Tailscale giù?) — controllo del backup non passato"
 
 
 async def test_the_alert_lands_in_the_unified_history(loop_factory) -> None:
@@ -51,7 +51,7 @@ async def test_the_next_turn_reads_the_alert_in_its_context(loop_factory) -> Non
 
 async def test_media_are_kept_with_the_recorded_line(loop_factory) -> None:
     loop = loop_factory()
-    media = ["/data/plots/umidita.png"]
+    media = ["/data/plots/backup.png"]
 
     await loop.record_channel_delivery(
         session_key=UNIFIED_SESSION_KEY, content="ecco il grafico", media=media

@@ -3,7 +3,7 @@
 Prima di questa modifica `_write()` era un `open(full, "w")` secco, quindi
 rilanciare lo scaffold su una wiki esistente per "aggiungere quel che manca" ne
 azzerava `wiki/index.md` e riscriveva il log del giorno. La fixture centrale qui
-e' modellata sulla deriva misurata sul telefono tra `main/` e `patreon-creator/`:
+e' modellata sulla deriva misurata sul telefono tra `main/` e `palestra-schede/`:
 la seconda non ha il file di istruzioni, ne' `audit/`, ne' `outputs/`, ma ha contenuto vero
 in `wiki/index.md` e nel log di oggi.
 
@@ -55,12 +55,12 @@ def _today_log_name() -> str:
 @pytest.fixture
 def drifted_wiki(tmp_path: Path) -> Path:
     """Una wiki vera e incompleta: manca il file di istruzioni, audit/, outputs/."""
-    root = tmp_path / "wikis" / "patreon-creator"
+    root = tmp_path / "wikis" / "palestra-schede"
     (root / "wiki" / "concepts").mkdir(parents=True)
     (root / "raw" / "notes").mkdir(parents=True)
     (root / "log").mkdir(parents=True)
     (root / "wiki" / "index.md").write_text(
-        "# Index — Patreon\n\n## Concepts\n- [[concepts/Pricing]]\n", encoding="utf-8"
+        "# Index — Palestra\n\n## Concepts\n- [[concepts/Pricing]]\n", encoding="utf-8"
     )
     (root / "research-plan.md").write_text("# Plan\n\nscritto a mano.\n", encoding="utf-8")
     (root / "log" / _today_log_name()).write_text(
@@ -75,7 +75,7 @@ def drifted_wiki(tmp_path: Path) -> Path:
 def test_topup_creates_the_gaps_and_leaves_the_rest_intact(scaffold, drifted_wiki, capsys):
     before = _digests(drifted_wiki)
 
-    created = scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    created = scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     capsys.readouterr()
 
     # Quel che mancava ora c'e'.
@@ -94,7 +94,7 @@ def test_topup_does_not_append_to_todays_log(scaffold, drifted_wiki, capsys):
     log = drifted_wiki / "log" / _today_log_name()
     before = log.read_text(encoding="utf-8")
 
-    scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     capsys.readouterr()
 
     # La skill chiede di loggare ogni operazione, ma un top-up non tocca un file
@@ -108,22 +108,22 @@ def test_topup_writes_todays_log_if_missing_and_lists_what_it_added(
 ):
     (drifted_wiki / "log" / _today_log_name()).unlink()
 
-    scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     capsys.readouterr()
 
     log = (drifted_wiki / "log" / _today_log_name()).read_text(encoding="utf-8")
     assert log.startswith(f"# {date.today().isoformat()}\n")
-    assert "scaffold | Topped up Patreon Creator scaffolding" in log
+    assert "scaffold | Topped up Palestra Schede scaffolding" in log
     assert "- Created AGENTS.md" in log
     # Non annuncia di aver creato quel che c'era gia'.
     assert "wiki/index.md" not in log
 
 
 def test_a_second_run_creates_nothing(scaffold, drifted_wiki, capsys):
-    scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     snapshot = _digests(drifted_wiki)
 
-    created = scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    created = scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     out = capsys.readouterr().out
 
     assert created == []
@@ -194,7 +194,7 @@ def wiki_with_old_name(tmp_path: Path) -> Path:
     vera per girarci sopra, che e' esattamente la situazione in cui il difetto si
     presenterebbe.
     """
-    root = tmp_path / "wikis" / "android-rom"
+    root = tmp_path / "wikis" / "andes-trek"
     (root / "wiki").mkdir(parents=True)
     (root / "wiki" / "index.md").write_text("# Index\n\nroba vera\n", encoding="utf-8")
     (root / "CLAUDE.md").write_text(
@@ -316,14 +316,14 @@ def test_a_notebook_without_map_gets_the_flat_map(scaffold, notebook, capsys):
 def test_a_library_with_an_empty_taxonomy_gets_the_whole_tree(
     scaffold, drifted_wiki, capsys
 ):
-    """Il verso in cui sbagliare costa di più. `patreon-creator` misurata ha le
+    """Il verso in cui sbagliare costa di più. `palestra-schede` misurata ha le
     cartelle della ricerca ancora vuote e le pagine dove capita: leggerla come un
     taccuino le negherebbe `outputs/queries` e la lascerebbe rotta. Il diario
     assente è il segno che quella cartella non è un progetto — sul telefono il
     diario ce l'hanno tutte, quindi qui conta la sua **assenza**."""
     assert not (drifted_wiki / "raw" / "journal").exists()
 
-    created = scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    created = scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     out = capsys.readouterr().out
 
     assert (drifted_wiki / "wiki" / "summaries").is_dir()
@@ -448,10 +448,10 @@ def test_a_second_topup_on_a_library_does_not_read_it_as_a_notebook(
     anche l'albero di ricerca crea `raw/journal/`, l'assenza del diario non
     distingue più niente al secondo giro. La cartella si dichiara con le sue
     cartelle di ricerca, che vincono."""
-    scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     capsys.readouterr()
 
-    scaffold.scaffold(str(drifted_wiki), "Patreon Creator")
+    scaffold.scaffold(str(drifted_wiki), "Palestra Schede")
     out = capsys.readouterr().out
 
     assert "already a notebook project" not in out

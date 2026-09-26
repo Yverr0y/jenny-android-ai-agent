@@ -80,15 +80,15 @@ async def _call(handler, route: str, **params: str):
 @pytest.fixture
 def two_projects(handler) -> Path:
     workspace = handler._get_workspace_root()
-    _wiki(workspace, "patreon", {"index.md": "# Patreon\n"})
-    _wiki(workspace, "etf", {"index.md": "# ETF\n", "note/segreto.md": "# Segreto\n"})
+    _wiki(workspace, "palestra", {"index.md": "# Palestra\n"})
+    _wiki(workspace, "etna", {"index.md": "# ETNA\n", "note/segreto.md": "# Segreto\n"})
     # Una wiki **fuori** da ``wikis/``: il bersaglio di una risalita che, senza il
     # controllo di appartenenza, sarebbe una cartella dalla forma giusta.
     (workspace / "fuori" / "wiki").mkdir(parents=True)
     (workspace / "fuori" / "wiki" / "index.md").write_text("# Fuori\n", encoding="utf-8")
     # E un fratello che non è pagine: è il vicino che il contenimento esclude.
-    (workspace / "wikis" / "etf" / "raw").mkdir()
-    (workspace / "wikis" / "etf" / "raw" / "appunti.md").write_text("# grezzo\n", encoding="utf-8")
+    (workspace / "wikis" / "etna" / "raw").mkdir()
+    (workspace / "wikis" / "etna" / "raw" / "appunti.md").write_text("# grezzo\n", encoding="utf-8")
     return workspace
 
 
@@ -102,7 +102,7 @@ def two_projects(handler) -> Path:
         "../fuori",
         "..",
         "../../fuori",
-        "patreon/../../fuori",
+        "palestra/../../fuori",
         "nessuna-wiki",
         "fuori",
     ],
@@ -124,7 +124,7 @@ async def test_a_wiki_name_must_be_a_wiki_that_exists_under_wikis(
 
 @pytest.mark.parametrize(
     "page",
-    ["../raw/appunti.md", "../../patreon/wiki/index.md", "/etc/passwd", "note/../../raw/appunti.md"],
+    ["../raw/appunti.md", "../../palestra/wiki/index.md", "/etc/passwd", "note/../../raw/appunti.md"],
 )
 async def test_a_page_path_that_climbs_is_refused_before_any_read(
     handler, two_projects, page: str
@@ -138,7 +138,7 @@ async def test_a_page_path_that_climbs_is_refused_before_any_read(
     verde. È esattamente il difetto che T4.12 ha trovato altrove, e lo si evita
     solo dicendo *quale* dei due deve rispondere.
     """
-    response = await _call(handler, "/api/page", wiki="etf", page=page)
+    response = await _call(handler, "/api/page", wiki="etna", page=page)
     assert response is not None
     assert response.status_code == 400, (page, response.status_code)
 
@@ -153,10 +153,10 @@ async def test_a_symlink_out_of_the_pages_dir_is_refused_by_containment(
     fuori. È il controllo ``full.resolve().relative_to(containment_root)`` a
     fermarlo, e questo è il solo input che lo distingue dal primo cancello.
     """
-    pages = two_projects / "wikis" / "etf" / "wiki"
-    (pages / "scorciatoia.md").symlink_to(two_projects / "wikis" / "etf" / "raw" / "appunti.md")
+    pages = two_projects / "wikis" / "etna" / "wiki"
+    (pages / "scorciatoia.md").symlink_to(two_projects / "wikis" / "etna" / "raw" / "appunti.md")
 
-    response = await _call(handler, "/api/page", wiki="etf", page="scorciatoia.md")
+    response = await _call(handler, "/api/page", wiki="etna", page="scorciatoia.md")
 
     assert response is not None
     assert response.status_code == 403, response.status_code
@@ -171,13 +171,13 @@ async def test_containment_answers_the_same_whether_the_file_exists_or_not(
     404 e uno presente 403: la risposta diceva a chi chiede se un file fuori
     dalla wiki c'e'.
     """
-    pages = two_projects / "wikis" / "etf" / "wiki"
-    outside = two_projects / "wikis" / "etf" / "raw"
+    pages = two_projects / "wikis" / "etna" / "wiki"
+    outside = two_projects / "wikis" / "etna" / "raw"
     (pages / "c-e.md").symlink_to(outside / "appunti.md")
     (pages / "non-c-e.md").symlink_to(outside / "mai-scritto.md")
 
-    present = await _call(handler, "/api/page", wiki="etf", page="c-e.md")
-    absent = await _call(handler, "/api/page", wiki="etf", page="non-c-e.md")
+    present = await _call(handler, "/api/page", wiki="etna", page="c-e.md")
+    absent = await _call(handler, "/api/page", wiki="etna", page="non-c-e.md")
 
     assert (present.status_code, absent.status_code) == (403, 403)
 
@@ -196,7 +196,7 @@ async def test_the_server_serves_any_of_the_users_own_wikis_by_design(
     modulo). Se un giorno il server dovesse davvero scoprirlo, questo test è il
     posto in cui la decisione cambia — e va cambiata qui, non aggiunta accanto.
     """
-    response = await _call(handler, route, wiki="etf")
+    response = await _call(handler, route, wiki="etna")
     assert response is not None and response.status_code == 200
     payload = json.loads(response.body.decode("utf-8"))
     assert payload
@@ -217,7 +217,7 @@ async def test_a_wiki_outside_wikis_is_not_reachable_by_name(handler, two_projec
     assert response.status_code == 404, response.status_code
 
     # …e le due vere si raggiungono entrambe.
-    for name in ("patreon", "etf"):
+    for name in ("palestra", "etna"):
         ok = await _call(handler, "/api/graph", wiki=name)
         assert ok is not None and ok.status_code == 200, name
 
@@ -247,10 +247,10 @@ class TestAHugePageIsNotAReply:
         self, handler, two_projects, monkeypatch
     ) -> None:
         monkeypatch.setattr("jenny.webui.wiki_routes._PAGE_MAX_BYTES", 64)
-        pages = two_projects / "wikis" / "etf" / "wiki"
+        pages = two_projects / "wikis" / "etna" / "wiki"
         (pages / "enorme.md").write_text("# Grossa\n" + "x" * 200, encoding="utf-8")
 
-        response = await _call(handler, "/api/page", wiki="etf", page="enorme.md")
+        response = await _call(handler, "/api/page", wiki="etna", page="enorme.md")
 
         assert response is not None
         assert response.status_code == 413, response.status_code
@@ -265,10 +265,10 @@ class TestAHugePageIsNotAReply:
         monkeypatch.setattr("jenny.webui.wiki_routes._PAGE_MAX_BYTES", 64)
         body = "# Piccola\n" + "y" * 54
         assert len(body.encode("utf-8")) == 64
-        pages = two_projects / "wikis" / "etf" / "wiki"
+        pages = two_projects / "wikis" / "etna" / "wiki"
         (pages / "piccola.md").write_text(body, encoding="utf-8")
 
-        response = await _call(handler, "/api/page", wiki="etf", page="piccola.md")
+        response = await _call(handler, "/api/page", wiki="etna", page="piccola.md")
 
         assert response is not None and response.status_code == 200
         assert json.loads(response.body.decode("utf-8"))["raw"] == body

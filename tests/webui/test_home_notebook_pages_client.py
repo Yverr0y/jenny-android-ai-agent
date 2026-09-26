@@ -474,7 +474,7 @@ def test_a_tap_on_the_empty_list_opens_nothing() -> None:
     _run("""
       const p = homePages();
       reply = FLAT;
-      await p.load('patreon');
+      await p.load('palestra');
       const shell = { dataset: { page: 'chat' } };
       const emptySpace = { closest: (sel) => (sel === '[data-page]' ? shell : null) };
       p._onListClick({ target: emptySpace });
@@ -486,7 +486,7 @@ def test_a_tap_on_a_row_opens_that_page() -> None:
     _run("""
       const p = homePages();
       reply = FLAT;
-      await p.load('patreon');
+      await p.load('palestra');
       const row = p.listEl.children[1];
       const onTheName = { closest: (sel) => (sel === '.home-notebook-page' ? row : null) };
       p._onListClick({ target: onTheName });
@@ -499,7 +499,7 @@ def test_a_row_outside_the_list_is_not_opened() -> None:
     _run("""
       const p = homePages();
       reply = FLAT;
-      await p.load('patreon');
+      await p.load('palestra');
       const stranger = { dataset: { page: 'altro.md', label: 'altro' } };
       p._onListClick({ target: { closest: () => stranger } });
       assert.deepEqual(p.opened, []);
@@ -507,14 +507,14 @@ def test_a_row_outside_the_list_is_not_opened() -> None:
 
 
 def test_the_index_is_named_for_what_it_is() -> None:
-    """Su viaggio-pazzo `index.md` e la pagina principale hanno lo stesso titolo
-    nel frontmatter, e l'elenco mostrava due righe «Viaggio Pazzo»."""
+    """Su viaggio-lento `index.md` e la pagina principale hanno lo stesso titolo
+    nel frontmatter, e l'elenco mostrava due righe «Viaggio Lento»."""
     _run("""
       const rows = orderPages([
-        { id: 'i', path: 'index.md', title: 'Viaggio Pazzo', group: 'other' },
-        { id: 'v', path: 'viaggio-pazzo.md', title: 'Viaggio Pazzo', group: 'other' },
+        { id: 'i', path: 'index.md', title: 'Viaggio Lento', group: 'other' },
+        { id: 'v', path: 'viaggio-lento.md', title: 'Viaggio Lento', group: 'other' },
       ]);
-      assert.deepEqual(rows.map((r) => r.label).sort(), ['Indice del quaderno', 'Viaggio Pazzo']);
+      assert.deepEqual(rows.map((r) => r.label).sort(), ['Indice del quaderno', 'Viaggio Lento']);
       // Solo l'indice della radice: una pagina che si chiama index altrove resta sua.
       assert.equal(labelOf({ path: 'concepts/index.md', title: 'Indice analitico' }), 'Indice analitico');
     """)

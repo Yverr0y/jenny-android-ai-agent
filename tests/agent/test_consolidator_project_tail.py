@@ -30,7 +30,7 @@ from jenny.agent.memory import Consolidator, MemoryStore
 from jenny.session.keys import UNIFIED_SESSION_KEY
 from jenny.session.manager import SessionManager
 
-PROJECT_NAME = "patreon"
+PROJECT_NAME = "palestra"
 PROJECT_KEY = f"project:{PROJECT_NAME}"
 
 def _diary(store: MemoryStore) -> list[dict]:
@@ -132,7 +132,7 @@ class TestProjectDegradedCompaction:
     ):
         """(a) Nessuna copia possibile => non si tronca: i messaggi restano vivi."""
         mock_provider.chat_with_retry.side_effect = RuntimeError("LLM unavailable")
-        _fill(consolidator, PROJECT_KEY)  # nessuna cartella wikis/patreon
+        _fill(consolidator, PROJECT_KEY)  # nessuna cartella wikis/palestra
 
         result = await consolidator.compact_idle_session(PROJECT_KEY, max_suffix=4)
         assert result is None

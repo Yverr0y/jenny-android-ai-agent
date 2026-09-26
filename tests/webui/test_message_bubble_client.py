@@ -13,7 +13,7 @@ sequenza vera dal transcript WebUI, tutta sotto lo stesso `turn_id`
 
     seq 1-2   reasoning_delta / reasoning_end
     seq 3     stream_end        (stream …:0 — iterazione di soli tool, zero delta)
-    seq 4     message           "ciao papi 😏 sono le 20:00 — ora di mollare tutto…"
+    seq 4     message           "ciao boss 😏 sono le 20:00 — ora di mollare tutto…"
     seq 5     message           text vuoto + tool_events del tool `message`
     seq 6-28  delta             "L'ho chiamato. Ora aspetto la sua risposta…"
     seq 29-30 stream_end, turn_end
@@ -157,7 +157,7 @@ def _run_js(script: str) -> None:
     run_js(_harness() + script)
 
 
-NOTICE = "ciao papi, sono le 20:00 — ora di mollare tutto"
+NOTICE = "ciao boss, sono le 20:00 — ora di mollare tutto"
 SERVICE = "L'ho chiamato. Ora aspetto la sua risposta"
 
 

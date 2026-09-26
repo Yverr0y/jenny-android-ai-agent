@@ -8,7 +8,7 @@ i delta di quel testo erano già partiti — quindi la WebUI, e solo la WebUI, l
 vedeva comunque.
 
 Misurato sul dispositivo il 27/08/2026, cron ``chiusura-giornata`` delle 20:00:
-il tool consegna "ciao papi, sono le 20:00 — ora di mollare tutto", il modello
+il tool consegna "ciao boss, sono le 20:00 — ora di mollare tutto", il modello
 scrive poi "L'ho chiamato. Ora aspetto la sua risposta", e in chat è comparso il
 secondo — sovrascrivendo il primo, perché il client riusava la bolla
 (v. ``tests/webui/test_message_bubble_client.py``). Notifica Android e transcript

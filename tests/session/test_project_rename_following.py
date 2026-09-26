@@ -109,9 +109,9 @@ def _traces(loop: AgentLoop, key: str) -> list[Path]:
 
 
 def test_a_project_turn_records_its_wiki_id(loop: AgentLoop, tmp_path: Path) -> None:
-    _wiki(tmp_path, "patreon")
-    loop._remember_project_id("project:patreon")
-    assert loop.sessions.get_or_create("project:patreon").metadata[PROJECT_WIKI_ID_KEY] == WIKI_ID
+    _wiki(tmp_path, "palestra")
+    loop._remember_project_id("project:palestra")
+    assert loop.sessions.get_or_create("project:palestra").metadata[PROJECT_WIKI_ID_KEY] == WIKI_ID
 
 
 def test_it_is_written_once_and_not_re_read(loop: AgentLoop, tmp_path: Path) -> None:
@@ -121,13 +121,13 @@ def test_it_is_written_once_and_not_re_read(loop: AgentLoop, tmp_path: Path) -> 
     lasciava passare anche una versione che rilegge a ogni turno, perché la
     seconda lettura non trovava niente da riscrivere.
     """
-    project = _wiki(tmp_path, "patreon")
-    loop._remember_project_id("project:patreon")
+    project = _wiki(tmp_path, "palestra")
+    loop._remember_project_id("project:palestra")
     (project / "AGENTS.md").write_text("---\nid: ffffffffffff\n---\n", encoding="utf-8")
 
-    loop._remember_project_id("project:patreon")
+    loop._remember_project_id("project:palestra")
 
-    metadata = loop.sessions.get_or_create("project:patreon").metadata
+    metadata = loop.sessions.get_or_create("project:palestra").metadata
     assert metadata[PROJECT_WIKI_ID_KEY] == WIKI_ID, (
         "l'id si annota una volta: rileggerlo a ogni turno è I/O per niente, e su un "
         "file che l'utente può cambiare sotto i piedi"
@@ -598,26 +598,26 @@ def test_the_trace_list_covers_the_three_that_move(loop: AgentLoop) -> None:
     al primo turno. Se un giorno nascesse una quinta traccia *fuori* dalla
     cartella, va aggiunta qui — ed è questo il test che se ne accorge.
     """
-    paths = project_trace_paths(loop.workspace, "project:patreon")
+    paths = project_trace_paths(loop.workspace, "project:palestra")
     kinds = {p.parent.name for p in paths}
     assert "sessions" in kinds
     assert "webui" in kinds
     assert "records" in kinds
-    assert all("project_patreon" in p.name for p in paths)
+    assert all("project_palestra" in p.name for p in paths)
 
 
 # ── T4.15 — non si insegue dentro un nome che nessuno puo' riaprire ──────
 #
 # La cartella la rinomina l'utente **fuori** da Jenny, quindi il nome nuovo non
-# e' passato da nessun controllo. ``wikis/Ricerca ETF`` non supera
-# ``is_valid_project_name``, e la chat portata su ``project:Ricerca ETF`` non la
+# e' passato da nessun controllo. ``wikis/Ricerca ETNA`` non supera
+# ``is_valid_project_name``, e la chat portata su ``project:Ricerca ETNA`` non la
 # apre ne' il canale (``session_key_for_channel``) ne' il chip (non la elenca):
 # uno spostamento riuscito verso il nulla, mentre sotto il nome vecchio la chat
 # funzionava ancora.
 
 
 _IMPOSSIBLE_NAMES = [
-    ("Ricerca ETF", "spazio"),
+    ("Ricerca ETNA", "spazio"),
     ("università", "accento"),
     (".nascosto", "punto-iniziale"),
     ("progetto(2026)", "parentesi"),
@@ -660,12 +660,12 @@ async def test_the_refusal_names_the_folder_and_the_rule(
     _wiki(tmp_path, "vecchio")
     loop._remember_project_id("project:vecchio")
     _traces(loop, "project:vecchio")
-    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca ETF")
+    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca ETNA")
 
     await loop._refuse_missing_project(_msg(), "project:vecchio")
 
     text = published[0]
-    assert "Ricerca ETF" in text, "quale cartella e' diventata: senza questo non si ripara"
+    assert "Ricerca ETNA" in text, "quale cartella e' diventata: senza questo non si ripara"
     assert "cannot be the name of a conversation" in text
     assert "no spaces and no accents" in text, "la regola, non un rimando al chip"
     assert "I could not find where it went" not in text, (
@@ -687,7 +687,7 @@ async def test_the_refusal_leaves_no_journal_entry_open(
     _wiki(tmp_path, "vecchio")
     loop._remember_project_id("project:vecchio")
     made = _traces(loop, "project:vecchio")
-    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca ETF")
+    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca ETNA")
 
     await loop._refuse_missing_project(_msg(), "project:vecchio")
 
@@ -699,7 +699,7 @@ async def test_the_refusal_leaves_no_journal_entry_open(
     assert repair_pending_project_renames(loop.workspace) == []
     assert all(p.exists() for p in made)
     assert [
-        p for p in project_trace_paths(loop.workspace, "project:Ricerca ETF") if p.exists()
+        p for p in project_trace_paths(loop.workspace, "project:Ricerca ETNA") if p.exists()
     ] == []
 
 
@@ -714,7 +714,7 @@ async def test_the_session_is_not_invalidated_by_the_refusal(
     _wiki(tmp_path, "vecchio")
     loop._remember_project_id("project:vecchio")
     _traces(loop, "project:vecchio")
-    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca ETF")
+    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca ETNA")
 
     await loop._refuse_missing_project(_msg(), "project:vecchio")
 
@@ -730,14 +730,14 @@ async def test_a_rename_into_a_valid_name_is_unchanged(
     _wiki(tmp_path, "vecchio")
     loop._remember_project_id("project:vecchio")
     made = _traces(loop, "project:vecchio")
-    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca-ETF")
+    (tmp_path / "wikis" / "vecchio").rename(tmp_path / "wikis" / "Ricerca-ETNA")
 
     await loop._refuse_missing_project(_msg(), "project:vecchio")
 
-    assert "Ricerca-ETF" in published[0] and "renamed" in published[0].lower()
+    assert "Ricerca-ETNA" in published[0] and "renamed" in published[0].lower()
     assert [p for p in made if p.exists()] == []
     assert len(
-        [p for p in project_trace_paths(loop.workspace, "project:Ricerca-ETF") if p.exists()]
+        [p for p in project_trace_paths(loop.workspace, "project:Ricerca-ETNA") if p.exists()]
     ) == len(made)
 
 
@@ -752,7 +752,7 @@ def test_the_mover_itself_refuses_an_unopenable_destination(
     """
     made = _all_traces(loop, "project:src")
 
-    moved, why = follow_renamed_project(loop.workspace, "project:src", "project:Ricerca ETF")
+    moved, why = follow_renamed_project(loop.workspace, "project:src", "project:Ricerca ETNA")
 
     assert moved is False
     assert why == "the new name cannot be the name of a conversation"

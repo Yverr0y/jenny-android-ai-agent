@@ -1,7 +1,7 @@
 """Un progetto che non si può aprire viene rifiutato, non silenziosamente dirottato.
 
 Il difetto: una cartella sotto `wikis/` il cui nome non passa
-`is_valid_project_name` (`Ricerca ETF`, `università`, `project (2026)`) veniva
+`is_valid_project_name` (`Ricerca ETNA`, `università`, `project (2026)`) veniva
 elencata da `/api/projects` e mostrata dal chip, ma
 `WebSocketChannel._envelope_chat_id` ne riscriveva il `chat_id` sulla chat
 personale. Tre guasti in un colpo, tutti muti:
@@ -31,7 +31,7 @@ from jenny.webui.gateway_services import build_gateway_services
 # Nomi che una cartella vera può avere e una sessione no. Non ipotetici: sono
 # quelli che un utente italiano scrive per primo.
 _UNOPENABLE = [
-    "project:Ricerca ETF",
+    "project:Ricerca ETNA",
     "project:università",
     "project:perché",
     "project:progetto (2026)",
@@ -116,7 +116,7 @@ class TestAnImpossibleProjectIsRejected:
             "client-1",
             {
                 "type": "message",
-                "chat_id": "project:Ricerca ETF",
+                "chat_id": "project:Ricerca ETNA",
                 "content": "guarda",
                 # Volutamente malformato: se venisse guardato, l'errore sarebbe
                 # `image_rejected` e non il nostro.
@@ -152,11 +152,11 @@ class TestWhatMustNotChange:
         await channel._dispatch_envelope(
             conn,
             "client-1",
-            {"type": "message", "chat_id": "project:ricerca-etf", "content": "ciao"},
+            {"type": "message", "chat_id": "project:ricerca-etna", "content": "ciao"},
         )
 
         channel._handle_message.assert_awaited_once()
-        assert channel._handle_message.call_args.kwargs["chat_id"] == "project:ricerca-etf"
+        assert channel._handle_message.call_args.kwargs["chat_id"] == "project:ricerca-etna"
         assert not [e for e in _events(conn) if e.get("event") == "error"]
 
     async def test_an_attach_to_a_valid_project_attaches_and_answers(self):
@@ -164,9 +164,9 @@ class TestWhatMustNotChange:
         conn = AsyncMock()
 
         await channel._dispatch_envelope(
-            conn, "client-1", {"type": "attach", "chat_id": "project:ricerca-etf"}
+            conn, "client-1", {"type": "attach", "chat_id": "project:ricerca-etna"}
         )
 
-        assert channel._conn_chats[conn] == {"project:ricerca-etf"}
+        assert channel._conn_chats[conn] == {"project:ricerca-etna"}
         attached = [e for e in _events(conn) if e.get("event") == "attached"]
-        assert attached and attached[0]["chat_id"] == "project:ricerca-etf"
+        assert attached and attached[0]["chat_id"] == "project:ricerca-etna"

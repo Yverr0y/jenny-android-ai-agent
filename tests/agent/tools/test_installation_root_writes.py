@@ -49,13 +49,13 @@ from jenny.security.workspace_access import (
 @pytest.fixture
 def install(tmp_path: Path) -> Path:
     """Un'installazione con un progetto vero dentro (``wiki/`` compresa)."""
-    (tmp_path / "wikis" / "patreon" / "wiki").mkdir(parents=True)
+    (tmp_path / "wikis" / "palestra" / "wiki").mkdir(parents=True)
     (tmp_path / "apps" / "todo" / "data").mkdir(parents=True)
     return tmp_path
 
 
 def _project(install: Path) -> Path:
-    return install / "wikis" / "patreon"
+    return install / "wikis" / "palestra"
 
 
 def _action(op: str) -> AppAction:

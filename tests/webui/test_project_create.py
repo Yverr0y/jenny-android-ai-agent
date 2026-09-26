@@ -73,14 +73,14 @@ def _frontmatter(text: str) -> dict:
 
 class TestAProjectIsBornComplete:
     async def test_creates_the_tree_the_registry_and_the_scope_line(self, ctx, workspace):
-        result = await _create(ctx, name="patreon-creator", seed="Come si cresce su Patreon.")
+        result = await _create(ctx, name="palestra-schede", seed="Come si cresce su Palestra.")
 
-        root = workspace / "wikis" / "patreon-creator"
+        root = workspace / "wikis" / "palestra-schede"
         for rel in ("AGENTS.md", "wiki/index.md", "audit/.gitkeep"):
             assert (root / rel).is_file(), rel
         for rel in ("wiki", "raw/journal", "raw/research", "log", "audit/resolved"):
             assert (root / rel).is_dir(), rel
-        assert result["name"] == "patreon-creator"
+        assert result["name"] == "palestra-schede"
         assert result["seeded"] is True
 
         # La riga dell'utente sta dove il registro la va a prendere...
@@ -89,15 +89,15 @@ class TestAProjectIsBornComplete:
         # vecchia asserzione fissava la forma non quotata, cioè esattamente il
         # difetto che il 22/08 ha fatto perdere tutta la frontmatter a una wiki
         # la cui riga di scope conteneva un due punti.
-        assert _frontmatter(schema)["summary"] == "Come si cresce su Patreon."
+        assert _frontmatter(schema)["summary"] == "Come si cresce su Palestra."
         # ...e nella mappa, che è quel che l'agente legge per primo (T3).
-        assert "Come si cresce su Patreon." in (root / "wiki" / "index.md").read_text("utf-8")
+        assert "Come si cresce su Palestra." in (root / "wiki" / "index.md").read_text("utf-8")
         # Nessun segnaposto: il seme entra alla nascita, non per sostituzione.
         assert "<one-line scope" not in schema
         # ...e infatti nel registro c'e'.
         registry = (workspace / "wikis" / "_index.md").read_text(encoding="utf-8")
-        assert "Come si cresce su Patreon." in registry
-        assert "[[patreon-creator/wiki/index|patreon-creator]]" in registry
+        assert "Come si cresce su Palestra." in registry
+        assert "[[palestra-schede/wiki/index|palestra-schede]]" in registry
 
     async def test_does_not_create_the_search_pattern_taxonomy(self, ctx, workspace):
         """T1: le cartelle che obbligavano a scegliere «concept o entity?» **mentre**
@@ -111,10 +111,10 @@ class TestAProjectIsBornComplete:
             assert not (root / rel).exists(), rel
 
     async def test_the_title_comes_from_the_folder_name(self, ctx, workspace):
-        await _create(ctx, name="patreon-creator", seed="x")
+        await _create(ctx, name="palestra-schede", seed="x")
 
-        schema = (workspace / "wikis" / "patreon-creator" / "AGENTS.md").read_text("utf-8")
-        assert "# Patreon Creator" in schema
+        schema = (workspace / "wikis" / "palestra-schede" / "AGENTS.md").read_text("utf-8")
+        assert "# Palestra Schede" in schema
 
     async def test_is_empty_of_content(self, ctx, workspace):
         """"Nuovo" costruisce lo scaffolding, non un primo articolo."""
@@ -238,17 +238,17 @@ class TestAHalfDoneProjectCanBeFinished:
         before = _frontmatter(schema.read_text("utf-8"))
         assert before["summary"].startswith("<"), "il fixture non riproduce il segnaposto"
 
-        result = await _create(ctx, name="morta-a-meta", seed="Come si cresce su Patreon.")
+        result = await _create(ctx, name="morta-a-meta", seed="Come si cresce su Palestra.")
 
         after = _frontmatter(schema.read_text("utf-8"))
-        assert after["summary"] == "Come si cresce su Patreon."
+        assert after["summary"] == "Come si cresce su Palestra."
         assert result["seeded"] is True
         # L'id scritto dalla migrazione resta quello: è l'identità della wiki, e
         # riscriverlo staccherebbe la cartella dalla sua chat.
         assert after["id"] == before["id"]
         # E il registro adesso la vede con la sua riga, non con «(no scope set)».
         registry = (workspace / "wikis" / "_index.md").read_text("utf-8")
-        assert "Come si cresce su Patreon." in registry
+        assert "Come si cresce su Palestra." in registry
 
     async def test_a_real_scope_is_not_rewritten(self, ctx, workspace):
         """Completare un progetto non è riscriverne lo scope: se la creazione era
@@ -290,14 +290,14 @@ class TestAHalfDoneProjectCanBeFinished:
 
 class TestTheGateIsOnTheServer:
     async def test_rejects_a_project_that_exists(self, ctx):
-        await _create(ctx, name="patreon", seed="uno")
+        await _create(ctx, name="palestra", seed="uno")
 
         with pytest.raises(CommandError) as exc:
-            await _create(ctx, name="patreon", seed="due")
+            await _create(ctx, name="palestra", seed="due")
         assert exc.value.code == "bad_request"
         # Il messaggio del progetto completo non cambia: è l'altro ramo che ne ha
         # uno nuovo, e i due devono restare distinguibili dal client.
-        assert exc.value.message == "project already exists: patreon"
+        assert exc.value.message == "project already exists: palestra"
 
     @pytest.mark.parametrize(
         "name",
@@ -473,7 +473,7 @@ class TestAListedNameIsAnOpenableName:
 
     @pytest.mark.parametrize(
         "name",
-        ["Ricerca ETF", "università", "perché", "progetto (2026)", ".nascosto", "x" * 65],
+        ["Ricerca ETNA", "università", "perché", "progetto (2026)", ".nascosto", "x" * 65],
     )
     async def test_a_name_that_cannot_be_a_session_is_not_openable(
         self, handler, workspace, name
@@ -508,7 +508,7 @@ class TestAListedNameIsAnOpenableName:
         """
         from jenny.channels.websocket import WebSocketChannel
 
-        for name in ("buona", "Ricerca ETF", "università", "altra_1"):
+        for name in ("buona", "Ricerca ETNA", "università", "altra_1"):
             self._wiki(workspace, name)
 
         payload = await _get_projects(handler)
@@ -550,7 +550,7 @@ class TestTheScaffolderWarns:
     riparata — quindi avvisa e continua.
     """
 
-    @pytest.mark.parametrize("name", ["Ricerca ETF", "università", "progetto (2026)", ".x"])
+    @pytest.mark.parametrize("name", ["Ricerca ETNA", "università", "progetto (2026)", ".x"])
     def test_warns_about_a_name_that_cannot_be_a_chat(self, tmp_path, name, capsys):
         scaffold = _scaffold_module()
 
@@ -558,7 +558,7 @@ class TestTheScaffolderWarns:
         err = capsys.readouterr().err
         assert name in err and "cannot be a project chat name" in err
 
-    @pytest.mark.parametrize("name", ["ricerca-etf", "b.eta_1", "X2"])
+    @pytest.mark.parametrize("name", ["ricerca-etna", "b.eta_1", "X2"])
     def test_is_silent_on_a_good_name(self, tmp_path, name, capsys):
         scaffold = _scaffold_module()
 
@@ -567,9 +567,9 @@ class TestTheScaffolderWarns:
 
     def test_the_full_scaffold_warns_and_creates_anyway(self, tmp_path, capsys):
         scaffold = _scaffold_module()
-        root = tmp_path / "wikis" / "Ricerca ETF"
+        root = tmp_path / "wikis" / "Ricerca ETNA"
 
-        scaffold.scaffold(str(root), "Ricerca ETF")
+        scaffold.scaffold(str(root), "Ricerca ETNA")
 
         captured = capsys.readouterr()
         assert "cannot be a project chat name" in captured.err
@@ -583,7 +583,7 @@ class TestTheScaffolderWarns:
         scaffold = _scaffold_module()
         for name in [
             "a", "X2", "b.eta_1-2", "x" * 64,
-            "Ricerca ETF", "università", ".nascosto", "-x", "", "x" * 65, "a..b",
+            "Ricerca ETNA", "università", ".nascosto", "-x", "", "x" * 65, "a..b",
             "x\n",  # ``$`` combacia anche prima di un a capo finale: ``\Z`` no
         ]:
             copied = bool(scaffold._VALID_WIKI_NAME.match(name)) and ".." not in name
@@ -632,9 +632,9 @@ class TestTheProjectThread:
     """
 
     async def test_a_project_key_is_no_longer_404(self, handler, ctx, workspace):
-        await _create(ctx, name="patreon", seed="di cosa si occupa")
+        await _create(ctx, name="palestra", seed="di cosa si occupa")
 
-        response = await _get_thread(handler, "project:patreon")
+        response = await _get_thread(handler, "project:palestra")
 
         assert response.status_code != 404, response.body
 
@@ -646,14 +646,14 @@ class TestTheProjectThread:
         mostrato "sessione personale" sopra il composer. Cioè esattamente la cosa
         che il chip esiste per non fare.
         """
-        await _create(ctx, name="patreon", seed="di cosa si occupa")
+        await _create(ctx, name="palestra", seed="di cosa si occupa")
 
-        response = await _get_thread(handler, "project:patreon")
+        response = await _get_thread(handler, "project:palestra")
         payload = json.loads(response.body.decode("utf-8"))
 
         scope = payload["workspace_scope"]
-        assert scope["project_name"] == "patreon"
-        assert scope["project_path"].endswith("wikis/patreon")
+        assert scope["project_name"] == "palestra"
+        assert scope["project_path"].endswith("wikis/palestra")
         assert scope["access_mode"] == "restricted"
 
     async def test_an_internal_session_stays_unreadable(self, handler):

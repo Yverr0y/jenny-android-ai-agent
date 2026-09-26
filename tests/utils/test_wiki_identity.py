@@ -72,7 +72,7 @@ def test_anything_else_is_not_an_id(raw) -> None:
 
 
 def test_the_id_is_read_from_the_instructions_file(wikis: Path) -> None:
-    project = _wiki(wikis, "patreon", "AGENTS.md", "---\nid: 3f9a2c1b7e04\n---\n\n# P\n")
+    project = _wiki(wikis, "palestra", "AGENTS.md", "---\nid: 3f9a2c1b7e04\n---\n\n# P\n")
     assert wiki_id(project) == "3f9a2c1b7e04"
 
 
@@ -295,16 +295,16 @@ def test_a_wiki_with_both_files_is_left_alone(wikis: Path) -> None:
 
 def test_a_wiki_with_no_instructions_file_gets_a_minimal_one(wikis: Path) -> None:
     """Minimo e non lo scaffold completo: `AGENTS.md` nasce quasi vuoto (21/08)."""
-    project = _wiki(wikis, "adhd")
+    project = _wiki(wikis, "acquari")
 
     migrate_wikis(wikis)
 
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert is_valid_wiki_id(wiki_id(project))
-    assert "# Adhd" in text
+    assert "# Acquari" in text
     assert "What this wiki covers" not in text, "lo scaffold pieno è mestiere di /init"
     # `summary` resta un segnaposto, non il nome della cartella: con il nome,
-    # `wikis/_index.md` direbbe «adhd — adhd», che *sembra* una descrizione. La
+    # `wikis/_index.md` direbbe «acquari — acquari», che *sembra* una descrizione. La
     # voce di prima diceva «(no AGENTS.md)», cioè la verità.
     from jenny.utils.wiki_paths import read_wiki_scope
 

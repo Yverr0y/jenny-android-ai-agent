@@ -231,13 +231,13 @@ def test_the_unopenable_array_is_read_and_kept() -> None:
     """Il difetto in una riga: `unopenable` non veniva letto affatto."""
     _run_js("""
       const chip = new Chip();
-      nextPayload = { dir: 'wikis', projects: [{ name: 'patreon', modified: 100 }],
+      nextPayload = { dir: 'wikis', projects: [{ name: 'palestra', modified: 100 }],
         unopenable: [
-          { name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' },
+          { name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' },
           { name: 'università', modified: 300, reason: 'invalid_name' },
         ] };
       await chip._loadProjects();
-      assert.deepEqual(chip._unopenable.map((f) => f.name), ['università', 'Ricerca ETF'],
+      assert.deepEqual(chip._unopenable.map((f) => f.name), ['università', 'Ricerca ETNA'],
                        'le cartelle non apribili sono state buttate, o non sono ordinate come le altre');
       assert.deepEqual(chip._unopenable.map((f) => f.reason), ['invalid_name', 'invalid_name'],
                        'il motivo non viaggia con la voce: la riga non saprebbe cosa dire');
@@ -249,11 +249,11 @@ def test_a_failed_read_does_not_erase_the_unopenable_cache() -> None:
     _run_js("""
       const chip = new Chip();
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       nextPayload = 'fail';
       await chip._loadProjects();
-      assert.deepEqual(chip._unopenable.map((f) => f.name), ['Ricerca ETF'],
+      assert.deepEqual(chip._unopenable.map((f) => f.name), ['Ricerca ETNA'],
                        'un guasto di rete ha cancellato la cartella dallo schermo');
       assert.equal(chip._loadFailed, true);
     """)
@@ -265,16 +265,16 @@ def test_a_failed_read_does_not_erase_the_unopenable_cache() -> None:
 def test_the_row_appears_with_its_own_label_and_one_note() -> None:
     _run_js(f"""
       const chip = new Chip();
-      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'patreon', modified: 100 }}],
+      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'palestra', modified: 100 }}],
         unopenable: [
-          {{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }},
+          {{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }},
           {{ name: 'università', modified: 90, reason: 'invalid_name' }},
         ] }};
       await chip._loadProjects();
       chip._renderMenu();
 
       const written = texts(chip.menu);
-      assert.equal(written.includes('Ricerca ETF'), true,
+      assert.equal(written.includes('Ricerca ETNA'), true,
                    'la cartella che il server manda come non apribile non compare');
       assert.equal(written.includes('università'), true);
       assert.equal(written.includes({json.dumps(_it("unopenableSection"))}), true,
@@ -288,7 +288,7 @@ def test_the_row_appears_with_its_own_label_and_one_note() -> None:
       assert.equal(notes[0].includes('{{rule}}'), false,
                    'la regola non è stata interpolata: a schermo resta il segnaposto');
       // E i progetti veri restano dove erano.
-      assert.ok(written.indexOf('patreon') < written.indexOf('Ricerca ETF'),
+      assert.ok(written.indexOf('palestra') < written.indexOf('Ricerca ETNA'),
                 'le righe da sistemare vengono prima di quelle su cui si lavora');
     """)
 
@@ -298,11 +298,11 @@ def test_the_row_is_shown_even_when_there_are_no_openable_projects() -> None:
     _run_js("""
       const chip = new Chip();
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
       const written = texts(chip.menu);
-      assert.equal(written.includes('Ricerca ETF'), true,
+      assert.equal(written.includes('Ricerca ETNA'), true,
                    "l'unica cartella del workspace non è sullo schermo");
       // «Nessun progetto ancora» resta vero — nessuno di quelli si apre — ed è
       // la riga sotto a spiegare cos'è quella cartella.
@@ -314,7 +314,7 @@ def test_nothing_is_added_when_every_folder_opens() -> None:
     """Il rovescio: senza cartelle bloccate la tendina è quella di prima."""
     _run_js(f"""
       const chip = new Chip();
-      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'patreon', modified: 100 }}],
+      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'palestra', modified: 100 }}],
         unopenable: [] }};
       await chip._loadProjects();
       chip._renderMenu();
@@ -339,8 +339,8 @@ def test_the_row_is_not_selectable() -> None:
     """
     _run_js("""
       const chip = new Chip();
-      nextPayload = { dir: 'wikis', projects: [{ name: 'patreon', modified: 100 }],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+      nextPayload = { dir: 'wikis', projects: [{ name: 'palestra', modified: 100 }],
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
 
@@ -356,7 +356,7 @@ def test_the_row_is_not_selectable() -> None:
       assert.equal(byClass(row, 'scope-menu-check').length, 0);
       assert.equal(row.dataset.reason, 'invalid_name');
 
-      // E il conto dei listener di tutta la tendina: personale + patreon +
+      // E il conto dei listener di tutta la tendina: personale + palestra +
       // "nuovo progetto", e nient'altro.
       assert.equal(listeners(chip.menu), 3,
                    'la tendina ha una riga tappabile in più del previsto');
@@ -370,7 +370,7 @@ def test_the_row_still_says_when_the_folder_last_moved() -> None:
       const chip = new Chip();
       const twoHoursAgo = Math.floor(Date.now() / 1000) - 7200;
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: twoHoursAgo, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: twoHoursAgo, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
       const written = texts(byClass(chip.menu, 'is-unopenable')[0]);
@@ -407,7 +407,7 @@ def test_an_unknown_reason_does_not_get_told_the_name_rule() -> None:
 def test_two_folders_on_the_same_reason_share_one_note() -> None:
     _run_js(f"""
       const chip = new Chip();
-      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'patreon', modified: 400 }}],
+      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'palestra', modified: 400 }}],
         unopenable: [
           {{ name: 'a b', modified: 300, reason: 'invalid_name' }},
           {{ name: 'c d', modified: 200, reason: 'invalid_name' }},
@@ -433,14 +433,14 @@ def test_a_rename_moves_the_folder_to_the_openable_list() -> None:
     _run_js("""
       const chip = new Chip();
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
       assert.equal(byClass(chip.menu, 'is-unopenable').length, 1);
       assert.equal(listeners(chip.menu), 2, 'personale + nuovo progetto, e nient\\'altro');
 
       // L'agente la rinomina, e la lettura dopo la trova dall'altro lato.
-      nextPayload = { dir: 'wikis', projects: [{ name: 'ricerca-etf', modified: 200 }],
+      nextPayload = { dir: 'wikis', projects: [{ name: 'ricerca-etna', modified: 200 }],
         unopenable: [] };
       await chip._loadProjects();
       chip._renderMenu();
@@ -448,13 +448,13 @@ def test_a_rename_moves_the_folder_to_the_openable_list() -> None:
       assert.equal(byClass(chip.menu, 'is-unopenable').length, 0,
                    'la riga grigia resta dopo il rename');
       const written = texts(chip.menu);
-      assert.equal(written.includes('ricerca-etf'), true);
-      assert.equal(written.includes('Ricerca ETF'), false, 'il nome vecchio è ancora a schermo');
+      assert.equal(written.includes('ricerca-etna'), true);
+      assert.equal(written.includes('Ricerca ETNA'), false, 'il nome vecchio è ancora a schermo');
       assert.equal(listeners(chip.menu), 3, 'la cartella rinominata non è diventata tappabile');
 
       // E ora si apre davvero: la riga chiama `select` col nome nuovo.
       const rows = byClass(chip.menu, 'scope-menu-item')
-        .filter((r) => texts(r).includes('ricerca-etf'));
+        .filter((r) => texts(r).includes('ricerca-etna'));
       assert.equal(rows.length, 1);
       assert.equal(rows[0].tag, 'button');
     """)
@@ -474,13 +474,13 @@ def test_the_payload_the_route_builds_is_the_payload_the_chip_reads(tmp_path) ->
     from jenny.webui.wiki_routes import _collect_projects
 
     wikis = tmp_path / "wikis"
-    for name in ("Ricerca ETF", "patreon"):
+    for name in ("Ricerca ETNA", "palestra"):
         (wikis / name / "wiki").mkdir(parents=True)
         (wikis / name / "wiki" / "index.md").write_text(f"# {name}\n", encoding="utf-8")
 
     projects, unopenable = _collect_projects(wikis)
     payload = {"dir": wikis.name, "projects": projects, "unopenable": unopenable}
-    assert [p["name"] for p in projects] == ["patreon"]
+    assert [p["name"] for p in projects] == ["palestra"]
 
     _run_js(f"""
       const chip = new Chip();
@@ -488,7 +488,7 @@ def test_the_payload_the_route_builds_is_the_payload_the_chip_reads(tmp_path) ->
       await chip._loadProjects();
       chip._renderMenu();
       const written = texts(chip.menu);
-      assert.equal(written.includes('Ricerca ETF'), true,
+      assert.equal(written.includes('Ricerca ETNA'), true,
                    'il chip non legge il payload che la route costruisce');
       assert.equal(written.includes({json.dumps(_hint())}), true,
                    "il motivo che il server manda non trova la frase che gli corrisponde");

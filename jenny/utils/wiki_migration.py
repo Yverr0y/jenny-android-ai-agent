@@ -92,7 +92,7 @@ def _ensure_id(root: Path) -> str | None:
     if schema is None:
         wiki_id_value = new_wiki_id()
         # ``summary`` resta il **segnaposto**, non il nome della cartella. Con il
-        # nome, ``wikis/_index.md`` mostrerebbe «adhd — adhd», che sembra una
+        # nome, ``wikis/_index.md`` mostrerebbe «ricette — ricette», che sembra una
         # descrizione e non lo è: la voce di prima diceva «(no AGENTS.md)», cioè
         # la verità. ``read_wiki_scope`` riconosce i segnaposto fra ``<>`` e
         # continua a dire «(no scope set)» — che è un invito a riempirlo, non

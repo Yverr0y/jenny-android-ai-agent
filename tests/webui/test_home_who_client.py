@@ -182,7 +182,7 @@ const LIST = {
   projects: [
     { name: 'piante', modified: 100 },
     { name: 'memory', modified: 300 },
-    { name: 'etf', modified: 200 },
+    { name: 'etna', modified: 200 },
   ],
   unopenable: [],
 };
@@ -252,7 +252,7 @@ def test_notebooks_come_down_from_the_most_recent() -> None:
     _run_js("""
       const panel = await open(LIST);
       const names = readout(panel).filter((r) => r.startsWith('- ')).map((r) => r.split(' ')[1]);
-      assert.deepEqual(names, ['memory', 'etf', 'piante']);
+      assert.deepEqual(names, ['memory', 'etna', 'piante']);
     """)
 
 
@@ -322,13 +322,13 @@ def test_folders_that_do_not_open_are_shown_last_with_one_note_each_reason() -> 
         dir: 'wikis',
         projects: [{ name: 'piante', modified: 100 }],
         unopenable: [
-          { name: 'Ricerca ETF', modified: 300, reason: 'invalid_name' },
+          { name: 'Ricerca ETNA', modified: 300, reason: 'invalid_name' },
           { name: 'università', modified: 200, reason: 'invalid_name' },
         ],
       });
       const rows = readout(panel);
       assert.deepEqual(rows.filter((r) => r.startsWith('x ')).map((r) => r.split(' · ')[0]),
-                       ['x Ricerca ETF', 'x università']);
+                       ['x Ricerca ETNA', 'x università']);
       assert.ok(rows.indexOf('etichetta: Non apribili') > rows.findIndex((r) => r.startsWith('- ')),
                 'le non apribili vanno dopo i quaderni veri');
       assert.equal(rows.filter((r) => r.startsWith('nota: Queste cartelle')).length, 1,
@@ -371,9 +371,9 @@ def test_the_name_you_touch_is_the_name_that_comes_back() -> None:
     conversazione la apre chi lo ospita."""
     _run_js("""
       const panel = await open(LIST);
-      const etf = rowsOf(panel).find((r) => r.children.some((c) => c.textContent === 'etf'));
-      tap(etf);
-      assert.deepEqual(panel.history, ['scelto:etf'],
+      const etna = rowsOf(panel).find((r) => r.children.some((c) => c.textContent === 'etna'));
+      tap(etna);
+      assert.deepEqual(panel.history, ['scelto:etna'],
                        'il pannello deve chiudersi prima di cambiare conversazione');
     """)
 
@@ -382,7 +382,7 @@ def test_the_personal_row_takes_you_home() -> None:
     """Senza, da dentro un quaderno il pannello saprebbe solo portarti altrove."""
     _run_js("""
       const panel = await open(LIST);
-      panel._currentProject = () => 'etf';
+      panel._currentProject = () => 'etna';
       panel.render();
       const home = rowsOf(panel).find((r) => String(r.className).includes('is-personal'));
       tap(home);
@@ -396,7 +396,7 @@ def test_a_folder_that_does_not_open_is_not_a_command() -> None:
     _run_js("""
       const panel = await open({
         dir: 'wikis', projects: [{ name: 'piante', modified: 1 }],
-        unopenable: [{ name: 'Ricerca ETF', modified: 1, reason: 'invalid_name' }],
+        unopenable: [{ name: 'Ricerca ETNA', modified: 1, reason: 'invalid_name' }],
       });
       const blocked = rowsOf(panel).filter((r) => String(r.className).includes('is-blocked'));
       assert.equal(blocked.length, 1);
@@ -416,11 +416,11 @@ def test_only_the_row_you_are_on_carries_the_check() -> None:
       assert.equal(checks(panel).length, 1);
       assert.ok(String(marked(panel).className).includes('is-personal'));
 
-      panel._currentProject = () => 'etf';
+      panel._currentProject = () => 'etna';
       panel.render();
       assert.equal(checks(panel).length, 1, 'due spunte: una delle due mente');
       const row = marked(panel);
-      assert.ok(row.children.some((c) => c.textContent === 'etf'));
+      assert.ok(row.children.some((c) => c.textContent === 'etna'));
       assert.equal(row.attrs['aria-current'], 'true',
                    'la spunta e\\' decorativa: chi non la vede deve saperlo lo stesso');
     """)
@@ -455,7 +455,7 @@ def test_a_blocked_row_has_no_colour_at_all() -> None:
     _run_js("""
       const panel = await open({
         dir: 'wikis', projects: [{ name: 'piante', modified: 1 }],
-        unopenable: [{ name: 'Ricerca ETF', modified: 1, reason: 'invalid_name' }],
+        unopenable: [{ name: 'Ricerca ETNA', modified: 1, reason: 'invalid_name' }],
       });
       const dots = walk(panel._body).filter((n) => String(n.className) === 'home-who-dot');
       assert.equal(dots.length, 2);
@@ -560,9 +560,9 @@ def test_the_panel_answers_how_many_pages_and_reads_the_list_if_it_has_to() -> N
 def test_holding_a_notebook_asks_for_its_sheet() -> None:
     _run_js(
         "const panel = await open(LIST);\n"
-        "const row = rowsOf(panel).find((r) => r.children.some((c) => c.textContent === 'etf'));\n"
+        "const row = rowsOf(panel).find((r) => r.children.some((c) => c.textContent === 'etna'));\n"
         "keep(row);\n"
-        "assert.deepEqual(panel.history, ['tenuto:etf']);\n"
+        "assert.deepEqual(panel.history, ['tenuto:etna']);\n"
     )
 
 
@@ -571,12 +571,12 @@ def test_the_tap_after_a_hold_does_not_switch_conversation() -> None:
     conversazione sotto. E il tocco dopo quello torna a essere un tocco."""
     _run_js(
         "const panel = await open(LIST);\n"
-        "const row = rowsOf(panel).find((r) => r.children.some((c) => c.textContent === 'etf'));\n"
+        "const row = rowsOf(panel).find((r) => r.children.some((c) => c.textContent === 'etna'));\n"
         "keep(row);\n"
         "tap(row);\n"
-        "assert.deepEqual(panel.history, ['tenuto:etf'], 'il tocco dopo la pressione ha cambiato conversazione');\n"
+        "assert.deepEqual(panel.history, ['tenuto:etna'], 'il tocco dopo la pressione ha cambiato conversazione');\n"
         "tap(row);\n"
-        "assert.deepEqual(panel.history.slice(1), ['scelto:etf']);\n"
+        "assert.deepEqual(panel.history.slice(1), ['scelto:etna']);\n"
     )
 
 

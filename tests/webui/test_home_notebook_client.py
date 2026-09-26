@@ -393,13 +393,13 @@ def test_nothing_to_rename_asks_nothing_of_the_gateway(written) -> None:
 
 
 def test_a_name_that_would_not_open_is_said_before_the_round_trip() -> None:
-    """La stessa regola del gateway, detta subito: senza, «Ricerca ETF»
+    """La stessa regola del gateway, detta subito: senza, «Ricerca ETNA»
     andrebbe e tornerebbe col suo rifiuto."""
     _run_rename(
         "assert.equal(await g.renameNotebook('viaggio'), false);\n"
         "assert.ok(!history.some((x) => x[0] === 'rpc'), 'un nome non valido e arrivato al gateway');\n"
         "assert.deepEqual(history.at(-1), ['avviso', 'scope.invalidName', 'error']);\n",
-        written="Ricerca ETF",
+        written="Ricerca ETNA",
         current_key=None,
     )
 

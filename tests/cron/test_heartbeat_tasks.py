@@ -39,7 +39,7 @@ from jenny.cron.types import CronJobState, CronTaskCheckState
 
 _WATERBOT = (
     "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo sotto il 15%. "
-    "Se hps è irraggiungibile salta il ciclo in silenzio."
+    "Se pibox è irraggiungibile salta il ciclo in silenzio."
 )
 _VITAMINS = "- Alle 9 ricordami le vitamine."
 
@@ -129,8 +129,8 @@ class TestTaskIdentity:
 
 class TestTheMarker:
     def test_a_numbered_marker_carries_the_task_and_the_reason(self) -> None:
-        assert parse_could_not_check_marks("CHECK_FAILED 2: hps unreachable") == [
-            CouldNotCheckMark("2", "hps unreachable")
+        assert parse_could_not_check_marks("CHECK_FAILED 2: pibox unreachable") == [
+            CouldNotCheckMark("2", "pibox unreachable")
         ]
 
     def test_one_turn_can_declare_several_failed_tasks(self) -> None:
@@ -148,10 +148,10 @@ class TestTheMarker:
 
     def test_the_monitor_form_without_a_number_still_works(self) -> None:
         """B8 non si tocca: un monitor ha un controllo solo e non numera niente."""
-        assert parse_could_not_check_marks("CHECK_FAILED: hps down") == [
-            CouldNotCheckMark(None, "hps down")
+        assert parse_could_not_check_marks("CHECK_FAILED: pibox down") == [
+            CouldNotCheckMark(None, "pibox down")
         ]
-        assert could_not_check_reason("CHECK_FAILED: hps down") == "hps down"
+        assert could_not_check_reason("CHECK_FAILED: pibox down") == "pibox down"
         assert could_not_check_reason("tutto a posto") is None
 
     def test_a_reason_that_starts_with_a_number_is_not_a_task_number(self) -> None:
@@ -164,9 +164,9 @@ class TestAttributingAMarkToATask:
     def test_with_one_task_a_marker_without_a_number_is_unambiguous(self) -> None:
         tasks = parse_heartbeat_tasks(_file(_WATERBOT))
 
-        reasons, unattributed = attribute_marks(tasks, [CouldNotCheckMark(None, "hps down")])
+        reasons, unattributed = attribute_marks(tasks, [CouldNotCheckMark(None, "pibox down")])
 
-        assert reasons == {tasks[0].id: "hps down"}
+        assert reasons == {tasks[0].id: "pibox down"}
         assert unattributed == []
 
     def test_with_two_tasks_a_marker_without_a_number_blames_nobody(self) -> None:
@@ -222,7 +222,7 @@ class TestTheStateSelfHeals:
             record_task_outcomes(
                 state,
                 tasks,
-                [CouldNotCheckMark("1", "hps down")],
+                [CouldNotCheckMark("1", "pibox down")],
                 now_ms=7,
                 escalating=[],
             )
@@ -258,10 +258,10 @@ class TestADelegatedTaskWaitsForItsVerdict:
     """Il turno che delega non ha l'esito: `spawn` ritorna subito."""
 
     def test_the_two_markers_do_not_read_each_other(self) -> None:
-        text = "CHECK_DELEGATED 1: leggi hps\nCHECK_FAILED 2: sveglia non impostata"
+        text = "CHECK_DELEGATED 1: leggi pibox\nCHECK_FAILED 2: sveglia non impostata"
 
         assert [(m.ref, m.reason) for m in parse_delegated_marks(text)] == [
-            ("1", "leggi hps")
+            ("1", "leggi pibox")
         ]
         assert [(m.ref, m.reason) for m in parse_could_not_check_marks(text)] == [
             ("2", "sveglia non impostata")
@@ -280,7 +280,7 @@ class TestADelegatedTaskWaitsForItsVerdict:
             [],
             now_ms=11,
             escalating=[],
-            delegated=[CouldNotCheckMark("1", "leggi hps")],
+            delegated=[CouldNotCheckMark("1", "leggi pibox")],
         )
 
         assert outcome.any_failure is False
@@ -404,7 +404,7 @@ class TestOneFaultIsOneWarning:
         record_task_outcomes(
             state,
             tasks,
-            [CouldNotCheckMark("1", "hps irraggiungibile")],
+            [CouldNotCheckMark("1", "pibox irraggiungibile")],
             now_ms=12,
             escalating=[],
         )
@@ -508,7 +508,7 @@ class TestOneFaultIsOneWarning:
         )
 
         outcome = record_followup_outcomes(
-            state, tasks, [CouldNotCheckMark("1", "hps irraggiungibile")],
+            state, tasks, [CouldNotCheckMark("1", "pibox irraggiungibile")],
             now_ms=12,
             escalating=[],  # nessuno gli aveva chiesto di parlare
             warned=[CouldNotCheckMark("1", "")],
@@ -539,7 +539,7 @@ class TestOneFaultIsOneWarning:
         record_task_outcomes(
             state,
             tasks,
-            [CouldNotCheckMark("1", "hps giù"), CouldNotCheckMark("2", "backup giù")],
+            [CouldNotCheckMark("1", "pibox giù"), CouldNotCheckMark("2", "backup giù")],
             now_ms=10,
             escalating=[],  # nessuno ha chiesto di parlare
             warned=[CouldNotCheckMark("1", "")],  # ma il modello ha avvisato del 1
@@ -551,7 +551,7 @@ class TestOneFaultIsOneWarning:
         for run in range(1, ESCALATE_AFTER_FAILURES):
             record_task_outcomes(
                 state, tasks,
-                [CouldNotCheckMark("1", "hps giù"), CouldNotCheckMark("2", "backup giù")],
+                [CouldNotCheckMark("1", "pibox giù"), CouldNotCheckMark("2", "backup giù")],
                 now_ms=10 + run, escalating=[],
             )
         assert tasks_due_for_escalation(state, tasks) == [tasks[1]]
@@ -571,7 +571,7 @@ class TestOneFaultIsOneWarning:
         record_task_outcomes(
             state,
             tasks,
-            [CouldNotCheckMark("1", "hps giù"), CouldNotCheckMark("2", "backup giù")],
+            [CouldNotCheckMark("1", "pibox giù"), CouldNotCheckMark("2", "backup giù")],
             now_ms=10,
             escalating=[],
             warned=[CouldNotCheckMark(None, "")],
@@ -593,7 +593,7 @@ class TestOneFaultIsOneWarning:
         record_task_outcomes(
             state,
             tasks,
-            [CouldNotCheckMark("1", "hps giù")],
+            [CouldNotCheckMark("1", "pibox giù")],
             now_ms=10,
             escalating=[],
             warned=[CouldNotCheckMark(None, "")],
@@ -618,7 +618,7 @@ class TestOneFaultIsOneWarning:
         record_task_outcomes(
             state,
             tasks,
-            [CouldNotCheckMark("1", "hps giù")],
+            [CouldNotCheckMark("1", "pibox giù")],
             now_ms=10,
             escalating=tasks,  # gli è stato chiesto di parlare
             warned=[],  # ha parlato (o no), ma non l'ha dichiarato
@@ -704,7 +704,7 @@ class TestOneFaultIsOneWarning:
 
         record_task_outcomes(
             state, tasks,
-            [CouldNotCheckMark("1", "hps giù"), CouldNotCheckMark("2", "backup giù")],
+            [CouldNotCheckMark("1", "pibox giù"), CouldNotCheckMark("2", "backup giù")],
             now_ms=10, escalating=tasks,
             warned=[CouldNotCheckMark("1", ""), CouldNotCheckMark("2", "")],
         )
@@ -729,7 +729,7 @@ class TestOneFaultIsOneWarning:
             record_task_outcomes(
                 state,
                 tasks,
-                [CouldNotCheckMark("1", "hps irraggiungibile")],
+                [CouldNotCheckMark("1", "pibox irraggiungibile")],
                 now_ms=100 + run,
                 escalating=tasks_due_for_escalation(state, tasks),
                 warned=[CouldNotCheckMark("1", "")] if run == 2 else [],
@@ -902,8 +902,8 @@ class TestTheModelQuotingItsOwnInstructions:
         assert parse_could_not_check_marks("CHECK_FAILED: <reason>") == []
 
     def test_a_real_reason_is_never_mistaken_for_one(self) -> None:
-        marks = parse_could_not_check_marks("CHECK_FAILED 2: hps unreachable")
-        assert [(m.ref, m.reason) for m in marks] == [("2", "hps unreachable")]
+        marks = parse_could_not_check_marks("CHECK_FAILED 2: pibox unreachable")
+        assert [(m.ref, m.reason) for m in marks] == [("2", "pibox unreachable")]
 
 
 class TestThePositiveMarker:
@@ -934,7 +934,7 @@ class TestThePositiveMarker:
         self,
     ) -> None:
         """Misurato sul device il 2026-08-16, ed è il motivo per cui questa
-        frase esiste. Il task WaterBot dice "se hps è irraggiungibile non
+        frase esiste. Il task WaterBot dice "se pibox è irraggiungibile non
         ritentare, riporta UNREACHABLE e fermati"; il subagent ha riportato
         correttamente ``UNREACHABLE``; e il turno d'annuncio ha scritto
         ``CHECK_OK``. Una versione precedente di questo blocco diceva che un

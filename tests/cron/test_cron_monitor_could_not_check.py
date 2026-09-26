@@ -2,7 +2,7 @@
 
 Prima di questo stato un monitor aveva due soli finali e producevano lo stesso
 identico output — niente. Un controllo delle piante rotto era indistinguibile da
-un giardino sano, e la skill aveva pure un motivo legittimo di tacere ("se hps è
+un giardino sano, e la skill aveva pure un motivo legittimo di tacere ("se pibox è
 irraggiungibile salta il ciclo in silenzio"), quindi il guasto era perfettamente
 mimetizzato.
 
@@ -47,7 +47,7 @@ _MESSAGE = "controlla l'umidità delle piante e avvisami solo sotto il 15%"
 
 # Il caso della frase più ordinaria che ci sia: l'utente chiede il controllo e
 # nella stessa riga chiede di non essere disturbato quando l'host è giù.
-_QUIET_MESSAGE = "controlla il server hps, e se è irraggiungibile non dire niente"
+_QUIET_MESSAGE = "controlla il server pibox, e se è irraggiungibile non dire niente"
 
 # Le due frasi del prompt su cui gli agenti finti decidono. Stanno qui, in un
 # posto solo, perché sono l'unico punto in cui questi test conoscono la prosa
@@ -103,13 +103,13 @@ class _FakeMonitorAgent:
         if self.healthy:
             return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
         if not self._asked_to_warn(msg.content):
-            return TurnOutcome.silent(final_text="CHECK_FAILED: hps non raggiungibile")
+            return TurnOutcome.silent(final_text="CHECK_FAILED: pibox non raggiungibile")
         self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
         # E dichiara l'avviso: il timbro nello stato viene da questa riga, non
         # dal fatto che ``message`` sia stato chiamato — un messaggio può parlare
         # d'altro, e per tre commit è stato quello a zittire il guasto.
         return TurnOutcome.spoke_via_tool(
-            final_text="CHECK_FAILED: hps non raggiungibile\nCHECK_WARNED"
+            final_text="CHECK_FAILED: pibox non raggiungibile\nCHECK_WARNED"
         )
 
 
@@ -183,7 +183,7 @@ class TestSilenceStaysFree:
         state = _state(service, job_id)
         assert state.last_status == "could_not_check"
         assert state.consecutive_could_not_check == 1
-        assert state.last_error == "hps non raggiungibile"
+        assert state.last_error == "pibox non raggiungibile"
 
     async def test_two_failed_checks_still_produce_no_message(self, tmp_path: Path) -> None:
         """La soglia è tre: due sono ancora dentro il margine di una rete ballerina."""
@@ -261,7 +261,7 @@ class TestTheStreakSpeaksOnce:
 
         async def mute(msg: InboundMessage) -> TurnOutcome:
             agent.prompts.append(msg.content)
-            return TurnOutcome.silent(final_text="CHECK_FAILED: hps non raggiungibile")
+            return TurnOutcome.silent(final_text="CHECK_FAILED: pibox non raggiungibile")
 
         agent.submit_cron_turn = mute  # type: ignore[method-assign]
         await _cycles(service, job_id, 5)
@@ -300,16 +300,16 @@ class _ObedientlySilentAgent(_FakeMonitorAgent):
     async def submit_cron_turn(self, msg: InboundMessage) -> TurnOutcome:
         self.prompts.append(msg.content)
         if self.healthy:
-            return TurnOutcome.silent(final_text="hps risponde, nulla da segnalare.")
+            return TurnOutcome.silent(final_text="pibox risponde, nulla da segnalare.")
         if _SILENCE_OVERRIDE not in msg.content:
             # "Non dire niente" applicato alla lettera: niente messaggio e
             # niente marcatore.
             return TurnOutcome.silent(final_text="")
         if not self._asked_to_warn(msg.content):
-            return TurnOutcome.silent(final_text="CHECK_FAILED: hps irraggiungibile")
+            return TurnOutcome.silent(final_text="CHECK_FAILED: pibox irraggiungibile")
         self.messages.append("Il controllo del server non riesce a partire da un po'.")
         return TurnOutcome.spoke_via_tool(
-            final_text="CHECK_FAILED: hps irraggiungibile\nCHECK_WARNED"
+            final_text="CHECK_FAILED: pibox irraggiungibile\nCHECK_WARNED"
         )
 
 
@@ -376,7 +376,7 @@ class _RepeatsItsOwnWarning(_FakeMonitorAgent):
         self.prompts.append(msg.content)
         if self.healthy:
             return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
-        final = "CHECK_FAILED: hps non raggiungibile"
+        final = "CHECK_FAILED: pibox non raggiungibile"
         if _ALREADY_WARNED in msg.content:
             return TurnOutcome.silent(final_text=final)
         if not self._asked_to_warn(msg.content) and not self.messages:
@@ -453,7 +453,7 @@ class _WarnsWithoutBeingAsked(_FakeMonitorAgent):
         self.prompts.append(msg.content)
         if self.healthy:
             return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
-        final = "CHECK_FAILED: hps non raggiungibile"
+        final = "CHECK_FAILED: pibox non raggiungibile"
         if _ALREADY_WARNED in msg.content:
             return TurnOutcome.silent(final_text=final)
         self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
@@ -473,7 +473,7 @@ class _WarnsAndNeverDeclaresIt(_FakeMonitorAgent):
         if self.healthy:
             return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
         self.messages.append("Il controllo delle piante non riesce a partire da un po'.")
-        return TurnOutcome.spoke_via_tool(final_text="CHECK_FAILED: hps non raggiungibile")
+        return TurnOutcome.spoke_via_tool(final_text="CHECK_FAILED: pibox non raggiungibile")
 
 
 class _ReportsAFindingAndAlsoFails(_FakeMonitorAgent):
@@ -492,7 +492,7 @@ class _ReportsAFindingAndAlsoFails(_FakeMonitorAgent):
         if self.healthy:
             return TurnOutcome.silent(final_text="Tutte le piante sopra il 15%.")
         self.messages.append("Basilico all'11%.")
-        return TurnOutcome.spoke_via_tool(final_text="CHECK_FAILED: hps non raggiungibile")
+        return TurnOutcome.spoke_via_tool(final_text="CHECK_FAILED: pibox non raggiungibile")
 
 
 class TestAMessageAboutSomethingElseDoesNotCountAsTheWarning:
@@ -748,7 +748,7 @@ class TestMarkerParsing:
     """Il marcatore è scritto da un modello: va letto con un po' di tolleranza."""
 
     def test_a_plain_marker_line_is_read_with_its_reason(self) -> None:
-        assert could_not_check_reason("CHECK_FAILED: hps unreachable") == "hps unreachable"
+        assert could_not_check_reason("CHECK_FAILED: pibox unreachable") == "pibox unreachable"
 
     def test_a_marker_at_the_end_of_a_longer_answer_still_counts(self) -> None:
         text = "Ho provato tre volte a leggere la sonda.\n\nCHECK_FAILED: timeout"
