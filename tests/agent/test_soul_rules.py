@@ -391,6 +391,37 @@ def test_saving_and_syncing_share_one_lock(tmp_path: Path) -> None:
     assert extract_rules((tmp_path / "SOUL.md").read_text(encoding="utf-8")) == RULES
 
 
+def test_the_sync_after_dream_waits_for_the_lock_too(tmp_path: Path) -> None:
+    """L'altra meta' della serratura (TD18 della terza revisione).
+
+    Il banco qui sopra prova che ``save_rules`` aspetta; nessuno provava che
+    aspettasse ``sync_soul``, la strada del loop dopo ogni passata di Dream:
+    togliere il suo ``with _SOUL_LOCK`` lasciava verde tutta la suite. Senza, la
+    sua lettura di ``SOUL.md`` puo' cadere in mezzo a un salvataggio e riscrivere
+    il file con la copia vecchia.
+    """
+    import threading
+
+    from jenny.agent import soul_rules
+
+    (tmp_path / "SOUL.md").write_text(SOUL, encoding="utf-8")
+    write_rules(tmp_path, RULES)
+    done = threading.Event()
+
+    def _sync() -> None:
+        sync_soul(tmp_path)
+        done.set()
+
+    with soul_rules._SOUL_LOCK:
+        worker = threading.Thread(target=_sync)
+        worker.start()
+        assert not done.wait(0.2), "la proiezione non ha aspettato la serratura"
+        assert extract_rules((tmp_path / "SOUL.md").read_text(encoding="utf-8")) == ""
+    worker.join(2)
+    assert done.is_set()
+    assert extract_rules((tmp_path / "SOUL.md").read_text(encoding="utf-8")) == RULES
+
+
 # ── Il gancio ───────────────────────────────────────────────────────────────
 
 
