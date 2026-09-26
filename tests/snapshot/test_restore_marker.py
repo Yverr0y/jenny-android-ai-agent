@@ -198,14 +198,39 @@ def test_a_fresh_safety_copy_of_an_old_workspace_is_kept(tmp_path: Path) -> None
     assert not stale.exists()
 
 
-def test_safety_dir_collision_gets_unique_suffix(tmp_path: Path) -> None:
-    """Se la safety dir esiste già, il vecchio workspace va in una dir con suffisso."""
+def test_a_restore_applied_days_after_staging_keeps_its_safety_copy(tmp_path: Path) -> None:
+    """La copia di sicurezza portava la data dello *staging*, non del restore: un
+    ripristino preparato e applicato al riavvio di dieci giorni dopo produceva
+    una copia gia' «vecchia», e la pulizia all'avvio la cancellava subito."""
+    import time
+
     _make_workspace(tmp_path)
     _make_staging(tmp_path)
     write_marker(tmp_path, source="backup_file")
-    marker = read_marker(tmp_path)
-    assert marker is not None
-    occupied = tmp_path / f"{SAFETY_DIR_PREFIX}{marker['created_at_ms']}"
+    marker_path = tmp_path / MARKER_FILE_NAME
+    marker = json.loads(marker_path.read_text("utf-8"))
+    marker["created_at_ms"] = int(time.time() * 1000) - 10 * 86_400_000
+    marker_path.write_text(json.dumps(marker), encoding="utf-8")
+
+    before_ms = int(time.time() * 1000)
+    assert apply_pending_restore(tmp_path) is True
+    assert sweep_safety_copies(tmp_path, max_age_days=7) == 0
+
+    (safety,) = tmp_path.glob(f"{SAFETY_DIR_PREFIX}*")
+    assert (safety / "SOUL.md").read_text("utf-8") == "attuale"
+    assert int(safety.name[len(SAFETY_DIR_PREFIX):].split("_")[0]) >= before_ms
+
+
+def test_safety_dir_collision_gets_unique_suffix(tmp_path: Path, monkeypatch) -> None:
+    """Se la safety dir esiste già, il vecchio workspace va in una dir con suffisso."""
+    from jenny.snapshot import restore_marker
+
+    _make_workspace(tmp_path)
+    _make_staging(tmp_path)
+    write_marker(tmp_path, source="backup_file")
+    clock = iter(range(1_000_000, 1_000_100))
+    monkeypatch.setattr(restore_marker, "_now_ms", lambda: next(clock))
+    occupied = tmp_path / f"{SAFETY_DIR_PREFIX}1000000"
     occupied.mkdir()
     (occupied / "estranea.txt").write_text("x", encoding="utf-8")
 

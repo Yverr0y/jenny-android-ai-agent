@@ -118,8 +118,12 @@ def _apply_pending_restore(runtime_root: Path) -> bool:
     workspace = runtime_root / "workspace"
     staged = runtime_root / STAGED_WORKSPACE_DIR_NAME
     staged_snapshots = runtime_root / STAGED_SNAPSHOTS_DIR_NAME
-    created_at = int(marker.get("created_at_ms") or _now_ms())
-    safety = runtime_root / f"{SAFETY_DIR_PREFIX}{created_at}"
+    # La copia di sicurezza porta l'istante del **ripristino**, non quello dello
+    # staging scritto nel marker: fra i due c'e' il riavvio, che puo' arrivare
+    # giorni dopo, e la pulizia all'avvio (``sweep_safety_copies``) data la copia
+    # dal nome — una copia nata col nome di dieci giorni prima spariva subito.
+    applied_at = _now_ms()
+    safety = runtime_root / f"{SAFETY_DIR_PREFIX}{applied_at}"
 
     if not staged.is_dir():
         if workspace.is_dir():
@@ -145,7 +149,7 @@ def _apply_pending_restore(runtime_root: Path) -> bool:
     # precedente l'aveva già fatta: workspace assente + staged presente).
     if workspace.is_dir():
         if safety.exists():
-            safety = runtime_root / f"{SAFETY_DIR_PREFIX}{created_at}_{_now_ms()}"
+            safety = runtime_root / f"{SAFETY_DIR_PREFIX}{applied_at}_{_now_ms()}"
         os.replace(workspace, safety)
 
     # Mossa 2: promuovi lo staging a workspace.
@@ -210,7 +214,7 @@ def _recover_from_safety(runtime_root: Path, workspace: Path) -> None:
 def _safety_copy_time_s(candidate: Path) -> float:
     """L'istante (epoch, secondi) del restore che ha prodotto *candidate*.
 
-    Dal nome, ``<prefisso><created_at_ms>[_<ms>]``, che scrive la mossa 1 di
+    Dal nome, ``<prefisso><ms del ripristino>[_<ms>]``, che scrive la mossa 1 di
     :func:`_apply_pending_restore`, e non dall'mtime: la copia e' il workspace
     **rinominato**, e il rename tiene l'mtime della cartella — l'ultima volta che
     nella sua radice si e' creato o tolto un file, magari mesi prima. Con l'mtime
