@@ -38,3 +38,32 @@ def test_dream_keys_never_collide_with_unified() -> None:
     key = MemoryStore.dream_session_key()
     assert key.startswith("dream:")
     assert key != UNIFIED_SESSION_KEY
+
+
+@pytest.mark.parametrize("chat_id", ["default", "altro-chat", "12345"])
+def test_mapping_a_chat_id_does_not_warn_about_an_unknown_key(chat_id: str) -> None:
+    """AC14 della terza revisione: un ``chat_id`` non e' una session key.
+
+    ``session_key_for_channel`` chiedeva a ``is_project_session_key`` se il
+    ``chat_id`` fosse un progetto, cioe' lo classificava come fosse una chiave di
+    sessione: ``"default"`` non sta in nessun vocabolario, e a ogni avvio usciva il
+    WARNING «session key 'default' is in no vocabulary».
+    """
+    from loguru import logger
+
+    from jenny.session import keys as keys_mod
+
+    keys_mod._UNCLASSIFIED_WARNED.discard(chat_id)
+    messages: list[str] = []
+    sink = logger.add(lambda m: messages.append(m.record["message"]), level="WARNING")
+    try:
+        assert session_key_for_channel("websocket", chat_id) == UNIFIED_SESSION_KEY
+    finally:
+        logger.remove(sink)
+    assert messages == []
+
+
+def test_a_webui_project_chat_id_still_opens_the_project() -> None:
+    assert session_key_for_channel("websocket", "project:orto") == "project:orto"
+    assert session_key_for_channel("telegram", "project:orto") == UNIFIED_SESSION_KEY
+    assert session_key_for_channel("websocket", "project:../fuori") == UNIFIED_SESSION_KEY
