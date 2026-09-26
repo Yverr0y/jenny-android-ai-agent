@@ -1024,6 +1024,7 @@
       "keyChange": "Cambia",
       "keySave": "Salva",
       "keySaved": "Chiave salvata",
+      "keyFailed": "Non sono riuscita a salvare la chiave.",
       "keyPlaceholder": "incolla qui la chiave",
       "restart": "Questo cambio vale dal prossimo avvio."
     },

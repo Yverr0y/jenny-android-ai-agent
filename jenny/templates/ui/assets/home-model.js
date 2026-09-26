@@ -222,8 +222,10 @@ export class HomeModel {
       this._loadModels(provider);
       showToast(i18n.t('home.model.keySaved'), 'success');
     } catch (err) {
+      /* Il motivo nel log, e a schermo una frase nella lingua di chi legge:
+         `err.message` era il testo inglese del server (HJ14). */
       console.warn('home.model: key not saved', err);
-      showToast(err?.message || i18n.t('home.model.failed'), 'error');
+      showToast(i18n.t('home.model.keyFailed'), 'error');
     }
   }
 

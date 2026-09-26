@@ -1021,6 +1021,7 @@
       "keyChange": "Replace",
       "keySave": "Save",
       "keySaved": "Key saved",
+      "keyFailed": "I couldn't save the key.",
       "keyPlaceholder": "paste the key here",
       "restart": "This change takes effect at the next start."
     },

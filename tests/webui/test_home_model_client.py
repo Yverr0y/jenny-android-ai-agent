@@ -479,6 +479,22 @@ def test_saving_an_empty_key_does_nothing() -> None:
     """)
 
 
+def test_a_key_that_is_not_saved_says_so_in_the_readers_language() -> None:
+    """Il toast diceva ``err.message``: il testo inglese del server, o
+    quello del client («Provider update failed: 500»), in una casa che parla
+    italiano (terza revisione, HJ14). Il motivo resta nel log."""
+    _run_js("""
+      console.warn = () => {};
+      const data = settings([{ name: 'groq', api_key_hint: '' }], 'groq', '');
+      const s = await room(data, { groq: { status: 'available', models: [] } });
+      brokenSave = true;
+      nodi['home-key-input'].value = 'gsk_una_chiave';
+      await s.saveKey();
+      assert.deepEqual(toasts, [[i18n.t('home.model.keyFailed'), 'error']]);
+      assert.notEqual(i18n.t('home.model.keyFailed'), 'home.model.keyFailed', 'la chiave i18n non c\u2019e\u2019');
+    """)
+
+
 def test_a_new_key_makes_the_catalogue_be_asked_again() -> None:
     """Una chiave appena messa puo' essere **esattamente** la ragione per cui
     l'elenco era vuoto."""
