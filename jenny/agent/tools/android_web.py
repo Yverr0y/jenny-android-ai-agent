@@ -509,9 +509,10 @@ class AndroidWebFetchTool(AndroidWebGateMixin, Tool):
         extract_mode = kwargs.pop("extractMode", extract_mode)
         max_chars = kwargs.pop("maxChars", max_chars) or self.max_chars
 
-        from jenny.security.network import validate_url_target
+        from jenny.security.network import validate_url_target_async
 
-        is_valid, error_msg = validate_url_target(url)
+        # Fuori dal loop: la validazione risolve il nome (CF9/TL11).
+        is_valid, error_msg = await validate_url_target_async(url)
         if not is_valid:
             return json.dumps(
                 {"error": f"URL validation failed: {error_msg}", "url": url},
@@ -570,7 +571,7 @@ class AndroidWebFetchTool(AndroidWebGateMixin, Tool):
         # WebView from having already made that request. A real fix needs a
         # Kotlin-side WebViewClient.shouldOverrideUrlLoading/
         # shouldInterceptRequest hook that re-validates each navigation.
-        final_ok, final_error = validate_url_target(final_url)
+        final_ok, final_error = await validate_url_target_async(final_url)
         if not final_ok:
             logger.warning(
                 "Android web_fetch: finalUrl {} failed post-fetch SSRF check: {}",

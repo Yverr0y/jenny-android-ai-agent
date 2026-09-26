@@ -9,6 +9,7 @@ to a blocked address.
 
 from __future__ import annotations
 
+import asyncio
 from urllib.parse import quote
 
 import httpx
@@ -88,7 +89,7 @@ async def execute_http_action(
             status=501,
         )
 
-    ok, error = validate_app_server_target(url)
+    ok, error = await asyncio.to_thread(validate_app_server_target, url)  # DNS fuori dal loop
     if not ok:
         raise HttpActionError(f"blocked server target: {error}", status=403)
 

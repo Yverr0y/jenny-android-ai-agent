@@ -16,6 +16,7 @@ scope a parte costringe a nominarlo esplicitamente per concederlo.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -194,6 +195,12 @@ class _SshToolMixin:
     def create(cls, ctx: Any) -> Any:
         return cls()
 
+    async def _resolve_off_loop(self, alias: str) -> tuple[Any, Any, Any]:
+        """:meth:`_resolve` in un thread: rilegge la config e risolve il nome
+        dell'host (``validate_ssh_target`` → ``getaddrinfo``), entrambi
+        bloccanti. Sul loop un DNS lento fermava tutto il gateway (CF9/TL11)."""
+        return await asyncio.to_thread(self._resolve, alias)
+
     def _resolve(self, alias: str) -> tuple[Any, Any, Any]:
         """``alias`` → ``(config ssh, config host, target)``, da config **fresca**.
 
@@ -317,7 +324,7 @@ class SshExecTool(_SshToolMixin, Tool):
         if not command:
             return "Error: command is empty."
         try:
-            ssh_cfg, _host_cfg, target = self._resolve(host)
+            ssh_cfg, _host_cfg, target = await self._resolve_off_loop(host)
         except SshError as exc:
             return _describe(exc)
 
@@ -451,7 +458,7 @@ class SshJobTool(_SshToolMixin, Tool):
             return f"Error: action={action} needs the job_id returned by action=start."
 
         try:
-            ssh_cfg, host_cfg, target = self._resolve(host)
+            ssh_cfg, host_cfg, target = await self._resolve_off_loop(host)
         except SshError as exc:
             return _describe(exc)
         backend = get_ssh_backend()
@@ -568,7 +575,7 @@ class SshTransferTool(_SshToolMixin, Tool):
             return f"Error: {exc}"
 
         try:
-            ssh_cfg, _host_cfg, target = self._resolve(host)
+            ssh_cfg, _host_cfg, target = await self._resolve_off_loop(host)
         except SshError as exc:
             return _describe(exc)
         backend = get_ssh_backend()

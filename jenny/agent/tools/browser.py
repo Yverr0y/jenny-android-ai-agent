@@ -479,9 +479,10 @@ class BrowserOpenTool(_BrowserToolBase):
 
     async def execute(self, url: str, filter: str = "", **kwargs: Any) -> Any:
         url = url.strip(" \t\r\n`\"'")
-        from jenny.security.network import validate_url_target
+        from jenny.security.network import validate_url_target_async
 
-        ok, err = validate_url_target(url)
+        # Fuori dal loop: la validazione risolve il nome (CF9/TL11).
+        ok, err = await validate_url_target_async(url)
         if not ok:
             return f"Error: URL validation failed: {err}"
 

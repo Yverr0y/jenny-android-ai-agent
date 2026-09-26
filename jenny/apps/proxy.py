@@ -111,7 +111,7 @@ class AppViewProxy:
 
     async def start(self) -> str:
         """Valida il target, apre il listener, torna l'URL d'ingresso."""
-        ok, error = validate_app_server_target(self.base_url)
+        ok, error = await asyncio.to_thread(validate_app_server_target, self.base_url)  # DNS fuori dal loop
         if not ok:
             raise AppViewProxyError(f"blocked server target: {error}")
 

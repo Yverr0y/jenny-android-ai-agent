@@ -24,6 +24,7 @@ all'avvio, e questo si porta dietro ``httpx``.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
@@ -66,7 +67,9 @@ async def open_validated_stream(
     for _ in range(MAX_REDIRECTS + 1):
         if https_only and not current.lower().startswith("https://"):
             raise ValueError("the URL must be https")
-        ok, error = check(current)
+        # In un thread: il validatore risolve il nome, e ``getaddrinfo`` sul
+        # loop fermava il gateway per tutta la durata del DNS (CF9).
+        ok, error = await asyncio.to_thread(check, current)
         if not ok:
             raise ValueError(f"URL blocked: {error}")
         # ``headers=None`` e' il default di ``httpx``: passarlo sempre e' lo stesso
