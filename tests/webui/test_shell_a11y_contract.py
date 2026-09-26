@@ -246,3 +246,28 @@ def test_the_dock_button_wears_no_default_dress() -> None:
     body = re.search(r"\n\.dock-item \{([^}]*)\}", css).group(1)
     for decl in ("border: none", "background: none", "font: inherit", "margin: 0"):
         assert decl in body, decl
+
+
+# ── CS11: il FAB nascosto fuori dal Tab ─────────────────────────────────────
+
+
+def _css_rule(css: str, selector: str) -> str:
+    m = re.search(r"\n" + re.escape(selector) + r" \{([^}]*)\}", css)
+    assert m, selector
+    return m.group(1)
+
+
+def test_the_hidden_scroll_button_is_out_of_the_tab_order() -> None:
+    """A opacita' 0 il bottone «Vai in fondo» restava raggiungibile: misurato
+    con Shift+Tab dal campo in Chrome, il fuoco ci si fermava sopra senza
+    mostrare niente. `visibility: hidden` lo toglie; la transizione la fa
+    scattare dopo la dissolvenza, non prima."""
+    css = (ASSETS / "mobile-style.css").read_text(encoding="utf-8")
+    hidden = _css_rule(css, ".chat-scroll-fab")
+    shown = _css_rule(css, ".chat-scroll-fab.visible")
+    assert "opacity: 0;" in hidden and "visibility: hidden;" in hidden
+    assert re.search(r"transition:[^;]*visibility 0s linear 0\.15s", hidden), (
+        "senza il ritardo la dissolvenza in uscita non si vede piu'"
+    )
+    assert "visibility: visible;" in shown
+    assert re.search(r"transition:[^;]*visibility 0s[;,]", shown)

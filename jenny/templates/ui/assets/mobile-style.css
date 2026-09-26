@@ -1533,12 +1533,19 @@ body {
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  /* Nascosto davvero, non solo trasparente: a opacita' 0 restava nell'ordine
+     del Tab, e la tastiera fisica ci si fermava sopra senza mostrare niente
+     (CS11 della terza revisione). `visibility` scatta **dopo** la dissolvenza
+     quando sparisce (ritardo 0,15s) e subito quando compare. */
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
 }
 .chat-scroll-fab.visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+  visibility: visible;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s;
 }
 .chat-scroll-fab-badge {
   position: absolute;
