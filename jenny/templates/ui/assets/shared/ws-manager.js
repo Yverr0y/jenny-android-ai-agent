@@ -143,19 +143,30 @@ class WebSocketManager extends EventTarget {
   }
 
   /** Smette di seguire una conversazione: la toglie dall'elenco che viene
-   *  ri-attaccato a ogni reconnect.
+   *  ri-attaccato a ogni reconnect e, se e' un quaderno, lo dice al gateway.
    *
-   *  **Non è una detach lato server, e non può esserlo**: il gateway conosce
-   *  solo `attach` (v. `WebSocketChannel._dispatch_envelope`), e ogni nuova
-   *  connessione parte comunque iscritta alla chat personale. Quindi la
-   *  connessione aperta continua a ricevere i frame della chat lasciata, e a
-   *  decidere che non vanno resi è il filtro sul `chat_id` in chi li consuma —
-   *  questo serve solo a non far crescere `knownChats` per sempre, che dopo
-   *  qualche cambio di progetto significava ri-attaccare (e quindi ri-ricevere)
-   *  ogni conversazione mai aperta.
+   *  **Una detach lato server, dal 26/09/2026** (HJ17 della terza revisione).
+   *  Prima il gateway conosceva solo `attach`, e la connessione aperta
+   *  continuava a ricevere i frame di ogni quaderno lasciato — il lavoro di
+   *  un turno in un altro progetto, spedito a una vista che lo buttava. Ora
+   *  il frame `detach` ha la forma dell'`attach` (`chat_id` com'e' sul filo,
+   *  v. `chatIdOf`), e il gateway risponde `{"event": "detached", …}` in modo
+   *  idempotente: qui non lo si aspetta, perche' l'elenco locale e' gia'
+   *  aggiornato, e un socket che cade prima della risposta riparte dai soli
+   *  `knownChats`, cioe' senza la chat lasciata.
+   *
+   *  **La chat personale non si stacca mai**: ogni connessione nuova ci parte
+   *  iscritta, ed e' li' che arrivano gli avvisi proattivi anche mentre si
+   *  guarda un quaderno. Il filtro sul `chat_id` in chi consuma i frame resta
+   *  comunque il cancello che decide cosa rendere.
    */
   detachChat(chatId) {
-    this.knownChats.delete(chatIdOf(chatId));
+    const clean = chatIdOf(chatId);
+    this.knownChats.delete(clean);
+    if (!clean || !clean.startsWith('project:')) return;
+    if (this.chatWs?.readyState === WebSocket.OPEN) {
+      this.chatWs.send(JSON.stringify({ type: 'detach', chat_id: clean }));
+    }
   }
 
   sendToChat(chatId, text, media = []) {
