@@ -125,8 +125,8 @@ up in a commit.
 
 The two summaries are one-liners shown inside the app when the update is offered — write them
 for the person holding the phone, not for the changelog. Both are required: Jenny picks one
-according to **her configured language** (Settings → language, i.e. `agents.defaults.language`),
-not the device locale, and falls back to `summary_en` if the matching one is missing. Anything
+according to **her configured language** (`agents.defaults.language`, written once by onboarding
+from the phone's language; there is no setting for it), not the current device locale, and falls back to `summary_en` if the matching one is missing. Anything
 past 400 characters is truncated, so keep them to a line.
 
 ### 4. Publish
@@ -175,11 +175,12 @@ brought up again for that version, however the user answers. If `updates.notifyI
 step is skipped entirely and nothing is recorded, so turning it back on still gets the
 announcement.
 
-**A badge in Settings.** The version row grows a *New* pill (*Security* when the release is
-`critical`), a line with your summary, a *What changed* link to `notes_url`, and an *Install now*
-button. This is not a second check — it reads the same cached result the scheduled check wrote —
-but it is the part that survives a missed message, and it is where a user who said "later" comes
-back to.
+**The Updates page.** On the home's Settings page the **Updates** row changes to
+`<installed> → <new>`, and the Updates page it opens names the new version (in words that call it
+a security update when the release is `critical`), with a line with your summary, a *What
+changed* link to `notes_url`, and an *Install now* button. This is not a second check — it reads
+the same cached result the scheduled check wrote — but it is the part that survives a missed
+message, and it is where a user who said "later" comes back to.
 
 **Two tools.** The user can ask in chat: `update_status` reports what is available and how far an
 installation has got, and `install_update` starts one — only after they have explicitly asked for
@@ -308,8 +309,8 @@ Be clear about what this does and does not do:
 - **It does not roll back.** There is no way to push an older `versionCode`; Android will not
   install it.
 - **It does not unsay the announcement.** A device that was already told about `0.7.0` in chat
-  has that recorded, permanently, for that version. Withdrawing the manifest makes the Settings
-  badge and the *Install now* button disappear at the next check, but nobody gets a retraction —
+  has that recorded, permanently, for that version. Withdrawing the manifest makes the Updates
+  row's new version and the *Install now* button disappear at the next check, but nobody gets a retraction —
   and if you later re-widen the same version, those devices will not be told a second time. If you
   need to tell people something, that is a message you send, not a manifest edit.
 
@@ -332,7 +333,8 @@ Concretely, it does four things:
   exception is `rollout: 0`, the [kill switch](#the-kill-switch), which stops critical releases
   too — that is a deliberate stop, not a wave.
 - Jenny is told to say plainly that it is a security update, instead of describing a new version.
-- The Settings badge reads *Security* instead of *New*, and the notice is styled to match.
+- The Updates page calls it a security update instead of a new version, and the *Install now*
+  button is styled to match.
 - A system notification is posted, so the announcement lands even if nobody had the chat open.
 
 It is still not a forced install. `critical` changes how insistently Jenny asks and who gets
@@ -380,4 +382,4 @@ ever looked at, so they belong on this page.
 | `enabled` | Whether the `update_check` job is registered at all. Off means the device never fetches the manifest and never learns a new version exists. Default `true`. |
 | `manifestUrl` | Where to look. Defaults to the `releases/latest/download/latest.json` URL above; override it to point a device at a staging manifest. |
 | `checkIntervalH` | Hours between checks, 1–168. Default `24`. Read once at startup, so a change needs a gateway restart. |
-| `notifyInChat` | Whether a new version opens a message in chat. Off leaves the Settings badge as the only signal — the check still runs. Default `true`. |
+| `notifyInChat` | Whether a new version opens a message in chat. Off leaves the Updates row and page as the only signal — the check still runs. Default `true`. |

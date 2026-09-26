@@ -85,19 +85,19 @@ The outcome message distinguishes the ways a pass can do nothing — nothing new
 
 ## Setting the periodic pass
 
-Everything about the automatic pass is in **Settings → Wiki and projects**: whether it runs, how often it looks, how much silence it needs in that project's conversation, how long before it comes back to the same project — and, in the same section, whether an idle project's chat history is archived.
+Everything about the automatic pass is in the workshop's **Memory** drawer, in the **Gardener** group (the workshop opens from the bottom of the home's Settings page): whether it runs, how often it looks, how much silence it needs in that project's conversation, how long before it comes back to the same project — and, in the same group under *Project history*, whether an idle project's chat history is archived. See [Settings](../reference/settings.md#gardener).
 
 Each control says what the value changes, and the numbers carry the ranges the schema enforces, so the field cannot offer one and the server refuse another. Every write goes through the config write funnel: a value you set is read back and kept, and setting a value to what it already is does not rewrite `config.json` at all. Turning the pass on or off, and changing the interval, re-arm the periodic job immediately — no restart.
 
 ## Turning it off
 
-The switch in **Settings → Wiki and projects**, and it applies live: the periodic pass stops looking. `/gardener` still works by hand from inside a project, so turning it off is not the same as losing the feature; turning it back on re-arms the job without a restart, even if the gateway started with it off.
+The **Periodic pass** switch in **Memory** → **Gardener**, and it applies live: the periodic pass stops looking. `/gardener` still works by hand from inside a project, so turning it off is not the same as losing the feature; turning it back on re-arms the job without a restart, even if the gateway started with it off.
 
 Turning the gardener off does **not** turn off capture: journal lines keep being written by the conversation itself, and they simply wait until a pass — periodic or manual — reads them. Capture is governed by the Writes/Read-only switch, not by this.
 
 ## Configuration reference
 
-Under `agents.defaults.gardener` in `config.json`, all four settable from **Settings → Wiki and projects**:
+Under `agents.defaults.gardener` in `config.json`, all four settable from **Memory** → **Gardener** in the workshop:
 
 | Key | Meaning | Default | Range |
 |---|---|---|---|

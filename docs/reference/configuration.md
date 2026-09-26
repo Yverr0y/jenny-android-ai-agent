@@ -393,7 +393,7 @@ The floating mascot: Jenny above your other apps. Tap her and a text field opens
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `floating.enabled` | bool | `false` | Whether the window exists. Off by default because switching it on needs Android's `SYSTEM_ALERT_WINDOW`, granted on a system screen — a default of `true` would promise a window Android wouldn't open. The switch lives in **Settings → Personalisation** and applies immediately, without restarting the app. |
+| `floating.enabled` | bool | `false` | Whether the window exists. Off by default because switching it on needs Android's `SYSTEM_ALERT_WINDOW`, granted on a system screen — a default of `true` would promise a window Android wouldn't open. The switch is **Floating mascot**, on the home's **Settings → Jenny** page, and applies immediately, without restarting the app. |
 | `floating.replyHoldS` | int 5–120 | `20` | Seconds the bubble stays up after a reply before the mascot goes back to resting. Not a reading time — whoever just wrote the question is watching — but how long a forgotten reply may sit on top of someone else's app. Typing resets the countdown. |
 
 She hides herself whenever Jenny's own UI is in the foreground: this app is the phone's launcher, and the home screen already has a mascot in it. The window lives inside the gateway service and is destroyed with it, so it can never sit there with no agent behind it. See [Android permissions](android-permissions.md#requested-permissions) for what the overlay permission does and does not allow.

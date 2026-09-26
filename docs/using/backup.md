@@ -15,7 +15,7 @@ Jenny keeps two independent safety nets for your workspace: automatic local snap
 
 If you only care about undoing something Jenny (or you) did to a file, snapshots already cover you. If you want to survive an uninstall, a phone upgrade, or a debug-to-release signature change, you need to export a `.jbk` backup and move it off the device.
 
-Both live under **Settings → Backup & restore** (see the [Settings reference](../reference/settings.md)).
+Exporting and restoring from a file are on the home's **Settings → Backup** page. The local snapshots are browsed in the workshop, under **Memory → Local history**. See the [Settings reference](../reference/settings.md#backup).
 
 ## Encrypted backup (.jbk)
 
@@ -25,7 +25,7 @@ This is disaster recovery: a single file containing your whole workspace — mem
 
 ### Exporting
 
-1. Open **Settings → Backup & restore** and tap **Export encrypted backup**.
+1. Open **Settings → Backup** and tap **Export a backup**.
 2. Choose a passphrase and type it twice to confirm.
 3. Jenny takes a `pre-export` snapshot, encrypts everything, and hands the file to Android's Storage Access Framework (SAF) "save as" picker — you can save it to Google Drive, an SD card, or any location the picker offers. No storage permission is requested; SAF handles it.
 4. The suggested filename is `jenny-backup-YYYYMMDD-HHMMSS.jbk`.
@@ -39,12 +39,11 @@ The export/import picker uses Android's standard document APIs, so Drive should 
 
 ### Importing
 
-1. From **Settings → Backup & restore**, tap **Restore from file** (worded as "Restore from backup" during onboarding — see below).
+1. From **Settings → Backup**, tap **Restore from a file** (worded as "Restore from backup" during onboarding — see below).
 2. Pick the `.jbk` file with Android's file picker. The picker has no MIME filter for `.jbk` (it isn't a registered file type), so it shows up as a generic file — just pick it by name.
-3. Enter the passphrase.
-4. Confirm the warning: *"Restoring will replace ALL of Jenny's current data with the backup. Continue?"* This is not a merge of your current workspace and the backup — it's a full replacement.
-5. Jenny decrypts and validates the backup first, **then** takes a `pre-restore` snapshot of your **current** state, and finally shows a non-cancellable **"Restore ready"** dialog with a single **Restart now** button. You cannot back out of this dialog with the Android back button.
-6. Tapping Restart now kills and relaunches the app. The actual workspace swap happens at that restart, not before — the app restarts itself to do the swap cleanly.
+3. Enter the passphrase. There is no separate confirmation after this: the warning is the note under the button, *"Replaces everything there is now with what's in the file, and restarts Jenny."* This is not a merge of your current workspace and the backup — it's a full replacement.
+4. Jenny decrypts and validates the backup first, **then** takes a `pre-restore` snapshot of your **current** state, and finally shows a non-cancellable **"Restore ready"** dialog with a single **Restart now** button. You cannot back out of this dialog with the Android back button.
+5. Tapping Restart now kills and relaunches the app. The actual workspace swap happens at that restart, not before — the app restarts itself to do the swap cleanly.
 
 What actually gets replaced: the whole workspace tree is swapped for the one in the backup — and only the workspace tree, which is why the SSH key directory next to it is neither replaced nor restored. Your current workspace isn't deleted immediately — it's kept as an internal safety copy for 7 days in case something goes wrong, but that copy is not reachable from the UI; it exists purely as an emergency recovery mechanism, not something you can browse or restore from yourself.
 
@@ -63,16 +62,16 @@ Whether restoring during onboarding skips the rest of the setup wizard on the ne
 
 ### After a restore, SSH is not restored
 
-A restore replaces the workspace. Your registered hosts live in `config.json` inside the workspace, so they all come back: aliases, addresses, usernames, descriptions, and the fingerprint strings shown in Settings. The private keys and `known_hosts` do not — they were never in the backup, because they sit outside the workspace. Nothing in the restore touches `<filesDir>/ssh` either way.
+A restore replaces the workspace. Your registered hosts live in `config.json` inside the workspace, so they all come back: aliases, addresses, usernames, descriptions, and the fingerprint strings shown in the workshop. The private keys and `known_hosts` do not — they were never in the backup, because they sit outside the workspace. Nothing in the restore touches `<filesDir>/ssh` either way.
 
 What that means depends on where you restore:
 
 - **Same device, app still installed** (a restore to undo a bad state): the key directory was never removed, so SSH keeps working. Nothing to do.
-- **New phone, or after an uninstall/reinstall** (the case backups exist for): the key directory is empty. Settings shows the full host list, but every SSH call fails.
+- **New phone, or after an uninstall/reinstall** (the case backups exist for): the key directory is empty. The workshop shows the full host list, but every SSH call fails.
 
-Since 0.6.6 **Settings → SSH** says so instead of leaving you to work it out: any host whose fingerprint is recorded in `config.json` but no longer pinned in `known_hosts` is named in a notice explaining that keys and fingerprints are not in the backup by design. That combination only happens to a host you had already verified, so a host you simply never finished setting up is not flagged. Export and import themselves still say nothing.
+Since 0.6.6 the **SSH** group in the workshop's **Hands** drawer says so instead of leaving you to work it out: any host whose fingerprint is recorded in `config.json` but no longer pinned in `known_hosts` is named in a notice explaining that keys and fingerprints are not in the backup by design. That combination only happens to a host you had already verified, so a host you simply never finished setting up is not flagged. Export and import themselves still say nothing.
 
-The fix is manual and per host: open **Settings → SSH**, tap **Generate key** on each host, copy the new public line into that server's `~/.ssh/authorized_keys`, and then **Verify fingerprint** again to re-pin the host key. Password hosts are the exception — the password is stored in `config.json`, so it comes back with the workspace and only the fingerprint needs re-accepting.
+The fix is manual and per host: open **Hands → SSH** in the workshop, tap each host and then **Generate key**, copy the new public line into that server's `~/.ssh/authorized_keys`, and then **Verify fingerprint** again to re-pin the host key. Password hosts are the exception — the password is stored in `config.json`, so it comes back with the workspace and only the fingerprint needs re-accepting.
 
 The remote job registry is also left behind on purpose: `.jenny/ssh_jobs/**` is excluded from snapshots and backups (see below), so pending `ssh_job` entries do not survive a restore.
 
@@ -89,7 +88,7 @@ Snapshots are an automatic, content-addressed version history of your workspace.
 | App shutdown | Every time the app closes |
 | Before memory consolidation | Right before each Dream run |
 | Before export / before restore | Automatically, as described above (`pre-export`, `pre-restore`) |
-| Manual | Tap **Create snapshot now** in Settings |
+| Manual | Tap **Create snapshot now** in the workshop's **Memory → Local history** panel |
 
 If nothing changed since the last snapshot, no new one is created — you get a **"No changes since the last snapshot"** toast instead of a duplicate entry.
 
@@ -97,7 +96,7 @@ If nothing changed since the last snapshot, no new one is created — you get a 
 
 - The most recent **20 snapshots are always kept**, no matter how old.
 - Beyond 30 days, history thins out to roughly one snapshot per day.
-- Beyond that, the default horizon is **forever** — nothing is deleted purely on age. You can change this in Settings under **Keep history for**: 1 week, 1 month, 1 year, or Forever.
+- Beyond that, the default horizon is **forever** — nothing is deleted purely on age. You can change this in the same panel under **Keep history for**: 1 week, 1 month, 1 year, or Forever.
 
 **Changing the retention setting prunes old snapshots immediately, and that pruning is permanent.** Dialing the horizon down from Forever to 1 week doesn't just change future behavior — it deletes everything older than a week right away. There's no undo.
 
@@ -111,7 +110,7 @@ And, as covered above, the SSH key directory is outside the workspace entirely, 
 
 ### Restoring from a snapshot
 
-Tap any entry in the **Local history** list in Settings. You'll be asked to confirm: *"Bring Jenny back to its state from {date}? A snapshot of the current state is saved first, so you can undo this."* Like the `.jbk` import, this applies at the next app restart, and — because the snapshot history lives outside the workspace — a restore from a snapshot is always reversible: you can always step forward again afterward.
+Open **Memory → Local history** in the workshop and tap any entry in the list. You'll be asked to confirm: *"Bring Jenny back to its state from {date}? A snapshot of the current state is saved first, so you can undo this."* Like the `.jbk` import, this applies at the next app restart, and — because the snapshot history lives outside the workspace — a restore from a snapshot is always reversible: you can always step forward again afterward.
 
 ## APK updates, uninstalling, and signature mismatches
 

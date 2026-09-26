@@ -88,7 +88,7 @@ If your gateway seems to ignore a `config.json` you carefully placed by hand, ch
 
 You don't need to create `config.json` yourself before starting the gateway. `ensure_minimal_config()` runs on every `run_gateway()` call and, if no config exists yet, writes a minimal one at `<data_dir>/workspace/config.json` with `gateway.host` set to `127.0.0.1` and a freshly generated `websocket.token_issue_secret` (used to authenticate the WebUI over HTTP/WebSocket). This is idempotent — it never overwrites an existing config.
 
-The gateway starts fine even with **no LLM provider configured at all** — it logs a warning and waits for one to be added. To actually get responses out of it, add a `providers.providers` entry and a `modelPresets` entry to the generated `config.json` afterward (see [Providers and models](../reference/providers.md) for the field-by-field format), then restart the process — config changes made by hand to the file (as opposed to through the WebUI's Settings) require a restart to take effect.
+The gateway starts fine even with **no LLM provider configured at all** — it logs a warning and waits for one to be added. To actually get responses out of it, add a `providers.providers` entry and a `modelPresets` entry to the generated `config.json` afterward (see [Providers and models](../reference/providers.md) for the field-by-field format), then restart the process — config changes made by hand to the file (as opposed to through the WebUI, from the home's Settings or the workshop) require a restart to take effect.
 
 ### Talking to the local gateway
 

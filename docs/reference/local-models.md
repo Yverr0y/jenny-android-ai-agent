@@ -73,7 +73,7 @@ Before this split, every path shared the 90 s stall timeout, so a local 3B never
 
 ## Configuring it
 
-Same provider entry shape as any other `openai_compat` provider — via Settings → Model → API keys, or directly in `config.json`:
+Same provider entry shape as any other `openai_compat` provider — via **Add provider** in the workshop's **Brain → Brands** group (Format *OpenAI Compatible*), or directly in `config.json`:
 
 ```json
 {

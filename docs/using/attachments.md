@@ -36,7 +36,7 @@ Attaching a file doesn't mean the model reads all of it, all the time — Jenny 
 
 This inline-extraction behavior is controlled by the `extractDocumentText` config key, which defaults to **false** (the on-demand-reference behavior above). Setting it to `true` switches to a legacy mode that force-extracts text from documents up to 50 MB instead of skipping straight to a reference above 512 KB — but the 200,000-character cap on extracted text still applies either way; this key is config-only today, there's no UI toggle for it — see [Configuration](../reference/configuration.md).
 
-If the active model doesn't support vision, Jenny drops the attached images and retries with text only, then appends a visible warning to its reply so it doesn't look like the attachment was silently ignored. As of this writing that warning string is hardcoded in Italian in the backend regardless of your UI language setting:
+If the active model doesn't support vision, Jenny drops the attached images and retries with text only, then appends a visible warning to its reply so it doesn't look like the attachment was silently ignored. As of this writing that warning string is hardcoded in Italian in the backend, whatever the phone's language (which the interface follows):
 
 > ⚠️ Le immagini allegate non sono state elaborate: il modello attivo non supporta input visivi.
 

@@ -43,7 +43,7 @@ All server-side command responses below are **hardcoded in English**, regardless
 
 Two more, `/tidy` and `/init`, appear in the chip and in `/help` but are not in the list above because they are not commands in the same sense: inside a [project](./projects.md) each is expanded into an ordinary agent turn — one restructures that project's wiki, the other writes its `AGENTS.md`. Outside a project they are refused like any other project command.
 
-**The knobs are not here.** Dream's budgets and review cadence, and everything about the periodic gardener pass, used to be arguments of `/dream` and `/gardener`. They are settings, so they live in **Settings** — under *Memory* and *Wiki and projects* — next to the numbers they act on. Typing the old form answers with where it went.
+**The knobs are not here.** Dream's budgets and review cadence, and everything about the periodic gardener pass, used to be arguments of `/dream` and `/gardener`. They are settings, so they live in the workshop's **Memory** drawer — in the *Dream* and *Gardener* groups — next to the numbers they act on. Typing the old form answers with where it went.
 
 Full details and exact output text for each command follow.
 
@@ -200,7 +200,7 @@ Dream failed after 4.2s: <error>
 
 If there's no new history to process yet (common on a fresh or short chat, since Dream only reads from `memory/history.jsonl`, which is only populated after compaction), you get a longer explanation instead, ending with suggestions like enabling `idleCompactAfterMinutes`. See [Memory and Dream](./memory.md) for the full model.
 
-The command takes no arguments. The three file budgets, the review cadence, and Dream's own schedule are in **Settings → Memory**, which also shows what each file currently measures — the number the budget is chosen from. `/dream budget …` answers with a line saying so.
+The command takes no arguments. The three file budgets, the review cadence, and Dream's own schedule are in the workshop's **Memory** drawer (*How much she remembers* and *Dream*), which also shows what each file currently measures — the number the budget is chosen from. `/dream budget …` answers with a line saying so.
 
 ### `/gardener` — run a gardener pass on this project
 
@@ -208,7 +208,7 @@ Inside a [project](./projects.md), `/gardener` runs one [gardener](./gardener.md
 
 Outside a project it is refused, and the refusal says to open one. There is no way to garden a project from the personal chat: that is deliberate, and it matches the tool layer, where the journal has no argument for reaching another project either.
 
-The periodic pass — whether it runs at all, how often it looks, how much silence it waits for, how long before it returns to the same project — is in **Settings → Wiki and projects**. Turning it off there leaves `/gardener` working by hand. `/gardener settings` and the other old words answer with a line saying where they went.
+The periodic pass — whether it runs at all, how often it looks, how much silence it waits for, how long before it returns to the same project — is in the workshop's **Memory** drawer, in the *Gardener* group. Turning it off there leaves `/gardener` working by hand. `/gardener settings` and the other old words answer with a line saying where they went.
 
 ### `/tidy` — restructure this project's wiki
 

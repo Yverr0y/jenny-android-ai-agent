@@ -18,7 +18,7 @@ On the home's **Jenny** page, **Her name** and **The rules you gave her** are di
 Most controls take effect the moment you use them. These ask you to confirm first:
 
 - **Deleting a provider.**
-- **Restoring from a backup file**, and **restoring a local snapshot**.
+- **Restoring a local snapshot.** Restoring from a backup file asks for no confirmation beyond the file picker and the passphrase; the note under the button says it replaces everything.
 - **Unpairing Telegram.**
 - **Deleting a scheduled job.**
 - **Regenerating an SSH key**, because it revokes the access already installed on the server.

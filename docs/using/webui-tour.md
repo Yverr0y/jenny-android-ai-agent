@@ -66,9 +66,9 @@ A row of four icons pinned to the bottom of the screen switches between the work
 | Icon | Tab | What it is |
 |---|---|---|
 | ✿ | **Console** | The conversation with Jenny, with everything under it on show: thoughts, tool calls, timings. See [Chat basics](chat.md). |
-| brain | **Brain** | Which brands exist, which model she thinks with, the generation parameters, and what the phone lets her do while the screen is off. |
-| hand | **Hands** | What she can do and with which permissions — web, location, SSH, Telegram, skills, mini-apps — and the jobs that start by themselves. |
-| database | **Memory** | What she remembers: the three memory files and their caps, Dream and the gardener that fill them, the workspace files, the local snapshot history. |
+| brain | **Brain** | Which brands exist, which model she thinks with, the generation parameters, what the phone lets her do while the screen is off, and the app version with the token usage. |
+| hand | **Hands** | What she can do and with which permissions — web search, location, SSH, Telegram, skills — and the jobs that start by themselves. |
+| database | **Memory** | What she remembers: the three memory files and their caps, Dream that fills them, the gardener that fills the notebooks, the workspace files, the local snapshot history. |
 
 A fifth tab, **Setup**, exists in the same dock but stays hidden once onboarding is complete — it only appears during first run, when it also disables the other four tabs so you can't wander off mid-wizard. See [First run](../start/first-run.md).
 
