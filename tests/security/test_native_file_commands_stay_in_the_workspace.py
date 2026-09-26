@@ -15,6 +15,7 @@ espone solo ``workspace/`` e il temporaneo della fotocamera.
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -45,8 +46,29 @@ def test_config_json_is_refused_inside_the_workspace() -> None:
     assert body.index("isWorkspaceSecret(") < body.index("return canonical")
     src = read_source("MainActivity")
     secret = src[src.index("private fun isWorkspaceSecret(") :].split("\n\n", 1)[0]
-    assert "file.parentFile == workspace" in secret
-    assert 'file.name.startsWith("config.json")' in secret, "anche .bak e i temporanei"
+    assert "file.parentFile != workspace) return false" in secret
+    assert 'name.startsWith("config.json")' in secret, "anche .bak e i temporanei"
+
+
+def test_the_quarantined_copy_of_a_broken_config_is_refused_too() -> None:
+    """Il loader mette da parte un ``config.json`` illeggibile come
+    ``config.corrupt-<data>.json``, con le stesse chiavi: il nome non comincia
+    con ``config.json``, e il recinto deve riconoscerlo lo stesso."""
+    src = read_source("MainActivity")
+    secret = src[src.index("private fun isWorkspaceSecret(") :].split("\n\n", 1)[0]
+    prefixes = re.findall(r'name\.startsWith\("([^"]+)"\)', secret)
+    loader = (Path(__file__).resolve().parents[2] / "jenny/config/loader.py").read_text(
+        encoding="utf-8"
+    )
+    assert '{path.stem}.corrupt-{stamp}{path.suffix}' in loader, "il nome della quarantena e' cambiato"
+    names = [
+        "config.json", "config.json.bak", "config.json.0123abcd.tmp",
+        "config.corrupt-20260927T010203Z.json", "config.json.corrupt-20260927T010203Z.bak",
+    ]
+    for name in names:
+        assert any(name.startswith(p) for p in prefixes), (name, prefixes)
+    for name in ("notes.md", "configurazione.md", "my-config.json"):
+        assert not any(name.startswith(p) for p in prefixes), (name, prefixes)
 
 
 @pytest.mark.parametrize("command", ["openFile", "shareFile", "saveToDownloads"])

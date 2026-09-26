@@ -187,8 +187,9 @@ refactor.
 - **Opening, sharing and saving files.** The `FileProvider` exposes `workspace/` and the camera
   temporary folder only. `openFile`, `shareFile` and `saveToDownloads` resolve the path on the
   canonical workspace (symlinks included) and refuse `config.json` and its companions (`.bak`,
-  the store's temporary files), so neither the provider keys nor the SSH private key can leave
-  that way.
+  the store's temporary files, and the `config.corrupt-<timestamp>.json` copy the loader sets
+  aside when the file cannot be read, which holds the same keys), so neither the provider keys
+  nor the SSH private key can leave that way.
 - **Notifications.** The direct-reply `PendingIntent` is mutable, as Android's direct reply
   requires, so an app granted notification access can send it with text of its own, and that
   text reaches Jenny as yours. Opening the chat from an alert (which also clears the unread

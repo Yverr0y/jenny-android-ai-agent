@@ -1670,12 +1670,23 @@ class MainActivity : AppCompatActivity() {
             return canonical
         }
 
-        /** `config.json` e i suoi compagni (`.bak`, temporanei dello store):
-         *  chiavi dei provider, token di Telegram, password SSH. Stanno nella
-         *  radice del workspace, e nessuna apertura legittima ne ha bisogno —
-         *  si modificano da Impostazioni, non si passano a un'altra app. */
-        private fun isWorkspaceSecret(file: File, workspace: File): Boolean =
-            file.parentFile == workspace && file.name.startsWith("config.json")
+        /** `config.json` e i suoi compagni: chiavi dei provider, token di
+         *  Telegram, password SSH. Stanno nella radice del workspace, e nessuna
+         *  apertura legittima ne ha bisogno — si modificano da Impostazioni,
+         *  non si passano a un'altra app.
+         *
+         *  I compagni sono due famiglie, e hanno le stesse chiavi del file:
+         *  - `config.json.*`: la copia `.bak` e i temporanei della scrittura
+         *    atomica (`config.json.<uuid>.tmp`);
+         *  - `config.corrupt-<data>.json`: la copia in quarantena che il loader
+         *    mette da parte quando il file non si legge (`_quarantine` in
+         *    `jenny/config/loader.py`). Il nome non comincia con `config.json`,
+         *    e il solo prefisso la lasciava aprire e condividere. */
+        private fun isWorkspaceSecret(file: File, workspace: File): Boolean {
+            if (file.parentFile != workspace) return false
+            val name = file.name
+            return name.startsWith("config.json") || name.startsWith("config.corrupt-")
+        }
 
         private fun contentUriFor(file: File, caller: String): android.net.Uri? = try {
             androidx.core.content.FileProvider.getUriForFile(
