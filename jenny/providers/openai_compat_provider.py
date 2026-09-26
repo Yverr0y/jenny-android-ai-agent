@@ -54,6 +54,7 @@ from jenny.providers.openai_compat_helpers import (
 )
 from jenny.providers.openai_compat_parsing import ResponseParsingMixin
 from jenny.providers.openai_responses import (
+    ResponsesStreamError,
     consume_sse_with_reasoning,
     convert_messages,
     convert_tools,
@@ -900,6 +901,10 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
                     ),
                 )
             )
+        except ResponsesStreamError as failure:
+            # Non è un errore dell'endpoint (niente ripiego su Chat Completions):
+            # è la risposta d'errore già classificata.
+            return failure.response
         finally:
             # Come per Chat Completions: chiusa anche se lo stream non finisce.
             await self._release(response)

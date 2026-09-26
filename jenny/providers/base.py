@@ -242,6 +242,7 @@ _STREAM_ERROR_STATUS = {
     "api_error": 500,
     "server_error": 500,
     "rate_limit_error": 429,
+    "rate_limit_exceeded": 429,
     "invalid_request_error": 400,
     "authentication_error": 401,
     "permission_error": 403,
@@ -270,8 +271,12 @@ def stream_error_response(error: Any, *, partial_content: str | None = None) -> 
         numeric = int(raw_code) if not isinstance(raw_code, bool) else None
         if numeric is not None and 400 <= numeric <= 599:
             status = numeric
-    if status is None and error_type:
-        status = _STREAM_ERROR_STATUS.get(error_type)
+    if status is None:
+        # L'API Responses mette il nome nel ``code`` (``server_error``), non nel
+        # ``type``: vale come l'uno o l'altro.
+        status = _STREAM_ERROR_STATUS.get(error_type or "") or _STREAM_ERROR_STATUS.get(
+            error_code or "",
+        )
 
     label = error_type or error_code
     return LLMResponse(

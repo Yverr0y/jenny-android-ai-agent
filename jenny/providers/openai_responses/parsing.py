@@ -15,6 +15,8 @@ from jenny.providers.base import (
     StreamTimeout,
     ToolCallRequest,
     parse_tool_arguments,
+    stream_error_response,
+    stream_truncated_response,
 )
 
 FINISH_REASON_MAP = {
@@ -23,6 +25,40 @@ FINISH_REASON_MAP = {
     "failed": "error",
     "cancelled": "error",
 }
+
+
+class ResponsesStreamError(RuntimeError):
+    """Lo stream è finito senza una risposta valida; *response* è l'errore da dare.
+
+    Due casi: il server ha scritto un errore nello stream (``response.failed``,
+    ``error``), o lo stream si è chiuso prima di ``response.completed``. In
+    entrambi *response* ha i metadati per la retry policy e il testo già
+    mostrato in ``partial_content``.
+    """
+
+    def __init__(self, response: LLMResponse) -> None:
+        super().__init__(response.content or "")
+        self.response = response
+
+
+def _stream_error_detail(event: dict[str, Any]) -> dict[str, Any]:
+    """Il corpo dell'errore di un evento ``response.failed`` o ``error``.
+
+    ``response.failed`` lo porta in ``response.error``; l'evento ``error`` ha
+    ``code`` e ``message`` in cima (il suo ``type`` è il nome dell'evento, non
+    il tipo dell'errore), o talvolta sotto ``error``.
+    """
+    if event.get("type") == "response.failed":
+        response_obj = event.get("response") or {}
+        nested = response_obj.get("error") if isinstance(response_obj, dict) else None
+    else:
+        nested = event.get("error")
+    if isinstance(nested, dict):
+        return nested
+    detail = {key: event[key] for key in ("code", "message") if event.get(key)}
+    if not detail.get("message"):
+        detail["message"] = str(nested or "the response failed")[:500]
+    return detail
 
 
 def map_finish_reason(status: str | None) -> str:
@@ -158,6 +194,7 @@ async def consume_sse_with_reasoning(
     usage: dict[str, int] = {}
     reasoning_content: str | None = None
     streamed_reasoning = False
+    saw_terminal = False
 
     async for event in _events_with_budget(
         iter_sse(response), idle_timeout_s, first_output_timeout_s,
@@ -261,6 +298,7 @@ async def consume_sse_with_reasoning(
             # ``completed`` quando la risposta si ferma al tetto di token: il suo
             # ``status`` è "incomplete" → ``length``, come nel ramo non-stream, e
             # porta l'usage. Ignorarlo dava ``stop`` e un usage vuoto.
+            saw_terminal = True
             response_obj = event.get("response") or {}
             status = response_obj.get("status") or (
                 "incomplete" if event_type == "response.incomplete" else None
@@ -272,9 +310,16 @@ async def consume_sse_with_reasoning(
                 if summary:
                     reasoning_content = summary
         elif event_type in {"error", "response.failed"}:
-            detail = event.get("error") or event.get("message") or event
-            raise RuntimeError(f"Response failed: {str(detail)[:500]}")
+            # Lo status si ricava dal corpo (``server_error`` → 500): con un
+            # ``RuntimeError`` nudo la retry policy vedeva solo il testo.
+            raise ResponsesStreamError(stream_error_response(
+                _stream_error_detail(event), partial_content=content or None,
+            ))
 
+    if not saw_terminal:
+        # Chiuso prima della fine: il testo è un frammento, e una tool call
+        # aperta ha argomenti a metà che non vanno eseguiti.
+        raise ResponsesStreamError(stream_truncated_response(content or None))
     return content, tool_calls, finish_reason, usage, reasoning_content
 
 
