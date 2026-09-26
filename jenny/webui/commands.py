@@ -164,6 +164,62 @@ def _wikis_dir(ctx: CommandContext) -> Path:
     return ctx.get_workspace_root() / subdir
 
 
+def _is_live_config(path: Path) -> bool:
+    """*path* (gia' risolto) e' il ``config.json`` che il gateway legge?"""
+    from jenny.config.loader import get_config_path
+
+    try:
+        return path == get_config_path().resolve()
+    except OSError:
+        return False
+
+
+async def _write_live_config(content: str) -> None:
+    """Il salvataggio di ``config.json`` dall'editor, attraverso ``store.mutate``.
+
+    ``workspace.write`` lo riscriveva a mano come un file qualunque (terza
+    revisione, WA6): ``chmod 600`` perso — le chiavi API leggibili da chiunque
+    abbia il permesso di leggere lo storage dell'app —, niente ``.bak``, niente
+    lock, e la copia che l'editor aveva aperto minuti prima cancellava in
+    silenzio quel che le Impostazioni avevano scritto nel frattempo. La regola
+    di ``AGENTS.md`` e' che ``config.json`` si scrive solo da ``mutate``.
+
+    Il contenuto si valida **prima** del lock, come vuole ``mutate`` (niente di
+    lento la' dentro): JSON, un oggetto, e lo schema. Un file che il loader non
+    sapesse leggere finirebbe in quarantena al prossimo avvio, e il gateway
+    ripartirebbe coi default: si rifiuta qui, dicendolo. Dentro il lock ogni
+    campo dello schema prende il valore scritto; le chiavi che questa versione
+    non conosce restano quelle del file, come per ogni altro scrittore.
+    """
+    import json
+
+    from jenny.config import store
+    from jenny.config.schema import Config
+
+    try:
+        raw = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise CommandError(
+            "bad_request",
+            f"config.json is not valid JSON (line {exc.lineno}, column {exc.colno}): "
+            "nothing was saved",
+        ) from None
+    if not isinstance(raw, dict):
+        raise CommandError("bad_request", "config.json must be a JSON object: nothing was saved")
+    try:
+        written = Config.model_validate(raw)
+    except (TypeError, ValueError) as exc:
+        raise CommandError(
+            "bad_request", f"config.json does not fit the settings ({exc}): nothing was saved"
+        ) from None
+
+    def _apply(config: Config) -> None:
+        for name in type(config).model_fields:
+            setattr(config, name, getattr(written, name))
+
+    await store.mutate(_apply)
+
+
 async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dict[str, Any]:
     """Scrive un file di testo del workspace (salvataggio dall'editor WebUI)."""
     from jenny.webui.workspace_files import validate_path, write_file
@@ -184,6 +240,9 @@ async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dic
 
     try:
         full_path = validate_path(ctx.get_workspace_root(), rel_path)
+        if _is_live_config(full_path):
+            await _write_live_config(content)
+            return {"path": rel_path, "bytes": size}
         # Fuori dall'event loop: ``write_file`` fa un atomic_write con fsync, e
         # fino a 1 MB di disco su una CPU Android sono centinaia di ms in cui il
         # gateway non risponderebbe a nessun altro (stessa ragione per cui il

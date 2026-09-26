@@ -251,6 +251,81 @@ async def test_copy_rejects_an_empty_dest(ctx: CommandContext, workspace_root: P
 
 
 # ---------------------------------------------------------------------------
+# WA6: ``workspace.write`` su config.json passa da ``store.mutate``
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def live_config(workspace_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """La config viva **dentro** il workspace, dove sta sul telefono."""
+    path = workspace_root / "config.json"
+    save_config(Config(), path)
+    path.chmod(0o600)
+    monkeypatch.setattr(get_runtime_context(), "config_path", path)
+    return path
+
+
+async def test_writing_config_json_goes_through_the_store(
+    ctx: CommandContext, live_config: Path
+) -> None:
+    """L'editor riscriveva ``config.json`` a mano (terza revisione, WA6): 600
+    diventava 644 — le chiavi API leggibili —, niente lock, niente ``.bak``, e
+    la copia che l'editor aveva aperto cancellava le scritture fatte intanto
+    dalle Impostazioni."""
+    import json
+    import stat
+
+    before = live_config.read_text(encoding="utf-8")
+    data = json.loads(before)
+    data.setdefault("workspace", {})["maxFileSize"] = 123456
+    await dispatch_command(
+        ctx, "workspace.write", {"path": "config.json", "content": json.dumps(data)}
+    )
+    assert load_config(live_config).workspace.max_file_size == 123456
+    assert stat.S_IMODE(live_config.stat().st_mode) == 0o600
+    assert (live_config.parent / "config.json.bak").read_text(encoding="utf-8") == before
+
+
+async def test_writing_config_json_takes_the_store_lock(
+    ctx: CommandContext, live_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from jenny.config import store
+
+    calls: list[str] = []
+    real = store.mutate
+
+    async def spy(apply, **kwargs):
+        calls.append("mutate")
+        return await real(apply, **kwargs)
+
+    monkeypatch.setattr(store, "mutate", spy)
+    await dispatch_command(
+        ctx, "workspace.write", {"path": "config.json", "content": live_config.read_text()}
+    )
+    assert calls == ["mutate"]
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{ non e' json",
+        "[1, 2, 3]",
+        '{"providers": {"providers": [{"name": "x", "format": "bogus"}]}}',
+    ],
+)
+async def test_an_unusable_config_json_is_refused_and_nothing_is_written(
+    ctx: CommandContext, live_config: Path, content: str
+) -> None:
+    """Un file che il loader non saprebbe leggere, al prossimo avvio, finirebbe in
+    quarantena e il gateway ripartirebbe coi default: si rifiuta qui, dicendolo."""
+    before = live_config.read_text(encoding="utf-8")
+    err = await _refused(ctx, "workspace.write", {"path": "config.json", "content": content})
+    assert err.code == "bad_request"
+    assert "config.json" in err.message and "nothing was saved" in err.message
+    assert live_config.read_text(encoding="utf-8") == before
+
+
+# ---------------------------------------------------------------------------
 # WA3: la radice, la cartella dei quaderni e i loro antenati non si cancellano
 # ---------------------------------------------------------------------------
 
