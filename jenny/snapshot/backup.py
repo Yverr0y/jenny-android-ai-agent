@@ -35,7 +35,7 @@ from jenny.snapshot.locations import (
     runtime_root_for,
 )
 from jenny.snapshot.restore_marker import write_marker, write_staging_sanity
-from jenny.snapshot.types import SnapshotManifest, unsafe_entry_reason
+from jenny.snapshot.types import SnapshotManifest, is_snapshot_id, unsafe_entry_reason
 from jenny.utils.path import atomic_write
 
 if TYPE_CHECKING:
@@ -227,7 +227,7 @@ class BackupManager:
                     raise BackupError(f"backup archive contains an unsafe path: {name}")
                 data = archive.read(name)
                 if dest_root is staged_snap and pure.parts[0] == "manifests":
-                    problem = _imported_manifest_problem(data)
+                    problem = _imported_manifest_problem(data, pure)
                     if problem is not None:
                         shutil.rmtree(staged_ws, ignore_errors=True)
                         shutil.rmtree(staged_snap, ignore_errors=True)
@@ -271,17 +271,29 @@ class BackupManager:
             }
 
 
-def _imported_manifest_problem(data: bytes) -> str | None:
+def _imported_manifest_problem(data: bytes, rel: PurePosixPath) -> str | None:
     """Perche' un manifest dello store importato non entra nella storia, o ``None``.
 
     La guardia zip-slip sopra guarda i nomi dello zip, non i percorsi scritti
     dentro i manifest: quelli entrano nella storia locale al boot
     (``_merge_snapshot_store``) e un ripristino li scriveva sotto lo staging.
+
+    Lo stesso per l'**id**: la retention cancella ``manifests/<id>.json`` con
+    l'id letto dentro il manifest, e ``../../workspace/config`` le faceva
+    cancellare ``config.json``. Deve avere la forma di un id ed essere il nome
+    del file, che sta direttamente in ``manifests/`` (*rel* e' il percorso
+    relativo allo store, ``manifests/<id>.json``).
     """
     try:
         manifest = SnapshotManifest.from_dict(json.loads(data.decode("utf-8")))
     except (ValueError, UnicodeDecodeError, KeyError, TypeError, AttributeError):
         return "unsafe or unreadable snapshot manifest"
+    if (
+        not is_snapshot_id(manifest.id)
+        or len(rel.parts) != 2
+        or rel.parts[1] != f"{manifest.id}.json"
+    ):
+        return f"snapshot id {manifest.id[:80]!r} is not an id or not its file name"
     for entry in manifest.files:
         reason = unsafe_entry_reason(entry.path, entry.hash)
         if reason is not None:

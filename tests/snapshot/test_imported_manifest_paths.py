@@ -45,12 +45,12 @@ def _manifest(path: str, hash_hex: str = _HASH, snapshot_id: str = "b" * 64) -> 
     }).encode("utf-8")
 
 
-def _archive(manifest: bytes) -> bytes:
+def _archive(manifest: bytes, name: str = f"manifests/{'b' * 64}.json") -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("metadata.json", b'{"format_version": 1}')
         archive.writestr("tree/SOUL.md", b"anima")
-        archive.writestr(f"snapshots/manifests/{'b' * 64}.json", manifest)
+        archive.writestr(f"snapshots/{name}", manifest)
     return buffer.getvalue()
 
 
@@ -95,3 +95,102 @@ def test_restore_snapshot_refuses_a_path_outside_the_destination(tmp_path) -> No
 
     assert not (tmp_path / "fuori.txt").exists()
     assert not list(tmp_path.rglob("fuori.txt"))
+
+
+# ---------------------------------------------------------------------------
+# L'id del manifest: finisce in un percorso, quindi e' dato non fidato anche lui
+# ---------------------------------------------------------------------------
+#
+# ``apply_retention`` cancella ``manifests/<id>.json`` con l'id letto **dentro**
+# il manifest: un id ``../../workspace/config`` importato con un ``.jbk`` faceva
+# cancellare ``config.json`` alla prima passata della retention.
+
+_EVIL_ID = "../../workspace/config"
+
+
+@pytest.mark.parametrize(
+    ("snapshot_id", "name"),
+    [
+        (_EVIL_ID, f"manifests/{'b' * 64}.json"),
+        ("B" * 64, f"manifests/{'B' * 64}.json"),
+        ("c" * 64, f"manifests/{'b' * 64}.json"),
+        ("b" * 64, f"manifests/sotto/{'b' * 64}.json"),
+    ],
+)
+def test_an_imported_manifest_whose_id_is_not_its_file_name_is_refused(
+    tmp_path, snapshot_id: str, name: str
+) -> None:
+    env = _env(tmp_path)
+
+    with pytest.raises(BackupError, match="snapshot id"):
+        env.manager._extract_backup(
+            _archive(_manifest("ok.txt", snapshot_id=snapshot_id), name=name)
+        )
+
+    assert not (env.runtime_root / STAGED_SNAPSHOTS_DIR_NAME).exists()
+
+
+def _plant(engine: SnapshotEngine, file_id: str, snapshot_id: str, created_at_ms: int = 1) -> None:
+    engine.manifests_dir.mkdir(parents=True, exist_ok=True)
+    (engine.manifests_dir / f"{file_id}.json").write_text(json.dumps({
+        "id": snapshot_id, "created_at_ms": created_at_ms, "trigger": "auto", "files": [],
+    }), encoding="utf-8")
+
+
+def test_retention_never_deletes_outside_the_manifests(tmp_path) -> None:
+    """Il manifest arrivato per un'altra strada — lo store fuso al boot, un file
+    messo a mano — non entra nella storia, e la retention non lo segue fuori."""
+    env = _env(tmp_path)
+    config = env.runtime_root / "workspace" / "config.json"
+    config.write_text('{"segreto": 1}', encoding="utf-8")
+    env.engine.create_snapshot(trigger="manual")
+    _plant(env.engine, "d" * 64, _EVIL_ID)
+
+    assert _EVIL_ID not in [s["id"] for s in env.engine.list_snapshots()]
+    env.engine.apply_retention(keep_recent=1, thin_after_days=7, max_age_days=30)
+
+    assert config.read_text(encoding="utf-8") == '{"segreto": 1}'
+
+
+def test_retention_ignores_an_index_row_whose_id_is_not_an_id(tmp_path) -> None:
+    """L'indice e' una cache dei manifest: una riga con un id che non e' un id
+    non viene da questo motore, e la retention non la segue fuori dallo store."""
+    env = _env(tmp_path)
+    config = env.runtime_root / "workspace" / "config.json"
+    config.write_text('{"segreto": 1}', encoding="utf-8")
+    first = env.engine.create_snapshot(trigger="manual", now_ms=10_000)
+    assert first is not None
+    _plant(env.engine, "e" * 64, "e" * 64, created_at_ms=2)
+    # Tante righe quanti manifest, cosi' ``_load_index`` si fida dell'indice.
+    env.engine.index_path.write_text(json.dumps({"version": 1, "snapshots": [
+        {"id": _EVIL_ID, "created_at_ms": 1, "trigger": "auto"},
+        first.summary(),
+    ]}), encoding="utf-8")
+
+    assert _EVIL_ID not in [s["id"] for s in env.engine.list_snapshots()]
+    env.engine.apply_retention(
+        keep_recent=1, thin_after_days=0, max_age_days=1, now_ms=10 * 86_400_000
+    )
+
+    assert config.read_text(encoding="utf-8") == '{"segreto": 1}'
+
+
+def test_load_manifest_refuses_an_id_that_is_not_an_id(tmp_path) -> None:
+    """``stage_snapshot_restore`` riceve l'id dalla WebUI: ``../../x`` leggeva
+    un JSON qualunque fuori dallo store."""
+    env = _env(tmp_path)
+    # La cartella deve esistere: ``manifests/..`` non si attraversa altrimenti.
+    env.engine.manifests_dir.mkdir(parents=True)
+    outside = env.runtime_root / "workspace" / "config.json"
+    outside.write_text(json.dumps({"id": "x", "created_at_ms": 1, "files": []}), encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError):
+        env.engine.load_manifest(_EVIL_ID)
+
+
+def test_load_manifest_refuses_a_file_that_names_another_snapshot(tmp_path) -> None:
+    env = _env(tmp_path)
+    _plant(env.engine, "d" * 64, "f" * 64)
+
+    with pytest.raises(ValueError, match="snapshot id"):
+        env.engine.load_manifest("d" * 64)

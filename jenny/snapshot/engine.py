@@ -20,7 +20,12 @@ from typing import Any, Iterable, Iterator
 from loguru import logger
 
 from jenny.snapshot.store import get_blob, iter_blob_hashes, object_path, put_blob
-from jenny.snapshot.types import FileEntry, SnapshotManifest, unsafe_entry_reason
+from jenny.snapshot.types import (
+    FileEntry,
+    SnapshotManifest,
+    is_snapshot_id,
+    unsafe_entry_reason,
+)
 from jenny.utils.path import atomic_write
 
 # Esclusioni di default (path POSIX relativi alla radice del workspace).
@@ -277,8 +282,23 @@ class SnapshotEngine:
         return index[0]["id"] if index else None
 
     def load_manifest(self, snapshot_id: str) -> SnapshotManifest:
+        """Il manifest di *snapshot_id*.
+
+        L'id arriva anche dalla WebUI (``stage_snapshot_restore``) e finisce in
+        un percorso: uno che non ne ha la forma non e' uno snapshot
+        (``FileNotFoundError``, come uno che manca) invece di un ``../`` che
+        legge un JSON qualunque fuori dallo store. Un file che dentro dice di
+        essere un altro snapshot non e' sano: ``ValueError``.
+        """
+        if not is_snapshot_id(snapshot_id):
+            raise FileNotFoundError(f"no snapshot {snapshot_id[:80]!r}")
         data = json.loads((self.manifests_dir / f"{snapshot_id}.json").read_text("utf-8"))
-        return SnapshotManifest.from_dict(data)
+        manifest = SnapshotManifest.from_dict(data)
+        if manifest.id != snapshot_id:
+            raise ValueError(
+                f"snapshot id {manifest.id[:80]!r} does not match its file {snapshot_id[:12]}"
+            )
+        return manifest
 
     # -- restore ------------------------------------------------------------
 
@@ -353,7 +373,9 @@ class SnapshotEngine:
         if not removed:
             return []
         for snapshot_id in removed:
-            (self.manifests_dir / f"{snapshot_id}.json").unlink(missing_ok=True)
+            # Ultima guardia prima di un ``unlink``: l'id finisce in un percorso.
+            if is_snapshot_id(snapshot_id):
+                (self.manifests_dir / f"{snapshot_id}.json").unlink(missing_ok=True)
         self._write_index([s for s in self._load_index() if s["id"] in keep_ids])
         logger.info("Snapshot retention removed {} snapshot(s)", len(removed))
         return removed
@@ -396,7 +418,11 @@ class SnapshotEngine:
             data = json.loads(self.index_path.read_text("utf-8"))
             raw = data.get("snapshots", [])
             if isinstance(raw, list):
-                summaries = [s for s in raw if isinstance(s, dict) and "id" in s]
+                # Una riga con un id che non e' un id non viene da questo motore:
+                # fuori, prima che la retention la trasformi in un percorso.
+                summaries = [
+                    s for s in raw if isinstance(s, dict) and is_snapshot_id(s.get("id"))
+                ]
         except FileNotFoundError:
             summaries = []
         except (OSError, ValueError):
@@ -424,6 +450,14 @@ class SnapshotEngine:
                     )
                 except (OSError, ValueError, KeyError):
                     logger.warning("Skipping unreadable snapshot manifest {}", manifest_path.name)
+                    continue
+                # L'id e' il nome del file, o il manifest non entra nella storia:
+                # la retention cancellerebbe il percorso che l'id scrive.
+                if not is_snapshot_id(manifest.id) or manifest_path.stem != manifest.id:
+                    logger.warning(
+                        "Skipping snapshot manifest {}: its id is not its file name",
+                        manifest_path.name,
+                    )
                     continue
                 summaries.append(manifest.summary())
         summaries.sort(key=lambda s: s["created_at_ms"])

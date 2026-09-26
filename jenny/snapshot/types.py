@@ -10,6 +10,17 @@ from typing import Any
 _HASH_RE = re.compile(r"\A[0-9a-f]{64}\Z")
 
 
+def is_snapshot_id(value: object) -> bool:
+    """*value* ha la forma di un id di snapshot: uno sha256 esadecimale minuscolo.
+
+    L'id finisce in un percorso (``manifests/<id>.json``), che la retention
+    cancella: uno arrivato con un ``.jbk`` e' dato non fidato come i ``path``
+    delle voci, e ``../../workspace/config`` faceva sparire ``config.json``.
+    Un id vero lo calcola ``SnapshotEngine._compute_id``, e ha solo questa forma.
+    """
+    return isinstance(value, str) and _HASH_RE.match(value) is not None
+
+
 def unsafe_entry_reason(path: str, hash_hex: str) -> str | None:
     """Perche' una voce di manifest non si puo' materializzare, o ``None``.
 
