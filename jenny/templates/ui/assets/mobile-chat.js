@@ -3769,8 +3769,12 @@ export class ChatController {
     const popover = document.createElement('div');
     popover.className = 'session-info-popover';
 
-    const channel = 'websocket';
-    const sessionId = 'default';
+    /* La conversazione aperta, com'e' davvero: la chiave del gateway e il suo
+       spazio (`websocket` per la personale, `project` per un quaderno). Erano
+       «default» e «websocket» scritti fissi, anche dentro un quaderno (WJ17
+       della terza revisione). */
+    const sessionId = sessionManager.currentKey || sessionManager.personalKey;
+    const channel = sessionId.includes(':') ? sessionId.slice(0, sessionId.indexOf(':')) : sessionId;
 
     const brand = model ? getProviderBrand(model.provider) : null;
     const modelLabel = model
