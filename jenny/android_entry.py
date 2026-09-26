@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,46 @@ from jenny.runtime.context import get_android_context as get_android_context
 
 MAX_RETRIES = 3
 RETRY_DELAY_S = 5
+
+
+_STDERR_SINK_ID: int | None = None
+
+
+class _CurrentStderr:
+    """Scrive sul ``sys.stderr`` *di adesso*, non su quello dell'import.
+
+    Chaquopy ridirige ``sys.stderr`` su logcat; un sink che tenesse l'oggetto
+    visto al momento dell'``add`` scriverebbe su uno stream sostituito (e sotto
+    pytest su una cattura già chiusa).
+    """
+
+    def write(self, text: str) -> None:
+        sys.stderr.write(text)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
+
+
+def configure_log_sinks() -> None:
+    """Sostituisce il sink di default di loguru con uno senza ``diagnose``.
+
+    Il default ha ``backtrace=True, diagnose=True``: ogni traceback porta i
+    valori delle variabili locali dei suoi frame, e un'eccezione in una route
+    autenticata ci mette dentro il segreto del gateway, una chiave API o una
+    password SSH passate in query. Stesso livello e stesso formato del
+    default, solo senza quelle due opzioni. Idempotente: il ciclo di retry e
+    un secondo avvio nello stesso processo non aggiungono sink.
+    """
+    global _STDERR_SINK_ID
+    if _STDERR_SINK_ID is not None:
+        return
+    try:
+        logger.remove(0)  # il sink di default, aggiunto da loguru all'import
+    except ValueError:
+        pass  # già tolto da chi ci ha preceduto
+    _STDERR_SINK_ID = logger.add(
+        _CurrentStderr(), level="DEBUG", backtrace=False, diagnose=False
+    )
 
 
 def set_android_context(context: Any) -> None:
@@ -54,6 +95,9 @@ def run_gateway(
     Raises:
         Exception: If the gateway fails to start after all retries.
     """
+    # Per primo: prima di qualunque riga di log che possa portare un traceback.
+    configure_log_sinks()
+
     if android_context is not None:
         set_android_context(android_context)
 

@@ -36,7 +36,11 @@ def install_log_buffer() -> None:
     def _sink(message: Any) -> None:
         _LOG_BUFFER.append(str(message).rstrip("\n"))
 
-    _SINK_ID = logger.add(_sink, level="DEBUG")
+    # ``diagnose=False``: il default di loguru stampa i valori delle variabili
+    # locali di ogni frame del traceback, e tra quelle c'è il segreto del
+    # gateway o la chiave API di una richiesta; questo buffer lo legge il
+    # modello. ``backtrace=False``: niente frame oltre il punto di cattura.
+    _SINK_ID = logger.add(_sink, level="DEBUG", backtrace=False, diagnose=False)
 
 
 @tool_parameters(
