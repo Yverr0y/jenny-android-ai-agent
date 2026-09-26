@@ -47,6 +47,19 @@ def _lock_for(path: Path) -> asyncio.Lock:
     return lock
 
 
+def reset_storage_locks() -> None:
+    """Dimentica i lock per-collezione prima di un nuovo event loop.
+
+    Simmetrico a ``config.store.reset_config_store_state``, e per la stessa
+    ragione: una ``asyncio.Lock`` si lega al loop la prima volta che qualcuno ci
+    si accoda, e il gateway riparte apposta nello stesso processo (retry di
+    ``run_gateway``). Da quel momento ogni append conteso su quella collezione
+    solleva ``RuntimeError: ... is bound to a different event loop``. Va
+    chiamata da ``android_entry.run_gateway`` accanto agli altri ``reset_*``.
+    """
+    _LOCKS.clear()
+
+
 def _collection_path(app_dir: Path, collection: str) -> Path:
     if not COLLECTION_RE.match(collection):
         raise StorageError(f"invalid collection name '{collection}'")

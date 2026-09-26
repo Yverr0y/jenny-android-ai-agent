@@ -40,6 +40,44 @@ async def test_an_append_to_a_clean_file_adds_no_blank_line(tmp_path) -> None:
     assert "\n\n" not in _file(tmp_path).read_text(encoding="utf-8")
 
 
+def _contend(app_dir) -> None:
+    """Un secondo acquirente in coda sul lock della collezione, su un loop nuovo.
+
+    E' li', e solo li', che una ``asyncio.Lock`` guarda il suo loop: la strada
+    senza contesa non passa da ``_get_loop``. Oggi la sezione critica di
+    ``execute_storage_action`` non ha ``await``, quindi due append non si
+    accodano mai e il pericolo e' latente, come per ``config.store`` — basta un
+    ``await`` li' dentro perche' diventi un append che fallisce per sempre.
+    """
+    import asyncio
+
+    from jenny.apps.storage import _lock_for
+
+    async def _two():
+        lock = _lock_for(_file(app_dir))
+        async with lock:
+            waiter = asyncio.ensure_future(lock.acquire())
+            await asyncio.sleep(0)
+        await waiter
+        lock.release()
+
+    asyncio.run(_two())
+
+
+def test_a_lock_left_by_a_previous_loop_is_forgotten_by_the_reset(tmp_path) -> None:
+    """CF8: il gateway riparte nello stesso processo, con un loop nuovo."""
+    from jenny.apps.storage import reset_storage_locks
+
+    reset_storage_locks()
+    _contend(tmp_path)  # lega il lock al primo loop, che poi muore
+    with pytest.raises(RuntimeError, match="different event loop"):
+        _contend(tmp_path)
+
+    reset_storage_locks()
+    _contend(tmp_path)
+    reset_storage_locks()
+
+
 async def test_update_respects_the_collection_size_cap(tmp_path) -> None:
     """CF11: ``append`` e ``set`` rifiutano una collezione oltre il tetto, ``update``
     no: bastava aggiornare lo stesso record con un campo enorme per farla crescere
