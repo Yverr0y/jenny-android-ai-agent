@@ -414,6 +414,20 @@ def _resolve_input_key(cls: type[BaseModel], key: str) -> str | None:
     return None
 
 
+def field_for_input_key(cls: type[BaseModel], key: str) -> str | None:
+    """Il nome del campo di *cls* che la chiave d'ingresso *key* valorizza, o None.
+
+    Pubblica per il loader della config, che deve distinguere una chiave ignota
+    da una seconda grafia di un campo noto senza reimplementare gli alias.
+    """
+    return _resolve_input_key(cls, key)
+
+
+def canonical_input_key(cls: type[BaseModel], field_name: str) -> str:
+    """La chiave con cui ``model_dump(by_alias=True)`` scrive il campo *field_name*."""
+    return _serialization_key(cls.model_fields[field_name], True)
+
+
 def _run_field_validators(
     cls: type[BaseModel],
     value: Any,
@@ -476,6 +490,14 @@ def _normalize_input(
     for key, value in data.items():
         field_name = _resolve_input_key(cls, key)
         if field_name is not None:
+            # Un campo scritto con due grafie (``maxTokens`` e ``max_tokens``):
+            # vince quella con cui il modello lo riscrive, qualunque sia
+            # l'ordine nel file. Prima vinceva l'ultima letta, e il loader
+            # riaccodava la vecchia in fondo a ogni salvataggio: la grafia
+            # vecchia vinceva per sempre e ogni modifica restava senza effetto.
+            canonical = canonical_input_key(cls, field_name)
+            if key != canonical and canonical in data:
+                continue
             normalized[field_name] = value
             continue
         if extra_policy == "forbid":

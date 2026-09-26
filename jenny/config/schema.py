@@ -1111,6 +1111,10 @@ class Config(BaseSettings):
     model_presets: dict[str, ModelPresetConfig] = Field(
         default_factory=dict,
         validation_alias=AliasChoices("modelPresets", "model_presets"),
+        # La grafia che documentazione e utenti scrivono. Senza, il dump usava
+        # ``model_presets`` e un ``modelPresets`` scritto a mano restava accanto
+        # come chiave «ignota», vincendo a ogni lettura sulle modifiche dalla UI.
+        serialization_alias="modelPresets",
     )
 
     @model_validator(mode="before")

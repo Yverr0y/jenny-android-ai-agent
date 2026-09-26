@@ -69,6 +69,13 @@ def test_model_dump_by_alias():
     assert m.model_dump(by_alias=True) == {"firstName": "Alan", "lastName": "Turing"}
 
 
+def test_the_dump_spelling_wins_when_a_field_is_given_twice():
+    """Qualunque sia l'ordine, vince la grafia con cui il modello riscrive il campo."""
+    after = CamelModel.model_validate({"firstName": "Ada", "first_name": "Old"})
+    before = CamelModel.model_validate({"first_name": "Old", "firstName": "Ada"})
+    assert after.first_name == before.first_name == "Ada"
+
+
 def test_to_camel_helper():
     assert to_camel("hello_world") == "helloWorld"
     assert to_camel("simple") == "simple"

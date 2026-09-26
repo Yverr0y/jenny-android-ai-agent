@@ -9,15 +9,21 @@ serializzazione delle modifiche concorrenti sta invece in
 import json
 import os
 import re
+import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, get_args, get_origin
 
 from loguru import logger
 
 from jenny.config.bootstrap import restrict_config_permissions
 from jenny.config.schema import Config
-from jenny.pydantic_compat import BaseModel, ValidationError
+from jenny.pydantic_compat import (
+    BaseModel,
+    ValidationError,
+    canonical_input_key,
+    field_for_input_key,
+)
 from jenny.utils.path import atomic_write
 
 
@@ -69,6 +75,13 @@ def load_config_with_raw(
         logger.warning(
             "Config keys not recognised by this version (kept in the file, ignored at runtime): {}",
             ", ".join(unknown),
+        )
+    shadowed = _shadowed_key_paths(raw)
+    if shadowed:
+        logger.warning(
+            "Config keys written twice under two spellings (the camelCase one is used; "
+            "these are ignored and dropped on the next write): {}",
+            ", ".join(shadowed),
         )
 
     _apply_ssrf_whitelist(config)
@@ -262,7 +275,60 @@ RETIRED_KEY_PATHS: frozenset[str] = frozenset({
 })
 
 
-def _merge_unknown(raw: Any, dumped: Any, prefix: str = "") -> Any:
+# La forma di un nodo del JSON, per sapere quali chiavi vi sono campi del modello:
+# ``("model", M)`` un oggetto validato da ``M``; ``("dict", M)`` una mappa con
+# chiavi libere (i nomi dei preset) e valori ``M``; ``None`` un nodo senza schema
+# (``websocket``, un ``dict[str, Any]``), dove ogni chiave e' dato e non campo.
+_Shape = tuple[str, type[BaseModel]] | None
+
+
+def _shape_of(annotation: Any) -> _Shape:
+    """La forma di un valore annotato *annotation*, se porta dentro un modello."""
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return ("model", annotation)
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin in (Union, types.UnionType):
+        for arg in args:
+            shape = _shape_of(arg)
+            if shape is not None and shape[0] == "model":
+                return shape
+        return None
+    if origin is dict and len(args) == 2:
+        inner = _shape_of(args[1])
+        if inner is not None and inner[0] == "model":
+            return ("dict", inner[1])
+    return None
+
+
+def _classify_key(shape: _Shape, key: str) -> tuple[str, _Shape]:
+    """Che cosa e' *key* in un nodo di forma *shape*, e la forma del suo valore.
+
+    ``"field"`` la chiave con cui il modello scrive un suo campo; ``"synonym"`` un
+    campo noto scritto con un'altra grafia (``max_tokens`` per ``maxTokens``), che
+    il modello legge e riscrive con la sua; ``"other"`` tutto il resto: una chiave
+    ignota a questo schema, o un dato di un nodo senza schema.
+    """
+    if shape is None:
+        return "other", None
+    kind, model = shape
+    if kind == "dict":
+        return "other", ("model", model)
+    if not model.__pydantic_rebuilt__:
+        model.model_rebuild(raise_errors=False)
+    field = field_for_input_key(model, key)
+    if field is None:
+        return "other", None
+    finfo = model.model_fields[field]
+    child = _shape_of(finfo.resolved_type if finfo.resolved_type is not None else finfo.annotation)
+    if key != canonical_input_key(model, field):
+        return "synonym", child
+    return "field", child
+
+
+def _merge_unknown(
+    raw: Any, dumped: Any, prefix: str = "", shape: _Shape = ("model", Config)
+) -> Any:
     """Restituisce *dumped* con le chiavi presenti solo in *raw* riportate dentro.
 
     Ricorsivo sui dizionari. Le liste vengono sostituite in blocco: allineare
@@ -273,41 +339,106 @@ def _merge_unknown(raw: Any, dumped: Any, prefix: str = "") -> Any:
 
     Le chiavi in :data:`RETIRED_KEY_PATHS` **non** vengono riportate: e' l'unico
     punto in cui una chiave ritirata smette di esistere nel file.
+
+    Nemmeno un campo noto scritto con un'altra grafia (``max_tokens`` accanto al
+    ``maxTokens`` del dump): e' lo stesso campo, e il dump lo porta gia' con la
+    grafia del modello. Riportarlo lo lasciava nel file in coda al dump, dove
+    alla lettura dopo vinceva lui: ogni modifica dalla UI si salvava e non aveva
+    effetto, per sempre.
     """
     if not isinstance(raw, dict) or not isinstance(dumped, dict):
         return dumped
     merged = dict(dumped)
     for key, raw_value in raw.items():
         where = f"{prefix}{key}"
+        role, child = _classify_key(shape, key)
+        if role == "synonym":
+            continue
         if key not in merged:
             if where not in RETIRED_KEY_PATHS:
                 merged[key] = raw_value
         else:
-            merged[key] = _merge_unknown(raw_value, merged[key], f"{where}.")
+            merged[key] = _merge_unknown(raw_value, merged[key], f"{where}.", child)
     return merged
 
 
-def _unknown_key_paths(raw: Any, dumped: Any, prefix: str = "") -> list[str]:
+def _unknown_key_paths(
+    raw: Any, dumped: Any, prefix: str = "", shape: _Shape = ("model", Config)
+) -> list[str]:
     """Elenca i percorsi delle chiavi presenti in *raw* ma non nel dump del modello.
 
     Una chiave ritirata non e' sconosciuta: non compare, o il warning che questa
     lista alimenta suonerebbe a ogni caricamento fino alla prima riscrittura.
+    Nemmeno un campo noto scritto con un'altra grafia: quello il modello lo
+    legge (v. :func:`_shadowed_key_paths` per il caso in cui non lo legge).
     """
     if not isinstance(raw, dict) or not isinstance(dumped, dict):
         return []
     unknown: list[str] = []
     for key, raw_value in raw.items():
         where = f"{prefix}{key}"
+        role, child = _classify_key(shape, key)
+        if role == "synonym":
+            continue
         if key not in dumped:
             if where not in RETIRED_KEY_PATHS:
                 unknown.append(where)
             continue
         if isinstance(raw_value, dict):
-            unknown.extend(_unknown_key_paths(raw_value, dumped[key], f"{where}."))
+            unknown.extend(_unknown_key_paths(raw_value, dumped[key], f"{where}.", child))
         elif isinstance(raw_value, list) and isinstance(dumped.get(key), list):
+            item_shape = _list_item_shape(shape, key)
             for i, (raw_item, dumped_item) in enumerate(zip(raw_value, dumped[key])):
-                unknown.extend(_unknown_key_paths(raw_item, dumped_item, f"{where}[{i}]."))
+                unknown.extend(
+                    _unknown_key_paths(raw_item, dumped_item, f"{where}[{i}].", item_shape)
+                )
     return unknown
+
+
+def _list_item_shape(shape: _Shape, key: str) -> _Shape:
+    """La forma degli elementi della lista che il campo *key* di *shape* contiene."""
+    if shape is None or shape[0] != "model":
+        return None
+    model = shape[1]
+    field = field_for_input_key(model, key)
+    if field is None:
+        return None
+    finfo = model.model_fields[field]
+    annotation = finfo.resolved_type if finfo.resolved_type is not None else finfo.annotation
+    if get_origin(annotation) is list and get_args(annotation):
+        inner = _shape_of(get_args(annotation)[0])
+        if inner is not None and inner[0] == "model":
+            return inner
+    return None
+
+
+def _shadowed_key_paths(
+    raw: Any, prefix: str = "", shape: _Shape = ("model", Config)
+) -> list[str]:
+    """Le grafie di un campo che il modello **non** legge, perche' c'e' anche la sua.
+
+    ``max_tokens`` da solo si legge (e alla prossima scrittura diventa
+    ``maxTokens``); ``max_tokens`` accanto a ``maxTokens`` no: vince la grafia del
+    modello, e questa sparisce alla prossima scrittura. E' l'unico caso in cui un
+    valore scritto nel file non ha effetto, e va detto.
+    """
+    if not isinstance(raw, dict) or shape is None:
+        return []
+    shadowed: list[str] = []
+    for key, raw_value in raw.items():
+        where = f"{prefix}{key}"
+        role, child = _classify_key(shape, key)
+        if role == "synonym" and shape[0] == "model":
+            field = field_for_input_key(shape[1], key)
+            if field is not None and canonical_input_key(shape[1], field) in raw:
+                shadowed.append(where)
+        if isinstance(raw_value, dict):
+            shadowed.extend(_shadowed_key_paths(raw_value, f"{where}.", child))
+        elif isinstance(raw_value, list):
+            item_shape = _list_item_shape(shape, key)
+            for i, item in enumerate(raw_value):
+                shadowed.extend(_shadowed_key_paths(item, f"{where}[{i}].", item_shape))
+    return shadowed
 
 
 def _unresolve_default_timezone(data: dict[str, Any]) -> None:

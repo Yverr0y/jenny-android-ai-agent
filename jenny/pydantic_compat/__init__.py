@@ -1,6 +1,11 @@
 """Pydantic-compatible wrapper implemented with stdlib dataclasses."""
 
-from jenny.pydantic_compat.core import BaseModel, BaseSettings
+from jenny.pydantic_compat.core import (
+    BaseModel,
+    BaseSettings,
+    canonical_input_key,
+    field_for_input_key,
+)
 from jenny.pydantic_compat.errors import ValidationError
 from jenny.pydantic_compat.fields import (
     AliasChoices,
@@ -19,6 +24,8 @@ __all__ = [
     "Field",
     "FieldInfo",
     "ValidationError",
+    "canonical_input_key",
+    "field_for_input_key",
     "field_validator",
     "model_validator",
     "to_camel",
