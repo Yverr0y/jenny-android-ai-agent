@@ -170,7 +170,7 @@ def test_absorbing_uimode_is_safe_because_nothing_native_follows_it() -> None:
 
 
 def test_absorbing_locale_is_safe_because_the_layout_has_no_string_resources() -> None:
-    """Stessa condizione per ``locale``: il layout nativo scrive le sue tre
+    """Stessa condizione per ``locale``: il layout nativo scrive le sue sei
     stringhe in chiaro e non referenzia nessun ``@string``, quindi non c'è niente
     da ri-risolvere al cambio lingua. La WebUI ha la sua i18n, con selettore
     dedicato in Impostazioni.

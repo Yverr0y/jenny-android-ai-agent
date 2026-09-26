@@ -119,8 +119,9 @@ class JennyApplication : Application() {
      * che `appcompat` NON si porta dietro) e il suo valore aggiunto — il debounce
      * da 700ms che evita un falso "background" quando un'activity ne apre
      * un'altra — qui non ha nulla da fare: l'app ha una sola activity, e
-     * `MainActivity` dichiara `configChanges="orientation|screenSize|keyboardHidden"`,
-     * quindi non viene nemmeno ricreata alla rotazione. Non serve contare le
+     * `MainActivity` assorbe nel manifest (`configChanges`) i cambi di
+     * configurazione che capitano davvero, rotazione compresa, quindi non
+     * viene ricreata. Non serve contare le
      * activity avviate, perché `onActivityStarted` scatta solo quando l'unica
      * activity torna visibile, che è esattamente l'evento che ci interessa.
      */

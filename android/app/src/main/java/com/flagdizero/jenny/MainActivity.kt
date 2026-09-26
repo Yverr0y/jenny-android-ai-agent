@@ -1733,9 +1733,10 @@ class MainActivity : AppCompatActivity() {
 
         /** Copia un file locale nella cartella Download di sistema via
          *  MediaStore (stile Telegram: il file diventa visibile a file
-         *  manager e altre app). Richiede API 29+; il runtime target
-         *  (Titan 2, Android 11) la soddisfa. Sincrono sul thread binder
-         *  del bridge: I/O fuori dall'UI thread, ritorno affidabile al JS. */
+         *  manager e altre app). Richiede API 29+ (il minSdk è 26: sotto,
+         *  risponde `false`). Gira su [nativeExecutor], come ogni comando di
+         *  [NativeCommands]: I/O fuori dal thread UI, e l'esito torna al JS
+         *  come risposta della Promise, a copia finita. */
         fun saveToDownloads(path: String): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 Log.w(TAG, "saveToDownloads: unsupported below API 29")

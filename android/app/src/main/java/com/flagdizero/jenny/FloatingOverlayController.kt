@@ -62,28 +62,29 @@ import kotlin.math.max
 /**
  * La mascotte flottante: Jenny sopra le altre app, un tap e le parli.
  *
- * ## Una finestra, due taglie
+ * ## Tre finestre, una sola che cambia taglia
  *
  * Il nodo di qualunque overlay è che **una finestra prende tutti i tocchi dentro
  * i suoi limiti**: a schermo intero renderebbe il telefono inutilizzabile,
- * piccola non basta a contenere un campo di testo e un fumetto. Qui la finestra
- * è una sola e cambia taglia:
+ * piccola non basta a contenere un campo di testo e una conversazione. Qui le
+ * finestre sono tre, montate in quest'ordine (quindi una sopra l'altra):
  *
- * * `PARKED` — grande quanto lo sprite, non focusable, al bordo dove l'hai
- *   lasciata. È il 99% del tempo;
- * * `CHAT` — schermo intero e focusable, con lo scrim, il campo in basso e il
- *   fumetto sopra la testa.
+ * * **il palco** — schermo intero, a `(0,0)`, per sempre ([stageParams]).
+ *   Cambia solo *cosa accetta*: da fermo `NOT_TOUCHABLE` ([STAGE_ASLEEP]), in
+ *   volo toccabile ([STAGE_TOUCHABLE]), in chat anche focusable
+ *   ([STAGE_CHAT]). Porta lo scrim, la colonna della chat e l'arte del volo;
+ * * **lei** — grande quanto lo sprite, e si ridimensiona solo quando cambia la
+ *   taglia ([applyMascotSize]): dove sta a schermo è la sua `x/y`
+ *   ([buildMascotWindow]);
+ * * **la maniglia** — grande quanto lo sprite, trasparente, sopra di lei: è
+ *   lei a prendere i tocchi ([buildGrip]). È l'unica che cambia taglia: al
+ *   `DOWN` diventa l'arena a schermo intero, così il dito non ne esce durante
+ *   il gesto, e alla fine del gesto torna piccola ([openArena], [restGrip]).
  *
- * **Il cambio di taglia avviene sempre fra un gesto e l'altro, mai durante.** Il
- * tap si completa e *poi* la finestra cresce; il trascinamento non cambia
- * taglia affatto (la finestra piccola segue il dito). Non esiste un gesto che
- * richieda di ridimensionare a dito abbassato, ed è questo che evita tutta la
- * classe di bug in cui il primo `MOVE` dopo il ridimensionamento arriva con
- * coordinate relative a una cornice diversa.
- *
- * Quando la finestra è intera sta a `(0,0)`, quindi la posizione della mascotte
- * dentro la pagina coincide con la sua posizione sullo schermo: il passaggio
- * fra le due taglie non sposta niente di un pixel.
+ * Le posizioni si contano in px schermo (per le due finestre piccole, con la
+ * correzione della status bar scritta in [parkTop]). Nessun passaggio fra
+ * stati ridimensiona una finestra che si vede: cresce e cala solo la maniglia,
+ * che non disegna niente.
  *
  * ## Chi possiede cosa
  *
@@ -333,7 +334,10 @@ object FloatingOverlayController {
         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
-    /** ...e sveglio: prende i tocchi ma non il fuoco (il solo fumetto). */
+    /** ...e in volo: prende i tocchi ma non il fuoco. Toccabile per non essere
+     *  tappato a 0,8 di opacità (v. `buildViews`); i tocchi li prende comunque
+     *  la maniglia, che in volo gli sta sopra a schermo intero. Il «solo
+     *  fumetto» per cui era nato non esiste più. */
     private const val STAGE_TOUCHABLE = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
@@ -1263,9 +1267,9 @@ object FloatingOverlayController {
 
         // Nel palco ci sta **solo l'arte del volo**, e solo mentre vola.
         //
-        // La mascotte ferma vive nella maniglia, non qui, per una ragione di
-        // sistema: un overlay non fidato con `FLAG_NOT_TOUCHABLE` viene tappato
-        // da Android a 0,8 di opacità (protezione anti-tapjacking, si legge in
+        // La mascotte ferma vive nella sua finestra ([buildMascotWindow]), non
+        // qui, per una ragione di sistema: un overlay non fidato con
+        // `FLAG_NOT_TOUCHABLE` viene tappato da Android a 0,8 di opacità (protezione anti-tapjacking, si legge in
         // `dumpsys` come `alpha=0.8`), e il palco da fermo *deve* essere
         // `NOT_TOUCHABLE` o si mangerebbe ogni tocco del telefono. Disegnarla
         // là vorrebbe dire una Jenny semitrasparente, sempre.
@@ -1345,11 +1349,13 @@ object FloatingOverlayController {
     }
 
     /**
-     * La maniglia: il riquadro che si tocca — **e in cui lei vive**.
+     * La maniglia: il riquadro che si tocca. **Lei non ci vive**: sta nella
+     * finestra sotto ([buildMascotWindow]), e questa è una `View` vuota e
+     * trasparente, grande quanto lo sprite e sopra di lei.
      *
-     * Grande quanto lo sprite, toccabile, quindi fuori dal tetto di opacità
-     * che Android mette agli overlay `NOT_TOUCHABLE`: è l'unico posto in cui
-     * si può disegnare a piena opacità qualcosa che sta sempre a schermo.
+     * Esiste per poter cambiare taglia senza che si veda: al `DOWN` diventa
+     * l'arena a schermo intero ([openArena]), a fine gesto torna piccola
+     * ([restGrip]). Ridimensionare la finestra di lei, invece, si vedrebbe.
      */
     @SuppressLint("ClickableViewAccessibility")
     private fun buildGrip(ctx: Context): View {
@@ -1380,8 +1386,9 @@ object FloatingOverlayController {
     /**
      * La finestra di lei: i due livelli dell'arte, e niente altro.
      *
-     * **Non si ridimensiona mai.** È la regola che tiene in piedi tutto il
-     * resto: dove sta a schermo è la `x/y` di questa finestra, punto, quindi
+     * **Non si ridimensiona mai per un gesto o un cambio di stato** — solo
+     * quando cambia la taglia in Impostazioni ([applyMascotSize], mai in
+     * volo). È la regola che tiene in piedi tutto il resto: dove sta a schermo è la `x/y` di questa finestra, punto, quindi
      * non esiste un fotogramma in cui due contabilità divergono. Il volo non
      * la fa crescere — per quello c'è la maniglia, che è trasparente — e la
      * scivolata fra gli ancoraggi muove lei, non un figlio dentro di lei.
@@ -2220,9 +2227,10 @@ object FloatingOverlayController {
                     } else if (!expanded) {
                         // Il sistema si è preso il gesto (un bordo, una
                         // notifica). L'arena era già aperta dal `DOWN` e a
-                        // schermo intero **inghiotte ogni tocco**: lasciarla lì
-                        // fino allo scadere del timer è un telefono morto per
-                        // venti secondi. Si richiude adesso.
+                        // schermo intero **inghiotte ogni tocco**: la richiude
+                        // `restGrip` qui sotto, subito. `collapse` a finestra
+                        // chiusa non fa altro che togliere il timer di
+                        // inattività armato al `DOWN` (esce prima del resto).
                         collapse()
                     }
                     tracker?.recycle()
@@ -2236,13 +2244,13 @@ object FloatingOverlayController {
     }
 
     /**
-     * Porta la finestra a schermo intero senza cambiare nient'altro.
+     * Porta la **maniglia** a schermo intero senza cambiare nient'altro.
      *
      * Serve al tocco, non all'aspetto: è l'arena in cui il dito può muoversi e
      * la mascotte può volare. Resta **non focusable** — nessuna tastiera
      * rubata a chi sta sotto — e la mascotte resta esattamente dov'era, perché
-     * la posizione che aveva come origine della finestra diventa un margine
-     * dentro di essa.
+     * sta in un'altra finestra, che non cambia. La maniglia non disegna niente:
+     * crescere non si vede.
      */
     private fun openArena(ctx: Context) {
         // A chat aperta l'arena c'è già: è il palco, intero e toccabile.
@@ -2270,18 +2278,19 @@ object FloatingOverlayController {
     /**
      * La presa: da qui in poi disegna il volo.
      *
-     * **La finestra resta della taglia dello sprite e si muove**, un fotogramma
-     * alla volta, esattamente come faceva il trascinamento. La prima versione
-     * la promuoveva a schermo intero per avere l'arena, ed è stata smentita dal
-     * telefono nel modo più netto: ridimensionare una finestra sotto il dito
-     * **annulla il gesto**. Misurato il 17/09 — `ACTION_CANCEL` cinque
-     * millisecondi dopo la presa, e la mascotte che cadeva da ferma senza
-     * essersi mossa. Spostarla, invece, il tocco lo tiene: è la differenza fra
-     * `updateViewLayout` che cambia `x`/`y` e uno che cambia `width`/`height`.
+     * **Alla presa nessuna finestra cambia taglia.** L'arena c'è già: la
+     * maniglia è cresciuta a schermo intero al `DOWN`, col dito ancora fermo
+     * ([bindTouch], [openArena]). Ridimensionare una finestra sotto il dito a
+     * gesto avviato è ciò che il 17/09 lo annullava — `ACTION_CANCEL` cinque
+     * millisecondi dopo la presa, e la mascotte che cadeva da ferma — ed è per
+     * questo che qui non succede.
      *
-     * L'oscillazione ci sta dentro lo stesso: il personaggio occupa circa il
-     * 45% del canvas quadrato e il resto è margine trasparente, quindi anche
-     * inclinata di 78° resta dentro il suo riquadro.
+     * Il volo si disegna **nel palco**, che è già a schermo intero: l'arte del
+     * volo ([flightArt]) si sposta per traslazione, un fotogramma alla volta,
+     * mentre la finestra di lei si nasconde. Per questo l'oscillazione non
+     * viene mai ritagliata, a qualunque inclinazione — non per il margine
+     * trasparente dello sprite, che è poco: il personaggio ne riempie circa il
+     * 73%, misurato sul telefono.
      */
     private fun startFlight(ctx: Context) {
         val mascot = column ?: return
@@ -2672,9 +2681,13 @@ object FloatingOverlayController {
      * Parcheggiata sta al bordo, per [DOCKED_OUT_RATIO] fuori schermo. «Out»
      * con la chat aperta sta **in piedi sul cap della pillola** dal suo lato:
      * l'asse del corpo ([AXIS_RATIO]) cade sul centro del cap — la pallina
-     * d'invio, a destra. «Out» senza chat — il
-     * solo fumetto di risposta — rientra a un quarto dal bordo, come prima:
-     * lì la pillola non c'è, e non c'è niente su cui stare.
+     * d'invio, a destra.
+     *
+     * «Out» senza chat oggi non capita: il fumetto di risposta da solo non
+     * esiste più (la conversazione sta nella colonna del composer), e ogni
+     * chiamante con `out = true` ha già la chat aperta. Il ramo con
+     * [OUT_RATIO] — a un quarto dal bordo — resta come ripiego per un
+     * chiamante futuro che la chiedesse fuori a chat chiusa.
      */
     private fun parkX(ctx: Context, out: Boolean = false): Int {
         val size = mascotSize(ctx)

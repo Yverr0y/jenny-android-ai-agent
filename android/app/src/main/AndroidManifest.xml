@@ -29,7 +29,9 @@
          stato ucciso a schermo spento. Permesso "normale" fino ad Android 11 e
          concedibile — revocabile — dall'utente da Android 12: quando manca,
          scheduleWake ricade su una sveglia inesatta, che slitta ma scatta
-         comunque. NON si dichiara USE_EXACT_ALARM: è riservato a sveglie e
+         comunque — e sveglia un gateway vivo, ma non ne rialza uno morto:
+         la sua allowlist non permette di avviare un foreground service (v.
+         GatewayStarter). NON si dichiara USE_EXACT_ALARM: è riservato a sveglie e
          timer visibili all'utente, non è revocabile e farebbe rifiutare l'app
          in review su Play. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -141,10 +143,10 @@
              assorbita qui sopra ricreava comunque.
 
              Assorbirli senza ricreare è sicuro **perché nulla di nativo dipende
-             da quelle risorse**: `Theme.Jenny` è `Theme.AppCompat.Light`, non
+             da quelle risorse**: `Theme.Jenny` è `Theme.AppCompat.Light.NoActionBar`, non
              DayNight, quindi `uiMode` non cambia nessun colore; i temi della
              WebUI sono CSS puro (`data-theme` + `setThemeBars`) e non usano
-             `prefers-color-scheme`; `activity_main.xml` scrive le sue tre
+             `prefers-color-scheme`; `activity_main.xml` scrive le sue sei
              stringhe in chiaro e non referenzia nessun `@string`, quindi
              `locale` non ha niente da ri-risolvere. La WebView, invece, il
              `fontScale` lo riceve da sola (v. `loadWebView`: `textZoom` non
