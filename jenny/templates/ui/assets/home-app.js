@@ -286,11 +286,12 @@ class HomeApp {
     /* Il selettore di allegati e' lo stesso dell'officina, con gli stessi tetti
        del server (4 immagini, 8 MB l'una): superarli fa rifiutare il messaggio
        intero, quindi i limiti devono stare da una parte sola. */
-    this.files = new ImageHandler();
-    this.files.onChange = () => this._renderPending();
-    /* Un allegato che non entra lo diceva nessuno: spariva e basta. Ora lo
-       dice il telefono, con le stesse parole che userebbe il gateway. */
-    this.files.onReject = (reason) => this.chat.noteRefusal(reason);
+    /* **Uno per conversazione**, come le bozze: una foto scelta dentro un
+       quaderno partiva col primo messaggio della conversazione personale
+       (terza revisione, HJ9). `this.files` e' quello della conversazione a
+       schermo, e cambia con lei (v. `showConversation`). */
+    this._attachments = new Map();
+    this.files = this._filesFor(sessionManager.currentKey);
 
     this._wireTimer = null;
     this._threadFailed = false;
@@ -570,6 +571,9 @@ class HomeApp {
       this.input.value = this._drafts.get(target) || '';
       this._autosize();
     }
+    /* ...e cosi' gli allegati in attesa. */
+    this.files = this._filesFor(target);
+    this._renderPending();
     this._applyConversation();
     await this._readThread();
   }
@@ -671,6 +675,23 @@ class HomeApp {
     return true;
   }
 
+  /** Gli allegati in attesa della conversazione `key`, nati al primo uso.
+   *
+   *  Ognuno parla col guscio solo mentre e' quello a schermo: un file letto
+   *  dopo che hai cambiato conversazione finisce nella sua, e non ridisegna
+   *  la striscia ne' scrive un rifiuto nel filo di un'altra. */
+  _filesFor(key) {
+    let files = this._attachments.get(key);
+    if (files) return files;
+    files = new ImageHandler();
+    files.onChange = () => { if (this.files === files) this._renderPending(); };
+    /* Un allegato che non entra lo diceva nessuno: spariva e basta. Ora lo
+       dice il telefono, con le stesse parole che userebbe il gateway. */
+    files.onReject = (reason) => { if (this.files === files) this.chat.noteRefusal(reason); };
+    this._attachments.set(key, files);
+    return files;
+  }
+
   /* La bozza di un quaderno rinominato passa al nome nuovo. Restava sotto la
      chiave vecchia, cioe' persa: nessuna conversazione la chiede piu'. Se il
      quaderno e' quello a schermo la bozza viva e' nel campo, non in
@@ -681,6 +702,12 @@ class HomeApp {
       : this._drafts.get(oldKey);
     this._drafts.delete(oldKey);
     if (draft !== undefined) this._drafts.set(newKey, draft);
+    /* Gli allegati in attesa seguono la bozza. */
+    const files = this._attachments?.get(oldKey);
+    if (files) {
+      this._attachments.delete(oldKey);
+      this._attachments.set(newKey, files);
+    }
   }
 
   /** Cancella un quaderno dalla sua scheda, e fa il seguito che e' di casa.
@@ -712,6 +739,7 @@ class HomeApp {
       await this.showConversation(this.homePages?.homeConversation || null);
     }
     this._drafts.delete(key);
+    this._attachments?.delete(key);
     await this.who.refresh();
     await this.pagesPort().reload();
     showToast(i18n.t('home.notebook.eliminato', { name: name }), 'success');

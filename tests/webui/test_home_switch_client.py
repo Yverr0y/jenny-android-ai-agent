@@ -329,6 +329,9 @@ class App {
   }
   _autosize() {}
   _renderPending() {}
+  /* Gli allegati per conversazione hanno il loro banco
+     (`test_home_attachments_per_conversation_client.py`). */
+  _filesFor() { return this.files; }
   _setRunning(running) { this._running = running; this.actions.push('ferma:' + running); }
   _showThreadError() { this._threadFailed = true; this.actions.push('non si legge'); }
   __SWITCH__
