@@ -243,6 +243,42 @@ assert.deepEqual(c.rendered, ['veloce']);
 """)
 
 
+def test_edits_typed_while_the_new_file_is_read_are_asked_about() -> None:
+    """Il buffer era pulito quando si e' toccato l'altro file, e si e' scritto
+    nell'editor mentre la lettura era in volo: la seconda domanda, a lettura
+    arrivata, e' l'unica che le vede."""
+    _run("""
+const c = new WorkspaceController();
+const opening = c.openFile('a.md');
+await tick();
+reads.shift().resolve({ content: 'originale' });
+await opening;
+assert.equal(c._dirty, false);
+
+dialog.answer = false;
+const p = c.openFile('b.md');
+await tick();
+assert.equal(dialog.asked, 0, 'un buffer pulito non fa domande');
+c.editor.text = 'scritto durante la lettura';
+c._dirty = true;
+reads.shift().resolve({ content: 'bi' });
+await p;
+assert.equal(dialog.asked, 1, 'le modifiche scritte durante la lettura sparite senza chiedere');
+assert.equal(c.currentPath, 'a.md');
+assert.equal(c.editor.getValue(), 'scritto durante la lettura');
+assert.equal(c._dirty, true);
+assert.deepEqual(c.rendered, ['originale']);
+
+dialog.answer = true;
+const q = c.openFile('b.md');
+await tick();
+reads.shift().resolve({ content: 'bi' });
+await q;
+assert.equal(c.currentPath, 'b.md');
+assert.equal(c._dirty, false);
+""")
+
+
 def test_a_binary_fallback_asks_before_dropping_the_edits() -> None:
     """Senza il ponte nativo l'apertura con l'app di sistema ripiega sulla vista
     dell'editor: anche quella strada sovrascriveva il buffer."""
