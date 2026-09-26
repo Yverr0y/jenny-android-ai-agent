@@ -35,7 +35,11 @@ from jenny.providers.base import (
     stream_truncated_response,
 )
 from jenny.providers.body_merge import deep_merge
-from jenny.providers.endpoint_budget import is_local_endpoint, request_timeout_s
+from jenny.providers.endpoint_budget import (
+    is_local_endpoint,
+    read_timeout_s,
+    request_timeout_s,
+)
 from jenny.providers.opencode import session_headers
 from jenny.providers.tool_ids import dedupe_tool_ids, unique_tool_ids_in_history
 
@@ -97,7 +101,12 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         self._http_client = httpx.AsyncClient(
             base_url=base_url,
             headers=headers,
-            timeout=request_timeout_s(local=self._is_local),
+            # La read non scade prima del budget del primo token: quel silenzio
+            # lo misura lo stream, con il suo messaggio (v. ``read_timeout_s``).
+            timeout=httpx.Timeout(
+                request_timeout_s(local=self._is_local),
+                read=read_timeout_s(local=self._is_local),
+            ),
             # Senza CA di provider resta ``True``, che e' esattamente il default
             # di httpx: la fiducia di default non la ridefiniamo noi.
             verify=self._ssl_context or True,

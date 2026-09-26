@@ -17,12 +17,18 @@ from __future__ import annotations
 from ipaddress import ip_address
 from urllib.parse import urlparse
 
-from jenny.config.runtime_env import llm_http_timeout_s
+from jenny.config.runtime_env import (
+    llm_http_timeout_s,
+    resolve_first_output_timeout_s,
+    resolve_stream_idle_timeout_s,
+)
 
 __all__ = [
     "DEFAULT_REQUEST_TIMEOUT_S",
     "LOCAL_REQUEST_TIMEOUT_S",
+    "FIRST_OUTPUT_READ_MARGIN_S",
     "is_local_endpoint",
+    "read_timeout_s",
     "request_timeout_s",
 ]
 
@@ -68,3 +74,25 @@ def request_timeout_s(*, local: bool = False) -> float:
     """
     default = LOCAL_REQUEST_TIMEOUT_S if local else DEFAULT_REQUEST_TIMEOUT_S
     return llm_http_timeout_s(default)
+
+
+# Quanto la read timeout di httpx sta *dopo* il budget del primo token: il
+# silenzio lo deve misurare quel budget (che dice «nessun output entro N
+# secondi»), non un ``ReadTimeout`` anonimo qualche istante prima.
+FIRST_OUTPUT_READ_MARGIN_S = 10.0
+
+
+def read_timeout_s(*, local: bool = False) -> float:
+    """Read timeout di httpx per una richiesta al modello.
+
+    Mai sotto il budget del primo token (``resolve_first_output_timeout_s``):
+    prima un endpoint remoto aveva 120 s di read contro 300 di budget, e un
+    modello che ragiona in silenzio veniva tagliato da httpx a 120 s — con i
+    retry, ~8 minuti per un errore che diceva solo ``ReadTimeout``. Connect,
+    write e pool restano a ``request_timeout_s``: una connessione che non si apre
+    non ha niente a che fare col modello che pensa.
+    """
+    # Lo stream aspetta il primo output ``max(primo token, idle)``: è quello il
+    # silenzio più lungo che può misurare, e la read deve starci sopra.
+    stream_budget = max(resolve_first_output_timeout_s(local=local), resolve_stream_idle_timeout_s())
+    return max(request_timeout_s(local=local), stream_budget + FIRST_OUTPUT_READ_MARGIN_S)

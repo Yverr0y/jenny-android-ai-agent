@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any, AsyncGenerator
@@ -9,7 +10,12 @@ from typing import Any, AsyncGenerator
 import httpx
 from loguru import logger
 
-from jenny.providers.base import LLMResponse, ToolCallRequest, parse_tool_arguments
+from jenny.providers.base import (
+    LLMResponse,
+    StreamTimeout,
+    ToolCallRequest,
+    parse_tool_arguments,
+)
 
 FINISH_REASON_MAP = {
     "completed": "stop",
@@ -134,8 +140,16 @@ async def consume_sse_with_reasoning(
     response: httpx.Response,
     on_content_delta: Callable[[str], Awaitable[None]] | None = None,
     on_tool_call_delta: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    *,
+    idle_timeout_s: float | None = None,
+    first_output_timeout_s: float | None = None,
 ) -> tuple[str, list[ToolCallRequest], str, dict[str, int], str | None]:
-    """Consume a Responses API SSE stream, including visible reasoning summaries."""
+    """Consume a Responses API SSE stream, including visible reasoning summaries.
+
+    Con *idle_timeout_s* l'attesa di ogni evento ha un tetto, e solleva
+    ``StreamTimeout`` come il ramo Chat Completions: *first_output_timeout_s*
+    (il budget lungo) vale finché non è arrivato niente, poi l'idle.
+    """
     content = ""
     tool_calls: list[ToolCallRequest] = []
     tool_call_buffers: dict[str, dict[str, Any]] = {}
@@ -145,7 +159,9 @@ async def consume_sse_with_reasoning(
     reasoning_content: str | None = None
     streamed_reasoning = False
 
-    async for event in iter_sse(response):
+    async for event in _events_with_budget(
+        iter_sse(response), idle_timeout_s, first_output_timeout_s,
+    ):
         event_type = event.get("type")
         if event_type == "response.output_item.added":
             item = event.get("item") or {}
@@ -260,6 +276,36 @@ async def consume_sse_with_reasoning(
             raise RuntimeError(f"Response failed: {str(detail)[:500]}")
 
     return content, tool_calls, finish_reason, usage, reasoning_content
+
+
+async def _events_with_budget(
+    events: AsyncGenerator[dict[str, Any], None],
+    idle_timeout_s: float | None,
+    first_output_timeout_s: float | None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Gli eventi di *events*, ciascuno atteso al più il budget in vigore.
+
+    Senza budget è un passante. Il primo evento ha il budget lungo (il modello
+    sta ancora ragionando), i successivi l'idle; allo scadere ``StreamTimeout``
+    dice quale dei due.
+    """
+    if idle_timeout_s is None:
+        async for event in events:
+            yield event
+        return
+    first_budget = first_output_timeout_s or idle_timeout_s
+    saw_event = False
+    iterator = events.__aiter__()
+    while True:
+        budget = idle_timeout_s if saw_event else first_budget
+        try:
+            event = await asyncio.wait_for(iterator.__anext__(), timeout=budget)
+        except StopAsyncIteration:
+            return
+        except asyncio.TimeoutError as exc:
+            raise StreamTimeout(budget, saw_output=saw_event) from exc
+        saw_event = True
+        yield event
 
 
 def _extract_reasoning_summary_from_output(output: Any) -> str | None:

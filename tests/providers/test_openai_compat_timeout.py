@@ -2,6 +2,7 @@ from unittest.mock import patch, sentinel
 
 import pytest
 
+from jenny.providers.endpoint_budget import read_timeout_s
 from jenny.providers.openai_compat_helpers import (
     _LOCAL_REQUEST_TIMEOUT_S,
     _OPENAI_COMPAT_REQUEST_TIMEOUT_S,
@@ -32,8 +33,10 @@ async def test_openai_compat_provider_sets_timeout_on_http_client() -> None:
 
     client_kwargs = mock_http_client.call_args.kwargs
     # Endpoint in loopback: il limite è quello lungo, perché il prompt
-    # processing di un model server locale può durare minuti.
-    assert client_kwargs["timeout"] == _LOCAL_REQUEST_TIMEOUT_S
+    # processing di un model server locale può durare minuti. La read copre in
+    # più il budget del primo token (PC5 della terza revisione).
+    assert client_kwargs["timeout"].connect == _LOCAL_REQUEST_TIMEOUT_S
+    assert client_kwargs["timeout"].read == read_timeout_s(local=True)
     assert client_kwargs["limits"].keepalive_expiry == 0
     assert provider._http_client is sentinel.http_client
 
@@ -50,7 +53,9 @@ async def test_openai_compat_provider_keeps_the_tight_timeout_for_remote() -> No
         )
         await provider._ensure_client()
 
-    assert mock_http_client.call_args.kwargs["timeout"] == _OPENAI_COMPAT_REQUEST_TIMEOUT_S
+    timeout = mock_http_client.call_args.kwargs["timeout"]
+    assert timeout.connect == _OPENAI_COMPAT_REQUEST_TIMEOUT_S
+    assert timeout.read == read_timeout_s(local=False)
 
 
 async def test_openai_compat_provider_timeout_can_be_overridden_by_env(monkeypatch) -> None:
@@ -61,7 +66,10 @@ async def test_openai_compat_provider_timeout_can_be_overridden_by_env(monkeypat
     )
     await provider._ensure_client()
 
-    assert provider._http_client.timeout.read == 45.0
+    # L'override vale per connect/write/pool; la read non scende sotto il
+    # budget del primo token, che ha il suo knob.
+    assert provider._http_client.timeout.connect == 45.0
+    assert provider._http_client.timeout.read == read_timeout_s(local=False)
 
 
 async def test_the_shared_env_name_also_applies_here(monkeypatch) -> None:
@@ -86,4 +94,4 @@ async def test_a_malformed_timeout_falls_back_to_the_default(monkeypatch, bad: s
     )
     await provider._ensure_client()
 
-    assert provider._http_client.timeout.read == _OPENAI_COMPAT_REQUEST_TIMEOUT_S
+    assert provider._http_client.timeout.connect == _OPENAI_COMPAT_REQUEST_TIMEOUT_S

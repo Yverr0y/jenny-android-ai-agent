@@ -27,6 +27,7 @@ from jenny.providers.base import (
     stream_timeout_response,
     tool_arguments_json_for_replay,
 )
+from jenny.providers.endpoint_budget import read_timeout_s
 from jenny.providers.openai_compat_helpers import (
     _ALLOWABLE_MSG_KEYS,
     _DEFAULT_OPENROUTER_HEADERS,
@@ -110,9 +111,17 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         self._responses_failures: dict[str, int] = {}
         self._responses_tripped_at: dict[str, float] = {}
 
+    def _timeout(self) -> httpx.Timeout:
+        """Timeout httpx: connect/write/pool stretti, read lunga quanto il
+        budget del primo token (v. ``endpoint_budget.read_timeout_s``)."""
+        return httpx.Timeout(
+            _openai_compat_timeout_s(local=self._is_local),
+            read=read_timeout_s(local=self._is_local),
+        )
+
     def _build_http_client(self) -> None:
         """Create a plain httpx client for the SDK-free path."""
-        timeout_s = _openai_compat_timeout_s(local=self._is_local)
+        timeout_s = self._timeout()
         # Senza CA di provider resta ``True``, che e' esattamente il default di
         # httpx: la fiducia di default non la ridefiniamo noi.
         verify = self._ssl_context or True
@@ -187,7 +196,7 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
             "POST", url,
             headers=self._auth_headers(),
             json=body,
-            timeout=_openai_compat_timeout_s(local=self._is_local),
+            timeout=self._timeout(),
             params=self._extra_query or None,
         )
         response = await self._http_client.send(request, stream=stream)
@@ -862,10 +871,17 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         )
         body["stream"] = True
         response = await self._http_request("/responses", body, stream=True)
+        # Gli stessi due budget del ramo Chat Completions: senza, uno stream
+        # Responses muto restava appeso fino alla read timeout di httpx.
+        idle_timeout_s = resolve_stream_idle_timeout_s()
         content, tool_calls, finish_reason, usage, reasoning_content = await consume_sse_with_reasoning(
             response,
             on_content_delta=on_content_delta,
             on_tool_call_delta=on_tool_call_delta,
+            idle_timeout_s=idle_timeout_s,
+            first_output_timeout_s=max(
+                resolve_first_output_timeout_s(local=self._is_local), idle_timeout_s,
+            ),
         )
         return LLMResponse(
             content=content or None,

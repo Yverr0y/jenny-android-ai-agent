@@ -23,6 +23,7 @@ from jenny.providers.anthropic_provider import AnthropicProvider
 from jenny.providers.endpoint_budget import (
     DEFAULT_REQUEST_TIMEOUT_S,
     LOCAL_REQUEST_TIMEOUT_S,
+    read_timeout_s,
 )
 from jenny.providers.factory import make_provider
 
@@ -177,14 +178,17 @@ def test_the_factory_hands_the_anthropic_provider_its_config() -> None:
 def test_a_remote_endpoint_gets_the_tight_timeout() -> None:
     provider = _provider()
 
-    assert provider._http_client.timeout.read == DEFAULT_REQUEST_TIMEOUT_S
+    # Stretto su connect/write; la read copre il budget del primo token (PC5).
+    assert provider._http_client.timeout.connect == DEFAULT_REQUEST_TIMEOUT_S
+    assert provider._http_client.timeout.read == read_timeout_s(local=False)
 
 
 def test_a_loopback_endpoint_gets_the_long_timeout() -> None:
     """Un model server locale macina il prompt in silenzio per minuti."""
     provider = AnthropicProvider(api_key="k", api_base="http://127.0.0.1:11434")
 
-    assert provider._http_client.timeout.read == LOCAL_REQUEST_TIMEOUT_S
+    assert provider._http_client.timeout.connect == LOCAL_REQUEST_TIMEOUT_S
+    assert provider._http_client.timeout.read == read_timeout_s(local=True)
 
 
 def test_the_http_timeout_can_be_raised_by_env(monkeypatch) -> None:
@@ -199,4 +203,4 @@ def test_the_historic_env_name_still_works_for_both(monkeypatch) -> None:
     monkeypatch.setenv("JENNY_OPENAI_COMPAT_TIMEOUT_S", "45")
     provider = _provider()
 
-    assert provider._http_client.timeout.read == 45.0
+    assert provider._http_client.timeout.connect == 45.0
