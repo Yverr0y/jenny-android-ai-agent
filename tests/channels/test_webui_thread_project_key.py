@@ -26,7 +26,7 @@ import pytest
 from support.gateway_http import make_handler, make_request
 
 from jenny.session import webui_turns
-from jenny.session.keys import webui_chat_id, webui_transcript_key
+from jenny.session.keys import UNIFIED_SESSION_KEY, webui_chat_id, webui_transcript_key
 from jenny.webui.transcript_store import append_transcript_object
 
 _ANNOUNCE = (
@@ -208,3 +208,25 @@ def test_a_key_that_is_not_a_project_name_is_not_a_project(handler, key, route) 
         response = handler._handle_file_preview(request, quoted)
     assert response.status_code == 404, response.body
     assert handler.read_keys == []
+
+
+def test_the_personal_conversation_on_a_new_workspace_is_empty_not_missing(handler) -> None:
+    """Su un workspace appena creato non c'e' ancora ne' la trascrizione ne' il
+    file di sessione. La conversazione personale esiste comunque: e' vuota, e il
+    client al primo avvio deve poterla aprire invece di dire che non riesce a
+    leggerla."""
+    payload = _get(handler, "websocket:default")
+
+    assert payload["messages"] == []
+    assert payload["has_pending_tool_calls"] is False
+    assert payload["sessionKey"] == "websocket:default"
+    assert handler.read_keys == [UNIFIED_SESSION_KEY]
+
+
+def test_a_legacy_websocket_key_without_history_is_still_missing(handler) -> None:
+    """Il vuoto vale per la conversazione unica, non per ogni ``websocket:<x>``."""
+    quoted = urllib.parse.quote("websocket:altro", safe="")
+    response = handler._handle_webui_thread_get(
+        make_request(f"/api/sessions/{quoted}/webui-thread"), quoted
+    )
+    assert response.status_code == 404, response.body

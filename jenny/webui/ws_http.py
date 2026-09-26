@@ -553,8 +553,12 @@ class GatewayHTTPHandler:
             limit=limit,
             before=before,
             # Un progetto appena creato non ha ancora scambiato un messaggio, e
-            # la sua chat deve aprirsi lo stesso: vuota, non con un 404.
-            allow_empty=is_project_session_key(core_key),
+            # la sua chat deve aprirsi lo stesso: vuota, non con un 404. Vale
+            # anche per la conversazione personale su un workspace nuovo: senza
+            # file di sessione il client, al primo avvio, direbbe di non
+            # riuscire a leggerla. Solo la conversazione unica: le chiavi
+            # ``websocket:<altro>`` legacy restano un 404 se non hanno niente.
+            allow_empty=is_project_session_key(core_key) or core_key == UNIFIED_SESSION_KEY,
         )
         if data is None:
             return _http_error(404, "webui thread not found")
