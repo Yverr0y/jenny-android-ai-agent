@@ -48,7 +48,12 @@ _SOURCE_KEYS = ("user", "api", "cron", "dream", "atlas", "gardener", "mascot", "
 # kind e' condiviso (``jenny.session.keys.internal_session_kind``), la
 # partizione in bucket no: e' una scelta di contabilita di questo modulo.
 # I kind assenti (``internal``, ``subagent``) finiscono in ``"user"`` per
-# fallthrough — come prima di questa condivisione.
+# fallthrough — come prima di questa condivisione. Un subagent pero' non si conta
+# con una chiave ``subagent:``: il suo runner porta la chiave della sessione che
+# l'ha lanciato, e il bucket e' quello (``SubagentManager.usage_hooks``). Allo
+# stesso modo una consolidazione si conta sotto la sessione consolidata
+# (``Consolidator.usage_hooks``). Fino alla terza revisione (AC6) nessuna delle
+# due arrivava qui: l'hook stava solo sui turni di ``AgentLoop``.
 _INTERNAL_KIND_TO_SOURCE = {
     "dream": "dream",
     "cron": "cron",

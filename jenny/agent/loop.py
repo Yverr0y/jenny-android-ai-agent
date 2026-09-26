@@ -382,6 +382,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # directory delle sessioni, e due istanze avrebbero due cache
             # divergenti sugli stessi file.
             session_manager=self.sessions,
+            usage_hooks=self._measuring_hooks(),
         )
         self._max_messages = max_messages if max_messages > 0 else 120
         self._running = False
@@ -425,6 +426,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             consolidation_ratio=consolidation_ratio,
             session_locks=self._session_locks,
             projects_subdir=projects_subdir,
+            usage_hooks=self._measuring_hooks(),
         )
         self.auto_compact = AutoCompact(
             sessions=self.sessions,
@@ -2409,6 +2411,16 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         l'ha mai visto.
         """
         self._file_state_store.drop(session_key)
+
+    def _measuring_hooks(self) -> list[AgentHook]:
+        """Gli hook di misura, da montare anche fuori dai turni del loop.
+
+        Sono quelli che dichiarano ``runs_when_ephemeral`` — misurare non è
+        parlare, e oggi è solo ``TokenUsageHook``. Vanno ai subagent e al
+        Consolidator, che chiamano il provider fuori da un turno di questo loop
+        e la cui spesa altrimenti non si contava (AC6 della terza revisione).
+        """
+        return [hook for hook in self._extra_hooks if hook.runs_when_ephemeral()]
 
     def active_session_keys(self) -> tuple[str, ...]:
         """Le sessioni con un turno in volo **adesso**.

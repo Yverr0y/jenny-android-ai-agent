@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, Any, Callable
 from loguru import logger
 
 from jenny.agent.agent_types import AgentType, UnknownAgentTypeError, get_agent_type
-from jenny.agent.hook import AgentHook, AgentHookContext, ToolResultHookContext
+from jenny.agent.hook import (
+    AgentHook,
+    AgentHookContext,
+    CompositeHook,
+    ToolResultHookContext,
+)
 from jenny.agent.runner import AgentRunner, AgentRunSpec
 from jenny.agent.subagent_activity import (
     KIND_ERROR,
@@ -743,9 +748,17 @@ class SubagentManager:
         *,
         session_manager: "SessionManager | None" = None,
         history_store: SubagentHistoryStore | None = None,
+        usage_hooks: Iterable[AgentHook] = (),
     ):
         defaults = AgentDefaults()
         self.provider = provider
+        # Gli hook di **misura** del loop (oggi ``TokenUsageHook``), montati su
+        # ogni run accanto a ``_SubagentHook``. Senza, un subagent girava nel suo
+        # ``AgentRunner`` e i suoi token non arrivavano mai in
+        # ``token-usage.json`` (AC6 della terza revisione). La spesa si registra
+        # sotto la chiave della sessione che l'ha lanciato: il runner del
+        # subagent porta quella, non una ``subagent:``.
+        self.usage_hooks: list[AgentHook] = list(usage_hooks)
         self.workspace = workspace
         self.bus = bus
         self.model = model or provider.get_default_model()
@@ -1258,7 +1271,9 @@ class SubagentManager:
                     ),
                     max_iterations=self._type_max_iterations(atype),
                     max_tool_result_chars=self.max_tool_result_chars,
-                    hook=hook,
+                    hook=(
+                        CompositeHook([hook, *self.usage_hooks]) if self.usage_hooks else hook
+                    ),
                     max_iterations_message="Task completed but no final response was generated.",
                     finalize_on_max_iterations=False,
                     error_message=None,

@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger
 
+from jenny.agent.hook import AgentHook, AgentHookContext
 from jenny.agent.memory import (
     _ARCHIVE_SUMMARY_MAX_CHARS,
     _RAW_ARCHIVE_MAX_CHARS,
@@ -113,6 +115,7 @@ class Consolidator:
         consolidation_ratio: float = 0.5,
         session_locks: "SessionLocks | None" = None,
         projects_subdir: str = _PROJECTS_SUBDIR,
+        usage_hooks: Iterable[AgentHook] = (),
     ):
         self.store = store
         self.provider = provider
@@ -139,6 +142,12 @@ class Consolidator:
         # memoria e non nei metadata: un riavvio che lo azzera concede al
         # modello tre tentativi in piu', che e' il verso innocuo dello sbaglio.
         self._token_failures: dict[str, int] = {}
+        # Gli hook di misura del loop (oggi ``TokenUsageHook``): la chiamata di
+        # consolidazione va al provider da sé, fuori da ogni ``AgentRunner``, e
+        # senza questi la sua spesa non arrivava in ``token-usage.json`` (AC6
+        # della terza revisione). Si registra sotto la chiave della sessione
+        # consolidata.
+        self.usage_hooks: list[AgentHook] = list(usage_hooks)
 
     def set_provider(
         self,
@@ -389,6 +398,28 @@ class Consolidator:
             count += 1
         return count
 
+    async def _record_usage(self, response: Any, session_key: str | None) -> None:
+        """Passa l'usage di una chiamata agli hook di misura, come un'iterazione.
+
+        Un hook che solleva non rompe la consolidazione: e' contabilita', e il
+        riassunto conta di piu'.
+        """
+        if not self.usage_hooks:
+            return
+        usage = getattr(response, "usage", None)
+        context = AgentHookContext(
+            iteration=0,
+            messages=[],
+            response=response,
+            usage=dict(usage) if isinstance(usage, dict) else {},
+            session_key=session_key,
+        )
+        for hook in self.usage_hooks:
+            try:
+                await hook.after_iteration(context)
+            except Exception:
+                logger.exception("Usage hook {} failed on a consolidation call", type(hook).__name__)
+
     async def archive(
         self,
         messages: list[dict],
@@ -448,6 +479,7 @@ class Consolidator:
                     tools=None,
                     tool_choice=None,
                 )
+            await self._record_usage(response, session_key)
             if response.finish_reason == "error":
                 raise RuntimeError(f"LLM returned error: {response.content}")
             summary = response.content or "[no summary]"
