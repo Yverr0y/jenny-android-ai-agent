@@ -81,6 +81,8 @@ export class HomePages {
     this.order = normalizeOrder([], [], this.fixed);
     this.index = this.chatIndex;
     this._cap = 8;
+    /** L'elenco e' stato letto? Non ancora: v. `known`. */
+    this._known = false;
     /** Chi accende e spegne una pagina fissa: `{activate, deactivate}` per id. */
     this._hooks = {};
     /** La pagina fissa accesa adesso, per spegnerla quando la lasci. */
@@ -159,12 +161,41 @@ export class HomePages {
       this._take(await api.getPages());
     } catch {
       this._take(null);
+      this.known = false;
     }
     this._draw();
     this.goTo(this.chatIndex, { animated: false });
   }
 
+  /** Vero se l'elenco e' stato letto davvero, falso prima della prima
+   *  lettura e finche' si mostra il ripiego di una lettura fallita.
+   *
+   *  **Una scrittura manda l'elenco intero**, quindi scriverne uno mai letto
+   *  vuol dire riscrivere sul server le sole pagine fisse: il primo «Metti
+   *  come pagina» cancellava tutte quelle che c'erano (terza revisione, HJ2).
+   *  Finche' e' falso non parte nessuna scrittura (v. `ensureKnown`). */
+  get known() {
+    return this._known;
+  }
+
+  set known(value) {
+    this._known = Boolean(value);
+  }
+
+  /** Prima di scrivere: l'elenco si conosce? Se no si rilegge adesso — senza
+   *  spostarti — e se neanche questa lettura arriva l'avviso lo dice e la
+   *  risposta e' no. Chi scrive calcola il suo elenco **dopo**, sulla
+   *  risposta vera. */
+  async ensureKnown() {
+    if (this.known) return true;
+    await this.reload();
+    if (this.known) return true;
+    showToast(i18n.t('home.pages.unknown'), 'error');
+    return false;
+  }
+
   _take(data) {
+    this.known = true;
     this.pages = Array.isArray(data?.pages) ? data.pages : [];
     if (Array.isArray(data?.fixed) && data.fixed.includes('chat')) this.fixed = data.fixed;
     if (Number.isFinite(data?.max)) this._cap = data.max;
@@ -184,6 +215,12 @@ export class HomePages {
    *  silenzio, «Metti/Togli pagina» non diceva niente. Chi ha qualcosa da
    *  tenere da parte (la bozza dell'ordine) la tiene finche' non torna vero. */
   async save(pages, order) {
+    /* L'ultima cintura: chi scrive dovrebbe aver chiesto `ensureKnown`, ma un
+       elenco mai letto non si scrive comunque. */
+    if (!this.known) {
+      showToast(i18n.t('home.pages.unknown'), 'error');
+      return false;
+    }
     const where = this.order[this.index];
     let saved;
     try {
@@ -335,6 +372,7 @@ export class HomePages {
    *  dov'era gli farebbe credere che non sia successo niente.
    */
   async append(kind, ref) {
+    if (!(await this.ensureKnown())) return false;
     if (this.pending(kind, ref) || this.full) return false;
     const id = `p${Date.now().toString(36)}`;
     const added = this.order
@@ -351,6 +389,7 @@ export class HomePages {
   /** La stacca. Niente conferma: una pagina si rimette con una pressione, e
    *  una domanda per un gesto annullabile e' solo un tocco in piu' ogni volta. */
   async detach(kind, ref) {
+    if (!(await this.ensureKnown())) return false;
     const via = this.pages.find((s) => s.kind === kind && s.ref === ref);
     if (!via) return false;
     const saved = await this.save(

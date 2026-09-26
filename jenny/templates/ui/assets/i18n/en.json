@@ -1061,7 +1061,8 @@
       "appGone": "The app “{name}” is gone.",
       "notebookGone": "The notebook “{name}” is gone.",
       "removePage": "Remove the page",
-      "saveFailed": "Couldn't save the pages. Nothing was changed."
+      "saveFailed": "Couldn't save the pages. Nothing was changed.",
+      "unknown": "I can't read the home's pages, so I changed nothing. Try again shortly."
     },
     "notebook": {
       "rename": "Rename",

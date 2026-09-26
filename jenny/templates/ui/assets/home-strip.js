@@ -264,6 +264,13 @@ export class HomeStrip {
 
   openSort() {
     if (this.sorting) return;
+    /* La bozza e' l'elenco a schermo, e «Fatto» lo riscrive intero: su un
+       elenco mai letto toglierebbe dal server tutte le pagine (HJ2). Si
+       rilegge prima, e ci si apre solo se la lettura arriva. */
+    if (this.homePages.known === false) {
+      this.homePages.ensureKnown?.().then((ok) => { if (ok) this.openSort(); });
+      return;
+    }
     this._draft = this.homePages.entries.map((v) => v.id);
     this.draw();
     this._onChange?.(true);

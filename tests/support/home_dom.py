@@ -128,8 +128,12 @@ globalThis.fetch = async (url, init) => {
   return body === undefined ? failed(404) : ok(body);
 };
 
-/* Il socket: ricorda cosa gli si manda, e si apre al giro dopo. */
+/* Il socket: ricorda cosa gli si manda, e si apre al giro dopo. Un comando
+   (`rpc`) il cui metodo sta in `rpcAnswers` riceve la risposta al giro dopo,
+   col risultato che la funzione calcola dai parametri; gli altri restano
+   senza, come un gateway che non risponde. */
 export const sent = [];
+export const rpcAnswers = {};
 export class FakeWS {
   constructor(u) {
     this.url = u;
@@ -137,7 +141,16 @@ export class FakeWS {
     FakeWS.last = this;
     setTimeout(() => { this.readyState = 1; this.onopen?.(); }, 0);
   }
-  send(d) { sent.push(JSON.parse(d)); }
+  send(d) {
+    const msg = JSON.parse(d);
+    sent.push(msg);
+    const answer = msg.type === 'rpc' ? rpcAnswers[msg.method] : null;
+    if (answer) {
+      setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+        event: 'rpc_result', id: msg.id, ok: true, result: answer(msg.params || {}),
+      }) }), 0);
+    }
+  }
   close() {}
 }
 FakeWS.OPEN = 1;
@@ -151,6 +164,8 @@ process.on('unhandledRejection', (e) => unhandled.push(String((e && e.message) |
 
 export const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 export const $ = (id) => document.getElementById(id);
+/* I testi degli avvisi a schermo (`showToast`). */
+export const toasts = () => [...document.querySelectorAll('.mobile-toast')].map((t) => t.textContent);
 
 /* Il filo com'e' a schermo, dall'alto: chi parla e cosa dice. */
 export function thread() {

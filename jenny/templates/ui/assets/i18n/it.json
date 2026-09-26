@@ -1064,7 +1064,8 @@
       "appGone": "L'app «{name}» non c'è più.",
       "notebookGone": "Il quaderno «{name}» non c'è più.",
       "removePage": "Togli la pagina",
-      "saveFailed": "Non ho potuto salvare le pagine. Non ho cambiato niente."
+      "saveFailed": "Non ho potuto salvare le pagine. Non ho cambiato niente.",
+      "unknown": "Non riesco a leggere le pagine della casa: non ho cambiato niente. Riprova fra poco."
     },
     "notebook": {
       "rename": "Rinomina",
