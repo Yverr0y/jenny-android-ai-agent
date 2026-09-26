@@ -1,8 +1,7 @@
 """In `switchMode` la classe `mode-*` si scrive **prima** di `activate()`.
 
 Lo scroller della chat **e' il documento**, non un `div` interno (v. il getter
-`_scroller` in `mobile-chat.js`, e `.agent/chat-selection-root-plan.md` per il
-motivo). E il documento scorre soltanto sotto `:root.mode-chat`
+`_scroller` in `mobile-chat.js` per il motivo). E il documento scorre soltanto sotto `:root.mode-chat`
 (`mobile-style.css:1617`): fuori dalla chat `html` e' `overflow: hidden` e non
 scorre affatto.
 

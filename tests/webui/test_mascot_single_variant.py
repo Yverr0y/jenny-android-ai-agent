@@ -2,7 +2,7 @@
 
 Fino all'08/09/2026 ogni posa esisteva in due copie e ``poseUrl`` rimappava il
 suffisso ``-color`` su una preferenza dell'utente. La preferenza è stata
-ritirata (v. ``.agent/mascot-faces-plan.md``, F9): qui si tiene fermo che
+ritirata: qui si tiene fermo che
 nessun path lo cerchi più, che il modulo delle preferenze non lo esporti più, e
 che un telefono che *aveva* scelto il B/N non se lo porti dietro — la chiave
 morta in ``localStorage`` si ripulisce al caricamento invece di restare a

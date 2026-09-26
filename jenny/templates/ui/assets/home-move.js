@@ -1,8 +1,8 @@
 /** Il trasloco della chat — una chat sola, che si sposta fra le pagine.
  *
  *  Una pagina «conversazione» non e' una seconda chat: e' una **scorciatoia**
- *  che cambia la conversazione dell'unica che c'e', travestita da pagina
- *  (v. `.agent/pagine-conversazione-plan.md`). La chat e' un elemento solo,
+ *  che cambia la conversazione dell'unica che c'e', travestita da pagina.
+ *  La chat e' un elemento solo,
  *  preso per id dai suoi controller: non si copia, si sposta — come le stanze
  *  prestate — nella pagina che guardi.
  *

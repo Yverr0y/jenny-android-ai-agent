@@ -1,6 +1,6 @@
 """Sola lettura: cosa si chiude, e soprattutto cosa **non** si chiude.
 
-Passo **4.2** di ``roadmap/progetti-passi.md``.
+Passo **4.2** del piano dei progetti.
 
 I cancelli sono otto, non tre. Tre sono quelli che il confine di scrittura del
 passo 1.3 aveva già sdoppiato — i tool file, i builtin di ``python_exec``,

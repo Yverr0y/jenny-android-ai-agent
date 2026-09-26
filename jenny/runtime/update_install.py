@@ -252,7 +252,7 @@ async def _resolve_apk_url(url: str, *, client: httpx.AsyncClient | None = None)
     sbagliato) potrebbe far bussare il telefono a ``https://192.168.1.1/…`` o a
     un nodo Tailscale, e il messaggio d'errore che risale in chat direbbe a chi
     ha scritto il manifest se quell'indirizzo esiste: una sonda cieca con
-    oracolo, che è la ragione per cui ``.agent/security.md`` impone
+    oracolo, che è la ragione per cui la regola di rete impone
     ``validate_url_target`` su **ogni** richiesta uscente.
 
     I redirect si seguono a mano — stesso pattern di

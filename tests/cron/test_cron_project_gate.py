@@ -1,6 +1,6 @@
 """Dentro un progetto non si programma niente, e il tool è l'unico a dirlo.
 
-Passo **3** di ``roadmap/progetti-passi.md``.
+Passo **3** del piano dei progetti.
 
 Il guasto che questo cancello previene non è un errore: oggi un promemoria
 creato dentro un progetto **funziona**. Il job si porta dietro

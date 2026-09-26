@@ -4,8 +4,8 @@ Oggi l'unità di scrittura è il **file**: chi vuole aggiungere un fatto a
 ``USER.md`` riscrive tutto il file, e l'unico modo di sapere se il fatto è
 arrivato su disco è confrontare le dimensioni prima e dopo — una stima, con una
 classe di falsi negativi nota (una correzione che accorcia *portandosi dentro* il
-fatto nuovo legge come "non è atterrato niente"). Da lì nasce metà del registro
-dei difetti in ``.agent/memory-plan.md``.
+fatto nuovo legge come "non è atterrato niente"). Da lì nasce metà dei difetti
+misurati sulla memoria.
 
 Qui l'unità è la **voce**: un bullet sotto la sua intestazione. ``add`` dice
 quale fatto aggiungere, e "è atterrato?" diventa una verifica invece che una
@@ -551,8 +551,8 @@ class MemoryEntryTool(Tool):
         #
         # Serve a un caso solo, ed e' meccanico di proposito: un run di Dream su
         # un batch di **progetto** riceve ``{"user"}``, perche' un fatto che
-        # nasce dentro un progetto puo' diventare identita' e non inventario
-        # (v. ``.agent/project-memory-plan.md``). Un rifiuto qui si prova con un
+        # nasce dentro un progetto puo' diventare identita' e non inventario.
+        # Un rifiuto qui si prova con un
         # test; la stessa regola scritta nel prompt no — e questa e' l'unica
         # differenza che conta fra le due, perche' il prompt lo legge un modello
         # e questa riga no.

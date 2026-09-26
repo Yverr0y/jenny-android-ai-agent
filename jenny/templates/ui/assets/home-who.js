@@ -6,9 +6,8 @@
  *  appoggia la tendina dell'officina. Qui c'e' solo il disegno.
  *
  *  **Un tocco cambia conversazione**, e la spunta e' su quella in cui sei. Per
- *  un giro non e' stato cosi' — le righe erano inerti e lo dichiaravano (v.
- *  `.agent/casa-who-plan.md`, D1) — e quel giro e' finito con
- *  `.agent/casa-notebook-plan.md`: le righe sono diventate bottoni e il resto
+ *  un giro non e' stato cosi' — le righe erano inerti e lo dichiaravano
+ *  — e quel giro e' finito: le righe sono diventate bottoni e il resto
  *  di questo file e' rimasto com'era, che era la previsione.
  *
  *  Le righe delle cartelle **non apribili** restano inerti, e non e' una
@@ -21,8 +20,8 @@
  *  chiave resta in un posto solo (`shared/conversation-list.js`).
  *
  *  **E' una pagina, non piu' una tendina.** Fino al 23/09/2026 si apriva dal
- *  titolo in un `<dialog>`; da allora e' la pagina Quaderni della pista (v.
- *  `.agent/pagine-in-alto-plan.md`): chi la ospita le da' il contenitore e la
+ *  titolo in un `<dialog>`; da allora e' la pagina Quaderni della pista:
+ *  chi la ospita le da' il contenitore e la
  *  ridisegna quando ci arrivi (`show`). Non c'e' niente da aprire ne' da
  *  chiudere, e toccare una riga lascia al guscio di portarti alla chat.
  */

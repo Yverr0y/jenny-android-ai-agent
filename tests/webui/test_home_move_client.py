@@ -4,7 +4,7 @@ Una pagina «conversazione» non e' una seconda chat: e' una scorciatoia che
 cambia la conversazione dell'unica che c'e', travestita da pagina. Il
 travestimento e' una **foto**: nelle pagine di chat che la chat non abita c'e'
 una copia statica di com'era, e all'arrivo la chat vera ci scivola sotto (v.
-`home-move.js` e `.agent/pagine-conversazione-plan.md`).
+`home-move.js`).
 
 **Perche' in node sul file vero, con un DOM finto fatto apposta.** Quel che
 questo modulo fa e' spostare, copiare e cercare nodi: un finto che

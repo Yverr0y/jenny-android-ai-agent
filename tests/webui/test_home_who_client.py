@@ -9,7 +9,7 @@ dalla prima: un elenco giusto disegnato nell'ordine sbagliato resta sbagliato.
 
 E si misura cosa fa un tocco: apre quella conversazione, e la spunta segue
 quella in cui sei. Per un giro non e' stato cosi' — le righe erano inerti e i
-banchi garantivano l'inerzia (`.agent/casa-who-plan.md`, D1) — e quei due
+banchi garantivano l'inerzia — e quei due
 banchi sono stati **rovesciati**, non cancellati: chi li vede passare oggi deve
 sapere che promettono il contrario di ieri. Le righe delle cartelle non
 apribili sono rimaste inerti, e quella proprieta' ha un banco suo.

@@ -349,7 +349,7 @@ class ApiClient {
   /* Rinomina, cancellazione e copia viaggiano sul WebSocket (`rpc`, comandi
      `workspace.rename`/`delete`/`copy`): cambiano il disco, e fino al
      26/09/2026 erano GET su /api/, che e' per letture e parametri corti
-     (`.agent/design.md`, decisione D3 della terza revisione). Stanno qui con
+     (decisione D3 della terza revisione). Stanno qui con
      la stessa firma perche' i chiamanti non cambino; l'errore porta il `code`
      del comando e il messaggio del server. Import **dinamico** per la stessa
      ragione di `savePages`. */
@@ -652,7 +652,7 @@ class ApiClient {
    *
    *  Resta qui perche' e' la gemella di `getPages`, ma la scrittura viaggia
    *  sul WebSocket (`rpc.saveHomePages`): `/api/` e' per letture e parametri
-   *  corti (`.agent/design.md`), e fino al 25/09/2026 questa era una GET col
+   *  corti, e fino al 25/09/2026 questa era una GET col
    *  JSON nell'indirizzo. Import **dinamico**: `ws-manager.js` importa questo
    *  modulo, e uno statico chiuderebbe il cerchio al caricamento. */
   async savePages(pages, order) {

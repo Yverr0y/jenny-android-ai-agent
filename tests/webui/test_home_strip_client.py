@@ -1,7 +1,7 @@
 """La fila dei nomi in alto, e la modalita' ordina che si apre tenendone premuto uno.
 
-Prende il posto di titolo, ingranaggio, bottone del cassetto e pallini (v.
-`.agent/pagine-in-alto-plan.md`): quello dove sei e' grande, un tocco su un nome
+Prende il posto di titolo, ingranaggio, bottone del cassetto e pallini:
+quello dove sei e' grande, un tocco su un nome
 ci va, e tenendo premuto le pagine si spostano. Qui si prova **cosa dice** e
 **cosa chiede alla pista**; la pista vera ha il suo banco
 (`test_home_track_client.py`), e il dito vero si prova sul telefono.

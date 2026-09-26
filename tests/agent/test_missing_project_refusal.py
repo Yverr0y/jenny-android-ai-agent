@@ -1,6 +1,6 @@
 """Una cartella legata che è sparita fa rifiutare la chat, a voce.
 
-Passo **6** di ``roadmap/progetti-passi.md``.
+Passo **6** del piano dei progetti.
 
 Prima del passo 6 lo scope veniva costruito comunque e puntava al posto che
 manca. La parte importante era già giusta — **niente fallback sulla radice

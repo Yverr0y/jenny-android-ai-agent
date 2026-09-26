@@ -1,6 +1,6 @@
 """Il flag della sola lettura: dove vive, da dove arriva, cosa non tocca.
 
-Passi **4.2** e **4.3** di ``roadmap/progetti-passi.md``.
+Passi **4.2** e **4.3** del piano dei progetti.
 
 Due trabocchetti scritti prima di toccare il codice, e sono la ragione per cui
 metà di questo file esiste:

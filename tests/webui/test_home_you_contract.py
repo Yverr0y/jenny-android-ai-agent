@@ -39,8 +39,7 @@ def _app() -> str:
 def test_settings_is_a_page_and_the_avatar_is_gone() -> None:
     """Il bottone in testa — chiave inglese, poi avatar — apriva «Tu e Jenny»
     e, tenuto premuto, l'officina. Dal 23/09/2026 «Tu e Jenny» e' la pagina
-    Impostazioni, e il suo nome sta nella fila in alto
-    (`.agent/pagine-in-alto-plan.md`).
+    Impostazioni, e il suo nome sta nella fila in alto.
 
     La scorciatoia per l'officina non si e' spostata sul nome: la pressione
     lunga su un nome della fila apre la modalita' ordina, e due gesti non

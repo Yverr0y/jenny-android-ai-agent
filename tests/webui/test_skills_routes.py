@@ -196,7 +196,8 @@ def test_update_writes_no_content_or_description_from_the_query(env) -> None:
 
     Erano decodificati due volte (``parse_qs`` e poi ``unquote``: un ``%25``
     del testo diventava altro) e portavano contenuto su una GET, contro
-    ``design.md`` (il contenuto viaggia sulla WebSocket). Nessun client li usa:
+    la regola per cui ``/api/`` e' per letture e parametri corti (il
+    contenuto viaggia sulla WebSocket). Nessun client li usa:
     l'unica chiamata, ``api-client.js``, manda solo ``disabled``.
     """
     skill_file = _write_skill(env.skills_dir, "foo", description="vecchia", body="corpo\n")

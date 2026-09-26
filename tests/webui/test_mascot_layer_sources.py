@@ -112,7 +112,7 @@ def test_the_reserve_is_kept_as_a_source_and_never_shipped() -> None:
 
     Le bocche alternative degli umori (parlato espressivo), l'orientamento
     ``side`` e i corpi del saluto. Un webp che nessun ramo del client può
-    mostrare marcirebbe, quindi non si esporta: v. mascot-faces-plan.md, F10.
+    mostrare marcirebbe, quindi non si esporta.
     """
     reserve = {p.stem for p in _sources()} - set(_layers())
     assert len(reserve) == 14, sorted(reserve)

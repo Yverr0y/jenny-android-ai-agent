@@ -189,7 +189,7 @@ def declared_marker_lines(tool: Tool | None) -> str:
 
     Vive qui e non in ``loop.py`` perché la traduzione fra l'azione e il
     marcatore è una proprietà di questo tool: il loop ne chiama una funzione, e
-    la regola "core stays small" di ``.agent/design.md`` resta rispettata.
+    la regola "core stays small" del progetto resta rispettata.
 
     Solo le dichiarazioni **numerate**: v. la nota nel docstring del modulo sul
     perché un ``CHECK_OK`` anonimo non si sintetizza.

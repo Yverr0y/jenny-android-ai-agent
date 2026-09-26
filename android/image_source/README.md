@@ -20,8 +20,7 @@ letto a runtime: è solo il punto di partenza della build degli asset.
   **Una variante per posa**, a colori. Fino all'08/09/2026 ogni posa aveva
   un gemello `<stem>_color.PNG` e il client rimappava il suffisso `-color` su
   una preferenza dell'utente; la preferenza è stata ritirata e la line-art coi
-  gemelli B/N è uscita dal repo (recuperabile dalla storia — v.
-  `.agent/mascot-faces-plan.md`, F9). L'icona app resta line-art: `icon.png` è
+  gemelli B/N è uscita dal repo (recuperabile dalla storia di git). L'icona app resta line-art: `icon.png` è
   un sorgente a sé e non c'entra con le pose.
 - `body_*.PNG` / `face_*.PNG` — l'arte **a due livelli**: corpi senza faccia e
   facce da sola, sullo stesso canvas 3000×3000 delle pose. Si compongono a
@@ -39,8 +38,7 @@ Le 10 pose `FILES` hanno la faccia disegnata dentro ("cotte"). Accanto, dal
 settembre 2026, c'è una seconda famiglia di sorgenti in cui **il corpo è senza
 faccia** e la faccia è un livello a sé: a mascotte intera la companion le
 sovrappone, così l'espressione è ortogonale al gesto e "triste mentre pensa"
-non è un disegno in più ma una composizione. Il ragionamento completo sta in
-[`.agent/mascot-faces-plan.md`](../../.agent/mascot-faces-plan.md).
+non è un disegno in più ma una composizione.
 
 **Orientamento.** `front` è la posa dritta (mascotte intera, `out`), `side` è
 quella diagonale che sporge dal bordo. Le facce di un orientamento valgono solo

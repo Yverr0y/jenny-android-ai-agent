@@ -5,8 +5,7 @@ faccia — felice, triste o arrabbiata — e la reazione diventa il frame
 ``mascot_mood`` che il client traduce in un'espressione. Da dove venga la
 reazione e' tutto qui: dagli emoji che lei stessa ha scritto, attraverso un
 dizionario. **Nessuna richiesta al modello**, quindi nessun costo e nessuna
-dipendenza dal provider o dalla lingua. Il piano e le ragioni stanno in
-``.agent/mascot-mood-emoji-plan.md``, l'arte in ``.agent/mascot-faces-plan.md``.
+dipendenza dal provider o dalla lingua.
 
 Fino al 24/09/2026 la reazione la dava il modello, con una richiesta da tre
 token dopo ogni turno. Su un modello che ragiona di default i tre token
@@ -45,8 +44,7 @@ if TYPE_CHECKING:
 #
 # Sono le espressioni che **esistono disegnate**: l'arte comanda, non il
 # vocabolario. Fino all'08/09/2026 erano cinque e comprendevano ``worried`` e
-# ``surprised``, che non hanno una faccia; ``angry`` invece ce l'ha. V.
-# mascot-faces-plan.md, F4.
+# ``surprised``, che non hanno una faccia; ``angry`` invece ce l'ha.
 MOODS: tuple[str, ...] = ("happy", "sad", "angry", "neutral")
 NEUTRAL_MOOD = "neutral"
 

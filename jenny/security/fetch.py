@@ -11,7 +11,7 @@ una volta, con le differenze vere come parametri.
 
 I redirect non si delegano a httpx perché ogni salto va rivalidato: un
 ``/releases/latest/download/`` di GitHub è per definizione un redirect verso un
-altro host, e delegarli validerebbe solo il primo (``.agent/security.md``).
+altro host, e delegarli validerebbe solo il primo.
 
 Il validatore lo passa il chiamante, e ha un default: ogni modulo lo importa per
 nome da :mod:`jenny.security.network` e lo passa com'è al momento della

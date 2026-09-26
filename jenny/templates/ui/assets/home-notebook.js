@@ -4,7 +4,7 @@
  *  e la loro scheda si apre di li'; i quaderni vivono nella pagina Quaderni, e
  *  questa e' la loro. Le due hanno le stesse righe nello stesso ordine e lo
  *  stesso aspetto — Apri · Metti come pagina · Rinomina · Elimina — perche'
- *  chi ha imparato una ha imparato l'altra (`.agent/pagine-dal-posto-plan.md`).
+ *  chi ha imparato una ha imparato l'altra.
  *
  *  «Rinomina» e non «Modifica»: la coerenza sta nella struttura, non nel
  *  costringere la stessa parola su due atti diversi. Modificare un'app vuol

@@ -345,7 +345,7 @@ def test_the_settings_scroll_restore_does_not_destroy_what_it_restores() -> None
 
 def test_the_model_catalog_moved_to_the_home_with_its_promise() -> None:
     """Il catalogo modelli non e' piu' in officina: e' in casa, da «Chi
-    risponde», dal 20/09/2026 (`.agent/officina-tavole-plan.md`, passo 3).
+    risponde», dal 20/09/2026.
 
     Questo banco difendeva lo stato «aperto + filtro» attraverso il
     ridisegno, perche' scegliere un modello *e'* un salvataggio e il

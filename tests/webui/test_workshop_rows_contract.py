@@ -691,7 +691,7 @@ def test_the_work_row_keeps_what_changes_the_meaning() -> None:
 #
 # Dal 21/09/2026 al 24/09/2026 non si vedevano da nessuna parte: la schermata
 # Apps che le ospitava era stata cancellata. Tornano in Mani con la forma di
-# tutte le altre righe (v. `.agent/officina-skill-plan.md`): in cassetto una
+# tutte le altre righe: in cassetto una
 # riga coi due conti, il resto dietro il tocco.
 
 

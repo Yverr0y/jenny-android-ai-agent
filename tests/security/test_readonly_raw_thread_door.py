@@ -12,8 +12,7 @@ False, quindi ``_refuse_write_if_readonly`` diventa un no-op e un turno in
 Perché pinnarla invece di chiuderla. Chiuderla vuol dire patchare
 ``threading.Thread`` a livello di processo, cioè mettersi in mezzo a ogni thread
 del gateway: è un limite **accettato e documentato** (v. il commento TRUST
-BOUNDARY in ``python_exec.py`` e la sezione «read-only turn» di
-``.agent/security.md``). Ma da oggi quei documenti affermano un fatto
+BOUNDARY in ``python_exec.py`` e ``SECURITY.md``). Ma da oggi quei documenti affermano un fatto
 *misurato*, e un fatto misurato che nessuno riesegue diventa una leggenda: se
 qualcuno chiude la porta, questi test falliscono ed è il momento di aggiornare i
 due documenti — e di valutare se ``templates/agent/readonly.md`` possa tornare a
@@ -34,7 +33,7 @@ from jenny.config.tool_schemas import PythonExecConfig
 
 _UPDATE_THE_DOCS = (
     "la porta dei thread nudi sembra chiusa: se è voluto, aggiorna il commento "
-    "TRUST BOUNDARY in python_exec.py, la sezione read-only di .agent/security.md "
+    "TRUST BOUNDARY in python_exec.py, SECURITY.md "
     "e TestKnownRemainingDoors"
 )
 

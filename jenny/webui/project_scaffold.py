@@ -1,6 +1,6 @@
 """Lo scaffolder dei progetti: la forma con cui una wiki nasce dalla UI.
 
-Passo **T1** di ``roadmap/taccuino-passi.md``. Un progetto nuovo nasce con
+Passo **T1** del piano del taccuino. Un progetto nuovo nasce con
 questo albero:
 
     <progetto>/

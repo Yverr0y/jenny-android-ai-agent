@@ -10,7 +10,7 @@ File a Fact Belongs In* di ``agent/tool_contract.md`` elenca quattro quaderni,
 ``AGENTS.md`` compreso, e sta nella coda che nessun gate per-tool tocca: la legge
 anche Dream. Ma la allowlist di scrittura di ``build_dream_tools`` è di tre file più
 le skill, e ``AGENTS.md`` ne è fuori per una decisione deliberata (il permesso di
-scrittura è ancora aperto in ``roadmap/agents-md-ownership.md``). Quel routing è
+scrittura è una decisione ancora aperta). Quel routing è
 scritto per l'agente principale, che lì può scrivere.
 
 Il costo di un rifiuto non è un tentativo sprecato ma il run intero: la regola di

@@ -1,6 +1,6 @@
 """Le wiki che esistevano prima del passo 7, portate alla forma di oggi.
 
-Passo **7.4** di ``roadmap/progetti-passi.md``. Due cose, entrambe idempotenti e
+Passo **7.4** del piano dei progetti. Due cose, entrambe idempotenti e
 nessuna delle due distruttiva:
 
 1. ``CLAUDE.md`` diventa ``AGENTS.md``. **Non e' un ritiro di template** —
@@ -14,7 +14,7 @@ nessuna delle due distruttiva:
    e' un indirizzo, non finisce in nessun nome di file, e una wiki senza id
    continua a funzionare come prima.
 3. Ogni wiki prende il suo **diario** (``raw/journal/``), se non ce l'ha —
-   passo T1 di ``roadmap/taccuino-passi.md``. E' la presa sulla conversazione, e
+   passo T1 del piano del taccuino. E' la presa sulla conversazione, e
    la politica che ci scrive dentro e' **universale**: vale per un progetto
    creato oggi e per una wiki di ricerca di mesi fa, perche' ogni conversazione
    di progetto contiene fatti stabili. Legare il diario al formato nuovo

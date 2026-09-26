@@ -8,7 +8,8 @@ mezzo scritto — che si legge come integro.
 
 Il discriminante è ``extra_write_allowed_files``: un tool costruito con una
 allowlist di file esatti esiste solo per riscrivere stato di Jenny. I file
-dell'utente restano scritti in posto, ed è deliberato (``.agent/gotchas.md``).
+dell'utente restano scritti in posto, ed è deliberato: rimpiazzare l'inode
+cambierebbe permessi e hardlink.
 """
 
 from __future__ import annotations
@@ -115,7 +116,7 @@ async def test_apply_patch_covers_all_three_in_one_call(dream, atomic_spy):
 
 
 class TestUserFilesStayInPlace:
-    """L'eccezione di ``gotchas.md``: i file dell'utente non diventano atomici."""
+    """L'eccezione voluta: i file dell'utente non diventano atomici."""
 
     @pytest.mark.asyncio
     async def test_write_file_on_a_user_file_is_not_atomic(self, tmp_path, atomic_spy):

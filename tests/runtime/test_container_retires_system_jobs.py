@@ -7,7 +7,7 @@ scadenza diventa un warning «unbound agent job» piu' una ``CronJobSkippedError
 — per sempre, perche' ``remove_job`` **rifiuta** un ``system_event`` e nessun
 tool dell'utente puo' toglierlo.
 
-Il primo ritirato e' ``atlas`` (v. ``.agent/retire-atlas-and-main-plan.md``, D1).
+Il primo ritirato e' ``atlas``.
 Il test lo nomina perche' e' la voce vera dell'elenco, non un esempio.
 """
 

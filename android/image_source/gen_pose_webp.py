@@ -26,13 +26,13 @@ b=braccia giu').
 
 **Una variante per posa.** Fino al 08/09/2026 ogni posa esisteva in due
 copie, line-art bianco/nero e colore, e il client rimappava il suffisso
--color su una preferenza dell'utente. La preferenza e' stata ritirata
-(v. .agent/mascot-faces-plan.md, F9): resta il colore, col nome piano.
+-color su una preferenza dell'utente. La preferenza e' stata ritirata:
+resta il colore, col nome piano.
 
 **Due tabelle.** ``FILES`` sono le pose "cotte", con la faccia disegnata
 dentro: le usano il docked, il volo e l'onboarding. ``LAYERS`` sono i
 sorgenti a due livelli — corpi senza faccia e facce da sola — che la
-companion sovrappone a mascotte intera (v. mascot-faces-plan.md, F1/F2).
+companion sovrappone a mascotte intera.
 Sono lo stesso canvas e lo stesso export: la composizione e' a runtime,
 due <img> impilate, e qui non si compone niente.
 """

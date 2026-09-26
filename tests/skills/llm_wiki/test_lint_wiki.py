@@ -178,7 +178,7 @@ def test_lint_flags_isolated_pages(lint_wiki, tmp_path, capsys):
 
 # ── T5: le due strutture, e il diario che vale per entrambe ──────────────────
 #
-# Passo **T5** di ``roadmap/taccuino-passi.md``. Due layout esistono nel mondo e
+# Passo **T5** del piano del taccuino. Due layout esistono nel mondo e
 # **nessun flag li distingue**: la struttura su disco è la dichiarazione, e il
 # lint la legge come tutti gli altri consumatori.
 #

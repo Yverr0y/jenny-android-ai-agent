@@ -274,7 +274,7 @@ async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dic
 # ---------------------------------------------------------------------------
 #
 # Fino al 26/09/2026 erano tre GET (``/api/workspace/delete``, ``rename``,
-# ``copy``): scritture sul disco su una superficie che ``.agent/design.md``
+# ``copy``): scritture sul disco su una superficie che il gateway
 # vuole di sola lettura, e che una qualunque ``<img src>`` con il token
 # nell'indirizzo poteva far partire. Decisione D3 della terza revisione: stanno
 # qui, accanto a ``project.delete`` e ``page.write``, sulla superficie
@@ -725,7 +725,7 @@ async def audit_create(ctx: CommandContext, params: Mapping[str, Any]) -> dict[s
     Fino al 26/09/2026 era ``GET /api/audit/create?comment=…``: il commento è
     testo libero, e nell'indirizzo stava sotto il tetto di 8192 byte per riga
     di ``websockets`` — un commento lungo e accentato (ogni lettera accentata
-    percent-encodata vale sei byte) falliva. È la regola di ``.agent/design.md``:
+    percent-encodata vale sei byte) falliva. È la regola del gateway:
     ``/api/`` è per letture e parametri corti, le note libere vanno qui.
 
     Stessa validazione e stessi esiti della route, tradotti nei codici di
@@ -1013,8 +1013,8 @@ async def home_pages_set(ctx: CommandContext, params: Mapping[str, Any]) -> dict
     """Salva le pagine della casa: l'elenco intero **e** l'ordine di tutte.
 
     Fino al 25/09/2026 era una GET (``/api/casa/schermate/set?v=<json>``, il nome di allora) che
-    scriveva ``config.json`` col JSON nell'indirizzo — contro la regola di
-    ``.agent/design.md``, per cui ``/api/`` e' per letture e parametri corti.
+    scriveva ``config.json`` col JSON nell'indirizzo — contro la regola
+    del gateway, per cui ``/api/`` e' per letture e parametri corti.
     La lettura resta ``GET /api/home/pages``.
 
     Aggiungere, togliere e spostare sono la stessa scrittura: mandare l'elenco
@@ -1051,7 +1051,7 @@ async def home_pages_set(ctx: CommandContext, params: Mapping[str, Any]) -> dict
 # ``/api/settings/ssh/host/save?password=``): una query string sta nella riga
 # di richiesta, e la riga di richiesta la vedono il log di accesso, i
 # traceback con le variabili locali e chiunque logghi un URL (terza revisione,
-# WA2). Il gateway non legge body HTTP (``.agent/design.md``), quindi la strada
+# WA2). Il gateway non legge body HTTP, quindi la strada
 # e' questa: un frame WebSocket, autenticato all'handshake. La logica resta
 # dov'era (``settings_api``, ``telegram_api``, ``ssh_api``): qui si traduce solo
 # il trasporto.

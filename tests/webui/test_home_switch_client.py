@@ -546,7 +546,7 @@ def test_the_draft_stays_with_the_conversation_it_was_written_in() -> None:
 # ── Il nome nella fila ──────────────────────────────────────────────────────
 #
 # Dal 23/09/2026 il titolo «Jenny ⌄» non c'e' piu': la pagina chat ha il suo
-# nome nella fila in alto (v. `.agent/pagine-in-alto-plan.md`). Fino al
+# nome nella fila in alto. Fino al
 # 26/09/2026 era il nome della conversazione che mostrava; ora e' sempre il
 # nome di lei, perche' un quaderno si apre nei Quaderni.
 

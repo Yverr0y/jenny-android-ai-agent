@@ -3,7 +3,7 @@
 **Il prompt conosce le wiki per nome e scope; il contenuto si legge.** Il blocco
 e' l'elenco delle cartelle sotto ``wikis/`` con la riga di scope di ognuna, reso
 dal disco a ogni build — e' quel che restava di utile della rubrica compilata
-da un modello, ed era il suo *input* (v. ``.agent/retire-atlas-and-main-plan.md``).
+da un modello, ed era il suo *input*.
 
 Le trappole da tenere chiuse sono quattro: che l'elenco arrivi a un progetto o
 al giardiniere (e' l'inventario degli *altri* soggetti, cioe' la fuga che il

@@ -1,7 +1,7 @@
 """I comandi ``workspace.delete``/``rename``/``copy`` del file manager.
 
 Fino al 26/09/2026 erano tre GET di ``/api/workspace/*``: scritture sul disco
-su una superficie che ``.agent/design.md`` vuole di sola lettura. Decisione D3
+su una superficie che il gateway vuole di sola lettura. Decisione D3
 della terza revisione: sono comandi dell'RPC WebSocket (``webui/commands.py``),
 come ``project.delete`` e ``page.write``. I test delle rotte che restano sono in
 ``tests/webui/test_workspace_routes.py``.

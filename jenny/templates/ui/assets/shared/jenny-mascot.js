@@ -36,7 +36,7 @@ const ART = {
 };
 const SIDE_TALK_ANIM = [ART.side, ART.sideTalk];
 
-/* ── Arte a due livelli (v. .agent/mascot-faces-plan.md) ──
+/* ── Arte a due livelli ──
    A mascotte intera il disegno è due img impilate sullo stesso quadrato: il
    CORPO porta il gesto, la FACCIA l'espressione. Sono ortogonali, quindi
    "triste mentre pensa" non è un disegno in più ma una composizione, e nel

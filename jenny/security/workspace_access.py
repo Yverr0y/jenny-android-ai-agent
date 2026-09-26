@@ -209,7 +209,7 @@ class WorkspaceScopeResolver:
     default_restrict_to_workspace: bool
     scoped_channel: str = "websocket"
     # Sottocartella che ospita i progetti, relativa al workspace. Un progetto
-    # *e'* una wiki (v. ``roadmap/progetti-passi.md``): non esiste una
+    # *e'* una wiki: non esiste una
     # ``projects/`` separata. Configurabile perche' lo e' ``config.wiki.wikis_dir``,
     # e chi costruisce il resolver la passa da li'.
     projects_subdir: str = "wikis"

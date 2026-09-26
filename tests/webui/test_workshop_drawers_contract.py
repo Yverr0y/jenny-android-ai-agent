@@ -1,7 +1,7 @@
 """I quattro cassetti dell'officina: nessuna sezione persa, nessuna inventata.
 
 Il dock e' passato da cinque voci per sottosistema a quattro per domanda — una
-console e tre facolta' (`.agent/officina-tavole-plan.md`). Il meccanismo e' una
+console e tre facolta'. Il meccanismo e' una
 tabella sola, `DRAWERS`, e questo file misura le tre cose che quella tabella
 puo' sbagliare **in silenzio**:
 

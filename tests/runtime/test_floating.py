@@ -197,14 +197,14 @@ class TestThePhysicsDoesNotDiverge:
     """Le costanti del volo vivono in due posti, e devono restare identiche.
 
     `FloatingFlight.kt` porta in Kotlin la macchina che il JS fa girare per la
-    mascotte in chat. È una duplicazione deliberata — v.
-    `roadmap/02-mascotte-flottante-piano.md`, S1 — e il suo prezzo è esattamente
+    mascotte in chat. È una duplicazione deliberata (la mascotte flottante
+    vive fuori dalla WebView) e il suo prezzo è esattamente
     questo: qualcuno ritocca una costante da una parte, e la mascotte comincia a
     oscillare in due modi diversi a seconda di dove la si guarda.
 
     **Il lato JS si è spostato** il 18/09/2026: la fisica stava in
     `mobile-jenny.js`, ora è in `shared/mascot-drag.js` perché la usano in due
-    (la casa e l'officina, v. `.agent/casa-plan.md`). I consumatori di queste
+    (la casa e l'officina). I consumatori di queste
     costanti sono quindi tre, e questo test è l'unico posto in cui due di loro
     si guardano in faccia.
 

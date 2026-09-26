@@ -229,7 +229,7 @@ def test_port_is_not_part_of_the_security_boundary():
 )
 def test_policy_divergence_table(ip, url_target_ok, app_server_ok, label):
     """Tabella esplicita di divergenza tra le due policy per lo stesso IP: per
-    design (vedi .agent/security.md) devono restare separate, non appiattite."""
+    design devono restare separate, non appiattite."""
     with patch("jenny.security.network.socket.getaddrinfo", _fake_resolve("host.example", [ip])):
         ok_url, _ = validate_url_target("http://host.example/x")
         ok_app, _ = validate_app_server_target("http://host.example/x")

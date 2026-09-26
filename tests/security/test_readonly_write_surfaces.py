@@ -1,6 +1,6 @@
 """L'inventario delle scritture, e il guardiano che lo tiene onesto.
 
-Passo **4.1** di ``roadmap/progetti-passi.md``, allargato al passo **T4.7**.
+Passo **4.1** del piano dei progetti, allargato al passo **T4.7**.
 
 «Sola lettura» vuol dire «non cambia niente sul telefono» (deciso il 22/08), e
 quella promessa è mantenuta da una **lista** — chi scrive, e da quale cancello.

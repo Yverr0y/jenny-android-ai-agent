@@ -617,7 +617,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Inset di gesture obbligatorio (D8 del piano .agent/apps-drawer-plan.md) ──
+    // ── Inset di gesture obbligatorio ──
     //
     // Quanta WebView cade dentro la fascia in cui la shell di sistema riconosce
     // la gesture di home, in px fisici. È il numero che il cassetto usa per
@@ -1268,8 +1268,7 @@ class MainActivity : AppCompatActivity() {
     inner class JennyNativeInfo {
         /**
          * Quanti px fisici del **fondo** della WebView cadono dentro la fascia
-         * in cui la shell di sistema riconosce la gesture di home (D8 del piano
-         * `.agent/apps-drawer-plan.md`). Il cassetto ci tiene sopra la propria
+         * in cui la shell di sistema riconosce la gesture di home. Il cassetto ci tiene sopra la propria
          * lista: una passata verso l'alto partita lì dentro non scorrerebbe,
          * chiamerebbe `goHome()` — e siccome Jenny **è** il launcher, non
          * porterebbe via a un'altra app ma smonterebbe tutti gli overlay.

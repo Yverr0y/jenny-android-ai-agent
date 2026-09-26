@@ -59,7 +59,7 @@ class TestLoadApp:
 
         Il vincolo `actions` non vuoto ha prodotto in produzione un'azione
         *inventata* (un ping verso il server, mai chiesto da nessuno) messa
-        lì solo per far passare lo schema. `.agent/jenny-apps.md` ha sempre
+        lì solo per far passare lo schema. Il disegno ha sempre
         detto che il lato agente è qualcosa che un'app "can" avere.
         """
         for manifest in (

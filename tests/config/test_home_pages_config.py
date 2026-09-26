@@ -199,7 +199,7 @@ def test_the_dropped_room_does_not_come_back_on_the_next_write(tmp_path) -> None
 # ── L'ordine delle pagine (23/09/2026) ──────────────────────────────────────
 #
 # Dal 23/09 la chat non e' piu' la pagina 0: l'utente sposta tutte le pagine,
-# le quattro fisse comprese (`.agent/pagine-in-alto-plan.md`). L'ordine sta in
+# le quattro fisse comprese. L'ordine sta in
 # un campo a parte, e la sua regola e' la stessa della migrazione qui sopra:
 # **mai un errore**, perche' un errore costa il file intero.
 

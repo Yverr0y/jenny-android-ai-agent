@@ -206,7 +206,7 @@ class MobileApp {
        colpisce qualunque testo lungo, fogli compresi. */
     /* Finché c'è una selezione, composer, dock e mascotte escono dal hit-test:
        è la condizione perché il tocco di un manico non ributti l'estremo
-       fermo sulla chrome (v. .agent/chat-selection-root-plan.md, pagina C).
+       fermo sulla chrome.
        Il tap che così finirebbe sotto viene riconsegnato al bersaglio vero. */
     exposeSelectionState();
     releaseSelectionOnBlur();

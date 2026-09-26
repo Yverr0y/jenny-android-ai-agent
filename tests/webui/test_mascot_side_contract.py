@@ -2,7 +2,7 @@
 
 Fino al 24/09/2026 il lato era il ricordo di dove l'avevi lasciata: caduta nella
 metà sinistra, si riagganciava a sinistra, e lì testo, fumetti e riga di lavoro le
-si allineavano male (v. ``.agent/tre-ritocchi-plan.md``, voce 1). Adesso il bordo
+si allineavano male. Adesso il bordo
 è uno solo. Qui si tiene fermo:
 
 - che il lato non esista più come stato: niente getter, niente chiave in

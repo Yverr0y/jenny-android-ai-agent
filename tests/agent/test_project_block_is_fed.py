@@ -1,6 +1,6 @@
 """Il blocco di progetto arriva pieno a **entrambi** i prompt, o fallisce a voce.
 
-Passo **T3.9** di ``roadmap/audit-taccuino-corrections.md``.
+Passo **T3.9** delle correzioni al taccuino.
 
 ``agent/project.md`` ha due chiamanti: ``ContextBuilder.build_system_prompt`` e
 ``SubagentManager._build_subagent_prompt``. Il secondo lo rendeva senza

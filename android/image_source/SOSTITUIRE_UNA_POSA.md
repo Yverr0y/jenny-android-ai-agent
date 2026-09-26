@@ -36,8 +36,7 @@ mappa dei nomi e quali sono in riserva stanno in
 
 Fino all'08/09/2026 ogni posa aveva due sorgenti, line-art bianco/nero e
 gemello colore, e a runtime l'utente sceglieva fra le due varianti. La
-preferenza è stata ritirata: resta il colore (v. `.agent/mascot-faces-plan.md`,
-F9). L'**icona app** (`icon.png`) è un sorgente a sé, sempre line-art, e non
+preferenza è stata ritirata: resta il colore. L'**icona app** (`icon.png`) è un sorgente a sé, sempre line-art, e non
 si tocca da questa guida.
 
 ## 2. Regole da rispettare quando esporti dal tool di disegno

@@ -6,11 +6,10 @@ Written: 2026-08-11.
 
 > Not under `docs/` on purpose: `docs/**` is published by `flagdizero/jenny-site`.
 > `roadmap/` is gitignored and local-only, by design — so **every `roadmap/` link
-> below is unreachable to anyone who clones this repo**, and so are the ~79
-> citations of those files in module docstrings under `jenny/` and `tests/`.
-> That is a standing decision to revisit, not an oversight: either the directory
-> gets tracked (the repo already tracks 18 plans under `.agent/`) or the
-> citations should name something a reader can open.
+> below is unreachable to anyone who clones this repo**. The same holds for
+> `.agent/`, which stopped being versioned on 2026-09-26. Code and tests no
+> longer cite either directory: where a comment needed the reason, the reason
+> is now in the comment.
 
 ## The roadmap index
 

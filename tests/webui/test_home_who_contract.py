@@ -32,7 +32,7 @@ def _member(source: str, name: str) -> str:
 
 def test_the_notebooks_are_a_page_of_the_home() -> None:
     """Fino al 23/09/2026 era la tendina del titolo; da allora e' la pagina
-    Quaderni della pista (`.agent/pagine-in-alto-plan.md`). Il pannello si
+    Quaderni della pista. Il pannello si
     disegna dentro il suo pannello, e si rilegge quando ci arrivi."""
     html = INDEX.read_text(encoding="utf-8")
     page = html.split('data-page="notebooks"', 1)[1].split('data-page="settings"', 1)[0]

@@ -5,7 +5,7 @@
  *  la chat, i quaderni, le impostazioni — e accanto ci sono quelle che l'utente
  *  ha aggiunto. **Tutte si spostano**, la chat compresa: dal 23/09/2026 la chat
  *  non e' piu' la pagina 0, e nessun indice qui dentro vuol dire «la chat» da
- *  solo (v. `.agent/pagine-in-alto-plan.md`). Dove sta ogni pagina lo dice
+ *  solo. Dove sta ogni pagina lo dice
  *  `order`, che il gateway salva accanto alle `pages`.
  *
  *  **Che cosa muove.** Una pista in fila orizzontale, un pannello per pagina,
@@ -301,8 +301,8 @@ export class HomePages {
    *
    *  Fino al 26/09/2026 un quaderno si apriva nella pagina chat, che prendeva
    *  il suo nome nella fila: una pagina che cambia nome a seconda di cosa ci
-   *  guardi dentro, e «Jenny» spariva dal menu (v.
-   *  `.agent/pagine-in-alto-plan.md`). La regola del 23/09 — «dalla pagina
+   *  guardi dentro, e «Jenny» spariva dal menu.
+   *  La regola del 23/09 — «dalla pagina
    *  chat si apre li', non scorrere» — e' caduta con lei.
    *
    *  Torna la promessa del cambio, e non per scrupolo: chi chiama ci manda

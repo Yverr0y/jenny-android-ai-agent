@@ -77,7 +77,7 @@ export function releaseSelectionOnBlur(win = window) {
    vincono loro: la selezione salta sulla chrome o collassa. Con
    `pointer-events: none` la chrome non partecipa al hit-test e il motore
    ritrova da solo il testo che ci sta sotto — misurato con tre pagine di
-   prova in .agent/selection-rig (pagina C). La classe la mette questo modulo,
+   prova sul telefono. La classe la mette questo modulo,
    la regola sta in mobile-style.css. */
 export const SELECTING_CLASS = 'has-selection';
 

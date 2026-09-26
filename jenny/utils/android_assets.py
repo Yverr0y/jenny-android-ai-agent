@@ -61,8 +61,8 @@ _TEMPLATES_MANIFEST = [*_USER_OWNED_TEMPLATES, *_SYSTEM_PROMPT_TEMPLATES]
 # ``retire_withdrawn_templates`` qui sotto, che quel file lo riscrive. Due copie
 # di un insieme che deve restare allineato è il guasto che questo repo continua
 # a dover riparare (tre copie della regola sui prefissi interni fra
-# ``session/keys.py``, ``agent/memory.py`` e ``agent/autocompact.py`; v.
-# ``roadmap/project-sessions.md``), quindi la definizione è una sola e chi la
+# ``session/keys.py``, ``agent/memory.py`` e ``agent/autocompact.py``),
+# quindi la definizione è una sola e chi la
 # vuole la importa.
 #
 # Servono perché il riconoscimento del template è un confronto con la copia
@@ -560,7 +560,7 @@ def extract_package_dir(
     """
     manifest = _get_manifest(package)
     if manifest is None:
-        # Design a manifest esplicito (vedi .agent/gotchas.md): un package senza
+        # Design a manifest esplicito: un package senza
         # manifest non deve mai finire in un walk silenzioso, che sul dispositivo
         # farebbe arrivare/mancare file senza traccia. Fallire esplicito.
         raise ValueError(

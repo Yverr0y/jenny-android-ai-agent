@@ -1,6 +1,6 @@
 """Il confine, guardato da un capo all'altro — e va in **un senso solo**.
 
-Passo **6** di ``roadmap/progetti-passi.md``, la prova che chiude la v1.
+Passo **6** del piano dei progetti, la prova che chiude la v1.
 
 Gli anelli sono provati uno per uno altrove: il prompt in
 ``test_project_prompt_contract.py``, la scrittura in

@@ -2,13 +2,12 @@
  *
  *  L'avevo tolta da questo giro con una ragione mia — «una chiave API si
  *  incolla in officina» — e quella ragione era paternalistica: in casa si
- *  sceglie chi risponde come si sceglie il tema. Piano:
- *  `.agent/casa-tu-e-jenny-resto-plan.md`, riga 2.
+ *  sceglie chi risponde come si sceglie il tema.
  *
  *  **Le mattonelle sono i provider gia' configurati**, non un catalogo di
  *  marche fra cui aggiungerne una nuova: scegliere una marca che non c'e'
  *  vuol dire conoscerne l'endpoint — per OpenCode Go sono tre campi — e quel
- *  meccanismo ha un piano suo (`provider-presets-plan.md`), proposto e non
+ *  meccanismo ha un piano suo, proposto e non
  *  fatto. Qui si sceglie fra quelli che esistono.
  *
  *  **Toccare una mattonella non cambia chi risponde**, mostra i suoi modelli.

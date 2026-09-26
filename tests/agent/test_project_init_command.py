@@ -1,6 +1,6 @@
 """``/init`` scrive *il* file di istruzioni del progetto, non un secondo.
 
-Passo **2.5** di ``roadmap/progetti-passi.md``.
+Passo **2.5** del piano dei progetti.
 
 Il difetto che questi test esistono per non ripetere è stato trovato sul telefono
 il 22/08, e nessun test l'aveva preso perché non ce n'erano. La prima versione

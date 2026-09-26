@@ -2,7 +2,7 @@
 
 In casa ha quattro righe — Apri · Metti come pagina · Modifica · Elimina — nello
 stesso ordine della scheda di un quaderno: **una cosa si appende dal posto dove
-vive** (`.agent/pagine-dal-posto-plan.md`). La stessa scheda la disegna
+vive**. La stessa scheda la disegna
 l'officina, che le pagine non le ha: li' deve restare **identica a prima**.
 
 In node sui file veri, come `test_home_track_client.py`: il modulo si importa

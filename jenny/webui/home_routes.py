@@ -8,8 +8,7 @@ peggiore, e ``localStorage`` non entra nel backup cifrato.
 
 **Qui si legge soltanto.** La scrittura e' il comando RPC ``home.pages.set``
 (``jenny/webui/commands.py``): fino al 25/09/2026 era una GET col JSON
-nell'indirizzo, e ``/api/`` e' per letture e parametri corti
-(``.agent/design.md``).
+nell'indirizzo, e ``/api/`` e' per letture e parametri corti.
 """
 
 from __future__ import annotations

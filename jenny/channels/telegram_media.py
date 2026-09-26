@@ -21,8 +21,8 @@ from typing import Any
 #
 # Protegge **l'ingresso**: banda, RAM del telefono e disco. Non è il tetto che
 # protegge la *finestra di contesto*, che è una decisione diversa, vale su ogni
-# porta da cui entra un'immagine (qui, gli allegati WebUI e `read_file`) e sta
-# scritta in `roadmap/17-tetto-immagini-read-file.md`. Quando quel numero verrà
+# porta da cui entra un'immagine (qui, gli allegati WebUI e `read_file`) e non è
+# ancora stata presa. Quando quel numero verrà
 # scelto sarà più basso di questo, e questa costante dovrà seguirlo: è una riga.
 #
 # 5 MB perché una foto passata da Telegram è già ricompressa lato server e sta

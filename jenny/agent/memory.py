@@ -558,16 +558,16 @@ class MemoryStore:
         content more tightly; this default only exists to catch unintentional
         large writes (e.g. an LLM echoing its input back as a "summary").
 
-        **Una sessione di progetto scrive qui, con la propria chiave** (08/09/2026,
-        v. ``.agent/project-memory-plan.md``). Fino a quel giorno questo metodo
+        **Una sessione di progetto scrive qui, con la propria chiave** (08/09/2026).
+        Fino a quel giorno questo metodo
         rifiutava una chiave ``project:`` e ritornava ``0``, e l'isolamento di un
         progetto era un'*assenza*. Adesso e' **una chiave piu' una destinazione**,
         ed e' un confine piu' stretto e non piu' largo: la chiave tiene la voce
         fuori da ogni prompt (:meth:`read_recent_history_for_prompt`), e a valle
         Dream puo' scriverne solo in ``USER.md`` (:meth:`build_dream_tools`).
 
-        Il cancello e' caduto perche' guardava l'asse sbagliato. La riga
-        dichiarata in ``.agent/security.md`` e' «chi sei viaggia, dove altro
+        Il cancello e' caduto perche' guardava l'asse sbagliato. La regola
+        di confine e' «chi sei viaggia, dove altro
         lavori no»: e' una regola sulla **categoria del fatto**, e questo era un
         cancello sull'**origine della sessione**. Nel verso in uscita le due
         coincidono, perche' esce solo l'identita'; in entrata no — un fatto
@@ -587,8 +587,7 @@ class MemoryStore:
         ``ContextBuilder`` dalla radice dell'installazione per **ogni** tipo di
         sessione, e ``MemoryRecallTool`` prende l'archivio di quella radice alla
         costruzione ignorando lo scope del workspace. Quel che si chiude sulla
-        sessione e' l'inventario fra progetti, non l'identita'. Il ragionamento
-        intero sta in ``.agent/security.md``.
+        sessione e' l'inventario fra progetti, non l'identita'.
 
         ``prompt_visible=False`` scrive la voce **per Dream e non per i prompt**:
         :meth:`read_recent_history_for_prompt` la salta. Serve a ``/new``, che
@@ -826,8 +825,8 @@ class MemoryStore:
 
         **E la restrizione e' un cancello davanti a un tool, non una tenda**: la
         passata puo' comunque *chiedere* la memoria personale — ``recall`` e i tre
-        file di identita' restano dove sono, per la ragione scritta in
-        ``.agent/security.md``. Questo ramo toglie quel che arrivava **non
+        file di identita' restano dove sono, perche' chi sei viaggia fra
+        progetti, dove altro lavori no. Questo ramo toglie quel che arrivava **non
         richiesto** dentro il prompt.
         """
         if session_key is not None and is_project_session_key(session_key):
@@ -1374,7 +1373,7 @@ class MemoryStore:
         """Build the restricted tool registry used by Dream runs.
 
         *scope* dice **su che tipo di batch** gira questo run, e cambia la
-        cassetta invece del prompt (08/09/2026, v. ``.agent/project-memory-plan.md``):
+        cassetta invece del prompt (08/09/2026):
 
         - ``"personal"`` — il default e il comportamento di sempre: i quattro tool
           file sui tre file di memoria piu' ``skills/``, e il tool per voci su
@@ -1384,7 +1383,7 @@ class MemoryStore:
 
         **Perche' togliere i tool invece di dirlo nel prompt.** La regola che
         questo run deve rispettare — da un progetto puo' uscire identita', mai
-        inventario — e' la stessa che ``.agent/security.md`` dichiara, e finora
+        inventario — e' la regola di confine fra progetti, e finora
         era garantita da un'*assenza* (un progetto non scriveva in ``history``).
         Aperta quella porta, la garanzia deve stare da qualche parte, e un
         paragrafo in un template non e' una garanzia: e' una richiesta. Con la

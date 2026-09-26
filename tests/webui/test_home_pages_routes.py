@@ -2,7 +2,7 @@
 
 Si legge con ``GET /api/home/pages`` e si scrive col comando RPC
 ``home.pages.set`` (fino al 25/09/2026 una GET col JSON nell'indirizzo, contro
-``.agent/design.md``: v. D4 in ``.agent/revisione-profonda.md``).
+la regola per cui ``/api/`` e' per letture e parametri corti).
 
 La casa e' un launcher e di lato alla chat ci sono le pagine che l'utente ha
 aggiunto (tavola `Pagine`). **Perche' in `config.json` e non in
@@ -179,7 +179,7 @@ async def test_the_cap_travels_with_the_list(env) -> None:
     # La conversazione era fuori anche lei (22/09/2026: «la chat e' una sola, una
     # pagina del genere non avrebbe contenuto proprio») ed e' rientrata il
     # 23/09 in un'altra forma — non una seconda chat, una scorciatoia che cambia
-    # quella che c'e'. V. `.agent/pagine-conversazione-plan.md`.
+    # quella che c'e'.
     # Le stanze sono uscite il 23/09/2026: posti dove si va, non dove si sta.
     assert "drawer" not in body["kinds"]
     assert set(body["kinds"]) == {"app", "conversation"}
@@ -298,7 +298,7 @@ async def test_a_page_pointing_at_nothing_is_kept(env) -> None:
 # ── Le pagine conversazione (23/09/2026) ────────────────────────────────────
 #
 # Una scorciatoia che cambia la conversazione dell'unica chat, travestita da
-# pagina (v. `.agent/pagine-conversazione-plan.md`). Punta a un quaderno, e
+# pagina. Punta a un quaderno, e
 # solo a uno che il gateway aprirebbe.
 
 
@@ -472,7 +472,7 @@ async def test_an_app_page_needs_a_slug_and_a_plain_id(env, row) -> None:
 # ── L'ordine (23/09/2026) ───────────────────────────────────────────────────
 #
 # Dal 23/09 si spostano tutte le pagine, la chat e le tre fisse comprese
-# (`.agent/pagine-in-alto-plan.md`). Il comando accetta `{pages, order}`, e
+# Il comando accetta `{pages, order}`, e
 # solo quello; l'ordine che arriva dev'essere **esatto** — la tolleranza e' del
 # file, non di chi scrive.
 

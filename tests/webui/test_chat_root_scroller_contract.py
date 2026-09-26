@@ -6,8 +6,8 @@ hit-test dalle sue coordinate di schermo (``OnDragBegin`` →
 viewport (``kIgnoreClipping`` allarga l'area al documento, ma
 ``PaintLayerClipper`` salta il clip soltanto per il root layer). Il testo
 scrollato fuori da uno scroller interno è irraggiungibile: la base finiva sul
-composer e la selezione si prendeva tutto. Misurato con tre pagine di prova in
-``.agent/selection-rig``; ragionamento in ``.agent/chat-selection-root-plan.md``.
+composer e la selezione si prendeva tutto. Misurato con tre pagine di prova sul
+telefono.
 
 Le condizioni sono tutte proprietà del sorgente, quindi si verificano qui:
 in ``mode-chat`` scorre ``html`` e nessun antenato del testo ritaglia; la chrome

@@ -1,6 +1,6 @@
 """I quattro file per-sessione, sotto un nome di progetto.
 
-Passo **6** di ``roadmap/progetti-passi.md``.
+Passo **6** del piano dei progetti.
 
 Una conversazione lascia quattro tracce su disco, e ognuna nasce da un mapping
 `chiave → nome di file` che sostituisce i caratteri scomodi con ``_``:

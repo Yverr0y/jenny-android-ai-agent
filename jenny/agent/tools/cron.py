@@ -29,8 +29,8 @@ _JOB_MODES = ("reminder", "monitor")
 _DEFAULT_JOB_MODE = "reminder"
 
 # Dentro un progetto non si programma niente, e questo e' l'unico posto in cui
-# Jenny lo viene a sapere: nessuna riga lo dice nel prompt (deciso il 22/08 —
-# v. ``roadmap/progetti-passi.md``, passo 3). Il blocco di sistema si paga a
+# Jenny lo viene a sapere: nessuna riga lo dice nel prompt (deciso il 22/08,
+# passo 3 del piano dei progetti). Il blocco di sistema si paga a
 # ogni turno di ogni progetto, un promemoria capita una volta al mese, e
 # scoprirlo cosi' costa una chiamata e niente da ripianificare.
 #

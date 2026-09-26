@@ -1,6 +1,6 @@
 """La raccolta del diario di un progetto: leggere senza accorciare.
 
-**Fase D di ``.agent/project-memory-plan.md``, e la fase senza la quale la
+**Fase D del piano della memoria di progetto, e la fase senza la quale la
 corsia esisteva a vuoto.** Aperta la scrittura di ``append_history`` a una chiave
 ``project:``, il trasporto restava quello della compattazione — un riassunto lo
 produce solo chi compatta — e la compattazione per inattivita' i progetti non li

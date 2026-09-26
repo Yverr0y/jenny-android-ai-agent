@@ -438,8 +438,7 @@ class TestTheUserIsNotToldTwice:
 class _WarnsWithoutBeingAsked(_FakeMonitorAgent):
     """Avvisa al primo guasto, senza che nessuno glielo abbia chiesto — e lo dichiara.
 
-    Misurato sul device alle 10:19 del 2026-08-16 (v.
-    ``roadmap/heartbeat-escalation-amnesia.md``, punto 3): il guasto ce l'ha
+    Misurato sul device alle 10:19 del 2026-08-16: il guasto ce l'ha
     davanti, e il fatto che il prompt non chieda ancora di parlare non gli
     impedisce di chiamare ``message``. Tace solo quando il prompt glielo chiede
     esplicitamente, che è l'unica riga che il modello vero rispetta.

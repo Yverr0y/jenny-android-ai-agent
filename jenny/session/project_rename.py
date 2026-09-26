@@ -1,6 +1,6 @@
 """Inseguire una wiki che ha cambiato nome, portandole dietro la sua chat.
 
-Passo **7** di ``roadmap/progetti-passi.md``, strada **B**.
+Passo **7** del piano dei progetti, strada **B**.
 
 L'indirizzo di una conversazione di progetto resta il **nome della cartella**, e
 non diventa un id: la cartella continua a dedursi dalla chiave, cosi' come

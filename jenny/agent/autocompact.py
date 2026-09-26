@@ -392,8 +392,7 @@ class AutoCompact:
     async def _harvest_project_diary(self, key: str) -> None:
         """Riassume quel che un progetto ha detto di nuovo, **senza toccarlo**.
 
-        **La fase che rende la corsia di diario non vuota** (08/09/2026, v.
-        ``.agent/project-memory-plan.md``). Aperta la scrittura in
+        **La fase che rende la corsia di diario non vuota** (08/09/2026). Aperta la scrittura in
         ``history.jsonl``, il trasporto restava quello della compattazione: un
         riassunto lo produce solo chi compatta. Misurato sul telefono lo stesso
         giorno, **3 sessioni di progetto su 9** erano mai state compattate — fra

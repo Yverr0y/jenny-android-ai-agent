@@ -442,8 +442,8 @@ def iter_wiki_pages(
 WIKI_ID_KEY = "id"
 
 # Forma dell'id: 12 caratteri esadecimali. Non finisce **mai** in un nome di
-# file — l'indirizzo di una chat resta il nome della cartella (v.
-# ``roadmap/progetti-passi.md``, passo 7, strada B) — quindi non deve essere
+# file — l'indirizzo di una chat resta il nome della cartella
+# (v. ``jenny/session/project_rename.py``) — quindi non deve essere
 # leggibile, deve solo essere improbabile da ripetere. Se un domani diventasse
 # l'indirizzo, i nomi dei file diventerebbero ``project_<id>.jsonl``, cioe'
 # illeggibili con adb: e' una delle ragioni per cui non lo e'.

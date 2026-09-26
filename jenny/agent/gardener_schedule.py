@@ -1,6 +1,6 @@
 """Chi viene giardinato a questo tick, e i tre orologi che lo decidono.
 
-Passo **T4.3** di ``roadmap/taccuino-passi.md``. Il job cron batte ogni mezz'ora;
+Passo **T4.3** del piano del taccuino. Il job cron batte ogni mezz'ora;
 questo modulo risponde all'unica domanda che il battito pone: *su quale progetto,
 se su nessuno.*
 

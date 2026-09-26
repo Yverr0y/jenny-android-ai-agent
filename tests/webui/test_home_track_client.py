@@ -3,7 +3,7 @@
 La casa e' un launcher (tavola `Pagine`). Quattro pagine ci sono sempre — App,
 la chat, Quaderni, Impostazioni — e accanto quelle che l'utente aggiunge. Dal
 23/09/2026 **si spostano tutte**, la chat compresa: nessun indice vuol dire «la
-chat» da solo (v. `.agent/pagine-in-alto-plan.md`). Per questo i casi qui
+chat» da solo. Per questo i casi qui
 parlano **per nome di pagina** (`I('p1')`, `CHAT()`) e non per numero: un
 banco che scrivesse `index === 1` proverebbe un ordine, non la pista.
 
@@ -1399,7 +1399,7 @@ def test_a_word_that_does_not_wrap_cannot_widen_every_page() -> None:
 # ── Appendere e staccare (23/09/2026) ───────────────────────────────────────
 #
 # Una cosa si appende **dal posto dove vive** — l'app dal cassetto, il quaderno
-# dalla tendina — e queste tre sono l'unica porta. V. `.agent/pagine-dal-posto-plan.md`.
+# dalla tendina — e queste tre sono l'unica porta.
 
 
 def test_pinning_saves_the_page_and_lands_on_it() -> None:

@@ -1,6 +1,6 @@
 """I tre orologi dell'innesco: chi viene giardinato a questo tick.
 
-Passo **T4.3** di ``roadmap/taccuino-passi.md``. Ogni cancello è provato come
+Passo **T4.3** del piano del taccuino. Ogni cancello è provato come
 **unico impedimento** — con gli altri due aperti — perché una guardia che non può
 scattare non è una guardia, ed è la stessa lezione già scritta in
 ``agent/autocompact.py`` (là togliere il filtro non faceva cadere nessun test,

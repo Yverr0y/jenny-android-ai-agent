@@ -5,7 +5,7 @@ per una versione piu' nuova, sbagliato per una chiave che questa versione ha
 tolto: resterebbe nel file per sempre, e con lei il warning «Config keys not
 recognised» a ogni caricamento. ``RETIRED_KEY_PATHS`` e' la terza specie, e la
 versione 2 dello schema fa riscrivere il file una volta all'avvio cosi' cadono
-al primo boot (v. ``.agent/retire-atlas-and-main-plan.md``, D2).
+al primo boot.
 
 Il meccanismo si prova con percorsi **sintetici** montati sulla lista: le due
 voci vere (``agents.defaults.atlas``, ``wiki.defaultWiki``) sono ancora campi

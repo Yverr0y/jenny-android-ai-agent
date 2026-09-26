@@ -1,6 +1,6 @@
 """La riga nel prompt della sola lettura, e perché qui se la guadagna.
 
-Passo **4.4** di ``roadmap/progetti-passi.md``.
+Passo **4.4** del piano dei progetti.
 
 Al passo 3 abbiamo deciso di **non** mettere niente nel prompt per il rifiuto dei
 promemoria, e il criterio era: una riga nel blocco se la guadagna la regola che

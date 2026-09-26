@@ -3,7 +3,7 @@
 Tenere premuto un quaderno nella tendina «Con chi parli» apre la sua scheda:
 Apri · Metti come pagina · Rinomina · Elimina — le stesse righe, nello stesso
 ordine, della scheda di un'app nel cassetto. **Una cosa si appende dal posto
-dove vive** (`.agent/pagine-dal-posto-plan.md`).
+dove vive**.
 
 `home-notebook.js` si importa vero, coi suoi vicini finti; `apps-actions.js`
 invece e' vero anche lui, perche' la riga la disegna la sua `drawRow` — la

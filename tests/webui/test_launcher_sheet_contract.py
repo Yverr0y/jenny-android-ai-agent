@@ -792,8 +792,8 @@ def test_the_drawer_is_reachable_from_every_view() -> None:
     #
     # 6. **23/09/2026, e stavolta il pulsante se ne va per una ragione.** In
     #    casa il cassetto non e' piu' un foglio: e' la **pagina App**, e il suo
-    #    nome sta nella fila in alto, che c'e' su ogni pagina
-    #    (`.agent/pagine-in-alto-plan.md`). L'invariante e' la stessa — un
+    #    nome sta nella fila in alto, che c'e' su ogni pagina.
+    #    L'invariante e' la stessa — un
     #    ingresso che esiste e si vede — e qui la pretende il banco: la pagina
     #    c'e', e' una delle fisse (che non si tolgono), e il cassetto dentro e'
     #    quello vero, incorporato. Nessun gesto dal bordo basso, di nuovo.

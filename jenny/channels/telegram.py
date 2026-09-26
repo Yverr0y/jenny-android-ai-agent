@@ -710,8 +710,8 @@ class TelegramChannel(NonStreamingChannelMixin):
     async def _maybe_pair(self, chat_id: str, sender: dict[str, Any], text: Any) -> None:
         """Onboarding in finestra di pairing: solo il codice esatto accoppia.
 
-        Senza ``pairing_code`` attivo il bot resta muto (regola no-oracle,
-        vedi ``.agent/security.md``). In finestra risponde con prompt/feedback
+        Senza ``pairing_code`` attivo il bot resta muto (regola no-oracle:
+        un bot che risponde a chiunque conferma di esistere). In finestra risponde con prompt/feedback
         entro un budget per chat; una chat oltre il cap (o oltre il bound del
         dict, fail-closed) è ineleggibile al pairing anche col codice giusto.
         """

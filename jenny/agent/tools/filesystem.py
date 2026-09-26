@@ -518,7 +518,7 @@ class _FsTool(Tool):
     def _commit_write(self, path: Path, text: str) -> None:
         """Imbuto unico di scrittura dei tool sui file, e sede della scelta atomica.
 
-        La regola di ``.agent/gotchas.md`` vale per verso: i file **dell'utente**
+        La regola sulle scritture atomiche vale per verso: i file **dell'utente**
         si scrivono in posto (rimpiazzare l'inode cambierebbe la semantica —
         permessi, hardlink), mentre lo stato che Jenny **rilegge da sé** passa da
         ``atomic_write``. Qui il discriminante è ``_is_exact_allowed_file``: un

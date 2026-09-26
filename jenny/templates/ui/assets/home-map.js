@@ -663,7 +663,7 @@ export class HomeMap {
    *  dopo.
    *
    *  La guardia vale anche in avanti, ed e' la ragione per cui arriva prima del
-   *  trascinamento dei nodi (v. `.agent/casa-mappa-dito-plan.md`): trascinare
+   *  trascinamento dei nodi: trascinare
    *  fa ripartire la fisica, quindi `end` scatta di nuovo, quindi senza questa
    *  riga **ogni pallino trascinato costerebbe un salto della vista** nel
    *  momento in cui si alza il dito.

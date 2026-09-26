@@ -3,8 +3,7 @@
  *  Puro di proposito — niente DOM, niente rete, niente `i18n` importato — per
  *  la stessa ragione di `launcher-rank.js`: la regola che divide l'elenco si
  *  prova sotto node, e la riga in cassetto e il pannello leggono **questa**
- *  funzione invece di tenerne ciascuno una copia (v.
- *  `.agent/officina-skill-plan.md`, «Le regole di divisione»).
+ *  funzione invece di tenerne ciascuno una copia.
  *
  *  La domanda che conta è una sola: **un interruttore qui sopravvive al
  *  riavvio?** Le integrate no — l'avvio le ri-estrae dall'APK sopra quel che

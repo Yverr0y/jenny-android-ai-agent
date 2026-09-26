@@ -1,7 +1,7 @@
 """Il cassetto delle app come **pagina**: la pagina App della casa (23/09/2026).
 
-Lo stesso `LauncherController` dell'officina, con `incorporato: true` (v.
-`.agent/pagine-in-alto-plan.md`). Le cose di un foglio che sale sopra la chat —
+Lo stesso `LauncherController` dell'officina, con `incorporato: true`.
+Le cose di un foglio che sale sopra la chat —
 velo, sfondo inerte, trascinamento per chiudere, geometria della tastiera, fuoco
 spostato all'apertura — qui non devono esserci; e «aperto» vuol dire **la
 pagina che guardi**: i tasti sono suoi solo in quel mentre, e sul Titan quei

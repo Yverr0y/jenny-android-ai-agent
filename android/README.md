@@ -19,5 +19,5 @@ to the WebSocket on the same origin.
 
 ## Troubleshooting
 
-Problemi con `web_search`/`web_fetch` (WebView bridge)? Vedi la sezione
-"Android WebView search/fetch" in [`.agent/gotchas.md`](../.agent/gotchas.md).
+Problemi con `web_search`/`web_fetch` (WebView bridge)? Vedi
+[Troubleshooting](../docs/using/troubleshooting.md).

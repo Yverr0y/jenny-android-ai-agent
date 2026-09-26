@@ -1,6 +1,6 @@
 """``journal_append``: la cattura di un progetto, e i suoi tre cancelli.
 
-Passo **T2.5** di ``roadmap/taccuino-passi.md``. Il tool nasce da una misura sul
+Passo **T2.5** del piano del taccuino. Il tool nasce da una misura sul
 telefono, non da un disegno: la politica di cattura funzionava, ma passava da uno
 spawn di subagent, perché ``orchestrator_mode`` toglie all'agente principale ogni
 scrittura. Una corsa di subagent per una riga di testo, a ogni turno con un fatto

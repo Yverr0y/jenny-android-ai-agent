@@ -1,6 +1,6 @@
 """La passata del giardiniere: la cassetta chiusa, il prompt, il cursore.
 
-Passo **T4.2** di ``roadmap/taccuino-passi.md``.
+Passo **T4.2** del piano del taccuino.
 
 Il gruppo che conta è ``TestTheToolbox``, e la ragione va scritta: **il
 confinamento di un turno interno è il registry, non lo scope.** Un turno interno

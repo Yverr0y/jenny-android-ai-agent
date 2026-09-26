@@ -97,8 +97,8 @@ class DreamConfig(Base):
         serialization_alias="memoryBudgetChars",
     )
     # ``USER.md`` sta a **4.000 dal 08/09/2026**, e i 1.000 in piu' rispetto a
-    # ``MEMORY.md`` hanno una causa sola: la corsia di diario dei progetti (v.
-    # ``.agent/project-memory-plan.md``). Misurato sul Titan 2 quel giorno, i
+    # ``MEMORY.md`` hanno una causa sola: la corsia di diario dei progetti.
+    # Misurato sul Titan 2 quel giorno, i
     # fatti personali detti dentro i progetti e mai arrivati qui valgono **1.749
     # caratteri** su un file che ne occupava 2.466 su 3.000 — cioe' il 140% del
     # tetto di allora, 1.215 di sforamento la prima notte. Un tetto che morde
@@ -486,8 +486,7 @@ class ProvidersConfig(Base):
 #: * ``app`` — una Jenny App, ``ref`` e' il suo slug;
 #: * ``conversation`` — un quaderno, ``ref`` e' ``project:<nome>``. E' una
 #:   **scorciatoia**, non una seconda chat: arrivarci cambia la conversazione
-#:   dell'unica chat che c'e', e lo scorrimento lo traveste da pagina (v.
-#:   ``.agent/pagine-conversazione-plan.md``).
+#:   dell'unica chat che c'e', e lo scorrimento lo traveste da pagina.
 #:
 #: Le assenze sono decise, non dimenticate:
 #:
@@ -511,8 +510,8 @@ PAGE_KINDS = ("app", "conversation")
 MAX_PAGES = 8
 
 #: Le pagine che ci sono sempre, nell'ordine in cui le trova chi non ha mai
-#: spostato niente: il cassetto, la chat, i quaderni, le impostazioni
-#: (``.agent/pagine-in-alto-plan.md``). **Si spostano, non si tolgono**: una
+#: spostato niente: il cassetto, la chat, i quaderni, le impostazioni.
+#: **Si spostano, non si tolgono**: una
 #: casa senza la pagina Impostazioni non avrebbe piu' una strada per tornarci.
 #: Sono id riservati in :attr:`HomeConfig.order`, e nessuna schermata puo'
 #: portarne uno.
@@ -656,7 +655,7 @@ class HomeConfig(Base):
     **Due elenchi, non uno.** ``pages`` sono le pagine *aggiunte* — cosa
     c'e' dentro ciascuna. ``order`` e' **dove sta ogni pagina**, le fisse
     comprese: la chat non e' piu' la pagina 0 e si sposta come le altre (dal
-    23/09/2026, v. ``.agent/pagine-in-alto-plan.md``). Le fisse non stanno in
+    23/09/2026). Le fisse non stanno in
     ``pages`` perche' non hanno niente da ricordare oltre al posto, e un
     file che le potesse elencare le potrebbe anche togliere.
     """

@@ -1,6 +1,6 @@
 """Dentro un progetto il prompt dice la verità su dov'è, e tace sugli altri.
 
-Passi **2.1** e **2.2** di ``roadmap/progetti-passi.md``. Il passo 1 ha legato la
+Passi **2.1** e **2.2** del piano dei progetti. Il passo 1 ha legato la
 cartella al turno, ma il prompt aveva continuato a descrivere quella cartella
 come se fosse il workspace. Tre affermazioni false, tutte misurate il 21/08:
 
@@ -235,7 +235,7 @@ def test_the_block_stays_small() -> None:
     giorno la regola diceva «se sarà ancora vero, scrivilo» senza dire mai *sul
     progetto*, e sul telefono si vedeva il risultato: **39 righe su 72** dei
     journal dei progetti veri erano fatti sulla persona, promossi a pagine di
-    wiki che non c'entravano (v. ``.agent/project-memory-plan.md``). Sono ~210
+    wiki che non c'entravano. Sono ~210
     token per turno di progetto, ed è il prezzo di non archiviare la famiglia di
     qualcuno sotto un progetto di lavoro.
     """

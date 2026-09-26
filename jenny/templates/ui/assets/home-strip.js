@@ -1,6 +1,6 @@
 /** La casa — la fila dei nomi in alto.
  *
- *  Prende il posto di quattro cose che c'erano (v. `.agent/pagine-in-alto-plan.md`):
+ *  Prende il posto di quattro cose che c'erano:
  *  il titolo «Jenny ⌄» con la sua tendina, l'ingranaggio verso «Tu e Jenny», il
  *  bottone del cassetto e la striscia dei pallini. I pallini dicevano quante
  *  pagine c'erano, non che cosa: qui ci sono i nomi, e **quello dove sei e'

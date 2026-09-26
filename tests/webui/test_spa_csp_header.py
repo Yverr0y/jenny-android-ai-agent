@@ -126,7 +126,7 @@ def test_workshop_html_carries_the_same_csp(tmp_path):
 
     La CSP era legata alla stringa ``index.html``, quindi un secondo documento
     nasceva senza policy e se la sarebbe presa addosso tutta insieme il giorno
-    dello scambio dei nomi (v. `.agent/casa-plan.md`) — cioe' alla fine, quando
+    dello scambio dei nomi — cioe' alla fine, quando
     una violazione costa di piu' e si spiega di meno. Il confronto ora e' su
     `_SHELL_DOCUMENTS`, e questo test e' cio' che impedisce di tornare indietro.
     """

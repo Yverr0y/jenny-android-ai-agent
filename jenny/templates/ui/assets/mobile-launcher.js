@@ -1,6 +1,6 @@
 /** Mobile Launcher — il foglio che sale dal composer.
  *
- *  Piano `.agent/apps-drawer-plan.md`, passi 1-6: l'impianto di navigazione, le
+ *  Dentro: l'impianto di navigazione, le
  *  tre liste vere, il campo di ricerca con sotto la lista ordinata e attivabile
  *  col tocco, **il modo di usarlo senza toccare lo schermo** (type-ahead,
  *  frecce, rotella, ⏎ e ⇧⏎), la geometria che schiva la gesture di home e
@@ -79,7 +79,7 @@ export class LauncherController {
   /** @param {object} app istanza di MobileApp (per il ritorno del fuoco).
    *  @param {object} [opzioni]
    *  @param {boolean} [opzioni.incorporato] il cassetto **e' una pagina** e non
-   *         un foglio: la pagina App della casa (v. `.agent/pagine-in-alto-plan.md`).
+   *         un foglio: la pagina App della casa.
    *         Niente velo, niente sfondo inerte, niente trascinamento per
    *         chiudere e niente geometria della tastiera — cose di un foglio che
    *         sale sopra la chat. «Aperto» vuol dire allora **la pagina che

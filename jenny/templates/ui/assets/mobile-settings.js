@@ -28,7 +28,7 @@ const KEEP_AWAKE_CHOICES = ['off', 'turns', 'always'];
  *
  * **Una tabella e non undici `if`.** Prima le sezioni erano un elenco dentro
  * `render()`; adesso sono un elenco per cassetto, e il controller ne disegna
- * uno per volta. Il giro delle tavole (`.agent/officina-tavole-plan.md`) sta
+ * uno per volta. Il riordino dei cassetti sta
  * tutto qui dentro: spostare una sezione da un cassetto all'altro e' spostare
  * una stringa, e non c'e' nessun posto in cui possa restare scritta due volte.
  *
@@ -2219,8 +2219,8 @@ export class SettingsController {
    *
    *  Stavano nella schermata Apps, cancellata il 21/09/2026, e da allora non si
    *  vedevano da nessuna parte. Qui e non altrove perche' Mani risponde a
-   *  *cosa sa fare* Jenny, e una skill e' una procedura che sa eseguire (v.
-   *  `.agent/officina-skill-plan.md`). Crearle, cambiarle e cancellarle
+   *  *cosa sa fare* Jenny, e una skill e' una procedura che sa eseguire.
+   *  Crearle, cambiarle e cancellarle
    *  restano fuori, per scelta: si chiede a lei, in chat.
    */
   _renderSkill() {

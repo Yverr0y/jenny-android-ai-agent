@@ -1,6 +1,6 @@
 """I tool che si portano la destinazione da sé, e che quindi devono chiedere.
 
-Passo **4.2** di ``roadmap/progetti-passi.md``, la metà che non passa dai
+Passo **4.2** del piano dei progetti, la metà che non passa dai
 cancelli di percorso.
 
 Questi quattro non risolvono niente con ``resolve_allowed_path``: la

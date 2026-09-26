@@ -1,6 +1,6 @@
 """Le scritture che usavano la radice dell'installazione invece di quella del turno.
 
-Passo **6** di ``roadmap/progetti-passi.md``.
+Passo **6** del piano dei progetti.
 
 Sono una famiglia, non due casi isolati: un tool che si porta la destinazione
 scritta dentro — ``<workspace>/downloads/``, ``apps/<nome>/data/`` — non passa da

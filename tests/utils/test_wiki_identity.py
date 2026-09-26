@@ -1,6 +1,6 @@
 """L'identità di una wiki: chi la scrive, chi la legge, e cosa fa se è ambigua.
 
-Passo **7.1** e **7.4** di ``roadmap/progetti-passi.md``, strada **B**.
+Passo **7.1** e **7.4** del piano dei progetti, strada **B**.
 
 L'id serve a **una** cosa: ritrovare la chat di una wiki dopo che la cartella ha
 cambiato nome. Non è l'indirizzo di niente — quello resta il nome della cartella,

@@ -3,8 +3,8 @@
 Fino al 24/08/2026 ``cron/runs/`` non aveva **nessuna** potatura — né tetto, né
 scadenza, né una `unlink` da nessuna parte — e ``remove_job`` non li sfiorava: i
 record di un job cancellato gli sopravvivevano per sempre. È la forma del difetto
-trovato lo stesso giorno sui progetti (v. ``.agent/stale-name-bindings-plan.md``),
-in versione più mite: gli id dei job sono opachi, quindi un job nuovo non eredita
+trovato lo stesso giorno sui progetti (un nome che torna libero in un deposito
+resta occupato in un altro), in versione più mite: gli id dei job sono opachi, quindi un job nuovo non eredita
 mai quelli di uno vecchio. Non reincarnazione, perdita lenta.
 
 **Nessuno legge quei file** — né il gateway, né le route WebUI, né il client, né

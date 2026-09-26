@@ -1,15 +1,15 @@
 """Jenny App manifest loading and validation.
 
 An app is a folder in ``<workspace>/apps/<slug>/`` with an ``app.json``
-manifest optionally declaring typed actions (see ``.agent/jenny-apps.md`` and
-the ``app-creator`` skill reference). Loading never raises: malformed apps come
+manifest optionally declaring typed actions (see ``docs/contribute/write-a-mini-app.md``
+and the ``app-creator`` skill reference). Loading never raises: malformed apps come
 back as ``LoadedApp(broken=True, error=...)`` so the grid can show them as
 broken without ever crashing the gateway.
 
 ``actions`` is optional: an app whose only job is to draw a screen has nothing
 agent-facing to declare, and requiring a non-empty list made that app
 impossible to write — the observed result was an *invented* action added only to
-satisfy the schema. ``.agent/jenny-apps.md`` always described the agent-facing
+satisfy the schema. The design always described the agent-facing
 side as something an app "can" carry; the code disagreed until Sept 2026.
 """
 

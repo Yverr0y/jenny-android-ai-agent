@@ -75,7 +75,8 @@ class SkillsRoutes:
 
         ``description`` e ``content`` in query non si leggono più: erano
         decodificati due volte (``parse_qs``, poi ``unquote``) e portavano
-        contenuto su una GET, contro ``design.md``; nessun client li mandava.
+        contenuto su una GET, contro la regola per cui ``/api/`` e' per letture
+        e parametri corti; nessun client li mandava.
         """
         if not self._check_api_token(request):
             return self._error(401, "Unauthorized")

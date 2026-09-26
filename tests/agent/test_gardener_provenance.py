@@ -24,9 +24,8 @@ di «verifica la citazione contro le parole dell'utente» sono state provate su
 questo stesso caso e cadono tutte; l'ultima boccia la fabbricazione **e** boccia
 `fibra.md`, che registra una decisione vera e detta chiaramente, solo
 parafrasata. La parafrasi è legittima e pervasiva, quindi nessun controllo a
-livello di stringa le separa. Il ragionamento sta in
-`roadmap/memory-scope-and-journal-provenance.md`, T3.0b: chi vuole «rafforzare»
-questi test con un confronto di stringhe lo legga prima.
+livello di stringa le separa: chi vuole «rafforzare» questi test con un confronto
+di stringhe boccerebbe proprio le parafrasi oneste.
 
 Quel che il codice impone è la **conseguenza** del bit, e quella è meccanica.
 """

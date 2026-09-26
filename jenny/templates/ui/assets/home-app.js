@@ -6,8 +6,6 @@
  *  possono rompere a vicenda. Condividono le fondamenta — `assets/shared/*` —
  *  e nient'altro.
  *
- *  Piano: `.agent/casa-plan.md`.
- *
  *  **Il contratto col guscio nativo e' di sei metodi.** Android chiama
  *  `window.mobileApp.onNativeReady()`, `.goHome()`, `.onPackageChanged()`,
  *  `.handleHardwareBack()`, `.openChat()` e `.isChatOnScreen()`. Erano tre in

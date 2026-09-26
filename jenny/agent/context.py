@@ -85,8 +85,7 @@ _WIKIS_BLOCK_MAX_TOKENS = 1500
 
 # La frase che precede l'elenco. E' l'unica prosa del blocco, quindi l'unica
 # cosa che vive in un prompt e non in un meccanismo: cambiarla e' cambiare cosa
-# il modello fa con l'elenco, e va ricalibrato sul telefono
-# (``.agent/retire-atlas-and-main-plan.md``, «Verifica sul telefono»).
+# il modello fa con l'elenco, e va ricalibrato sul telefono.
 _WIKIS_BLOCK_LEAD = (
     "Your wikis live under `{wikis_dir}/`. Open `{wikis_dir}/<name>/wiki/index.md` "
     "before answering about one of these subjects; to find out whether something is "
@@ -476,8 +475,8 @@ class ContextBuilder:
     # un manuale di cron scritto da noi il secondo). È lo stesso caso di
     # ``MEMORY.md`` e riceve la stessa risposta: si salta.
     #
-    # ``AGENTS.md`` ci è entrato con ``roadmap/agents-md-ownership.md``, che ha
-    # spostato la sua metà "di sistema" in ``agent/scheduling.md`` — dove un
+    # ``AGENTS.md`` ci è entrato quando la sua metà "di sistema" è passata in
+    # ``agent/scheduling.md`` — dove un
     # aggiornamento arriva davvero, perché ``agent/**`` si riscrive a ogni boot
     # mentre i file dell'utente si creano una volta sola. Quel che resta è un
     # segnaposto, e un segnaposto nel prompt è solo contesto pagato a vuoto.
@@ -1363,8 +1362,8 @@ class ContextBuilder:
         viaggia, dove altro lavori no», e quel che si chiude sulla sessione e'
         l'inventario fra progetti (l'elenco delle wiki, e la coda di
         ``read_recent_history_for_prompt``), non i tre file di identita'. Chi
-        arriva qui pensando di simmetrizzare il confine legga prima
-        ``.agent/security.md``: togliere l'identita' a un attore vuol dire
+        arriva qui pensando di simmetrizzare il confine tenga presente
+        che togliere l'identita' a un attore vuol dire
         filarci la specie di sessione dentro il percorso di prompt piu'
         condiviso che c'e', e lasciare l'unico attore senza identita' a scrivere
         pagine che l'utente legge.

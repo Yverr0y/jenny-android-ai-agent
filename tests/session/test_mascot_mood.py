@@ -1,8 +1,7 @@
 """L'umore della mascotte, letto dagli emoji della risposta.
 
 Due parti, tutte e due pure e senza rete: quale riga si legge (``last_reply``)
-e che faccia ne esce (``mood_from_reply``). Le regole sono quelle di
-``.agent/mascot-mood-emoji-plan.md`` (D2–D5). Gli esempi sono inventati: il
+e che faccia ne esce (``mood_from_reply``). Gli esempi sono inventati: il
 repository e' pubblico.
 """
 

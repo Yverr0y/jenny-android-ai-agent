@@ -553,8 +553,7 @@ def test_the_retired_digest_registry_has_exactly_one_definition() -> None:
     boot — e stanno in package diversi, che è esattamente la condizione in cui la
     seconda copia nasce. ``session/keys.py``, ``agent/memory.py`` e
     ``agent/autocompact.py`` sono tre copie divergenti della regola sui prefissi
-    interni, e ``roadmap/project-sessions.md`` la chiama "a data-loss bug no test
-    will catch". Questo è il test che la prende.
+    interni: "a data-loss bug no test will catch". Questo è il test che la prende.
     """
     sources = list((Path(__file__).resolve().parents[2] / "jenny").rglob("*.py"))
     assert sources, "nessun sorgente trovato: il path del package è cambiato"

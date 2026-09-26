@@ -1,6 +1,6 @@
 """Rinominare una cartella non perde più la sua chat.
 
-Passo **7.2** e **7.3** di ``roadmap/progetti-passi.md``, strada **B**.
+Passo **7.2** e **7.3** del piano dei progetti, strada **B**.
 
 Il piano diceva «id stabile, e le chat passano a ``project:<id>``». Quella strada
 **inverte l'invariante del 21/08** — la cartella si deduce dalla chiave e non è

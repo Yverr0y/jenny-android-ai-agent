@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 # writes. The asyncio hops carry both halves across
 # (`_carry_turn_across_thread`); a raw thread carries neither.
 # Consequence for anything that *describes* the switch — the prompt block in
-# `templates/agent/readonly.md`, `.agent/security.md`: the read-only turn is an
+# `templates/agent/readonly.md`, `SECURITY.md`: the read-only turn is an
 # instruction backed by tool refusals, and it must not be written up as a
 # boundary that holds against code that goes looking for a way round it.
 

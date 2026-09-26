@@ -1,6 +1,6 @@
 """Il giardiniere — la passata che trasforma il diario di un progetto in pagine.
 
-Passo **T4.2** di ``roadmap/taccuino-passi.md``. La cattura (T2) scrive righe di
+Passo **T4.2** del piano del taccuino. La cattura (T2) scrive righe di
 diario mentre si conversa; qui quelle righe diventano pagine e la mappa torna
 vera. Due mestieri separati di proposito: la cattura deve costare una chiamata e
 non decidere niente, il giardiniere decide (nomi, struttura, cosa merita una

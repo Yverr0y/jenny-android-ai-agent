@@ -2,11 +2,11 @@
 
 Prima di questo lavoro il chip faceva due cose sbagliate, entrambe silenziose:
 elencava `workspace/projects/`, una cartella che non esiste (i progetti **sono**
-le wiki, `roadmap/project-sessions.md`), e "Nuovo progetto" chiamava
+le wiki), e "Nuovo progetto" chiamava
 `/api/workspace/mkdir` — cartella nuda, nessun albero, nessun `AGENTS.md`,
 nessuna voce nel registro. Una wiki rotta che sembrava un progetto.
 
-Dal 22/08 (**T1** di `roadmap/taccuino-passi.md`) lo scaffolder e' nel package
+Dal 22/08 (**T1** del piano del taccuino) lo scaffolder e' nel package
 (`webui/project_scaffold.py`) e costruisce il **formato nostro**: pagine piatte
 sotto `wiki/`, un diario, la mappa. Il fixture monta comunque il checkout della
 skill nel workspace, perche' da la' viene ancora `reindex_wikis.py` — il registro

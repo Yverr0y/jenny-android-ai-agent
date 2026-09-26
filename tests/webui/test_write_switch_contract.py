@@ -1,6 +1,6 @@
 """L'interruttore scrittura / sola lettura, dal lato del client.
 
-Passo **4.5** di ``roadmap/progetti-passi.md``.
+Passo **4.5** del piano dei progetti.
 
 Risponde alla seconda metà della stessa domanda del chip — *cosa farà quel che
 sto per mandare* — e per questo sta nella stessa riga: un messaggio partito

@@ -10,7 +10,7 @@ lo raggiunge mai, ``tasks_due_for_escalation`` lo salta e ``already_warned_block
 dice al modello "di questi non parlare, qualunque cosa trovi". L'unica uscita
 automatica è un ``CHECK_OK`` che il modello può non scrivere mai — e un
 follow-up senza marcatore è lo *stato normale* di un controllo delegato sano
-misurato sul device (v. ``roadmap/heartbeat-escalation-amnesia.md``).
+misurato sul device.
 
 Le due mitigazioni misurate, che questo file tiene ferme perché senza di loro la
 funzione è una seccatura invece di una correzione:

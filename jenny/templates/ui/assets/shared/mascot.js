@@ -9,10 +9,9 @@
  * sinistra il resto dell'interfaccia — testo, fumetti, riga di lavoro — le si
  * allineava male; e il lato non era una scelta, solo il ricordo dell'ultimo
  * lancio.
- * V. .agent/tre-ritocchi-plan.md, voce 1.
  *
  * Il bianco/nero non c'è più (08/09/2026): l'arte esiste in una sola
- * variante, a colori, col nome piano — v. .agent/mascot-faces-plan.md, F9.
+ * variante, a colori, col nome piano.
  */
 
 /* Letture e scritture che non sollevano: con lo storage negato le preferenze

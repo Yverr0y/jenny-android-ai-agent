@@ -1,6 +1,6 @@
 """I progetti non si archiviano per inattività — e la lunghezza li raggiunge.
 
-Passo **8** di ``roadmap/progetti-passi.md``.
+Passo **8** del piano dei progetti.
 
 Fino al passo 8 i progetti erano salvi **per accidente**: ``check_expired`` aveva
 ``UNIFIED_SESSION_KEY`` cablato dentro, quindi guardava una sessione sola e le
@@ -32,8 +32,7 @@ ha in più della sua cartella.
 
 **E una quarta metà, dall'08/09/2026: sulla stessa sessione scaduta passa ora un
 secondo lavoro, che non è questo.** ``_harvest_project_diary`` legge i messaggi
-nuovi, li riassume nella coda del diario e **non toglie un messaggio** (v.
-``.agent/project-memory-plan.md``). Il recinto qui descritto non lo riguarda: non
+nuovi, li riassume nella coda del diario e **non toglie un messaggio**. Il recinto qui descritto non lo riguarda: non
 difende la sessione dall'essere *letta*, difende i suoi messaggi dall'essere
 *buttati*. Perciò i test di pianificazione qui sotto non chiedono più «non è
 stato schedulato niente» — che confonderebbe i due lavori e farebbe fallire il

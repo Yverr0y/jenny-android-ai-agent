@@ -16,7 +16,7 @@
 //   usare WebRTC, e i candidati ICE sono proprio il modo di raggiungere (e di
 //   scoprire) gli indirizzi della rete locale.
 //
-// Cosa NON fa, e va detto (v. .agent/security.md): non tocca i Worker — dentro
+// Cosa NON fa, e va detto: non tocca i Worker — dentro
 // un Worker `WebSocket` è quello nativo — né i frame in cui questo script non
 // viene iniettato (un about:blank appena creato può restituire i costruttori
 // originali). Ferma una pagina qualunque, non una costruita apposta contro

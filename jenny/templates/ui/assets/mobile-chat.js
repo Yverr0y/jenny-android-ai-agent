@@ -3589,7 +3589,7 @@ export class ChatController {
      di selezione Chromium ri-deriva l'estremo fermo con un hit-test che
      ignora solo il ritaglio del viewport, mai quello di uno scroller interno;
      con la chat in un `div` scrollabile, l'estremo uscito di vista finiva sul
-     composer e la selezione si prendeva tutto (v. .agent/chat-selection-root-plan.md).
+     composer e la selezione si prendeva tutto.
      Ogni lettura e scrittura di scroll passa da qui: un solo punto da cambiare. */
   get _scroller() {
     return document.scrollingElement || document.documentElement;

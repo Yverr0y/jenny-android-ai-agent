@@ -368,7 +368,7 @@ class WikiRoutes:
 
         **Un progetto e' una wiki**, quindi l'elenco e' `discover_wiki_roots` e
         non il contenuto di una cartella `projects/`: quella non esiste, e il
-        chip la leggeva (v. `roadmap/project-sessions.md`, item 10). `dir` viaggia
+        chip la leggeva. `dir` viaggia
         col payload perche' il chip mostra lo scope come un percorso e il nome
         della cartella e' configurabile (`config.wiki.wikis_dir`).
 

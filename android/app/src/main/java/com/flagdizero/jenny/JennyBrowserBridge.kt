@@ -352,7 +352,7 @@ class JennyBrowserBridge(context: Context) {
      * Rimedio parziale e dichiarato come tale: uno script iniettato a inizio
      * documento (`res/raw/browser_network_guard.js`) avvolge i costruttori nei
      * frame della pagina. Non copre i Worker né un frame in cui lo script non
-     * arriva — v. il commento in testa allo script e `.agent/security.md`.
+     * arriva — v. il commento in testa allo script, che elenca i limiti.
      * Senza `DOCUMENT_START_SCRIPT` la guardia non c'è, e lo si scrive nel log
      * invece di fingere.
      */
@@ -376,7 +376,7 @@ class JennyBrowserBridge(context: Context) {
      * via HTTP stavolta. Sul profilo **separato** della sessione, e solo lì: il
      * controller del profilo di default è quello della SPA e di `web_fetch`.
      * Senza profilo separato (MULTI_PROFILE assente o aggancio fallito) il buco
-     * resta, ed è scritto in `.agent/security.md`.
+     * resta: è un limite noto e accettato, non un difetto da scoprire.
      */
     private fun guardServiceWorkersOnMain(p: Profile) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST)) {

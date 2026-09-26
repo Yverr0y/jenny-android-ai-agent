@@ -12,7 +12,7 @@ Quel rimedio non serve più. La regola di *instradamento* — quale delle tre
 destinazioni — sta in ``jenny/templates/agent/scheduling.md``, che è codice e si
 riscrive a ogni boot; ``AGENTS.md`` non la contiene più affatto. Le asserzioni qui
 sotto restano, ma cambiano di mestiere: non presidiano più una scorciatoia, tengono
-fermo il posto della skill nel confine descritto in ``roadmap/agents-md-ownership.md``.
+fermo il posto della skill nel confine fra prompt di sistema e manuale.
 Il manuale sta qui perché lo si legge su richiesta, mentre ``agent/scheduling.md`` si
 paga a ogni turno; ed è ancora questa la pagina che il prompt dice di leggere *prima*
 di schedulare.

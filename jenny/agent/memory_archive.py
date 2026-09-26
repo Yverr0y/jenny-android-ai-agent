@@ -1,6 +1,6 @@
 """Il tier freddo della memoria: dove finisce una voce quando lascia i file caldi.
 
-La fase 2 di ``.agent/memory-plan.md`` sostituisce la cancellazione con la
+La fase 2 del piano della memoria sostituisce la cancellazione con la
 **degradazione**. Non è una sfumatura di parole: è ciò che rende il "fai spazio"
 un'operazione che riesce sempre, e quindi toglie la ragione per cui una scrittura
 deve essere rifiutata. Ed è la riparazione vera per il review pass, i cui errori

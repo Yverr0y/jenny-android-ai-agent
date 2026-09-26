@@ -189,7 +189,7 @@ class TestTheWritePassesWithItsKey:
     un progetto e' identita', cioe' la classe autorizzata a viaggiare, e veniva
     fermato lo stesso. Misurato sul telefono: 39 righe su 72 dei journal di
     progetto erano fatti sulla persona, e 18 su 23 campionati non stavano in
-    nessun file di memoria (``.agent/project-memory-plan.md``).
+    nessun file di memoria.
 
     L'isolamento adesso e' **una chiave piu' una destinazione**, ed e' piu'
     stretto e non piu' largo: la chiave tiene la voce fuori da ogni prompt (la

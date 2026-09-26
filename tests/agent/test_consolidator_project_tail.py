@@ -6,8 +6,7 @@ dump grezzo in ``history.jsonl``, quindi i messaggi rimossi restano da qualche
 parte; per una sessione-progetto ``append_history`` non scriveva affatto, quindi
 quel dump non esisteva e la troncatura li cancellava.
 
-**Dall'08/09/2026 il dump viene scritto anche per un progetto** (v.
-``.agent/project-memory-plan.md``), e la copia dentro il progetto serve lo
+**Dall'08/09/2026 il dump viene scritto anche per un progetto**, e la copia dentro il progetto serve lo
 stesso: sono due depositi per due lettori. Il dump in ``history.jsonl`` e' la
 coda da cui Dream estrae i fatti *sulla persona*, e da un prompt di progetto non
 e' raggiungibile — il filtro di ``read_recent_history_for_prompt`` lo esclude. La
