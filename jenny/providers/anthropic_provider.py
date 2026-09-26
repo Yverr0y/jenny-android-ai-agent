@@ -212,7 +212,11 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         )
 
         max_tokens = max(1, max_tokens)
-        thinking_enabled = bool(reasoning_effort) and reasoning_effort.lower() != "none"
+        # ``minimal`` (e l'alias ``minimum``) spegne il thinking, come sul ramo
+        # OpenAI-compat: qui lo accendeva col budget di default.
+        thinking_enabled = bool(reasoning_effort) and reasoning_effort.lower() not in (
+            "none", "minimal", "minimum",
+        )
 
         # Several Anthropic models (opus-4-7, opus-4-8, fable) deprecated the
         # `temperature` parameter — the API returns 400 if it is present.
@@ -236,7 +240,12 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
             if not omit_temperature:
                 kwargs["temperature"] = 1.0
         elif thinking_enabled:
-            budget_map = {"low": 1024, "medium": 4096, "high": max(8192, max_tokens)}
+            # ``high`` prende tutto lo spazio che il ``max_tokens`` configurato
+            # lascia al testo (4096), non il ``max_tokens`` intero: con quello il
+            # finale diventava ``max_tokens + 4096`` e superava il tetto del
+            # modello (32000 su un Opus 4 → 36096, rifiutato). Il finale sale
+            # oltre il configurato solo quando questo è troppo piccolo.
+            budget_map = {"low": 1024, "medium": 4096, "high": max(8192, max_tokens - 4096)}
             budget = budget_map.get(reasoning_effort.lower(), 4096)
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
             kwargs["max_tokens"] = max(max_tokens, budget + 4096)
