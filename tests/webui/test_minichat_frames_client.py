@@ -277,3 +277,60 @@ def test_an_empty_message_means_thinking_as_in_the_mother() -> None:
         assert.equal(j.bubble.textContent, '');
         """
     )
+
+
+def test_a_question_asked_mid_answer_follows_that_turn_but_not_its_old_words() -> None:
+    """WJ6 della terza revisione. Una domanda fatta alla minichat mentre Jenny
+    sta rispondendo in chat non apre un turno suo: il gateway la inietta nel
+    turno in volo. La minichat adottava «il primo turno che vede» e ne mostrava
+    il segmento che stava scorrendo — la risposta alla domanda **di prima**.
+    Ora segue quel turno, salta il segmento in corso e mostra da quello dopo."""
+    _run(
+        """
+        const { wsManager } = await import('./shared/ws-manager.js');
+        const { sessionManager } = await import('./shared/session-manager.js');
+        const sent = [];
+        Object.assign(wsManager, { connectChat() {}, chatConnected: true,
+                                   sendToChat: (key, text) => { sent.push(text); return true; } });
+        sessionManager.ensureAttached = () => {};
+        globalThis.setTimeout = () => 0;
+        const j = minichat({ expected: false, inTurn: false, open: true });
+        j.mc.dataset.state = 'ask';
+        // In chat il turno t1 sta scorrendo; la minichat non lo disegna.
+        j._handleFrame({ event: 'delta', text: 'Ecco il riassunto del documento', turn_id: 't1' });
+        assert.equal(j.bubble.textContent, '');
+        await j._send('che ore sono?');
+        assert.deepEqual(sent, ['che ore sono?']);
+        assert.equal(j._streamTurnId, 't1', 'la domanda entra nel turno in volo');
+        j._handleFrame({ event: 'delta', text: ' che mi avevi chiesto', turn_id: 't1' });
+        assert.equal(j.bubble.textContent, '', 'le parole di prima non sono la risposta');
+        j._handleFrame({ event: 'stream_end', text: 'Ecco il riassunto…', turn_id: 't1' });
+        assert.equal(j.bubble.textContent, '');
+        j._handleFrame({ event: 'delta', text: 'Sono le 10.', turn_id: 't1' });
+        assert.equal(j.bubble.textContent, 'Sono le 10.');
+        j._handleFrame({ event: 'turn_end', turn_id: 't1' });
+        assert.equal(j.awaiting, false);
+        assert.equal(j._pendingTurn, false);
+        assert.equal(j.invalidations, 1);
+        """
+    )
+
+
+def test_a_question_asked_at_rest_adopts_its_own_turn() -> None:
+    _run(
+        """
+        const { wsManager } = await import('./shared/ws-manager.js');
+        const { sessionManager } = await import('./shared/session-manager.js');
+        Object.assign(wsManager, { connectChat() {}, chatConnected: true, sendToChat: () => true });
+        sessionManager.ensureAttached = () => {};
+        globalThis.setTimeout = () => 0;
+        const j = minichat({ expected: false, inTurn: false, open: true });
+        j._handleFrame({ event: 'delta', text: 'vecchio', turn_id: 't0' });
+        j._handleFrame({ event: 'turn_end', turn_id: 't0' });
+        await j._send('ciao');
+        assert.equal(j._streamTurnId, null);
+        j._handleFrame({ event: 'delta', text: 'Ciao!', turn_id: 't2' });
+        assert.equal(j.bubble.textContent, 'Ciao!');
+        assert.equal(j._streamTurnId, 't2');
+        """
+    )

@@ -50,6 +50,13 @@ export class JennyCompanion extends JennyMascot {
     this._replyShown = false;
     this._replyTimer = null;
     this._deltaBuffer = '';
+    /* Il turno della conversazione in volo, visto da tutti i frame e non solo
+       da quelli che la minichat disegna (v. `_noteLiveTurn`), e se un suo
+       segmento di testo sta scorrendo. */
+    this._liveTurnId = null;
+    this._liveSegment = false;
+    // Il segmento che scorreva quando la domanda e' partita: non e' la risposta.
+    this._skipSegment = false;
 
     this._bindMinichat();
     AppState.on('currentMode', (mode) => this.setMode(mode));
@@ -227,6 +234,14 @@ export class JennyCompanion extends JennyMascot {
     this.awaiting = true;
     this._replyShown = false;
     this._deltaBuffer = '';
+    /* Una domanda fatta mentre Jenny sta gia' rispondendo in chat non apre un
+       turno suo: il gateway la inietta nel turno in volo (`_pending_queues` in
+       `agent/loop.py`), e la risposta arriva con quell'id. Si segue quindi quel
+       turno — e non «il primo frame che si vede», che poteva essere di un altro
+       — ma senza mostrarne il segmento che stava scorrendo: quello risponde
+       alla domanda di prima (WJ6 della terza revisione). */
+    this._streamTurnId = this._liveTurnId;
+    this._skipSegment = !!this._liveTurnId && this._liveSegment;
 
     try {
       await this._ensureConnected();
@@ -269,7 +284,23 @@ export class JennyCompanion extends JennyMascot {
 
   /* Il filtro sulla conversazione e l'umore li fa `_handleWsMessage`, che e'
      di tutte e due; qui si decide solo dove va il frame. */
+  /* Il turno in volo nella conversazione, da ogni frame. La minichat scarta
+     quelli che non ha a schermo, e senza questo non saprebbe, al momento di
+     mandare, che c'e' gia' una risposta che scorre. */
+  _noteLiveTurn(msg) {
+    if (msg.event === 'turn_end' || msg.event === 'error') {
+      this._liveTurnId = null;
+      this._liveSegment = false;
+      return;
+    }
+    const turnId = msg.turn_id || msg.turnId || null;
+    if (turnId) this._liveTurnId = turnId;
+    if (msg.event === 'delta') this._liveSegment = true;
+    else if (msg.event === 'stream_end') this._liveSegment = false;
+  }
+
   _handleFrame(msg) {
+    this._noteLiveTurn(msg);
     if (this.mode === 'chat') {
       this._handleChatStream(msg);
       return;
@@ -305,19 +336,28 @@ export class JennyCompanion extends JennyMascot {
     if (this.mode === 'chat') return;
     switch (msg.event) {
       case 'delta':
+        if (this._skipSegment) break;
         this._deltaBuffer += (msg.text || '');
         this._showReply(plainText(this._deltaBuffer));
         break;
       case 'stream_end':
+        // La fine del segmento di prima: da qui in poi le parole sono per noi.
+        if (this._skipSegment) {
+          this._skipSegment = false;
+          this._deltaBuffer = '';
+          break;
+        }
         if (msg.text) this._showReply(plainText(msg.text));
         break;
       case 'message':
+        if (this._skipSegment) break;
         if (msg.text && msg.kind !== 'tool_hint' && msg.kind !== 'progress') {
           this._showReply(plainText(msg.text));
         }
         break;
       case 'turn_end':
         this.awaiting = false;
+        this._skipSegment = false;
         if (this._replyTimer) {
           clearTimeout(this._replyTimer);
           this._replyTimer = null;
@@ -342,6 +382,9 @@ export class JennyCompanion extends JennyMascot {
       this._replyTimer = null;
     }
     this._deltaBuffer = '';
+    this._liveTurnId = null;
+    this._liveSegment = false;
+    this._skipSegment = false;
     super._releaseTrackedTurn();
   }
 
