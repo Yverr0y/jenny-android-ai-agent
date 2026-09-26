@@ -107,6 +107,22 @@ class _SearchTool(_FsTool):
                 return target.relative_to(workspace).as_posix()
         return target.relative_to(root).as_posix()
 
+    def _link_escapes(self, candidate: Path) -> bool:
+        """Un file-symlink il cui bersaglio ``read_file`` rifiuterebbe (TL12).
+
+        ``os.walk`` non scende nei link a cartelle, ma i link a file li elenca
+        fra i file: senza questo controllo ``grep`` ne apriva il bersaglio fuori
+        dal confine e ne stampava il contenuto. Stesso giudice di ``read_file``
+        (``_resolve_read``), così i due tool non possono dire cose diverse.
+        """
+        if not candidate.is_symlink():
+            return False
+        try:
+            self._resolve_read(str(candidate))
+        except (OSError, ValueError, RuntimeError):
+            return True
+        return False
+
     def _iter_files(self, root: Path) -> Iterable[Path]:
         if root.is_file():
             yield root
@@ -116,7 +132,10 @@ class _SearchTool(_FsTool):
             dirnames[:] = sorted(d for d in dirnames if d not in self._IGNORE_DIRS)
             current = Path(dirpath)
             for filename in sorted(filenames):
-                yield current / filename
+                candidate = current / filename
+                if self._link_escapes(candidate):
+                    continue
+                yield candidate
 
 
 class FindFilesTool(_SearchTool):
@@ -201,7 +220,10 @@ class FindFilesTool(_SearchTool):
             if include_dirs and current != root:
                 yield current
             for filename in sorted(filenames):
-                yield current / filename
+                candidate = current / filename
+                if self._link_escapes(candidate):
+                    continue
+                yield candidate
 
     async def execute(
         self,
