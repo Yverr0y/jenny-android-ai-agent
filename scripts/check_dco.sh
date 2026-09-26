@@ -38,10 +38,16 @@ while IFS= read -r sha; do
     author="$(git show -s --format='%an <%ae>' "$sha")"
     subject="$(git show -s --format='%s' "$sha")"
     short="$(git rev-parse --short "$sha")"
-    # -i: git's own `-s` casing is "Signed-off-by", but contributors hand-write
-    # this line often enough that case should not be the thing that fails a PR.
-    # -F: the author string is data, never a regex.
-    if git show -s --format='%B' "$sha" | grep -qiF "Signed-off-by: $author"; then
+    # Only the real trailer block counts. `%(trailers:...)` is git's own trailer
+    # parser (the one `git interpret-trailers --parse` uses), so a
+    # "Signed-off-by:" quoted in the body, or followed by more prose, is not a
+    # sign-off. Git matches the key case-insensitively; `valueonly` leaves just
+    # "Name <email>", one per line.
+    # -x: the whole value must be the author, not merely contain it.
+    # -i: contributors hand-write this line often enough that case should not
+    #     be the thing that fails a PR. -F: the author string is data, not a regex.
+    if git show -s --format='%(trailers:key=Signed-off-by,valueonly,unfold)' "$sha" \
+        | grep -qixF -- "$author"; then
         echo "ok   $short $subject"
     else
         echo "FAIL $short $subject"
