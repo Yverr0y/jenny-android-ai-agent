@@ -53,6 +53,13 @@ _IDLE_POLL_S = 15
 # nome lo conosce solo la pagina e la politica deve stare dove si puo' testare.
 _LAST_INDEX: dict[str, tuple[str, str]] = {}
 _INDEX_VERSION: str = ""
+# Per ref, il nome del bottone che invia il modulo dell'elemento ('' fuori da
+# un modulo), dal terzo campo dell'indice. E il ref che ha il cursore: l'ultimo
+# `click`/`type`/`select` riuscito. Insieme dicono **cosa** invierebbe un
+# `press Enter`, che deve passare dallo stesso lessico di un click (TL13). Si
+# svuotano col documento, come l'indice.
+_FORM_OF: dict[str, str] = {}
+_FOCUS_REF: str = ""
 
 # Verbi che cambiano il mondo di chi legge: soldi, distruzione, identita'. Un
 # click su uno di questi non parte da solo.
@@ -174,8 +181,10 @@ def _detach_browser() -> Any:
     Istantaneo e sul thread del loop: da qui in poi nessuno la vede piu', anche
     se la chiusura vera (``close`` in Kotlin) deve ancora girare.
     """
-    global _BROWSER_INSTANCE, _ISOLATED_FOR
+    global _BROWSER_INSTANCE, _ISOLATED_FOR, _FOCUS_REF
     _LAST_INDEX.clear()
+    _FORM_OF.clear()
+    _FOCUS_REF = ""
     _ISOLATED_FOR = None
     bridge, _BROWSER_INSTANCE = _BROWSER_INSTANCE, None
     return bridge
@@ -323,13 +332,17 @@ def _render_snapshot(data: dict[str, Any]) -> str:
     index = data.get("index")
     if isinstance(index, dict):
         version = str(data.get("version", ""))
-        global _INDEX_VERSION
+        global _INDEX_VERSION, _FOCUS_REF
         if version != _INDEX_VERSION:
             _LAST_INDEX.clear()
+            _FORM_OF.clear()
+            _FOCUS_REF = ""
             _INDEX_VERSION = version
         for ref, pair in index.items():
-            if isinstance(pair, list) and len(pair) == 2:
+            if isinstance(pair, list) and len(pair) in (2, 3):
                 _LAST_INDEX[str(ref)] = (str(pair[0]), str(pair[1]))
+                if len(pair) == 3:
+                    _FORM_OF[str(ref)] = str(pair[2])
     head = [
         _UNTRUSTED_BANNER,
         f"url: {data.get('url', '')}",
@@ -351,12 +364,38 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
 
     Rifiuta l'intera chiamata e non solo il passo: i passi sono un blocco, e
     fermarsi a meta' lascerebbe la pagina in uno stato che nessuno ha descritto.
+
+    ``press Enter`` in un campo invia il suo modulo come un click sul bottone, e
+    passa quindi dallo stesso lessico (TL13): il modulo lo si conosce dal campo
+    che ha il cursore — l'ultimo ``click``/``type``/``select`` di questo blocco,
+    o del precedente. Se il cursore non si sa, il passo parte con
+    ``submit: false`` e la pagina non invia: l'invio passa allora dal click sul
+    bottone, che il suo nome lo porta. **Unico passo che questa funzione
+    modifica**, e solo quel campo.
     """
+    focus = _FOCUS_REF
     for i, st in enumerate(steps):
         if not isinstance(st, dict):
             continue
         action = str(st.get("action", "")).lower()
         ref = str(st.get("ref", ""))
+        if action == "press":
+            st.pop("submit", None)
+            if str(st.get("key") or "Enter") != "Enter" or st.get("confirm"):
+                continue
+            label = _FORM_OF.get(focus) if focus else None
+            if label is None:
+                st["submit"] = False
+            elif _is_sensitive(label):
+                return (
+                    f'passo {i}: Enter invierebbe il modulo "{label}", un\'azione che costa '
+                    "(soldi, cancellazione o accesso). Non la faccio da sola: chiedi conferma "
+                    "all'utente, e se dice di si' ripeti lo stesso passo aggiungendo "
+                    '"confirm": true.'
+                )
+            continue
+        if action in ("click", "type", "select") and ref:
+            focus = ref
         role, name = _LAST_INDEX.get(ref, ("", ""))
         if action == "type" and role == "password":
             return (
@@ -370,6 +409,24 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
                 'si\' ripeti lo stesso passo aggiungendo "confirm": true.'
             )
     return None
+
+
+def _remember_focus(steps: list[dict[str, Any]], results: list[Any]) -> None:
+    """Il cursore dopo i passi: il ref dell'ultimo click/type/select riuscito."""
+    global _FOCUS_REF
+    for r in results:
+        if not isinstance(r, dict) or not r.get("ok"):
+            continue
+        idx = r.get("i")
+        if not isinstance(idx, int) or not 0 <= idx < len(steps):
+            continue
+        st = steps[idx]
+        if (
+            isinstance(st, dict)
+            and str(st.get("action", "")).lower() in ("click", "type", "select")
+            and st.get("ref")
+        ):
+            _FOCUS_REF = str(st["ref"])
 
 
 class _BrowserToolBase(AndroidWebGateMixin, Tool):
@@ -533,6 +590,7 @@ class BrowserDoTool(_BrowserToolBase):
         out = await _call(self.android_context, "act", payload, self.timeout, timeout=self.timeout, idle_s=self.idle_close_s)
         if out.get("error"):
             return f"Error: {out['error']}"
+        _remember_focus(steps, out.get("results") or [])
 
         lines = []
         for r in out.get("results", []):

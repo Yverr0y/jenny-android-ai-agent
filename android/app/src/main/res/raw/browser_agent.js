@@ -66,7 +66,16 @@
     contentinfo: 1, complementary: 1, region: 1,
   };
 
+  function isPassword(el) {
+    return el.tagName.toLowerCase() === 'input' &&
+      (el.getAttribute('type') || '').toLowerCase() === 'password';
+  }
+
   function role(el) {
+    // Un campo password resta `password` qualunque `role` dichiari la pagina:
+    // `<input type=password role=textbox>` passava per un textbox, e il divieto
+    // di scriverci (che guarda il ruolo) non scattava.
+    if (isPassword(el)) return 'password';
     var explicit = el.getAttribute('role');
     if (explicit) {
       var first = explicit.split(/\s+/)[0].toLowerCase();
@@ -140,6 +149,19 @@
       if (tail) return '/' + decodeURIComponent(tail).slice(0, 40);
     }
     return '';
+  }
+
+  // Il nome del bottone che invia il modulo di *el*, o '' se non c'e' un modulo.
+  // Serve alla politica su `press Enter`: un Enter in un campo invia il modulo
+  // come un click sul suo bottone, e deve passare dallo stesso lessico dei
+  // verbi che costano. Senza bottone, il nome del modulo stesso.
+  function formLabel(el) {
+    var f = el.form;
+    if (!f) return '';
+    var btn = f.querySelector(
+      'button[type="submit"], button:not([type]), input[type="submit"], input[type="image"]');
+    var n = btn ? accessibleName(btn, 'button') : '';
+    return n || clean(f.getAttribute('aria-label')) || clean(f.getAttribute('name')) || 'form';
   }
 
   function state(el, r) {
@@ -247,7 +269,7 @@
         // politica su cosa si puo' cliccare e dove si puo' scrivere sta in
         // Python, dove si puo' testare, ma il nome accessibile lo sa solo la
         // pagina. Questo indice non arriva al modello.
-        index[ref] = [item.role, item.name];
+        index[ref] = [item.role, item.name, formLabel(item.el)];
       }
       lines.push(lineFor(item, ref)); keys.push(keyFor(item));
       used += probe.length + 1;
@@ -369,8 +391,18 @@
           ['keydown', 'keyup'].forEach(function (t) {
             target.dispatchEvent(new KeyboardEvent(t, { key: key, bubbles: true }));
           });
-          if (key === 'Enter' && target.form) { target.form.requestSubmit ?
-            target.form.requestSubmit() : target.form.submit(); navHint = true; }
+          if (key === 'Enter' && target.form) {
+            // `submit: false` lo mette Python quando non sa (o non deve) far
+            // partire il modulo: l'invio si fa allora col click sul bottone,
+            // che passa dal controllo sui verbi che costano.
+            if (st.submit === false) {
+              r.error = 'Enter invierebbe il modulo "' + formLabel(target) + '": clicca il ' +
+                'suo bottone invece, o ripeti il passo con "confirm": true se l\'utente ha detto si\'.';
+              results.push(r); break;
+            }
+            target.form.requestSubmit ?
+              target.form.requestSubmit() : target.form.submit(); navHint = true;
+          }
           r.ok = true;
         } else {
           var res = resolve(st.ref);
@@ -389,6 +421,12 @@
             // il modello ci ha provato quattro volte di fila, perche' ogni
             // volta gli rispondevamo "ok".
             var tag = el.tagName.toLowerCase();
+            // Anche qui, oltre che in Python: l'indice dei ruoli puo' mancare
+            // (il ref di un bridge vecchio), il tipo del campo no.
+            if (isPassword(el)) {
+              r.error = 'non scrivo in un campo password: le credenziali le mette l\'utente.';
+              results.push(r); break;
+            }
             var typeable = tag === 'input' || tag === 'textarea' || el.isContentEditable;
             if (!typeable) {
               r.error = 'non ci si puo\' scrivere: ' + (role(el) || tag) +
