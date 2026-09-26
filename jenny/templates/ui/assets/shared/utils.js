@@ -152,3 +152,37 @@ export function isNetworkFailure(reason) {
     String(reason.message || ''),
   );
 }
+
+/* ── `localStorage`, senza che un accesso negato butti giu' chi chiama ─────
+   Nella WebView con i dati del sito bloccati, in un'anteprima o con la quota
+   piena, `localStorage` **solleva** — gia' leggendo la proprieta', non solo
+   scrivendo. Chiamato nudo dal caricamento di un modulo (`state.js` leggeva il
+   tema cosi') l'errore si portava via l'intero grafo degli import, cioe' la
+   pagina (WJ21, HJ19 della terza revisione). Qui si legge `null` e si scrive
+   niente: sono tutte preferenze, e senza si riparte dai default. */
+
+export function readStorage(key) {
+  try {
+    return globalThis.localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Vero se il valore e' stato scritto. */
+export function writeStorage(key, value) {
+  try {
+    globalThis.localStorage.setItem(key, value);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+export function removeStorage(key) {
+  try {
+    globalThis.localStorage.removeItem(key);
+  } catch (_) {
+    /* storage non disponibile */
+  }
+}

@@ -161,13 +161,22 @@ export async function migrateUsage(native, local) {
  *  @param {{native?: any, local?: any}} [deps] di suo `window.JennyNative` e
  *         `window.localStorage`; nei banchi, dei finti.
  */
+/* `window.localStorage` solleva gia' alla lettura della proprieta', con i dati
+   del sito bloccati: senza storage l'ordine dei lanci non si ricorda, ma il
+   lanciatore si apre (WJ21 della terza revisione). */
+function pageStorage() {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch (_) {
+    return null;
+  }
+}
+
 export function usageStore(deps = {}) {
   const native = 'native' in deps
     ? deps.native
     : (typeof window === 'undefined' ? null : window.JennyNative);
-  const local = 'local' in deps
-    ? deps.local
-    : (typeof window === 'undefined' ? null : window.localStorage);
+  const local = 'local' in deps ? deps.local : pageStorage();
 
   if (!nativeUsable(native)) return local || null;
   return nativeStore(native, local);

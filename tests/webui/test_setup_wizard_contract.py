@@ -274,7 +274,7 @@ def test_an_unreadable_settings_call_is_not_read_as_configured() -> None:
 
     assert "let firstRunKnown = false;" in init
     assert "firstRunKnown = true;" in init
-    assert re.search(r"if \(firstRunKnown && !this\._firstRun && localStorage\.getItem", init), (
+    assert re.search(r"if \(firstRunKnown && !this\._firstRun && readStorage\(", init), (
         "il ramo 'onboarding appena concluso' gira anche quando lo stato è ignoto"
     )
     # rsplit: il primo `catch (err)` di init() è quello di api.bootstrap(),

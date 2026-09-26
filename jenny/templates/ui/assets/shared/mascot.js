@@ -15,6 +15,26 @@
  * variante, a colori, col nome piano — v. .agent/mascot-faces-plan.md, F9.
  */
 
+/* Letture e scritture che non sollevano: con lo storage negato le preferenze
+   tornano ai default e non si salvano, ma la mascotte c'e' (HJ19, WJ21 della
+   terza revisione). La regola di `readStorage` in `utils.js`, qui a mano
+   perche' questo modulo non importa niente. */
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {
+    /* storage non disponibile */
+  }
+}
+
 const VISIBLE_KEY = 'jenny-mascot-visible';
 const SIZE_KEY = 'jenny-mascot-size';
 /* Visibilita' e taglia si chiamavano `jenny-mascotte-visible` e
@@ -67,13 +87,13 @@ for (const key of DEAD_KEYS) {
 export const MASCOT_SIZES = { sm: 120, md: 160, lg: 210 };
 
 export function mascotVisible() {
-  const v = localStorage.getItem(VISIBLE_KEY);
+  const v = readStorage(VISIBLE_KEY);
   if (v === null) return true; // default: visibile
   return v === '1';
 }
 
 export function setMascotVisible(on) {
-  localStorage.setItem(VISIBLE_KEY, on ? '1' : '0');
+  writeStorage(VISIBLE_KEY, on ? '1' : '0');
   window.dispatchEvent(new CustomEvent('mascotchange', {
     detail: { visible: on },
   }));
@@ -81,13 +101,13 @@ export function setMascotVisible(on) {
 }
 
 export function mascotSize() {
-  const s = localStorage.getItem(SIZE_KEY);
+  const s = readStorage(SIZE_KEY);
   return s in MASCOT_SIZES ? s : 'sm'; // default: piccola
 }
 
 export function setMascotSize(size) {
   const normalized = size in MASCOT_SIZES ? size : 'sm';
-  localStorage.setItem(SIZE_KEY, normalized);
+  writeStorage(SIZE_KEY, normalized);
   applyMascotSize();
   window.dispatchEvent(new CustomEvent('mascotchange', {
     detail: { visible: mascotVisible(), size: normalized },

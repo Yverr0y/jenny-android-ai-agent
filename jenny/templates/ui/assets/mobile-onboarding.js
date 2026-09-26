@@ -1,7 +1,7 @@
 /** Mobile Onboarding Controller — 4-step setup wizard. */
 
 import { api } from './shared/api-client.js';
-import { escapeHtml, showToast } from './shared/utils.js';
+import { escapeHtml, showToast, writeStorage } from './shared/utils.js';
 import { i18n } from './shared/i18n.js';
 import { runImportFlow } from './shared/backup-flow.js';
 import { TelegramPairingWidget } from './shared/telegram-pairing.js';
@@ -159,7 +159,7 @@ export class OnboardingController {
     this.contentEl.querySelector('#btn-restore-backup').addEventListener('click', async () => {
       const staged = await runImportFlow();
       if (!staged) return;
-      localStorage.setItem('onboarding-complete', '1');
+      writeStorage('onboarding-complete', '1');
       // Il blocco del primo avvio va tolto insieme al marcatore, sempre. Il
       // ripristino può concludersi senza riavvio immediato (il dialog di
       // riavvio è rifiutabile finché resta a schermo): senza questo, il dock
@@ -523,8 +523,8 @@ export class OnboardingController {
       this._batteryCard.destroy();
       this._batteryCard = null;
     }
-    localStorage.setItem('onboarding-complete', 'true');
-    localStorage.setItem('mobile-last-mode', 'chat');
+    writeStorage('onboarding-complete', 'true');
+    writeStorage('mobile-last-mode', 'chat');
     // Stesso motivo del ramo restore: il lock si toglie con lo stesso setter
     // che l'ha messo. Qui segue un reload, ma affidarsi al reload significa
     // avere un percorso che non ripulisce — ed è esattamente com'era nato il

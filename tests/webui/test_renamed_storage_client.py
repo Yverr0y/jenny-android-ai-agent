@@ -78,8 +78,9 @@ def test_the_first_paint_reads_the_old_mascot_keys_too() -> None:
     l'aggiornamento la chiave nuova non c'e' ancora, e senza il nome vecchio la
     mascotte nascosta lampeggerebbe visibile per un fotogramma."""
     source = (ASSETS / "bootstrap.js").read_text(encoding="utf-8")
-    assert "localStorage.getItem('jenny-mascotte-visible')" in source
-    assert "localStorage.getItem('jenny-mascotte-size')" in source
+    # `read` e' la lettura protetta del file (WJ21 della terza revisione).
+    assert "read('jenny-mascotte-visible')" in source
+    assert "read('jenny-mascotte-size')" in source
 
 
 def _migration(source: str) -> dict[str, str]:

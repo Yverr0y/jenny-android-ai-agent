@@ -4,14 +4,24 @@
 // script-src 'self' CSP (M1). Load WITHOUT defer, in <head>, so it still
 // executes before the rest of the document (same timing as the old inline).
 (function () {
+  // `localStorage` puo' sollevare (dati del sito bloccati, anteprima): qui
+  // un errore fermerebbe l'intero script, e con lui il tema e la lingua
+  // della pagina. Si legge null e non si scrive (WJ21, HJ19 della terza
+  // revisione); la stessa regola di `readStorage` in shared/utils.js.
+  function read(key) {
+    try { return localStorage.getItem(key); } catch (_) { return null; }
+  }
+  function write(key, value) {
+    try { localStorage.setItem(key, value); } catch (_) { /* storage non disponibile */ }
+  }
   var THEMES = ['chanel', 'synthwave', 'kyoto', 'sticker', 'comic', 'y2k', 'stone'];
   // Come MIGRATION in shared/theme.js: i modi di una volta e gli id italiani
   // dei temi fino al 25/09/2026.
   var MIGRATION = { dark: 'chanel', light: 'stone', match: 'chanel', fumetto: 'comic', pietra: 'stone' };
-  var t = localStorage.getItem('tc-theme') || 'chanel';
+  var t = read('tc-theme') || 'chanel';
   t = MIGRATION[t] || t;
   if (THEMES.indexOf(t) === -1) t = 'chanel';
-  localStorage.setItem('tc-theme', t);
+  write('tc-theme', t);
   document.documentElement.setAttribute('data-theme', t);
 
   // La lingua della pagina, con la regola di `i18n.detectLocale()`: quella del
@@ -27,7 +37,7 @@
   // serve: la mascotte è creata da JS e posizionata prima del primo paint).
   // Le chiavi si chiamavano `jenny-mascotte-*` fino al 25/09/2026: finche'
   // shared/mascot.js non le ha copiate, qui si legge anche il nome vecchio.
-  var mascotVisible = localStorage.getItem('jenny-mascot-visible') || localStorage.getItem('jenny-mascotte-visible');
+  var mascotVisible = read('jenny-mascot-visible') || read('jenny-mascotte-visible');
   if (mascotVisible === '0') {
     document.documentElement.setAttribute('data-mascot-hidden', '1');
   }
@@ -36,7 +46,7 @@
   // poi ridimensionarsi. Le misure sono duplicate da MASCOT_SIZES in
   // shared/mascot.js — qui non si possono importare moduli.
   var mascotSizes = { sm: '120px', md: '160px', lg: '210px' };
-  var mascotSize = mascotSizes[localStorage.getItem('jenny-mascot-size') || localStorage.getItem('jenny-mascotte-size')];
+  var mascotSize = mascotSizes[read('jenny-mascot-size') || read('jenny-mascotte-size')];
   if (mascotSize) {
     document.documentElement.style.setProperty('--jenny-size', mascotSize);
   }

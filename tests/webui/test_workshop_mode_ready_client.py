@@ -36,7 +36,7 @@ globalThis.document = {{
   documentElement: {{ classList: {{ forEach() {{}}, remove() {{}}, add() {{}} }} }},
 }};
 const viewElement = (mode) => document.getElementById(`view-${{VIEW_OF[mode] || mode}}`);
-globalThis.localStorage = {{ getItem: () => '1' }};
+const readStorage = () => '1';
 const AppState = {{ set() {{}} }};
 const toasts = [];
 const showToast = (m) => toasts.push(m);

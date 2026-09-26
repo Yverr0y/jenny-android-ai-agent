@@ -50,7 +50,7 @@ globalThis.document = {{
   }},
 }};
 const viewElement = (mode) => document.getElementById(`view-${{VIEW_OF[mode] || mode}}`);
-globalThis.localStorage = {{ getItem: () => '1' }};
+const readStorage = () => '1';
 const AppState = {{ values: {{}}, set(k, v) {{ this.values[k] = v; }} }};
 const showToast = () => {{}};
 const i18n = {{ t: (k) => k }};

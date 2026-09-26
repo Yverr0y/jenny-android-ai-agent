@@ -4,7 +4,9 @@ import { AppState, closeComposeMenus, composeMenuOpen } from './shared/state.js'
 import { sessionManager } from './shared/session-manager.js';
 import { scopeChip } from './shared/scope-chip.js';
 import { writeSwitch } from './shared/write-switch.js';
-import { isNetworkFailure, showToast } from './shared/utils.js';
+import {
+  isNetworkFailure, readStorage, removeStorage, showToast, writeStorage,
+} from './shared/utils.js';
 import { i18n } from './shared/i18n.js';
 import { api } from './shared/api-client.js';
 import { ViewTitleController } from './mobile-header.js';
@@ -189,7 +191,7 @@ class MobileApp {
 
     // Persist mode changes
     AppState.on('currentMode', (mode) => {
-      localStorage.setItem('mobile-last-mode', mode);
+      writeStorage('mobile-last-mode', mode);
     });
 
     // Viewport height sync (Android keyboard fix)
@@ -213,7 +215,7 @@ class MobileApp {
     // Determine initial mode
     const urlParams = new URLSearchParams(window.location.search);
     const urlMode = urlParams.get('mode');
-    const savedMode = localStorage.getItem('mobile-last-mode');
+    const savedMode = readStorage('mobile-last-mode');
     let initialMode = urlMode || savedMode || 'chat';
     /* `workspace` **e' un file aperto**, non una sezione: l'esploratore vive
        in Memoria, e questa vista senza il suo file e' una schermata bianca.
@@ -239,7 +241,7 @@ class MobileApp {
       firstRunKnown = true;
       if (settings?.first_run) {
         initialMode = 'onboarding';
-        localStorage.removeItem('onboarding-complete');
+        removeStorage('onboarding-complete');
         this._setFirstRunLock(true);
       }
     } catch (err) {
@@ -264,9 +266,9 @@ class MobileApp {
     // After onboarding completed: force chat mode, clear stale state.
     // Solo se sappiamo davvero che il primo avvio è alle spalle: consumare il
     // marcatore su un "non lo so" lo perde per sempre.
-    if (firstRunKnown && !this._firstRun && localStorage.getItem('onboarding-complete')) {
-      localStorage.removeItem('onboarding-complete');
-      localStorage.setItem('mobile-last-mode', 'chat');
+    if (firstRunKnown && !this._firstRun && readStorage('onboarding-complete')) {
+      removeStorage('onboarding-complete');
+      writeStorage('mobile-last-mode', 'chat');
       initialMode = 'chat';
     }
 
@@ -749,7 +751,7 @@ class MobileApp {
    *  `switchMode`: durante il primo avvio la vista è già `onboarding`, quindi
    *  a schermo non cambia niente. */
   openLauncher() {
-    if (!localStorage.getItem('onboarding-complete') && this._firstRun) {
+    if (!readStorage('onboarding-complete') && this._firstRun) {
       console.warn('Onboarding not complete - redirecting to onboarding');
       this.switchMode('onboarding');
       return;
@@ -779,7 +781,7 @@ class MobileApp {
 
   switchMode(mode, pushState = true) {
     // Block ANY navigation if onboarding is not complete
-    if (mode !== 'onboarding' && !localStorage.getItem('onboarding-complete') && this._firstRun) {
+    if (mode !== 'onboarding' && !readStorage('onboarding-complete') && this._firstRun) {
       console.warn('Onboarding not complete - redirecting to onboarding');
       this.switchMode('onboarding', pushState);
       return;
@@ -929,7 +931,7 @@ class MobileApp {
       canStart: () => {
         view = null; neighbors = null;
         // Guardia: durante il primo avvio la navigazione e' bloccata.
-        if (this._firstRun && !localStorage.getItem('onboarding-complete')) return false;
+        if (this._firstRun && !readStorage('onboarding-complete')) return false;
         // Guardia: un cassetto aperto possiede il proprio gesto (verticale).
         if (this.drawer.activeDrawer) return false;
         // Guardia: c'e' del testo selezionato. Trascinare per aggiustare i
