@@ -177,8 +177,11 @@
                 android:value="local_agent_runtime" />
         </service>
 
-        <!-- Espone i file del workspace ad app esterne per l'apertura col
-             viewer di sistema (JennyNative.openFile → ACTION_VIEW). -->
+        <!-- Passa ad app esterne, con un permesso concesso Intent per Intent, i
+             file del workspace (JennyNative.openFile/shareFile → ACTION_VIEW,
+             ACTION_SEND) e il file temporaneo della fotocamera. Solo quelle due
+             radici: v. res/xml/file_paths.xml, e resolveLocalFile in
+             MainActivity per config.json. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

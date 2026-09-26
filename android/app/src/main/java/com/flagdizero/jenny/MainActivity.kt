@@ -1552,24 +1552,42 @@ class MainActivity : AppCompatActivity() {
         }
 
         /** Risolve un path (assoluto o relativo al workspace) in un file
-         *  canonico dentro filesDir (anti-traversal, stessa disciplina di
-         *  exportBackup). Ritorna null se il path non è valido. */
+         *  canonico dentro il **workspace**, per aprirlo, condividerlo o
+         *  copiarlo in Download. Ritorna null se il path non è valido.
+         *
+         *  Il recinto era tutto `filesDir`: ci stanno anche la chiave privata
+         *  SSH (`files/ssh/`, fuori dal workspace apposta), lo store degli
+         *  snapshot e lo staging dei backup. Ora è il workspace, cioè quel che
+         *  l'esploratore mostra e dove stanno gli allegati della chat
+         *  (`uploads/`, `.jenny/media/`). Il path canonico risolve i symlink:
+         *  un link nel workspace verso `../ssh/` finisce fuori e si rifiuta.
+         *  Dentro il workspace si esclude [isWorkspaceSecret]. */
         private fun resolveLocalFile(path: String, caller: String): File? {
-            val filesRoot = try {
-                filesDir.canonicalPath
+            val workspace = try {
+                File(filesDir, "workspace").canonicalFile
             } catch (e: Exception) {
-                Log.e(TAG, "$caller: cannot resolve filesDir (${e.javaClass.simpleName})")
+                Log.e(TAG, "$caller: cannot resolve the workspace (${e.javaClass.simpleName})")
                 return null
             }
-            val raw = if (path.startsWith("/")) File(path)
-                      else File(File(filesDir, "workspace"), path)
+            val raw = if (path.startsWith("/")) File(path) else File(workspace, path)
             val canonical = try { raw.canonicalFile } catch (e: Exception) { return null }
-            if (!canonical.path.startsWith(filesRoot + File.separator) || !canonical.isFile) {
-                Log.w(TAG, "$caller: rejected path outside filesDir")
+            if (!canonical.path.startsWith(workspace.path + File.separator) || !canonical.isFile) {
+                Log.w(TAG, "$caller: rejected path outside the workspace")
+                return null
+            }
+            if (isWorkspaceSecret(canonical, workspace)) {
+                Log.w(TAG, "$caller: rejected a file that holds secrets")
                 return null
             }
             return canonical
         }
+
+        /** `config.json` e i suoi compagni (`.bak`, temporanei dello store):
+         *  chiavi dei provider, token di Telegram, password SSH. Stanno nella
+         *  radice del workspace, e nessuna apertura legittima ne ha bisogno —
+         *  si modificano da Impostazioni, non si passano a un'altra app. */
+        private fun isWorkspaceSecret(file: File, workspace: File): Boolean =
+            file.parentFile == workspace && file.name.startsWith("config.json")
 
         private fun contentUriFor(file: File, caller: String): android.net.Uri? = try {
             androidx.core.content.FileProvider.getUriForFile(
