@@ -84,6 +84,8 @@ class WebSocketDispatcher:
         self._dispatch_task: asyncio.Task | None = None
         self._hot_tasks: list[asyncio.Task] = []
         self._origin_reply_fingerprints: dict[tuple[str, str, str], str] = {}
+        # Un reload di Telegram per volta: v. ``reload_telegram``.
+        self._telegram_reload_lock = asyncio.Lock()
 
         self._init_channel()
         self._init_telegram()
@@ -269,22 +271,32 @@ class WebSocketDispatcher:
         """
         from jenny.config.loader import load_config
 
-        old = self.channels.pop("telegram", None)
-        if old is not None:
+        # Serializzato: due salvataggi ravvicinati facevano girare due reload
+        # insieme. Il secondo, arrivato mentre il primo aspettava lo ``stop()``,
+        # trovava il posto vuoto e creava il suo canale; poi il primo
+        # sovrascriveva ``channels["telegram"]`` col proprio, e quello del
+        # secondo restava a fare long polling senza che nessuno lo fermasse
+        # (409 da Telegram, update doppi). Con il lock ogni reload trova e
+        # ferma il canale lasciato dal precedente.
+        async with self._telegram_reload_lock:
+            old = self.channels.pop("telegram", None)
+            if old is not None:
+                try:
+                    await old.stop()
+                except Exception:
+                    logger.exception("Error stopping telegram channel during reload")
             try:
-                await old.stop()
+                self.config = load_config()
             except Exception:
-                logger.exception("Error stopping telegram channel during reload")
-        try:
-            self.config = load_config()
-        except Exception:
-            logger.exception("reload_telegram: config reload failed")
-            return
-        self._init_telegram()
-        new = self.channels.get("telegram")
-        if new is not None:
-            self._hot_tasks.append(asyncio.create_task(self._start_channel("telegram", new)))
-        self._hot_tasks = [t for t in self._hot_tasks if not t.done()]
+                logger.exception("reload_telegram: config reload failed")
+                return
+            self._init_telegram()
+            new = self.channels.get("telegram")
+            if new is not None:
+                self._hot_tasks.append(
+                    asyncio.create_task(self._start_channel("telegram", new))
+                )
+            self._hot_tasks = [t for t in self._hot_tasks if not t.done()]
 
     @staticmethod
     def _fingerprint_content(content: str) -> str:

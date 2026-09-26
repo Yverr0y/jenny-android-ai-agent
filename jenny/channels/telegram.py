@@ -309,16 +309,23 @@ class TelegramChannel(NonStreamingChannelMixin):
         # L'ordine conta: il canale viene *ricostruito* a ogni reload delle
         # impostazioni Telegram, e un handler lasciato appeso continuerebbe a
         # scrivere su una ``TelegramAPI`` già chiusa a ogni turno.
+        # E ogni passo avviene anche se uno prima fallisce: un'eccezione nello
+        # stop del typing lasciava vivo il poller, cioè un secondo long polling
+        # accanto a quello del canale nuovo.
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
-        await self._typing.stop()
-        if self._poll_task is not None:
-            self._poll_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._poll_task
-            self._poll_task = None
-        await self.api.close()
+        try:
+            await self._typing.stop()
+        finally:
+            try:
+                if self._poll_task is not None:
+                    self._poll_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await self._poll_task
+                    self._poll_task = None
+            finally:
+                await self.api.close()
 
     async def _poll_loop(self) -> None:
         """Long-poll di ``getUpdates`` con backoff su errori di rete.
