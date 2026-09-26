@@ -75,6 +75,33 @@ async def test_a_page_that_cannot_be_taken_does_not_undo_the_notebook_delete(
     assert await commands.project_delete(ctx, {"name": "piante"}) == {"name": "piante"}
 
 
+def test_a_folder_that_cannot_be_removed_says_why_without_the_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``str(OSError)`` porta il percorso assoluto della cartella privata
+    dell'app, e il messaggio finisce nel toast: resta solo il perche'."""
+    wikis = tmp_path / "wikis"
+    (wikis / "piante" / "wiki").mkdir(parents=True)
+    (wikis / "piante" / "wiki" / "index.md").write_text("# p", encoding="utf-8")
+    secret_path = str(wikis / "piante" / "wiki" / "index.md")
+
+    def _denied(path, *args, **kwargs):
+        raise PermissionError(13, "Permission denied", secret_path)
+
+    monkeypatch.setattr(module.shutil, "rmtree", _denied)
+    with pytest.raises(module.ProjectDeleteError) as err:
+        module.delete_project(
+            wikis_dir=wikis,
+            scripts_dir=tmp_path / "scripts",
+            workspace=tmp_path,
+            name="piante",
+            invalidate_session=lambda _key: None,
+        )
+    message = str(err.value)
+    assert "Permission denied" in message
+    assert str(tmp_path) not in message
+
+
 def test_the_commands_do_not_import_http_routes() -> None:
     """``commands.py`` di trasporti non sa niente: le pagine della casa le tocca
     da ``home_pages``, il modulo neutro, non da ``home_routes``."""
