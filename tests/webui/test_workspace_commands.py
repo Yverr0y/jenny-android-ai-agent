@@ -199,3 +199,82 @@ async def test_copy_rejects_an_empty_dest(ctx: CommandContext, workspace_root: P
     (workspace_root / "src.txt").write_text("dati", encoding="utf-8")
     err = await _refused(ctx, "workspace.copy", {"path": "src.txt", "dest": ""})
     assert err.code == "bad_request"
+
+
+# ---------------------------------------------------------------------------
+# WA3: la radice, la cartella dei quaderni e i loro antenati non si cancellano
+# ---------------------------------------------------------------------------
+
+
+def _notebook(workspace_root: Path, rel: str = "wikis/orto") -> Path:
+    pages = workspace_root / rel / "wiki"
+    pages.mkdir(parents=True)
+    (pages / "index.md").write_text("# o", encoding="utf-8")
+    return pages
+
+
+@pytest.mark.parametrize("path", [".", "./", "sub/..", "./sub/../."])
+async def test_delete_refuses_the_workspace_root(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, path: str
+) -> None:
+    """``path=.`` faceva la ``rmtree`` della radice del workspace (terza
+    revisione, WA3): config, sessioni, memoria, tutto."""
+    (workspace_root / "sub").mkdir()
+    (workspace_root / "USER.md").write_text("io", encoding="utf-8")
+    err = await _refused(ctx, "workspace.delete", {"path": path})
+    assert err.code == "forbidden"
+    assert (workspace_root / "USER.md").exists()
+
+
+@pytest.mark.parametrize("path", ["", "   "])
+async def test_delete_refuses_an_empty_path(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, path: str
+) -> None:
+    (workspace_root / "USER.md").write_text("io", encoding="utf-8")
+    err = await _refused(ctx, "workspace.delete", {"path": path})
+    assert err.code == "bad_request"
+    assert (workspace_root / "USER.md").exists()
+
+
+@pytest.mark.parametrize("path", ["wikis", "wikis/", "wikis/."])
+async def test_delete_refuses_the_notebooks_folder(
+    ctx: CommandContext, workspace_root: Path, config_path: Path, path: str
+) -> None:
+    """Il rifiuto dei progetti guardava solo i figli diretti di ``wikis/``:
+    ``path=wikis`` cancellava tutti i quaderni insieme, lasciando ogni chat
+    orfana."""
+    pages = _notebook(workspace_root)
+    err = await _refused(ctx, "workspace.delete", {"path": path})
+    assert err.code == "forbidden"
+    assert "orto" in err.message
+    assert pages.is_dir()
+
+
+async def test_delete_refuses_any_ancestor_of_a_notebook(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    config = load_config(config_path)
+    config.wiki.wikis_dir = "archivio/wikis"
+    save_config(config, config_path)
+    pages = _notebook(workspace_root, "archivio/wikis/orto")
+    err = await _refused(ctx, "workspace.delete", {"path": "archivio"})
+    assert err.code == "forbidden"
+    assert pages.is_dir()
+
+
+async def test_delete_allows_a_folder_that_holds_no_notebook(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    """Il rifiuto e' per chi *contiene* un quaderno, non per ogni cartella."""
+    _notebook(workspace_root)
+    (workspace_root / "output" / "vecchio").mkdir(parents=True)
+    await dispatch_command(ctx, "workspace.delete", {"path": "output"})
+    assert not (workspace_root / "output").exists()
+
+
+async def test_delete_allows_a_notebooks_folder_without_notebooks(
+    ctx: CommandContext, workspace_root: Path, config_path: Path
+) -> None:
+    (workspace_root / "wikis" / "appunti-sparsi").mkdir(parents=True)
+    await dispatch_command(ctx, "workspace.delete", {"path": "wikis"})
+    assert not (workspace_root / "wikis").exists()

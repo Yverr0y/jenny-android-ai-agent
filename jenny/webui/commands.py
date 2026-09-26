@@ -230,6 +230,57 @@ def _fs_errors() -> Iterator[None]:
         raise CommandError("bad_request", str(exc)) from exc
 
 
+def _notebooks_dir(workspace_root: Path) -> Path:
+    """La cartella dei quaderni (``wiki.wikis_dir``), **risolta**.
+
+    Risolta perche' si confronta con percorsi che escono da ``validate_path``,
+    che risolve: su Android ``/data/user/0/…`` e ``/data/data/…`` sono la stessa
+    cartella per due nomi, e un confronto testuale fra le due forme direbbe di
+    no a ogni domanda.
+    """
+    try:
+        from jenny.config.loader import load_config
+
+        subdir = load_config().wiki.wikis_dir or "wikis"
+    except Exception:  # noqa: BLE001 — senza config si usa il nome di default
+        subdir = "wikis"
+    return (workspace_root / subdir).resolve()
+
+
+def _delete_refusal(workspace_root: Path, target: Path) -> str | None:
+    """Il motivo per cui *target* non si cancella dal file manager, o ``None``.
+
+    Tre rifiuti, dal piu' largo (terza revisione, WA3). La radice del workspace:
+    ``path=.`` — o qualunque percorso che ci si risolva — faceva la ``rmtree``
+    di tutto, config e sessioni comprese. Una cartella che **contiene** dei
+    quaderni — ``wikis/`` stessa o un suo antenato: il rifiuto dei progetti qui
+    sotto guarda solo i figli diretti di ``wikis/``, e da un gradino piu' su si
+    cancellavano tutti insieme, ognuno con la sua chat lasciata orfana. Poi il
+    singolo progetto (:func:`_project_delete_refusal`).
+    """
+    from jenny.utils.wiki_paths import is_wiki_root
+
+    root = workspace_root.resolve()
+    if target == root:
+        return "the workspace itself cannot be deleted from the file browser"
+    wikis_dir = _notebooks_dir(workspace_root)
+    if wikis_dir == target or target in wikis_dir.parents:
+        try:
+            notebooks = sorted(
+                child.name for child in wikis_dir.iterdir() if is_wiki_root(child)
+            )
+        except OSError:
+            notebooks = []
+        if notebooks:
+            shown = ", ".join(notebooks[:5]) + (", …" if len(notebooks) > 5 else "")
+            return (
+                f"this folder holds notebooks ({shown}): each has a conversation that "
+                "lives outside this tree. Delete them one at a time from Notebooks, "
+                "then the folder."
+            )
+    return _project_delete_refusal(workspace_root, target)
+
+
 def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
     """Il motivo per cui *target* non si cancella da qui, o ``None``.
 
@@ -261,12 +312,7 @@ def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
     from jenny.session.keys import is_valid_project_name
     from jenny.utils.wiki_paths import is_wiki_root
 
-    try:
-        from jenny.config.loader import load_config
-
-        wikis_dir = workspace_root / (load_config().wiki.wikis_dir or "wikis")
-    except Exception:  # noqa: BLE001 — senza config si usa il nome di default
-        wikis_dir = workspace_root / "wikis"
+    wikis_dir = _notebooks_dir(workspace_root)
 
     if target.parent == wikis_dir and is_wiki_root(target):
         name = target.name
@@ -309,7 +355,7 @@ async def workspace_delete(ctx: CommandContext, params: Mapping[str, Any]) -> di
     root = ctx.get_workspace_root()
     with _fs_errors():
         full_path = validate_path(root, rel_path)
-        refusal = _project_delete_refusal(root, full_path)
+        refusal = _delete_refusal(root, full_path)
         if refusal:
             raise CommandError("forbidden", refusal)
         await asyncio.to_thread(delete_path, full_path)
