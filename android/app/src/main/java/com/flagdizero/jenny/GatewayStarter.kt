@@ -7,9 +7,11 @@ import android.util.Log
 /**
  * Il punto da cui parte `startForegroundService(GatewayService)`: le reti di
  * sicurezza, il boot, il watchdog, le sveglie e l'activity passano tutte da qui.
- * L'unica eccezione è `ReplyReceiver`, che consegna una risposta dalla notifica:
+ * Due eccezioni. `ReplyReceiver`, che consegna una risposta dalla notifica:
  * extra suoi, lock di handoff senza `EXTRA_WAKE_TICK`, e un fallimento che deve
- * tornare all'utente (`postReplyFailure`) invece di finire in un log.
+ * tornare all'utente (`postReplyFailure`) invece di finire in un log. E il
+ * tocco su [RestartNotice], che è un `PendingIntent` e lo avvia il sistema: è
+ * la strada che resta quando da qui l'avvio viene rifiutato.
  *
  * Perché centralizzarlo: le reti di sicurezza anti-doze sono ormai SEI, e sono
  * indipendenti per costruzione — sticky restart, sveglia di `onDestroy`,
@@ -58,6 +60,8 @@ object GatewayStarter {
      * l'avvio lo concedono per conto loro — boot, aggiornamento dell'APK,
      * l'app in primo piano, un tocco su una notifica — e l'app esente
      * dall'ottimizzazione batteria, per cui l'avvio non viene rifiutato affatto.
+     * Il tocco lo si chiede: senza sveglia armata `ensureUp` posta
+     * [RestartNotice], «Jenny è ferma — tocca per riavviarla».
      */
     private const val ALARM_FALLBACK_DELAY_MS = 10_000L
 
@@ -82,6 +86,10 @@ object GatewayStarter {
      * e riarmarne un'altra sullo stesso request code non farebbe che spostare
      * in avanti la rete di sicurezza del service. Senza sveglie esatte il
      * ripiego non si arma affatto: non concederebbe niente.
+     *
+     * Ogni rifiuto dell'avvio che non lascia armata una sveglia esatta — con o
+     * senza `alarmFallback` — posta [RestartNotice]: è l'unico modo rimasto di
+     * far sapere all'utente che serve un suo tocco.
      */
     fun ensureUp(
         context: Context,
@@ -108,14 +116,15 @@ object GatewayStarter {
             if (wakeTick) {
                 PowerBridge.releaseHandoffLock()
             }
+            var recoveryArmed = false
             if (alarmFallback) {
                 if (PowerBridge.canScheduleExactAlarms(appContext)) {
-                    val armed = PowerBridge.scheduleWake(
+                    recoveryArmed = PowerBridge.scheduleWake(
                         appContext,
                         System.currentTimeMillis() + ALARM_FALLBACK_DELAY_MS,
                         PowerBridge.REQUEST_CODE_SERVICE_RESTART,
                     )
-                    Log.i(TAG, "Recovery alarm armed after refused FGS start (ok=$armed)")
+                    Log.i(TAG, "Recovery alarm armed after refused FGS start (ok=$recoveryArmed)")
                 } else {
                     // V. ALARM_FALLBACK_DELAY_MS: un'inesatta non concede il FGS.
                     Log.w(
@@ -124,6 +133,15 @@ object GatewayStarter {
                             "waiting for a trigger that does (boot, app in foreground, notification)",
                     )
                 }
+            }
+            // Nessuna sveglia esatta riproverà: resta il tocco dell'utente, e
+            // glielo si chiede. Con la sveglia armata invece si tace: fra dieci
+            // secondi riprova da sé, e se fallisce anche lì (chiamata senza
+            // `alarmFallback`) torna qui con `recoveryArmed` falso. Il rifiuto
+            // lo riconosce `RestartNotice`: un'eccezione diversa non si ripara
+            // con un tocco.
+            if (!recoveryArmed) {
+                RestartNotice.showIfRefused(appContext, e, reason)
             }
             false
         }

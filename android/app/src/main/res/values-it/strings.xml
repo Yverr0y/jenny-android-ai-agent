@@ -4,6 +4,11 @@
     <string name="gateway_channel_name">Servizio in background</string>
     <string name="gateway_channel_description">Mostrata mentre Jenny è attiva in background. Android la richiede e resta finché Jenny non viene fermata. Toccala per aprire Jenny.</string>
 
+    <string name="restart_channel_name">Riavvio necessario</string>
+    <string name="restart_channel_description">Compare quando Android ha fermato Jenny in background e non le permette di ripartire da sola. Toccala per riavviarla.</string>
+    <string name="restart_notice_title">Jenny è ferma</string>
+    <string name="restart_notice_text">Tocca per riavviarla</string>
+
     <string name="alerts_channel_name">Avvisi</string>
     <string name="alerts_channel_description">Promemoria e messaggi che Jenny manda di sua iniziativa</string>
 

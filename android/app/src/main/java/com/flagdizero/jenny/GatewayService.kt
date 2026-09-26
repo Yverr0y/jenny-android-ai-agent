@@ -369,6 +369,13 @@ class GatewayService : Service() {
         }
         isRunning = true
         Watchdog.noteAlive(this)
+        // In foreground, quindi «Jenny è ferma» non è più vero: da qualunque
+        // strada si sia arrivati — il tocco sulla notifica, l'app aperta a
+        // mano, il boot — la notifica di riavvio se ne va qui.
+        if (intent?.getBooleanExtra(RestartNotice.EXTRA_FROM_NOTICE, false) == true) {
+            Log.i(TAG, "Gateway service started from the restart notice")
+        }
+        RestartNotice.clear(this)
         // Idempotente: riparte solo se il thread del gateway non c'è più. È il
         // braccio operativo del watchdog — senza, "riavviare il service" su un
         // processo vivo ma con Python morto non riavvierebbe proprio niente.

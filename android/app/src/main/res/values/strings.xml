@@ -9,6 +9,14 @@
     <string name="gateway_channel_name">Background service</string>
     <string name="gateway_channel_description">Shown while Jenny runs in the background. Android requires it, and it stays until Jenny is stopped. Tap it to open Jenny.</string>
 
+    <!-- Il gateway non può ripartire da background (RestartNotice): Android
+         rifiuta l'avvio e nessuna sveglia esatta lo riproverà. Il tocco sulla
+         notifica lo concede, quindi il testo chiede proprio quel gesto. -->
+    <string name="restart_channel_name">Restart needed</string>
+    <string name="restart_channel_description">Shown when Android has stopped Jenny in the background and won\'t let her start again on her own. Tap it to restart her.</string>
+    <string name="restart_notice_title">Jenny has stopped</string>
+    <string name="restart_notice_text">Tap to restart her</string>
+
     <!-- Proactive alerts posted by the agent (the message itself comes from
          Python; only the channel is described here). -->
     <string name="alerts_channel_name">Alerts</string>
