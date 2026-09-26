@@ -9,7 +9,6 @@ import { getProviderBrand } from './shared/provider-brand.js';
 import {
   BatteryExemptionCard,
   batteryExemptionSupported,
-  batteryExemptionNeeded,
 } from './shared/battery-exemption.js';
 import { buildCronView } from './shared/cron-view.js';
 import { whenText } from './shared/when.js';

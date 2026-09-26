@@ -247,8 +247,6 @@ export class ChatController {
       showToast(describeWireError({ reason }, (key) => i18n.t(key)).text, 'error');
     };
 
-    this._voiceTimerInterval = null;
-
     this._autoScroll = true;
     this._userTouching = false;
     this._scrollThreshold = 60;
@@ -3748,8 +3746,6 @@ export class ChatController {
       node.parentNode.replaceChild(frag, node);
     }
   }
-
-  handleAction(action) {}
 
   _initSessionInfo() {
     this._ensureIdentity();

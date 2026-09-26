@@ -23,7 +23,7 @@ import { showToast } from './utils.js';
 import { deleteProjectFlow } from './project-delete.js';
 import { PROJECT_WORDS, createProjectFlow } from './project-create.js';
 import {
-  ConversationList, UNOPENABLE_HINT_KEYS, ago, isOpenableProjectName, projectKey,
+  ConversationList, UNOPENABLE_HINT_KEYS, ago, projectKey,
 } from './conversation-list.js';
 
 /** Quanto del nome entra nel placeholder prima dei puntini.
