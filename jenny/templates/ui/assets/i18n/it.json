@@ -32,6 +32,7 @@
     "historyLoadFailed": "Storia della conversazione non caricata. Nuovo tentativo alla riconnessione.",
     "couldNotOpen": "Impossibile aprire {path}",
     "unknown": "Sconosciuto",
+    "sessionStarted": "Nuova sessione iniziata.",
     "fullAccess": "Accesso completo",
     "restricted": "Limitato",
     "default": "Predefinito",

@@ -37,7 +37,7 @@ import { renderRich } from './shared/rich-content.js';
 import { workspacePathIn } from './shared/conversation-list.js';
 import { MARKED_OPTIONS, renderMarkdown as renderSafeMarkdown } from './shared/markdown.js';
 import { i18n } from './shared/i18n.js';
-import { getProviderBrand } from './shared/provider-brand.js';
+import { brandLabel, getProviderBrand } from './shared/provider-brand.js';
 import { confirmDialog, detailDialog } from './shared/dialog.js';
 import { commandsChip } from './shared/commands-chip.js';
 import { isTypeAheadKey } from './shared/type-ahead.js';
@@ -513,7 +513,7 @@ export class ChatController {
 
   /** Overlay fullscreen per un'immagine: tap-per-zoom, tap sullo sfondo / Esc per chiudere. */
   _openLightbox(src, alt) {
-    openImageLightbox(src, { alt, closeLabel: i18n.t('chat.close') || 'Close' });
+    openImageLightbox(src, { alt, closeLabel: i18n.t('chat.close') });
   }
 
   /** Renderer condiviso degli allegati media (live + history), per tipo:
@@ -1023,7 +1023,7 @@ export class ChatController {
     const el = document.createElement('div');
     el.className = 'chat-session-boundary';
     const label = document.createElement('span');
-    label.textContent = text || 'New session started.';
+    label.textContent = text || i18n.t('chat.sessionStarted');
     el.appendChild(label);
     if (toTop) {
       this._insertAtTop(el);
@@ -3778,7 +3778,7 @@ export class ChatController {
 
     const brand = model ? getProviderBrand(model.provider) : null;
     const modelLabel = model
-      ? `${brand?.label || model.provider || i18n.t('chat.unknown')} / ${model.model || '—'}`
+      ? `${brandLabel(brand, (k) => i18n.t(k)) || model.provider || i18n.t('chat.unknown')} / ${model.model || '—'}`
       : '—';
     const modelColor = brand?.color || 'var(--text-faint)';
 
@@ -3895,7 +3895,7 @@ export class ChatController {
     if (!el || !this._runtimeModel) return;
     const { provider, model } = this._runtimeModel;
     const brand = getProviderBrand(provider);
-    el.textContent = `${brand.label || provider || i18n.t('chat.unknown')} / ${model || '—'}`;
+    el.textContent = `${brandLabel(brand, (k) => i18n.t(k)) || provider || i18n.t('chat.unknown')} / ${model || '—'}`;
     el.style.color = brand.color;
   }
 

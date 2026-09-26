@@ -1,6 +1,6 @@
 const PROVIDER_BRANDS = {
   openai:        { label: "OpenAI",        color: "#10a37f", logo: null },
-  anthropic:     { label: "Anthropic Compatible", color: "#d4a574", logo: null },
+  anthropic:     { label: "Anthropic Compatible", labelKey: "provider.anthropic", color: "#d4a574", logo: null },
   google:        { label: "Google",        color: "#4285f4", logo: null },
   groq:          { label: "Groq",          color: "#f55036", logo: null },
   deepseek:      { label: "DeepSeek",      color: "#4d6bfe", logo: null },
@@ -82,8 +82,27 @@ function colorFromName(name) {
 }
 
 export function getProviderBrand(name) {
-  if (!name) return { label: 'Unknown', color: '#888', logo: null };
+  if (!name) return { label: 'Unknown', labelKey: 'provider.unknown', color: '#888', logo: null };
   const normalized = name.toLowerCase().replace(/[\s-]+/g, '_');
   const aliased = PROVIDER_ALIASES[normalized] || normalized;
   return PROVIDER_BRANDS[aliased] || { label: name, color: colorFromName(name), logo: null };
+}
+
+/** Il nome di una marca da mostrare, nella lingua dell'interfaccia.
+ *
+ *  I nomi propri (OpenAI, Mistral) sono gli stessi in ogni lingua e stanno
+ *  nella tabella. Due no, e hanno la loro chiave i18n (`labelKey`): «Anthropic
+ *  Compatible», che e' una descrizione e non un marchio, e la marca che manca
+ *  (WJ18 della terza revisione). `label` resta in inglese per chi la legge
+ *  come dato — `shortBrand` in `home-model.js` ne toglie « Compatible» — e
+ *  qui fa da ripiego se la traduzione non c'e'. *t* e' un appiglio e non un
+ *  `import`, per la stessa ragione di `shared/wire-error.js`.
+ */
+export function brandLabel(brand, t) {
+  if (!brand) return '';
+  if (brand.labelKey && typeof t === 'function') {
+    const text = t(brand.labelKey);
+    if (text && text !== brand.labelKey) return text;
+  }
+  return brand.label || '';
 }

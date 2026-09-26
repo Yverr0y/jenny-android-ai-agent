@@ -32,6 +32,7 @@
     "historyLoadFailed": "Could not load this conversation's history. It will retry on reconnect.",
     "couldNotOpen": "Could not open {path}",
     "unknown": "Unknown",
+    "sessionStarted": "New session started.",
     "fullAccess": "Full access",
     "restricted": "Restricted",
     "default": "Default",
