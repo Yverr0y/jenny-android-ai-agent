@@ -324,7 +324,11 @@ class _FsTool(Tool):
             for_write=False,
         )
 
-    def _resolve_write(self, path: str) -> Path:
+    def _resolve_write(self, path: str, *, preview: bool = False) -> Path:
+        # ``preview``: la risoluzione di un dry-run (``apply_patch``). Stessi
+        # confini di una scrittura, ma niente rifiuto della sola lettura:
+        # un'anteprima non cambia niente sul telefono, ed è proprio ciò che
+        # serve per descrivere «cosa avrei cambiato» (TL18).
         # Punto di raccolta unico per l'intento di scrittura di tutti i tool
         # write-capable (write_file / edit_file / apply_patch): contarlo qui,
         # prima della risoluzione (che può sollevare ``PermissionError`` o
@@ -336,7 +340,7 @@ class _FsTool(Tool):
         # si conta l'intento di scrittura: e' l'imbuto di write_file, edit_file e
         # apply_patch, e un tentativo rifiutato resta un tentativo (Dream ci si
         # appoggia per non avanzare il cursore).
-        if current_turn_is_readonly():
+        if current_turn_is_readonly() and not preview:
             raise ReadOnlyTurnError(f"refused write to {path}")
         if self._write_files_only:
             # Bypassa ``_effective_allowed_root``: passare ``allowed_dir=None``
