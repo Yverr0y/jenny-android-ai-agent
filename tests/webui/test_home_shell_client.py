@@ -153,3 +153,29 @@ def test_the_row_is_first_drawn_once_the_words_have_arrived() -> None:
     init = member(src, "init", prefixes=("async ",))
     assert init.index("await i18n.load(") < init.index("this._applyTranslations()")
     assert "this.strip?.draw();" in member(src, "_applyTranslations")
+
+
+def test_the_shell_keeps_the_native_contract_and_no_dead_doors() -> None:
+    """``whenShellReady`` (con la sua coda ``_shellReadyCbs``) e ``openLauncher``
+    erano copiati dall'officina e in casa non li chiamava nessuno: ne' il
+    Kotlin (che chiama i sei metodi del contratto), ne' i moduli che la casa
+    carica — ``mobile-onboarding.js``, l'unico che chiama ``whenShellReady``,
+    e' dell'officina. Codice morto che sembra un contratto (terza revisione,
+    HJ16). ``onNativeReady`` resta: il guscio nativo lo chiama comunque."""
+    src = APP_JS.read_text(encoding="utf-8")
+    for name in (
+        "onNativeReady",
+        "goHome",
+        "onPackageChanged",
+        "handleHardwareBack",
+        "openChat",
+        "isChatOnScreen",
+    ):
+        member(src, name)
+    for dead in ("whenShellReady", "_shellReadyCbs", "openLauncher"):
+        assert dead not in src, f"{dead} e' tornato in home-app.js"
+    assets = APP_JS.parent
+    loaded = [*assets.glob("home-*.js"), *(assets / "shared").glob("*.js"), assets / "mobile-launcher.js"]
+    for path in loaded:
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"\.(whenShellReady|openLauncher)\(", text), path.name

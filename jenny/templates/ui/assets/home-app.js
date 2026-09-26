@@ -309,11 +309,6 @@ class HomeApp {
        prima del salvataggio (terza revisione, HJ11). */
     this._settingsGen = 0;
     this._running = false;
-    /* Il guscio nativo copre la pagina con un caricamento finche' non chiama
-       onNativeReady: fino ad allora qualunque animazione d'ingresso scorre
-       dietro una tendina e se ne vede solo la coda. */
-    this._shellReady = false;
-    this._shellReadyCbs = [];
 
     /* Il cassetto, cioe' la pagina App: costruito subito perche' il suo
        markup e' statico. **Incorporato**: e' una pagina della pista, non un
@@ -1398,22 +1393,15 @@ class HomeApp {
 
   /* ── Il contratto col guscio nativo ── */
 
-  /** Chiamato da MainActivity.hideLoading a dissolvenza finita. */
-  onNativeReady() {
-    if (this._shellReady) return;
-    this._shellReady = true;
-    this._shellReadyCbs.splice(0).forEach((cb) => cb());
-  }
-
-  /** Esegue `cb` quando la pagina e' davvero visibile.
+  /** Chiamato da MainActivity.hideLoading a dissolvenza finita.
    *
-   *  Fuori dal guscio nativo — in un browser normale, dove `JennyNative` non
-   *  esiste — non arrivera' mai nessun onNativeReady: si parte al frame dopo.
-   */
-  whenShellReady(cb) {
-    if (this._shellReady) return cb();
-    this._shellReadyCbs.push(cb);
-    if (!window.JennyNative) requestAnimationFrame(() => this.onNativeReady());
+   *  In casa non aspetta niente: la coda di chi aspettava la pagina visibile
+   *  era copiata dall'officina, dove la usa l'onboarding, e qui nessuno ci
+   *  metteva niente (terza revisione, HJ16). Il metodo resta perche' il
+   *  guscio nativo lo chiama comunque, e un `undefined` sarebbe un TypeError
+   *  dentro la sua `evaluateJavascript`. */
+  onNativeReady() {
+    // Niente da fare: v. sopra.
   }
 
   /** La sorgente dei dati del cassetto, costruita alla prima richiesta.
@@ -1472,14 +1460,6 @@ class HomeApp {
     this.input.value = text;
     this.input.dispatchEvent(new Event('input', { bubbles: true }));
     this.input.focus();
-  }
-
-  /** Il cassetto delle app: dal 23/09/2026 e' la pagina App, e ci si va.
-   *  Stesso nome del metodo dell'officina, perche' chi chiama e' lo stesso
-   *  codice. */
-  openLauncher() {
-    this._setView('chat');
-    this.homePages?.goToId('app');
   }
 
   /** Il nome che l'elenco delle app da' a uno slug, se l'elenco e' gia' stato
