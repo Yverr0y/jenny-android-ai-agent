@@ -1,6 +1,6 @@
 """L'activity principale sopravvive a una ricreazione senza lasciare cocci.
 
-Tre difetti dello stesso ciclo di vita:
+Quattro difetti dello stesso ciclo di vita:
 
 - ``configChanges`` non dichiarava ``keyboard`` né ``navigation``: attaccare o
   staccare una tastiera Bluetooth ricreava l'activity, e con lei la SPA;
@@ -8,7 +8,9 @@ Tre difetti dello stesso ciclo di vita:
   suo renderer e la sua WebSocket accanto a quella nuova;
 - ``pendingExportPath`` viveva solo in un campo: un'activity ricreata mentre il
   picker di salvataggio era davanti riceveva il risultato senza sapere cosa
-  copiare, e rispondeva «annullato» a un backup confermato.
+  copiare, e rispondeva «annullato» a un backup confermato;
+- un picker di backup accodato prima di ``onDestroy`` si lanciava dopo, su un
+  launcher già deregistrato: crash.
 
 Il Kotlin non gira in CI: il contratto si fissa sul sorgente ridotto al solo
 codice (``support.kotlin_source``). La lista completa di ``configChanges`` la
@@ -48,3 +50,26 @@ def test_the_pending_export_survives_a_recreation() -> None:
     restore = on_create.index("pendingExportPath = savedInstanceState?.getString(STATE_PENDING_EXPORT)")
     # Prima di qualunque cosa possa consegnare il risultato del picker.
     assert restore < on_create.index("setContentView(")
+
+
+def test_a_backup_picker_queued_after_on_destroy_does_not_crash() -> None:
+    """``shutdown`` lascia finire la coda di ``nativeExecutor``: un
+    ``exportBackup``/``importBackup`` accodato prima di ``onDestroy`` gira dopo,
+    quando i launcher di ActivityResult sono già deregistrati, e ``launch``
+    sollevava sul thread UI (voce AN7 della terza revisione)."""
+    code = _main()
+    for command, launcher in (
+        ("exportBackup", "exportBackupLauncher.launch("),
+        ("importBackup", "importBackupLauncher.launch("),
+    ):
+        body = function_body(code, command)
+        assert "launchPicker(" in body, f"{command} deve passare dal lancio controllato"
+        assert body.index("launchPicker(") < body.index(launcher)
+        assert "runOnUiThread" not in body, f"{command} non lancia più il picker a mano"
+
+    guard = function_body(code, "launchPicker")
+    ui = guard[guard.index("runOnUiThread") :]
+    # Il controllo sta sul thread UI, prima del lancio, e ha un'uscita.
+    assert ui.index("isDestroyed") < ui.index("launch()")
+    assert "onDropped()" in ui[: ui.index("launch()")]
+    assert "catch (e: RuntimeException)" in ui

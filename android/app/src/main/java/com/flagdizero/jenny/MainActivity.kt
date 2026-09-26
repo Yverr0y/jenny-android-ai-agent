@@ -1542,13 +1542,49 @@ class MainActivity : AppCompatActivity() {
                 "jenny-backup.jbk"
             }
             pendingExportPath = canonical
-            runOnUiThread { exportBackupLauncher.launch(safeName) }
+            val dropped = {
+                pendingExportPath = null
+                notifyBackupJs("onExportDone", false)
+            }
+            launchPicker("exportBackup", dropped) { exportBackupLauncher.launch(safeName) }
         }
 
         /** Apre il picker SAF di selezione file. Il .jbk non ha un MIME
          *  registrato, quindi il filtro resta aperto. */
         fun importBackup() {
-            runOnUiThread { importBackupLauncher.launch(arrayOf("*/*")) }
+            launchPicker("importBackup", { notifyBackupJs("onImportPicked", false) }) {
+                importBackupLauncher.launch(arrayOf("*/*"))
+            }
+        }
+
+        /** Lancia un picker SAF sul thread UI, ma solo se l'activity è viva.
+         *
+         *  I comandi già in coda su [nativeExecutor] girano anche dopo
+         *  `onDestroy` (lo `shutdown` lascia finire la coda), e a quel punto
+         *  i launcher di ActivityResult sono deregistrati: `launch` solleva
+         *  `IllegalStateException` sul thread UI, cioè un crash dell'app. Il
+         *  controllo sta **dentro** il blocco del thread UI: la distruzione
+         *  avviene su quel thread in un solo messaggio, quindi nessun blocco
+         *  accodato la può trovare a metà. Il `catch` copre il resto: un
+         *  launcher deregistrato per un'altra via, o nessuna app che risponda
+         *  al picker (`ActivityNotFoundException`, anche lei un crash). In
+         *  ogni caso [onDropped] dice alla SPA che non se ne fa niente, così
+         *  il suo flusso non resta ad aspettare. */
+        private fun launchPicker(caller: String, onDropped: () -> Unit, launch: () -> Unit) {
+            runOnUiThread {
+                if (isFinishing || isDestroyed) {
+                    Log.w(TAG, "$caller dropped: the activity is gone")
+                    onDropped()
+                    return@runOnUiThread
+                }
+                try {
+                    launch()
+                } catch (e: RuntimeException) {
+                    // IllegalStateException o ActivityNotFoundException.
+                    Log.w(TAG, "$caller dropped: picker unavailable (${e.javaClass.simpleName})")
+                    onDropped()
+                }
+            }
         }
 
         /** Risolve un path (assoluto o relativo al workspace) in un file
