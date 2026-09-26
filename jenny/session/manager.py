@@ -473,6 +473,15 @@ class SessionManager:
         """Get the file path for a session."""
         return self.sessions_dir / f"{self.safe_key(key)}.jsonl"
 
+    def turn_journal_path(self, key: str) -> Path:
+        """Il diario del turno in corso di *key*, accanto al suo file di sessione.
+
+        Lo scrive il checkpoint del turno (v. ``TurnPersistenceMixin``): i
+        messaggi già chiusi del turno, in append. L'estensione non è ``.jsonl``
+        di proposito, perché chi elenca le sessioni non lo scambi per una.
+        """
+        return self.sessions_dir / f"{self.safe_key(key)}.turn-journal"
+
     def get_or_create(self, key: str) -> Session:
         """
         Get an existing session or create a new one.
