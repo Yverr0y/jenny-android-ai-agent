@@ -10,7 +10,13 @@ import { scopeChip } from './shared/scope-chip.js';
 import { writeSwitch } from './shared/write-switch.js';
 import { ImageHandler } from './shared/image-handler.js';
 import { openImageLightbox } from './shared/image-lightbox.js';
-import { contentLinkTarget, openOutsideWebView } from './shared/content-link.js';
+import {
+  contentLinkHref,
+  contentLinkOf,
+  contentLinkTarget,
+  findContentAnchor,
+  openOutsideWebView,
+} from './shared/content-link.js';
 /* Formule e diagrammi dentro una bolla appena disegnata.
  *
  *  Era `renderKaTeX`, e chiamava KaTeX per conto proprio. Il 21/09/2026 le
@@ -447,7 +453,9 @@ export class ChatController {
       // quindi quando la bolla arriva qui il click ha un padrone. Senza questo
       // controllo "Apri nell'editor" funzionava ma mostrava anche il toast del
       // link inerte, perché `#workspace` non è un'ancora della conversazione.
-      const link = e.target.closest('a[href]');
+      // `contentLinkOf` e non `closest('a[href]')`: anche `<area href>` e il
+      // `<a xlink:href>` di un `<svg>` sono link (WJ3 della terza revisione).
+      const link = contentLinkOf(e.target);
       if (link && this.chatArea.contains(link)) {
         if (!e.defaultPrevented) this._handleContentLink(e, link);
         return;
@@ -479,7 +487,7 @@ export class ChatController {
       applica identica, e una regola scritta due volte diverge. */
   _handleContentLink(e, a) {
     e.preventDefault();
-    const target = contentLinkTarget(a.getAttribute('href'), window.location);
+    const target = contentLinkTarget(contentLinkHref(a), window.location);
     if (target?.kind === 'hash') { this._scrollToChatAnchor(target.id); return; }
     if (target?.kind === 'external') {
       if (!openOutsideWebView(target.href)) showToast(i18n.t('common.linkNotOpenable'), 'error');
@@ -490,13 +498,12 @@ export class ChatController {
 
   /** Scroll a un'ancora della conversazione. La ricerca è ristretta alla chat:
       un id qualsiasi della SPA (dock, drawer, dialog) non è un bersaglio
-      legittimo per un link scritto dal modello. */
+      legittimo per un link scritto dal modello. Gli id del contenuto escono
+      dal sanificatore prefissati (`SANITIZE_NAMED_PROPS`): li cerca
+      `findContentAnchor`, che conosce il prefisso. */
   _scrollToChatAnchor(id) {
     if (!id) return;
-    let target = null;
-    try {
-      target = this.chatArea.querySelector(`#${CSS.escape(id)}, [name="${CSS.escape(id)}"]`);
-    } catch (_) { target = null; }
+    const target = findContentAnchor(this.chatArea, id);
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     else showToast(i18n.t('common.linkNotOpenable'), 'info');
   }

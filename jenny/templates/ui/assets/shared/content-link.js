@@ -51,6 +51,54 @@ export function contentLinkTarget(href, here = globalThis.location) {
   return null;
 }
 
+/** Il prefisso che DOMPurify mette a ogni `id`/`name` di un contenuto
+ *  (`SANITIZE_NAMED_PROPS` in `shared/markdown.js`). E' fisso nella libreria,
+ *  non si configura: se cambiasse, le ancore smetterebbero di trovarsi, e il
+ *  banco che le prova lo direbbe. */
+export const SANITIZED_ID_PREFIX = 'user-content-';
+
+/** L'elemento di *root* a cui porta un'ancora `#id` scritta nel contenuto, o
+ *  `null`. L'href e' quello scritto dall'autore (`#sezione`), l'elemento ha
+ *  l'id sanificato (`user-content-sezione`): si cerca quello, e solo dentro
+ *  *root* — un id del guscio (dock, dialoghi) non e' un bersaglio legittimo. */
+export function findContentAnchor(root, id) {
+  if (!root || !id) return null;
+  const clean = String(id).startsWith(SANITIZED_ID_PREFIX) ? String(id) : SANITIZED_ID_PREFIX + id;
+  try {
+    const esc = CSS.escape(clean);
+    return root.querySelector(`#${esc}, [name="${esc}"]`);
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Il link di un tocco dentro un contenuto, o `null`.
+ *
+ *  Non basta `closest('a[href]')`: un `<area href>` o un `<a xlink:href>` dentro
+ *  un `<svg>` sono link anche loro, e un tocco lasciato passare navigava il
+ *  frame principale (WJ3 della terza revisione). Il sanificatore oggi li
+ *  toglie; questo e' il secondo cancello, per quel che una sua versione futura
+ *  lasciasse passare. `[*|href]` prende l'attributo in qualunque namespace. */
+export function contentLinkOf(target) {
+  if (!target || typeof target.closest !== 'function') return null;
+  try {
+    return target.closest('a[href], area[href], [href], [*|href]');
+  } catch (_) {
+    return target.closest('a[href], area[href], [href]');
+  }
+}
+
+/** L'href scritto di un link trovato da `contentLinkOf`, anche `xlink:href`. */
+export function contentLinkHref(link) {
+  if (!link) return '';
+  return (
+    link.getAttribute('href') ||
+    link.getAttributeNS?.('http://www.w3.org/1999/xlink', 'href') ||
+    link.getAttribute('xlink:href') ||
+    ''
+  );
+}
+
 /** Apre un URL fuori dalla WebView. Falso se non ci e' riuscito.
  *
  *  `window.open` qui non apre una finestra: la WebView non supporta le finestre

@@ -97,7 +97,9 @@ def test_without_a_known_origin_the_web_stays_inert() -> None:
 
 _CLICK_HARNESS = """
 import assert from 'node:assert/strict';
-const { contentLinkTarget, openOutsideWebView } = await import('__MODULE__');
+const {
+  contentLinkHref, contentLinkOf, contentLinkTarget, findContentAnchor, openOutsideWebView,
+} = await import('__MODULE__');
 globalThis.window = {
   location: __HERE__,
   opened: [],
