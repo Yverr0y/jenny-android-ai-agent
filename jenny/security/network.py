@@ -7,6 +7,18 @@ import socket
 from contextlib import suppress
 from urllib.parse import urlparse
 
+# Indirizzi che non sono mai un server, per nessuna delle tre policy (CF5 della
+# terza revisione): ``::`` non specificato (su Linux una connessione verso
+# ``::`` arriva all'host stesso, come ``0.0.0.0``), ``::/96`` IPv4-compatibile
+# (deprecato: ``::127.0.0.1`` è il loopback in una forma che ``_normalize_addr``
+# non riconosce, perché non è una IPv4-mapped), multicast e broadcast.
+_NEVER_A_SERVER = [
+    ipaddress.ip_network("::/96"),             # :: e IPv4-compatibili (::1 compreso)
+    ipaddress.ip_network("224.0.0.0/4"),       # multicast v4
+    ipaddress.ip_network("255.255.255.255/32"),  # broadcast
+    ipaddress.ip_network("ff00::/8"),          # multicast v6
+]
+
 _BLOCKED_NETWORKS = [
     ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
@@ -18,6 +30,7 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),          # unique local
     ipaddress.ip_network("fe80::/10"),         # link-local v6
+    *_NEVER_A_SERVER,
 ]
 
 # Blocklist for Jenny App `http` actions: app servers are user-declared LAN
@@ -49,6 +62,7 @@ _APP_SERVER_BLOCKED_NETWORKS = [
     ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud metadata
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fe80::/10"),         # link-local v6
+    *_NEVER_A_SERVER,
 ]
 
 # Blocklist for SSH targets. Come quella degli app server, ma senza CGNAT:
@@ -69,6 +83,7 @@ _SSH_BLOCKED_NETWORKS = [
     ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud metadata
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fe80::/10"),         # link-local v6
+    *_NEVER_A_SERVER,
 ]
 
 
@@ -227,7 +242,10 @@ def validate_ssh_target(host: str) -> tuple[bool, str]:
         # sessione SSH verso il telefono stesso, e con essa raggiungere l'API del
         # gateway dall'interno. Il loopback e la sola cosa che questa policy
         # promette senza condizioni: qui non si negozia.
-        if _normalize_addr(addr).is_loopback:
+        # Il non specificato (`0.0.0.0`, `::`) è il telefono tanto quanto il
+        # loopback: una connessione verso di lui arriva all'host stesso (CF5).
+        normalized = _normalize_addr(addr)
+        if normalized.is_loopback or normalized.is_unspecified:
             return False, f"Blocked: {hostname} resolves to the phone itself ({addr})"
         if _is_blocked(addr, _SSH_BLOCKED_NETWORKS):
             return False, f"Blocked: {hostname} resolves to {addr}"
