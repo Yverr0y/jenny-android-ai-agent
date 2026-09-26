@@ -1190,6 +1190,7 @@ body {
    da' un `transform`, quindi la transizione di `transform` qui sotto per lei
    non parte mai. Erano tre regole ricopiate, identiche riga per riga. */
 .drawer-close, .launcher-close, .file-preview-close, .session-info-close {
+  position: relative;
   width: 22px; height: 22px;
   border-radius: var(--radius-sm);
   border: 0.5px solid var(--border-strong);
@@ -1204,6 +1205,16 @@ body {
 .drawer-close:hover, .file-preview-close:hover, .session-info-close:hover { transform: scale(1.1); }
 .drawer-close:active, .file-preview-close:active, .session-info-close:active { transform: scale(0.9); }
 .drawer-close i, .launcher-close i { font-size: 13px; }
+/* L'area di tocco e' piu' grande del disegno: la crocetta resta da 22 px, ma
+   un anello invisibile di 5 px tutt'attorno porta il bersaglio a 32 px —
+   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano (CS16 della terza
+   revisione). */
+.drawer-close::after, .launcher-close::after,
+.file-preview-close::after, .session-info-close::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
 
 /* Drawer body */
 .drawer-body {
@@ -3128,6 +3139,16 @@ body {
 }
 .launcher-search-clear.visible { visibility: visible; opacity: 1; }
 .launcher-search-clear i { font-size: 12px; }
+/* L'area di tocco e' piu' grande del disegno: la crocetta resta da 22 px, ma
+   un anello invisibile di 5 px tutt'attorno porta il bersaglio a 32 px —
+   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano (CS16 della terza
+   revisione). */
+.launcher-search-clear::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+}
 
 .launcher-list {
   flex: 1; min-height: 0;

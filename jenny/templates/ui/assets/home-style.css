@@ -1086,6 +1086,16 @@ body.home {
   cursor: pointer;
   padding: 0;
 }
+/* L'area di tocco e' piu' grande del disegno: la crocetta resta da 20 px, ma
+   un anello invisibile di 6 px tutt'attorno porta il bersaglio a 32 px —
+   sopra i 24 di WCAG 2.5.8, che 20 px da soli non facevano (CS16 della terza
+   revisione). */
+.home-pending-x::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+}
 
 /* L'immagine in chat si tocca per ingrandirla. */
 .home-media img { cursor: pointer; }
