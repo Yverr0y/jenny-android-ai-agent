@@ -623,8 +623,8 @@ class TestAutoCompactEdgeCases:
         await loop.close_background_tasks()
 
     @pytest.mark.asyncio
-    async def test_auto_compact_archive_failure_still_keeps_recent_suffix(self, tmp_path):
-        """Auto-new should keep the recent suffix even if LLM archive falls back to raw dump."""
+    async def test_auto_compact_archive_failure_keeps_the_whole_session(self, tmp_path):
+        """A LLM giu' la compattazione per inattivita' non tronca (AC2 della terza revisione)."""
         loop = _make_loop(tmp_path, session_ttl_minutes=15)
         session = loop.sessions.get_or_create("internal:test")
         _add_turns(session, 6, prefix="important")
@@ -637,7 +637,7 @@ class TestAutoCompactEdgeCases:
         await loop.auto_compact._archive("internal:test")
 
         session_after = loop.sessions.get_or_create("internal:test")
-        assert len(session_after.messages) == loop.auto_compact._RECENT_SUFFIX_MESSAGES
+        assert len(session_after.messages) == 12
 
         await loop.close_background_tasks()
 

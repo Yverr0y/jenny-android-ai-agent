@@ -211,26 +211,23 @@ class TestProjectHealthyCompaction:
         assert _copies(project_root) == []
 
 
-class TestPersonalSessionUnchanged:
-    async def test_llm_failure_raw_dumps_to_history_and_truncates(
+class TestPersonalSession:
+    async def test_llm_failure_leaves_the_session_whole(
         self, consolidator, mock_provider, project_root, store, tmp_path
     ):
-        """(c) La conversazione personale non cambia: dump in ``history.jsonl``,
-        sessione troncata, e nessuna copia dentro un progetto."""
+        """(c) La conversazione personale, dalla terza revisione (AC2): a LLM giu'
+        niente dump, niente troncatura e nessuna copia dentro un progetto — la
+        sessione resta intera e la finestra dopo riprova."""
         mock_provider.chat_with_retry.side_effect = RuntimeError("LLM unavailable")
         _fill(consolidator, UNIFIED_SESSION_KEY)
 
         result = await consolidator.compact_idle_session(UNIFIED_SESSION_KEY, max_suffix=4)
         assert result is None
 
-        entries = store.read_unprocessed_history(since_cursor=0)
-        raw = "\n".join(entry["content"] for entry in entries)
-        assert "[RAW]" in raw
-        assert "user msg 0" in raw
-        assert entries[0]["session_key"] == UNIFIED_SESSION_KEY
-
+        assert store.read_unprocessed_history(since_cursor=0) == []
+        consolidator.sessions.invalidate(UNIFIED_SESSION_KEY)
         reloaded = consolidator.sessions.get_or_create(UNIFIED_SESSION_KEY)
-        assert len(reloaded.messages) <= 4
+        assert len(reloaded.messages) == 20
         assert _copies(project_root) == []
         assert list(tmp_path.glob("wikis/**/*.jsonl")) == []
 

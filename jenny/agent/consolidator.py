@@ -90,6 +90,14 @@ class Consolidator:
 
     _MAX_CONSOLIDATION_ROUNDS = 5
 
+    # Fallimenti di fila della consolidazione per lunghezza, sulla stessa
+    # sessione, prima di ripiegare sul dump grezzo e avanzare (AC2 della terza
+    # revisione). Sotto la soglia un fallimento non avanza niente e il turno dopo
+    # riprova; alla soglia si torna al comportamento di prima, perche' un chunk
+    # che il modello rifiuta *per la sua forma* costerebbe altrimenti una
+    # chiamata a ogni turno, per sempre, con la sessione che cresce.
+    _TOKEN_FAILURES_BEFORE_RAW_DUMP = 3
+
     _SAFETY_BUFFER = 1024  # extra headroom for tokenizer estimation drift
 
     def __init__(
@@ -127,6 +135,10 @@ class Consolidator:
         from jenny.agent.session_locks import SessionLocks
 
         self._session_locks: SessionLocks = session_locks or SessionLocks()
+        # Il conto di ``_TOKEN_FAILURES_BEFORE_RAW_DUMP``, per sessione. In
+        # memoria e non nei metadata: un riavvio che lo azzera concede al
+        # modello tre tentativi in piu', che e' il verso innocuo dello sbaglio.
+        self._token_failures: dict[str, int] = {}
 
     def set_provider(
         self,
@@ -355,6 +367,7 @@ class Consolidator:
         session_key: str | None = None,
         summary_messages: list[dict] | None = None,
         prompt_visible: bool = True,
+        raw_dump_on_failure: bool = True,
     ) -> str | None:
         """Summarize messages via LLM and append to history.jsonl.
 
@@ -369,6 +382,12 @@ class Consolidator:
         default resta ``True``, che e' il caso normale — l'auto-compattazione
         riassume una conversazione **che continua**, e il modello deve
         continuare a vederne la coda.
+
+        ``raw_dump_on_failure=False`` non scrive niente quando la chiamata
+        fallisce: e' per chi **riprova** (la compattazione per inattivita', quella
+        per lunghezza sotto la soglia dei fallimenti), perche' il dump e' tagliato a
+        ``_RAW_ARCHIVE_MAX_CHARS`` e ogni riprova ne scriverebbe un altro. Chi lo
+        passa non deve dare per consolidati i messaggi quando torna ``None``.
 
         Returns the summary text on success, None if nothing to archive.
         """
@@ -416,6 +435,12 @@ class Consolidator:
             )
             return summary
         except Exception:
+            if not raw_dump_on_failure:
+                logger.warning(
+                    "Consolidation LLM call failed for {}; nothing written, it will be retried",
+                    session_key or "-",
+                )
+                return None
             logger.warning("Consolidation LLM call failed, raw-dumping to history")
             await asyncio.to_thread(
                 self.store.raw_archive,
@@ -531,11 +556,28 @@ class Consolidator:
                     source,
                     len(chunk),
                 )
-                summary = await self.archive(chunk, session_key=session.key)
-                # Advance the cursor either way: on success the chunk was
-                # summarized; on failure archive() already raw-archived it as
-                # a breadcrumb. Re-archiving the same chunk on the next call
-                # would just emit duplicate [RAW] entries.
+                # Un riassunto fallito **non** avanza il cursore (AC2 della terza
+                # revisione). Avanzava sempre, col dump grezzo per briciola: ma il
+                # dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, e i messaggi oltre
+                # ``last_consolidated`` la compattazione per inattivita' li butta —
+                # quindi quel che il taglio lasciava fuori spariva da sessione e
+                # diario. Ora il chunk resta da consolidare, senza dump (niente
+                # doppioni) e il turno dopo riprova; alla soglia dei fallimenti di
+                # fila si torna al dump e all'avanzamento.
+                failures = self._token_failures.get(session.key, 0)
+                give_up = failures + 1 >= self._TOKEN_FAILURES_BEFORE_RAW_DUMP
+                summary = await self.archive(
+                    chunk, session_key=session.key, raw_dump_on_failure=give_up,
+                )
+                if not summary and not give_up:
+                    self._token_failures[session.key] = failures + 1
+                    logger.warning(
+                        "Token consolidation for {} failed ({} in a row); the chunk stays "
+                        "unconsolidated and the next turn retries",
+                        session.key, failures + 1,
+                    )
+                    break
+                self._token_failures.pop(session.key, None)
                 if summary:
                     last_summary = summary
                 session.last_consolidated = end_idx
@@ -569,8 +611,17 @@ class Consolidator:
 
         Used by AutoCompact so all session mutation goes through a single
         lock-protected path.  Returns the summary text on success, ``None``
-        if the LLM failed (raw_archive fallback), or ``""`` if there was
-        nothing to archive.
+        if the LLM failed, or ``""`` if there was nothing to archive.
+
+        **A LLM giu' la conversazione personale non si tronca** (AC2 della terza
+        revisione). Si troncava comunque, con il dump grezzo a fare da copia; ma il
+        dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, e in una conversazione
+        lunga la maggior parte dei messaggi spariva da sessione e diario. Ora
+        niente dump, niente troncatura e niente salvataggio: ``updated_at`` resta
+        vecchio, la sessione resta scaduta e AutoCompact riprova (con il suo
+        intervallo, v. ``AutoCompact._RETRY_AFTER_FAILURE_S``). Un progetto resta
+        com'era: la sua copia integrale in ``raw/compacted/`` rende gia'
+        reversibile la troncatura, e il suo caso ha i suoi test.
         """
         lock = self.get_lock(session_key)
         async with lock:
@@ -602,6 +653,7 @@ class Consolidator:
 
             last_active = session.updated_at
             summary: str | None = ""
+            is_project = is_project_session_key(session_key)
             if messages_to_remove:
                 # Summarize the retained suffix too, but only remove/raw-dump
                 # the messages that are no longer kept in the live session.
@@ -609,9 +661,19 @@ class Consolidator:
                     messages_to_remove,
                     session_key=session_key,
                     summary_messages=messages_to_summarize,
+                    raw_dump_on_failure=is_project,
                 )
 
-            if messages_to_remove and summary is None and is_project_session_key(session_key):
+            if messages_to_remove and summary is None and not is_project:
+                logger.warning(
+                    "Idle-session compact for {} postponed: the summary call failed, so the "
+                    "{} messages stay in the session; retrying at the next idle window",
+                    session_key,
+                    len(messages_to_remove),
+                )
+                return None
+
+            if messages_to_remove and summary is None and is_project:
                 # ``archive()`` ha fallito la chiamata LLM e ha raw-dumpato in
                 # ``history.jsonl``. **Dall'08/09/2026 quel dump viene scritto
                 # anche per un progetto** (``append_history`` non rifiuta più una

@@ -218,6 +218,39 @@ class TestCheckExpired:
         assert len(scheduled) == 1
         assert self.UNIFIED in ac._archiving
 
+    async def test_a_failed_compaction_waits_before_retrying(self, monkeypatch):
+        """AC2: a LLM giu' la sessione resta scaduta, e il giro TTL passa ogni minuto.
+
+        Senza un'attesa la compattazione riproverebbe a ogni giro, una chiamata al
+        minuto per tutta la durata del guasto.
+        """
+        from jenny.agent import autocompact as module
+
+        clock = {"now": 1000.0}
+        monkeypatch.setattr(module.time, "monotonic", lambda: clock["now"])
+        ac = _make_autocompact(ttl=15)
+        mock_sm = MagicMock(spec=SessionManager)
+        old_ts = (datetime.now() - timedelta(minutes=20)).isoformat()
+        mock_sm.read_session_metadata.return_value = {
+            "key": self.UNIFIED, "updated_at": old_ts,
+        }
+        ac.sessions = mock_sm
+        ac.consolidator.compact_idle_session = AsyncMock(return_value=None)
+
+        await ac._archive(self.UNIFIED)
+
+        scheduled = []
+
+        def scheduler(coro):
+            scheduled.append(coro)
+            coro.close()
+
+        ac.check_expired(scheduler)
+        assert scheduled == []
+        clock["now"] += AutoCompact._RETRY_AFTER_FAILURE_S + 1
+        ac.check_expired(scheduler)
+        assert len(scheduled) == 1
+
     def test_fresh_unified_session_skips(self):
         """A recently-updated unified session should not be archived."""
         ac = _make_autocompact(ttl=15)

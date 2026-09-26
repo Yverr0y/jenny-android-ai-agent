@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +67,12 @@ class AutoCompact:
     # orologio andrebbe confrontato con quello di chi scrive.
     _DIARY_HARVEST_KEY = "_diary_harvested"
 
+    # Quanto aspetta una compattazione per inattivita' fallita prima di
+    # riprovare (AC2 della terza revisione). A LLM giu' la sessione non si tronca
+    # e resta scaduta, e il giro TTL passa ogni 60 secondi: senza questa attesa
+    # sarebbe una chiamata al minuto per tutta la durata del guasto.
+    _RETRY_AFTER_FAILURE_S = 600.0
+
     def __init__(self, sessions: SessionManager, consolidator: Consolidator,
                  session_ttl_minutes: int = 0,
                  compact_projects: bool = False,
@@ -96,6 +103,9 @@ class AutoCompact:
         # la stessa riga di log ogni minuto (il giro TTL gira a 60s). La
         # decisione non e' memorizzata — si rifa ogni volta.
         self._deferred: dict[str, str] = {}
+        # Il momento (``time.monotonic``) prima del quale una sessione la cui
+        # compattazione e' fallita non si riprova. V. ``_RETRY_AFTER_FAILURE_S``.
+        self._retry_not_before: dict[str, float] = {}
 
     @property
     def _workspace(self) -> Path | None:
@@ -335,6 +345,8 @@ class AutoCompact:
         for key in self._idle_candidates():
             if key in self._archiving or key in active_session_keys:
                 continue
+            if self._retry_not_before.get(key, 0.0) > time.monotonic():
+                continue
             info = self.sessions.read_session_metadata(key)
             if info is None:
                 continue
@@ -435,6 +447,12 @@ class AutoCompact:
             summary = await self.consolidator.compact_idle_session(
                 key, self._RECENT_SUFFIX_MESSAGES,
             )
+            # ``None`` e' il fallimento: la sessione non e' stata toccata e resta
+            # scaduta, quindi si riprova — ma non al prossimo giro.
+            if summary is None:
+                self._retry_not_before[key] = time.monotonic() + self._RETRY_AFTER_FAILURE_S
+            else:
+                self._retry_not_before.pop(key, None)
             if summary and summary != "(nothing)":
                 session = self.sessions.get_or_create(key)
                 meta = session.metadata.get("_last_summary")
@@ -445,6 +463,7 @@ class AutoCompact:
                     )
         except Exception:
             logger.exception("Auto-compact: failed for {}", key)
+            self._retry_not_before[key] = time.monotonic() + self._RETRY_AFTER_FAILURE_S
         finally:
             self._archiving.discard(key)
 

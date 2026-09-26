@@ -337,11 +337,16 @@ class TestConsolidatorTokenBudget:
         assert archived_chunk[0]["content"] == "m0"
         assert session.last_consolidated > 0
 
-    async def test_raw_archive_fallback_advances_last_consolidated(self, consolidator):
-        """When archive() falls back to raw-archive (LLM failed), the cursor
-        must still advance. Otherwise the same chunk gets raw-archived again
-        on every subsequent maybe_consolidate_by_tokens() call, spamming
-        duplicate [RAW] entries into history.jsonl."""
+    async def test_a_failed_summary_does_not_advance_last_consolidated(self, consolidator):
+        """AC2 della terza revisione: un riassunto fallito non conta come consolidato.
+
+        Il cursore avanzava comunque, con un dump grezzo tagliato a 16.000
+        caratteri per «briciola»: i messaggi dopo il taglio restavano nella
+        sessione, ma oltre ``last_consolidated``, e la compattazione per
+        inattività successiva li buttava senza che fossero mai entrati nel diario.
+        Ora il chunk resta da consolidare e il turno dopo riprova; niente dump,
+        quindi niente doppioni.
+        """
         consolidator._SAFETY_BUFFER = 0
         session = MagicMock()
         session.last_consolidated = 0
@@ -352,18 +357,61 @@ class TestConsolidatorTokenBudget:
         ]
         session.metadata = {}
         consolidator.sessions._session_cache[session.key] = session
-        consolidator.estimate_session_prompt_tokens = MagicMock(
-            side_effect=[(1200, "tiktoken"), (400, "tiktoken")]
-        )
-        # LLM consolidation fails — archive() returns None (raw_archive fired).
+        consolidator.estimate_session_prompt_tokens = MagicMock(return_value=(1200, "tiktoken"))
         consolidator.archive = AsyncMock(return_value=None)
 
         await consolidator.maybe_consolidate_by_tokens(session)
 
         consolidator.archive.assert_awaited_once()
-        # The chunk is considered "materialized" (as a raw-archive breadcrumb),
-        # so last_consolidated must have moved past it.
+        assert consolidator.archive.await_args.kwargs["raw_dump_on_failure"] is False
+        assert session.last_consolidated == 0
+
+    async def test_repeated_failures_fall_back_to_the_raw_dump(self, consolidator):
+        """Il freno: un chunk che fallisce sempre non blocca la sessione per sempre.
+
+        Al terzo fallimento di fila si torna al comportamento di prima — dump
+        grezzo e cursore avanti — perche' un chunk che il modello rifiuta per la
+        sua forma farebbe altrimenti una chiamata sprecata a ogni turno, e la
+        sessione crescerebbe senza fine.
+        """
+        consolidator._SAFETY_BUFFER = 0
+        session = MagicMock()
+        session.last_consolidated = 0
+        session.key = "test:key"
+        session.messages = [
+            {"role": "user" if i in {0, 50} else "assistant", "content": f"m{i}"}
+            for i in range(70)
+        ]
+        session.metadata = {}
+        consolidator.sessions._session_cache[session.key] = session
+        consolidator.estimate_session_prompt_tokens = MagicMock(return_value=(1200, "tiktoken"))
+        consolidator.archive = AsyncMock(return_value=None)
+
+        for _ in range(2):
+            await consolidator.maybe_consolidate_by_tokens(session)
+        assert session.last_consolidated == 0
+        await consolidator.maybe_consolidate_by_tokens(session)
+
+        assert consolidator.archive.await_args.kwargs["raw_dump_on_failure"] is True
         assert session.last_consolidated == 50
+
+    async def test_a_success_resets_the_failure_count(self, consolidator):
+        consolidator._SAFETY_BUFFER = 0
+        session = MagicMock()
+        session.last_consolidated = 0
+        session.key = "test:key"
+        session.messages = [
+            {"role": "user" if i in {0, 50} else "assistant", "content": f"m{i}"}
+            for i in range(70)
+        ]
+        session.metadata = {}
+        consolidator.sessions._session_cache[session.key] = session
+        consolidator.estimate_session_prompt_tokens = MagicMock(return_value=(1200, "tiktoken"))
+        consolidator.archive = AsyncMock(side_effect=[None, None, "- [durable] ok"])
+        for _ in range(3):
+            await consolidator.maybe_consolidate_by_tokens(session)
+        assert session.last_consolidated == 50
+        assert consolidator._token_failures == {}
 
     async def test_raw_archive_fallback_breaks_round_loop(self, consolidator):
         """A degraded LLM should not trigger more archive() calls within the
@@ -487,28 +535,45 @@ class TestCompactIdleSession:
         assert "CORRECTED_FINAL_RESULT_alpha" in summarized
 
     @pytest.mark.asyncio
-    async def test_raw_dumps_only_dropped_messages_on_llm_failure(
+    async def test_llm_failure_dumps_nothing_and_keeps_the_session(
         self, real_consolidator, mock_provider, store
     ):
-        """Summarizing over the full tail must not widen what gets raw-dumped on
-        LLM failure: the breadcrumb should contain only the removed prefix, not
-        the retained suffix that stays live in the session. Regression for #4264."""
+        """AC2 della terza revisione: a LLM giu' la compattazione per inattivita' non tronca.
+
+        Prima tagliava comunque, e il dump grezzo che doveva fare da copia era
+        troncato a 16.000 caratteri: in una conversazione lunga la maggior parte
+        dei messaggi spariva da sessione **e** diario. Ora la sessione resta
+        intera e scaduta, e la finestra dopo riprova; niente dump, perche' ogni
+        riprova ne scriverebbe un altro.
+        """
         mock_provider.chat_with_retry.side_effect = RuntimeError("LLM unavailable")
         sessions = real_consolidator.sessions
-        session = sessions.get_or_create("internal:rawdrop")
-        for i in range(18):
-            session.add_message("user", f"user msg {i}")
-            session.add_message("assistant", f"assistant msg {i}")
-        session.add_message("user", "final user follow-up")
-        session.add_message("assistant", "RETAINED_SUFFIX_marker")
+        session = sessions.get_or_create("unified:default")
+        for i in range(30):
+            session.add_message("user", f"FACT-{i:02d} " + "z" * 1000)
+            session.add_message("assistant", f"reply {i}")
         sessions.save(session)
+        before = sessions.get_or_create("unified:default").updated_at
 
-        await real_consolidator.compact_idle_session("internal:rawdrop", max_suffix=8)
+        result = await real_consolidator.compact_idle_session("unified:default", max_suffix=8)
 
-        raw = "\n".join(e["content"] for e in store.read_unprocessed_history(since_cursor=0))
-        assert "[RAW]" in raw
-        assert "user msg 0" in raw  # removed prefix is the breadcrumb
-        assert "RETAINED_SUFFIX_marker" not in raw  # retained suffix not dumped
+        assert result is None
+        assert store.read_unprocessed_history(since_cursor=0) == []
+        sessions.invalidate("unified:default")
+        reloaded = sessions.get_or_create("unified:default")
+        assert len(reloaded.messages) == 60
+        assert reloaded.last_consolidated == 0
+        assert reloaded.updated_at == before
+
+        # Il provider torna: la finestra dopo compatta, e il riassunto vede tutto.
+        mock_provider.chat_with_retry.side_effect = None
+        mock_provider.chat_with_retry.return_value = MagicMock(
+            content="- [durable] riassunto", finish_reason="stop",
+        )
+        result = await real_consolidator.compact_idle_session("unified:default", max_suffix=8)
+        assert result == "- [durable] riassunto"
+        sent = mock_provider.chat_with_retry.await_args.kwargs["messages"][1]["content"]
+        assert "FACT-00" in sent
 
     @pytest.mark.asyncio
     async def test_idle_compact_writes_session_key_to_history(
@@ -568,8 +633,8 @@ class TestCompactIdleSession:
         assert "_last_summary" not in reloaded.metadata
 
     @pytest.mark.asyncio
-    async def test_llm_failure_still_truncates(self, real_consolidator, mock_provider, store):
-        """LLM raises RuntimeError → raw_archive fires, session still truncated, returns None."""
+    async def test_llm_failure_does_not_truncate(self, real_consolidator, mock_provider, store):
+        """LLM raises RuntimeError → nothing dumped, session left whole, returns None."""
         mock_provider.chat_with_retry.side_effect = RuntimeError("LLM unavailable")
         sessions = real_consolidator.sessions
         session = sessions.get_or_create("internal:fail")
@@ -581,13 +646,10 @@ class TestCompactIdleSession:
         result = await real_consolidator.compact_idle_session("internal:fail", max_suffix=4)
         assert result is None
 
-        # raw_archive should have been called (history.jsonl gets an entry)
-        entries = store.read_unprocessed_history(since_cursor=0)
-        assert any("[RAW]" in e["content"] for e in entries)
-
-        # Session should still be truncated
+        assert store.read_unprocessed_history(since_cursor=0) == []
+        sessions.invalidate("internal:fail")
         reloaded = sessions.get_or_create("internal:fail")
-        assert len(reloaded.messages) <= 4
+        assert len(reloaded.messages) == 20
 
     @pytest.mark.asyncio
     async def test_respects_last_consolidated(self, real_consolidator, mock_provider):
