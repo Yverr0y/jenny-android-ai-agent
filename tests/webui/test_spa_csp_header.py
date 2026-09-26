@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from support.gateway_http import make_handler
 
 from jenny.webui.ws_http import GatewayHTTPHandler
@@ -47,20 +46,43 @@ def test_index_html_carries_a_csp(tmp_path):
     assert _csp(tmp_path), "la shell deve essere servita con una CSP"
 
 
-@pytest.mark.parametrize("directive", [
-    "default-src 'self'",
-    "script-src 'self'",
-    "connect-src 'self' ws: wss:",
-    "object-src 'none'",
-    "base-uri 'none'",
-])
-def test_the_directives_that_matter_are_intact(tmp_path, directive):
-    """Il perimetro che regge contro un'iniezione nella SPA.
+# La policy intera, direttiva per direttiva. Un confronto per sottostringa
+# lasciava passare ``script-src 'self' 'unsafe-eval' https:`` (contiene
+# ``script-src 'self'``) e qualunque direttiva nuova: qui ogni aggiunta,
+# rimozione o allargamento fa fallire il test, ed è voluto — cambiare la CSP
+# della shell è una decisione da prendere guardando questo elenco.
+_EXPECTED_POLICY: dict[str, list[str]] = {
+    "default-src": ["'self'"],
+    "script-src": ["'self'"],
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "img-src": ["'self'", "data:", "blob:"],
+    "font-src": ["'self'"],
+    "connect-src": ["'self'", "ws:", "wss:"],
+    "frame-src": ["'self'", "http://127.0.0.1:*"],
+    "object-src": ["'none'"],
+    "base-uri": ["'none'"],
+}
 
-    ``frame-src`` sotto allarga cosa si puo' incorniciare; queste no, e allargare
-    una di queste per far funzionare una vista sarebbe la scorciatoia sbagliata.
+
+def _parse_policy(csp: str) -> dict[str, list[str]]:
+    policy: dict[str, list[str]] = {}
+    for directive in csp.split(";"):
+        tokens = directive.split()
+        if not tokens:
+            continue
+        name = tokens[0].lower()
+        assert name not in policy, f"direttiva ripetuta: {name}"
+        policy[name] = tokens[1:]
+    return policy
+
+
+def test_the_policy_is_exactly_the_declared_one(tmp_path):
+    """Il perimetro che regge contro un'iniezione nella SPA, a valori esatti.
+
+    ``frame-src`` allarga cosa si puo' incorniciare; le altre no, e allargarne
+    una per far funzionare una vista sarebbe la scorciatoia sbagliata.
     """
-    assert directive in _csp(tmp_path)
+    assert _parse_policy(_csp(tmp_path)) == _EXPECTED_POLICY
 
 
 def test_frame_src_allows_the_loopback_view_proxy(tmp_path):
