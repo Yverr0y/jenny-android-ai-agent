@@ -343,8 +343,13 @@ body.home {
 }
 .home-path-root:active { color: var(--text); }
 
+/* Cede, ma non fino a sparire: a 360 px del nome del quaderno restavano 15 px
+   — «U.» — e a 320 niente (CS13 della terza revisione). Cinque em sono
+   quattro o cinque lettere maiuscole spaziate piu' i puntini: abbastanza per
+   riconoscere il quaderno, che il resto della pagina ripete per esteso. */
 .home-path-here {
   flex: 0 1 auto;
+  min-width: 5em;
   color: var(--heading);
 }
 
@@ -399,6 +404,24 @@ body.home {
   background: var(--overlay);
 }
 .home-view-switch[hidden] { display: none; }
+
+/* Su uno schermo stretto l'interruttore tiene le icone e il numero, e le
+   parole le dice solo a chi non vede: «Chat | Pagine 3» sono 172 px, che a
+   360 lasciavano al nome del quaderno una lettera (CS13). Nascoste alla
+   vista e non tolte — sono il nome dei due bottoni per TalkBack. Il Titan 2
+   (590 px) le vede ancora tutte. */
+@media (max-width: 480px) {
+  .home-view-seg { padding: 0 9px; }
+  .home-view-seg > span:not(.home-view-count) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 
 .home-view-seg {
   display: inline-flex;
