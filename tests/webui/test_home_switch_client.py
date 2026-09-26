@@ -71,6 +71,8 @@ function makeEl(tag) {
     attrs: {},
     setAttribute(k, v) { this.attrs[k] = v; },
     blur() {},
+    /* Un dialogo condiviso si congeda con `cancel`: nessuno lo rifiuta. */
+    dispatchEvent() { return true; },
   };
 }
 
@@ -467,7 +469,8 @@ def _harness() -> str:
         .replace("__BIND_COMPOSER__", member(src, "_bindComposer"))
         .replace("__DEFAULT_BOT_NAME__", _const_block_scalar(src, "DEFAULT_BOT_NAME"))
         .replace("__SHEETS__", _const_block_scalar(src, "LONG_PRESS_SHEETS") + "\n"
-                 + _const_block_scalar(src, "REPORT_SHEET"))
+                 + _const_block_scalar(src, "REPORT_SHEET") + "\n"
+                 + _const_block_scalar(src, "SHARED_DIALOGS"))
         .replace("__NOTEBOOK_DELETE_WORDS__", _const_block(src, "NOTEBOOK_DELETE_WORDS"))
         .replace("__FLOOR__", _const_block_scalar(src, "FLOOR_NO_COMPOSER"))
         .replace("__BACK_TO__", _const_block(src, "BACK_TO"))
@@ -1871,7 +1874,7 @@ def test_every_sheet_that_back_closes_counts_as_something_above() -> None:
     nuovo aggiunto a uno solo avrebbe lasciato la tastiera al campo sotto."""
     _run_js("""
       const app = home();
-      for (const id of [...LONG_PRESS_SHEETS, REPORT_SHEET]) {
+      for (const id of [...SHARED_DIALOGS, ...LONG_PRESS_SHEETS, REPORT_SHEET]) {
         const sheet = document.getElementById(id);
         sheet.open = true;
         sheet.close = function () { this.open = false; };

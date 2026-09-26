@@ -109,6 +109,12 @@ const BACK_TO = {
 const LONG_PRESS_SHEETS = ['home-notebook-sheet', 'jenny-app-sheet', 'android-app-sheet'];
 const REPORT_SHEET = 'home-audit-dialog';
 
+/* I dialoghi condivisi con l'officina (`shared/dialog.js`): «Elimina
+   quaderno?», «Nuovo nome per …», il dettaglio. Si aprono *da* una scheda o da
+   una pagina, quindi stanno sopra a tutto il resto, e Indietro li chiude per
+   primi (terza revisione, HJ3). */
+const SHARED_DIALOGS = ['oc-confirm-dialog', 'oc-prompt-dialog', 'oc-detail-dialog'];
+
 /* Le stesse domande dell'officina, dette come si dicono in casa.
  *
  *  Il giro di creazione e' uno solo (`shared/project-create.js`) e non sa come
@@ -1079,7 +1085,7 @@ class HomeApp {
    *  tasto: da pagina, e' vivo mentre la guardi — anche sotto una scheda aperta
    *  sopra, o sotto una app che ha lanciato. */
   hasOverlayAbove() {
-    for (const id of [...LONG_PRESS_SHEETS, REPORT_SHEET]) {
+    for (const id of [...SHARED_DIALOGS, ...LONG_PRESS_SHEETS, REPORT_SHEET]) {
       if (document.getElementById(id)?.open) return true;
     }
     return Boolean(this._appActions?.isAppOpen()) || Boolean(this.strip?.sorting);
@@ -1479,7 +1485,21 @@ class HomeApp {
    *  schermo, non una scelta fra candidati.
    */
   _closeOverlays() {
-    /* Prima di tutto, i fogli che si aprono con una pressione lunga: quello di
+    /* Prima di tutto i dialoghi condivisi, che si aprono sopra le schede e
+       sopra le pagine. Si congedano con la semantica di Esc, come fa
+       l'officina (`_dismissTopDialog`): l'evento `cancel`, annullabile, e
+       `close()` solo se nessuno l'ha rifiutato — cosi' chi aspettava la
+       risposta la riceve, ed e' un no. Mancavano: Indietro portava via la
+       pagina sotto «Elimina quaderno?», e la domanda restava aperta sopra
+       un'altra (HJ3). */
+    for (const id of SHARED_DIALOGS) {
+      const dialog = document.getElementById(id);
+      if (dialog?.open) {
+        if (dialog.dispatchEvent(new Event('cancel', { cancelable: true }))) dialog.close();
+        return true;
+      }
+    }
+    /* Poi i fogli che si aprono con una pressione lunga: quello di
        un quaderno **dai** Quaderni, e i due delle app **dal** cassetto (Open,
        Edit, Delete). Sono `<dialog>` con `showModal()`: stanno nel top layer,
        sopra tutto, e il loro commento in `apps-actions.js` lo dice — Indietro
@@ -1584,8 +1604,8 @@ class HomeApp {
     return this.view === 'chat'
       && this._entry?.kind === 'chat'
       && sessionManager.currentKey === sessionManager.personalKey
-      /* Un'app aperta, una scheda o la modalita' ordina la coprono: sotto
-         c'e', ma non la stai guardando. */
+      /* Un'app aperta, una scheda, una domanda condivisa o la modalita'
+         ordina la coprono: sotto c'e', ma non la stai guardando. */
       && !this.hasOverlayAbove();
   }
 
