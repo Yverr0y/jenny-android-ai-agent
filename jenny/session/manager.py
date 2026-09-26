@@ -23,6 +23,14 @@ from jenny.utils.helpers import (
 from jenny.utils.path import atomic_write
 
 FILE_MAX_MESSAGES = 2000
+
+# Nei metadata di una sessione-progetto: quanti dei suoi messaggi, dall'inizio,
+# la raccolta del diario ha gia' riassunto (``AutoCompact._harvest_project_diary``).
+# Sta qui e non nell'autocompact perche' e' un indice nei messaggi, e chi li
+# accorcia o li azzera — :meth:`Session.clear`, :meth:`Session.retain_recent_legal_suffix`
+# — deve spostarlo insieme a loro, come fa con ``last_consolidated`` (AC8 della
+# terza revisione).
+DIARY_HARVEST_METADATA_KEY = "_diary_harvested"
 _MESSAGE_TIME_PREFIX_RE = re.compile(r"^\[Message Time: [^\]]+\]\n?")
 _LOCAL_IMAGE_BREADCRUMB_RE = re.compile(r"^\[image: (?:/|~)[^\]]+\]\s*$")
 _TOOL_CALL_ECHO_RE = re.compile(r'^\s*message\([^)]*\)\s*$')
@@ -196,6 +204,10 @@ class Session:
         self.last_consolidated = 0
         self.updated_at = datetime.now()
         self.metadata.pop("_last_summary", None)
+        # L'indice della raccolta del diario conta messaggi che non ci sono piu':
+        # tenuto, dopo ``/new`` i messaggi nuovi — meno dei vecchi — non
+        # sarebbero mai stati raccolti.
+        self.metadata.pop(DIARY_HARVEST_METADATA_KEY, None)
 
     def retain_recent_legal_suffix(
         self,
@@ -279,6 +291,15 @@ class Session:
             1 for i, m in enumerate(original)
             if i < before_lc and id(m) in retained_ids
         )
+
+        # L'indice della raccolta del diario scorre allo stesso modo: resta il
+        # numero dei messaggi *rimasti* che erano gia' stati raccolti.
+        harvested = self.metadata.get(DIARY_HARVEST_METADATA_KEY)
+        if isinstance(harvested, int) and not isinstance(harvested, bool):
+            self.metadata[DIARY_HARVEST_METADATA_KEY] = sum(
+                1 for i, m in enumerate(original)
+                if i < harvested and id(m) in retained_ids
+            )
 
         self.messages = retained
         self.last_consolidated = new_lc

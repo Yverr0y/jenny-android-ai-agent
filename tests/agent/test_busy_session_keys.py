@@ -105,11 +105,15 @@ async def test_a_diary_harvest_keeps_its_project_busy_until_it_saves() -> None:
     entered, release = asyncio.Event(), asyncio.Event()
 
     class _Consolidator:
-        async def archive(self, messages, *, session_key):
+        def messages_fitting_budget(self, messages, *, session_key):
+            return len(messages)
+
+        async def archive(self, messages, *, session_key, raw_dump_on_failure):
             entered.set()
             await release.wait()
+            return "- riassunto"
 
-    session = SimpleNamespace(messages=[{"role": "user"}] * 3, metadata={})
+    session = SimpleNamespace(messages=[{"role": "user"}] * 3, metadata={}, last_consolidated=0)
     sessions = SimpleNamespace(get_or_create=lambda key: session, save=lambda s: None)
     compact = AutoCompact(sessions, _Consolidator())  # type: ignore[arg-type]
     compact._harvesting.add("project:orto")  # come fa ``check_expired``

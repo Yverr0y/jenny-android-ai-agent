@@ -89,6 +89,33 @@ def test_retain_recent_legal_suffix_adjusts_last_consolidated():
     assert session.last_consolidated == 1
 
 
+def test_retain_recent_legal_suffix_shifts_the_diary_harvest_mark():
+    """AC8: l'indice della raccolta del diario scorre con i messaggi, come il cursore."""
+    from jenny.session.manager import DIARY_HARVEST_METADATA_KEY
+
+    session = Session(key="project:esempio")
+    for i in range(10):
+        session.messages.append({"role": "user", "content": f"msg{i}"})
+    session.metadata[DIARY_HARVEST_METADATA_KEY] = 8
+
+    session.retain_recent_legal_suffix(4)
+
+    # Restano msg6..msg9: di quelle, lette erano msg6 e msg7.
+    assert session.metadata[DIARY_HARVEST_METADATA_KEY] == 2
+
+
+def test_clear_forgets_the_diary_harvest_mark():
+    from jenny.session.manager import DIARY_HARVEST_METADATA_KEY
+
+    session = Session(key="project:esempio")
+    session.messages.append({"role": "user", "content": "msg"})
+    session.metadata[DIARY_HARVEST_METADATA_KEY] = 1
+
+    session.clear()
+
+    assert DIARY_HARVEST_METADATA_KEY not in session.metadata
+
+
 def test_retain_recent_legal_suffix_zero_clears_session():
     session = Session(key="test:trim-zero")
     for i in range(10):

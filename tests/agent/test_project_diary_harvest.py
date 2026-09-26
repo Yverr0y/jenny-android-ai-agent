@@ -239,3 +239,93 @@ class TestTheRoundSchedulesTheHarvest:
         # E la conversazione personale non passa di qui: ha Dream che la legge
         # dalla sua coda, non un progetto da raccogliere.
         assert PERSONAL not in autocompact._diary_candidates()
+
+
+class TestTheIndexFollowsTheSession:
+    """AC8 della terza revisione: l'indice segue la sessione, e segna solo quel che e' entrato.
+
+    Era una posizione assoluta nei messaggi: dopo ``/new`` restava al valore di
+    prima, e i messaggi nuovi — meno di quelli vecchi — non entravano mai nel
+    diario. La prima raccolta ripartiva da zero anche sul prefisso gia'
+    consolidato per lunghezza (che nella coda c'e' gia'), e un giro oltre il
+    budget di input del Consolidator segnava letti anche i messaggi che il
+    troncamento aveva lasciato fuori dal riassunto.
+    """
+
+    async def test_after_new_the_new_messages_are_harvested(self, autocompact, consolidator):
+        _talked(autocompact, PROJECT, turns=20, tag="vecchio")
+        await autocompact._harvest_project_diary(PROJECT)
+        # ``/new``, come lo fa ``cmd_new``.
+        session = autocompact.sessions.get_or_create(PROJECT)
+        session.clear()
+        autocompact.sessions.save(session)
+        autocompact.sessions.invalidate(PROJECT)
+        _talked(autocompact, PROJECT, turns=5, tag="nuovo")
+
+        await autocompact._harvest_project_diary(PROJECT)
+
+        assert consolidator.provider.chat_with_retry.await_count == 2
+        payload = consolidator.provider.chat_with_retry.await_args.kwargs["messages"][-1][
+            "content"
+        ]
+        assert "messaggio nuovo0" in payload
+
+    async def test_the_prefix_already_consolidated_is_not_summarized_again(
+        self, autocompact, consolidator
+    ):
+        _talked(autocompact, PROJECT, turns=5, tag="consolidato")
+        _talked(autocompact, PROJECT, turns=2, tag="fresco")
+        session = autocompact.sessions.get_or_create(PROJECT)
+        session.last_consolidated = 10
+        autocompact.sessions.save(session)
+
+        await autocompact._harvest_project_diary(PROJECT)
+
+        payload = consolidator.provider.chat_with_retry.await_args.kwargs["messages"][-1][
+            "content"
+        ]
+        assert "consolidato" not in payload
+        assert "messaggio fresco0" in payload
+
+    async def test_a_session_over_the_budget_is_read_in_chunks(self, tmp_path, store):
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(
+            return_value=MagicMock(content="- fatto", finish_reason="stop")
+        )
+        small = Consolidator(
+            store=store, sessions=SessionManager(tmp_path), provider=provider, model="m",
+            context_window_tokens=8_000, build_messages=MagicMock(return_value=[]),
+            get_tool_definitions=MagicMock(return_value=[]), max_completion_tokens=100,
+        )
+        ac = AutoCompact(sessions=small.sessions, consolidator=small, session_ttl_minutes=30)
+        session = ac.sessions.get_or_create(PROJECT)
+        for i in range(60):
+            session.messages.append({"role": "user", "content": f"msg-{i:02d} " + "y" * 900})
+        session.updated_at = datetime.now() - timedelta(hours=6)
+        ac.sessions.save(session)
+
+        await ac._harvest_project_diary(PROJECT)
+
+        payloads = [
+            call.kwargs["messages"][-1]["content"]
+            for call in provider.chat_with_retry.await_args_list
+        ]
+        assert len(payloads) > 1
+        assert not any("(truncated)" in text for text in payloads)
+        seen = {i for i in range(60) for text in payloads if f"msg-{i:02d}" in text}
+        mark = ac.sessions.get_or_create(PROJECT).metadata[AutoCompact._DIARY_HARVEST_KEY]
+        # Letto vuol dire riassunto: l'indice copre esattamente quel che e' partito.
+        assert seen == set(range(mark))
+        assert mark == 60
+
+    async def test_a_failed_call_leaves_the_index_where_it_was(
+        self, autocompact, consolidator, store
+    ):
+        consolidator.provider.chat_with_retry = AsyncMock(side_effect=RuntimeError("giu'"))
+        _talked(autocompact, PROJECT, turns=3)
+
+        await autocompact._harvest_project_diary(PROJECT)
+
+        session = autocompact.sessions.get_or_create(PROJECT)
+        assert AutoCompact._DIARY_HARVEST_KEY not in session.metadata
+        assert store.read_unprocessed_history(since_cursor=0) == []

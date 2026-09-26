@@ -360,6 +360,35 @@ class Consolidator:
             return truncate_text(text, _RAW_ARCHIVE_MAX_CHARS)
         return truncate_text_to_tokens(text, budget)
 
+    def messages_fitting_budget(
+        self, messages: list[dict], *, session_key: str | None = None,
+    ) -> int:
+        """Quanti dei primi *messages* entrano **interi** nell'input di :meth:`archive`.
+
+        :meth:`archive` tronca l'input al budget del modello, e il troncamento
+        taglia la coda: chi segna dei messaggi come riassunti deve sapere quanti
+        ci sono entrati davvero (AC8 della terza revisione). Il conto e' quello di
+        ``archive``: il budget d'input meno il blocco "già registrato", in
+        caratteri a ``CHARS_PER_TOKEN``. Almeno uno, se ce n'e': un messaggio che
+        da solo sfora si tronca comunque, e zero vorrebbe dire non avanzare mai.
+        """
+        if not messages:
+            return 0
+        known = self.store.get_known_facts_context(session_key=session_key)
+        budget = self._input_token_budget - _estimate_tokens(known)
+        limit = budget * CHARS_PER_TOKEN if budget > 0 else _RAW_ARCHIVE_MAX_CHARS
+        used = 0
+        count = 0
+        for message in messages:
+            cost = len(MemoryStore._format_messages([message]))
+            if cost:
+                cost += 1 if used else 0
+            if count and used + cost > limit:
+                break
+            used += cost
+            count += 1
+        return count
+
     async def archive(
         self,
         messages: list[dict],

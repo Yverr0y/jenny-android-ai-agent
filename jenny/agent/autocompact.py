@@ -17,7 +17,7 @@ from jenny.session.keys import (
     UNIFIED_SESSION_KEY,
     is_project_session_key,
 )
-from jenny.session.manager import Session, SessionManager
+from jenny.session.manager import DIARY_HARVEST_METADATA_KEY, Session, SessionManager
 
 # La sottocartella dei progetti quando nessuno la passa. Dalla stessa costante
 # che usa il ``Consolidator``, non da un letterale: ``config.wiki.wikis_dir`` e'
@@ -64,8 +64,13 @@ class AutoCompact:
 
     # Dove la sessione si annota fin dove il diario e' stato raccolto. Un indice
     # nei messaggi, non un timestamp: i messaggi sono la cosa che si conta, e un
-    # orologio andrebbe confrontato con quello di chi scrive.
-    _DIARY_HARVEST_KEY = "_diary_harvested"
+    # orologio andrebbe confrontato con quello di chi scrive. La costante vive
+    # con ``Session``, che lo sposta quando accorcia o azzera i messaggi.
+    _DIARY_HARVEST_KEY = DIARY_HARVEST_METADATA_KEY
+
+    # Quanti riassunti al massimo per una raccolta: una sessione oltre il budget
+    # d'input si legge a pezzi, e il resto aspetta il giro dopo.
+    _DIARY_HARVEST_MAX_CHUNKS = 4
 
     # Quanto aspetta una compattazione per inattivita' fallita prima di
     # riprovare (AC2 della terza revisione). A LLM giu' la sessione non si tronca
@@ -362,6 +367,8 @@ class AutoCompact:
         for key in self._diary_candidates():
             if key in self._harvesting or key in active_session_keys:
                 continue
+            if self._retry_not_before.get(key, 0.0) > time.monotonic():
+                continue
             info = self.sessions.read_session_metadata(key)
             if info is None or not self._is_expired(info.get("updated_at")):
                 continue
@@ -404,10 +411,23 @@ class AutoCompact:
         all'orologio del giardiniere sarebbe la corsa fra orologi che quel metodo
         esiste per evitare.
 
-        L'indice avanza **anche quando la chiamata LLM fallisce**, e non e' una
-        svista: in quel caso ``archive`` scrive il dump grezzo nella coda con la
-        stessa chiave, quindi la materia e' arrivata lo stesso e riassumerla di
-        nuovo produrrebbe una seconda voce sullo stesso contenuto.
+        **L'indice dice "riassunto", e nient'altro** (AC8 della terza revisione).
+        Tre cose lo tradivano. Era una posizione assoluta, e dopo ``/new`` restava
+        al valore di prima: i messaggi nuovi, meno dei vecchi, non entravano mai —
+        ora ``Session.clear`` lo toglie e ``retain_recent_legal_suffix`` lo fa
+        scorrere. La prima raccolta partiva da zero anche sul prefisso gia'
+        consolidato per lunghezza, che nella coda c'e' gia' con la stessa chiave:
+        ora parte da ``last_consolidated`` se e' piu' avanti. E una sessione oltre
+        il budget d'input del Consolidator veniva troncata dentro ``archive`` e
+        segnata letta per intero: ora si legge a pezzi che ci stanno interi
+        (:meth:`Consolidator.messages_fitting_budget`) e l'indice avanza di un
+        pezzo alla volta.
+
+        **Una chiamata fallita non avanza niente.** Avanzava, contando sul dump
+        grezzo; ma il dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, quindi la
+        coda di una conversazione lunga risultava letta senza esserlo. Ora niente
+        dump (ogni riprova ne scriverebbe un altro) e si riprova dopo
+        ``_RETRY_AFTER_FAILURE_S``.
         """
         try:
             session = self.sessions.get_or_create(key)
@@ -415,17 +435,44 @@ class AutoCompact:
             # ``min``: se qualcuno ha compattato in mezzo, l'indice puo' essere
             # oltre la fine. Ripartire da li' invece che da zero — rileggere
             # tutto produrrebbe un doppione di quel che e' gia' nella coda.
-            start = min(int(session.metadata.get(self._DIARY_HARVEST_KEY, 0)), len(messages))
-            fresh = messages[start:]
-            if len(fresh) < self._DIARY_HARVEST_MIN_MESSAGES:
+            mark = session.metadata.get(self._DIARY_HARVEST_KEY, 0)
+            if not isinstance(mark, int) or isinstance(mark, bool):
+                mark = 0
+            start = min(max(mark, session.last_consolidated), len(messages))
+            if len(messages) - start < self._DIARY_HARVEST_MIN_MESSAGES:
                 return
-            await self.consolidator.archive(fresh, session_key=key)
-            session = self.sessions.get_or_create(key)
-            session.metadata[self._DIARY_HARVEST_KEY] = len(messages)
-            self.sessions.save(session)
-            logger.info(
-                "Diary harvest for {}: {} new messages read into the queue", key, len(fresh),
-            )
+            position = start
+            for _ in range(self._DIARY_HARVEST_MAX_CHUNKS):
+                rest = messages[position:]
+                if not rest:
+                    break
+                count = self.consolidator.messages_fitting_budget(rest, session_key=key)
+                summary = await self.consolidator.archive(
+                    rest[:count], session_key=key, raw_dump_on_failure=False,
+                )
+                if summary is None:
+                    self._retry_not_before[key] = (
+                        time.monotonic() + self._RETRY_AFTER_FAILURE_S
+                    )
+                    break
+                position += count
+                current = self.sessions.get_or_create(key)
+                # La sessione puo' essere stata azzerata o accorciata durante la
+                # chiamata: un indice scritto su messaggi diversi da quelli letti
+                # salterebbe quelli nuovi.
+                if (
+                    len(current.messages) < position
+                    or current.messages[position - 1] != messages[position - 1]
+                ):
+                    break
+                current.metadata[self._DIARY_HARVEST_KEY] = position
+                self.sessions.save(current)
+            if position > start:
+                self._retry_not_before.pop(key, None)
+                logger.info(
+                    "Diary harvest for {}: {} new messages read into the queue",
+                    key, position - start,
+                )
         except Exception:
             logger.exception("Diary harvest failed for {}", key)
         finally:
