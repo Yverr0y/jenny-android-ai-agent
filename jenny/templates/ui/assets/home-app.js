@@ -743,7 +743,7 @@ class HomeApp {
     this._attachments?.delete(key);
     await this.who.refresh();
     await this.pagesPort().reload();
-    showToast(i18n.t('home.notebook.eliminato', { name: name }), 'success');
+    showToast(i18n.t('home.notebook.deleted', { name: name }), 'success');
     return true;
   }
 
@@ -1030,10 +1030,10 @@ class HomeApp {
     /* La tastiera non resta aperta su un campo che e' uscito di scena: i tasti
        dopo finirebbero nella chat che non guardi. Ne' su quello coperto
        dall'avviso di un quaderno cancellato (v. `onGoneChanged`). */
-    if (!this._haComposer(entry) || this.homePages?.goneHere?.()) this.input?.blur();
+    if (!this._hasComposer(entry) || this.homePages?.goneHere?.()) this.input?.blur();
     else this.focus?.restore();
     // La chat torna a schermo: un filo che non era arrivato si riprova.
-    if (this._haComposer(entry)) this._retryThread();
+    if (this._hasComposer(entry)) this._retryThread();
     this._placeJenny();
     this.strip?.draw();
     this._applyHead();
@@ -1074,7 +1074,7 @@ class HomeApp {
   }
 
   /* Le pagine su cui si scrive: la chat, e una pagina quaderno che la ospita. */
-  _haComposer(entry) {
+  _hasComposer(entry) {
     if (entry?.kind === 'notebooks') return Boolean(this.homePages?.notebooksConversation);
     return entry?.kind === 'chat' || entry?.kind === 'conversation';
   }
@@ -1085,7 +1085,7 @@ class HomeApp {
      la terrebbe sospesa a mezz'aria sopra le righe. */
   _placeJenny() {
     if (this.view !== 'chat') return;
-    if (this._haComposer(this._entry)) {
+    if (this._hasComposer(this._entry)) {
       this._measureFloor?.();
       return;
     }
@@ -1116,7 +1116,7 @@ class HomeApp {
      strati della casa, qualunque `<dialog>` aperto — anche quelli condivisi di
      conferma — e l'immagine ingrandita, che non sono strati del cassetto. */
   _composerActive() {
-    if (this.view !== 'chat' || !this._haComposer(this._entry)) return false;
+    if (this.view !== 'chat' || !this._hasComposer(this._entry)) return false;
     if (this.homePages?.goneHere?.()) return false;
     if (this.hasOverlayAbove()) return false;
     return !document.querySelector('dialog[open], .image-lightbox');
@@ -1719,7 +1719,7 @@ class HomeApp {
       if (this.view !== 'chat') return;
       /* ...e solo sulle pagine che un composer ce l'hanno. Le altre il loro
          pavimento lo dichiarano (v. `_placeJenny`). */
-      if (this._entry && !this._haComposer(this._entry)) return;
+      if (this._entry && !this._hasComposer(this._entry)) return;
       /* Il riferimento, non una ricerca per classe: le foto del trasloco sono
          copie della chat col loro composer, e una che sta prima nel documento
          veniva misurata al posto di quello vero. */

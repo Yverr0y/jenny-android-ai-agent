@@ -246,9 +246,9 @@ export class HomeStrip {
   _inView(nav, active) {
     if (!active || !nav.scrollWidth) return;
     const start = active.offsetLeft;
-    const fine = start + active.offsetWidth;
-    if (fine > nav.scrollLeft + nav.clientWidth) {
-      nav.scrollLeft = fine - nav.clientWidth + MARGIN_IN_VIEW;
+    const end = start + active.offsetWidth;
+    if (end > nav.scrollLeft + nav.clientWidth) {
+      nav.scrollLeft = end - nav.clientWidth + MARGIN_IN_VIEW;
     } else if (start < nav.scrollLeft) {
       nav.scrollLeft = Math.max(0, start - MARGIN_IN_VIEW);
     }
@@ -443,10 +443,10 @@ export class HomeStrip {
       const fromIndex = this._draft.indexOf(t.id);
       const a = this._draft.indexOf(nearby.dataset.id);
       const r = nearby.getBoundingClientRect();
-      const beyondMeta = e.clientX > r.left + r.width / 2;
+      const pastHalf = e.clientX > r.left + r.width / 2;
       /* Dove cadrebbe: prima della vicina, o dopo se il dito ne ha passato la
          meta'. Contato **senza** la pastiglia presa, che sta ancora nella bozza. */
-      let where = beyondMeta ? a + 1 : a;
+      let where = pastHalf ? a + 1 : a;
       if (fromIndex < where) where -= 1;
       if (where !== fromIndex) {
         this.move(t.id, where);

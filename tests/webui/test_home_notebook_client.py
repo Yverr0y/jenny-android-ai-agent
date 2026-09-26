@@ -188,7 +188,7 @@ def _member(source: str, name: str) -> str:
     return member(source, name, prefixes=("async ",))
 
 
-def _run_follow_up(body: str, *, confirmed: bool, corrente: str | None) -> None:
+def _run_follow_up(body: str, *, confirmed: bool, current_key: str | None) -> None:
     method = _member((ASSETS / "home-app.js").read_text(encoding="utf-8"), "deleteNotebook")
     script = textwrap.dedent(
         f"""
@@ -201,7 +201,7 @@ def _run_follow_up(body: str, *, confirmed: bool, corrente: str | None) -> None:
         }}
         const projectNameOf = (k) => (k && k.startsWith('project:') ? k.slice(8) : null);
         const projectKey = (n) => 'project:' + n;
-        const sessionManager = {{ currentKey: {json.dumps(corrente)}, personalKey: 'websocket:default' }};
+        const sessionManager = {{ currentKey: {json.dumps(current_key)}, personalKey: 'websocket:default' }};
         const i18n = {{ t: (k) => k }};
         function showToast(t) {{ history.push(['avviso', t]); }}
         class Shell {{
@@ -228,7 +228,7 @@ def test_a_delete_asks_with_the_notebook_words() -> None:
         "await g.deleteNotebook('piante');\n"
         "assert.deepEqual(history[0], ['chiede', 'piante', true]);\n",
         confirmed=True,
-        corrente=None,
+        current_key=None,
     )
 
 
@@ -239,7 +239,7 @@ def test_deleting_the_notebook_you_are_in_takes_you_home() -> None:
         "assert.deepEqual(history.map((x) => x[0]), ['chiede', 'conversation', 'tendina', 'pagine', 'avviso']);\n"
         "assert.deepEqual(history[1], ['conversation', null]);\n",
         confirmed=True,
-        corrente="project:piante",
+        current_key="project:piante",
     )
 
 
@@ -250,7 +250,7 @@ def test_deleting_another_notebook_leaves_you_where_you_are() -> None:
         "assert.ok(history.some((x) => x[0] === 'pagine'), 'le pagine non sono state rilette');\n"
         "assert.ok(history.some((x) => x[0] === 'tendina'), 'la tendina non si e ridisegnata');\n",
         confirmed=True,
-        corrente="project:altro",
+        current_key="project:altro",
     )
 
 
@@ -260,7 +260,7 @@ def test_saying_no_changes_nothing() -> None:
         "assert.equal(done, false);\n"
         "assert.deepEqual(history.map((x) => x[0]), ['chiede']);\n",
         confirmed=False,
-        corrente="project:piante",
+        current_key="project:piante",
     )
 
 
@@ -302,7 +302,7 @@ def test_the_workshop_still_asks_about_a_project() -> None:
 
 
 def _run_rename(
-    body: str, *, written: str | None, corrente: str | None, refuses: bool | str = False,
+    body: str, *, written: str | None, current_key: str | None, refuses: bool | str = False,
 ) -> None:
     app_js = (ASSETS / "home-app.js").read_text(encoding="utf-8")
     method = _member(app_js, "renameNotebook")
@@ -327,7 +327,7 @@ def _run_rename(
         }};
         // La disposizione della mappa: la misura test_map_layout_client.py.
         async function moveLayoutKey(a, b) {{ history.push(['mappa', a, b]); return true; }}
-        const sessionManager = {{ currentKey: {json.dumps(corrente)} }};
+        const sessionManager = {{ currentKey: {json.dumps(current_key)} }};
         const i18n = {{ t: (k, p) => p && p.error !== undefined ? k + ':' + p.error
           : p && p.name !== undefined ? k + '|' + p.name : k }};
         function showToast(t, type) {{ history.push(['avviso', t, type]); }}
@@ -367,7 +367,7 @@ def test_renaming_the_notebook_you_are_in_keeps_you_there_under_the_new_name() -
         "assert.ok(order.indexOf('tendina') < order.indexOf('conversation'),\n"
         "  'la tendina rilegge dopo il cambio: la pastiglia perde il numero');\n",
         written=" viaggi ",
-        corrente="project:viaggio",
+        current_key="project:viaggio",
     )
 
 
@@ -377,7 +377,7 @@ def test_renaming_another_notebook_leaves_you_where_you_are() -> None:
         "assert.ok(!history.some((x) => x[0] === 'conversation'), 'ti ha spostato');\n"
         "assert.ok(history.some((x) => x[0] === 'pagine'));\n",
         written="viaggi",
-        corrente=None,
+        current_key=None,
     )
 
 
@@ -387,7 +387,7 @@ def test_nothing_to_rename_asks_nothing_of_the_gateway(written) -> None:
         "assert.equal(await g.renameNotebook('viaggio'), false);\n"
         "assert.deepEqual(history.map((x) => x[0]), ['chiede']);\n",
         written=written,
-        corrente="project:viaggio",
+        current_key="project:viaggio",
     )
 
 
@@ -399,7 +399,7 @@ def test_a_name_that_would_not_open_is_said_before_the_round_trip() -> None:
         "assert.ok(!history.some((x) => x[0] === 'rpc'), 'un nome non valido e arrivato al gateway');\n"
         "assert.deepEqual(history.at(-1), ['avviso', 'scope.invalidName', 'error']);\n",
         written="Ricerca ETF",
-        corrente=None,
+        current_key=None,
     )
 
 
@@ -409,7 +409,7 @@ def test_a_refused_rename_changes_nothing_at_home() -> None:
         "assert.deepEqual(history.map((x) => x[0]), ['chiede', 'rpc', 'avviso']);\n"
         "assert.equal(history.at(-1)[2], 'error');\n",
         written="viaggi",
-        corrente="project:viaggio",
+        current_key="project:viaggio",
         refuses=True,
     )
 
@@ -422,7 +422,7 @@ def test_a_rename_refused_while_jenny_works_there_is_said_in_the_readers_languag
         "assert.equal(await g.renameNotebook('viaggio'), false);\n"
         "assert.deepEqual(history.at(-1), ['avviso', 'home.notebook.renameBusy|viaggio', 'error']);\n",
         written="viaggi",
-        corrente="project:viaggio",
+        current_key="project:viaggio",
         refuses="conflict",
     )
     _run_rename(
@@ -430,7 +430,7 @@ def test_a_rename_refused_while_jenny_works_there_is_said_in_the_readers_languag
         "assert.deepEqual(history.at(-1), ['avviso',\n"
         "  'home.notebook.renameFailed:a folder named viaggi already exists', 'error']);\n",
         written="viaggi",
-        corrente="project:viaggio",
+        current_key="project:viaggio",
         refuses=True,
     )
 
@@ -451,7 +451,7 @@ def test_the_expected_refusals_are_said_in_the_readers_language(code, expected) 
         "assert.equal(await g.renameNotebook('viaggio'), false);\n"
         f"assert.deepEqual(history.at(-1), ['avviso', {json.dumps(expected)}, 'error']);\n",
         written="viaggi",
-        corrente="project:viaggio",
+        current_key="project:viaggio",
         refuses=code,
     )
 

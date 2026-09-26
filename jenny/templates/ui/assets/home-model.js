@@ -355,14 +355,14 @@ export class HomeModel {
         : i18n.t('home.model.none');
     }
     const catalog = this._catalogs.get(this.viewing) || { status: 'loading', models: [] };
-    const corrente = this.data?.agent?.model || '';
+    const current = this.data?.agent?.model || '';
     const active = this.viewing === this.data?.default_provider;
     /* Il modello in uso sta in cima **anche se il provider non lo elenca**:
        puo' essere un id battuto a mano in officina, o l'elenco puo' non
        essere arrivato. Non vederlo da nessuna parte vorrebbe dire una stanza
        che non risponde alla domanda che ha in testa. */
     const rows = [...catalog.models];
-    if (active && corrente && !rows.includes(corrente)) rows.unshift(corrente);
+    if (active && current && !rows.includes(current)) rows.unshift(current);
 
     this.modelsEl.replaceChildren();
     for (const id of rows) {
@@ -370,7 +370,7 @@ export class HomeModel {
       row.type = 'button';
       row.className = 'home-model';
       row.dataset.model = id;
-      const on = active && id === corrente;
+      const on = active && id === current;
       row.classList.toggle('is-on', on);
       row.setAttribute('aria-checked', String(on));
       row.setAttribute('role', 'radio');

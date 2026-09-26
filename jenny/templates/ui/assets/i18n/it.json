@@ -1070,7 +1070,7 @@
     },
     "notebook": {
       "rename": "Rinomina",
-      "eliminato": "Quaderno «{name}» eliminato",
+      "deleted": "Quaderno «{name}» eliminato",
       "deleteConfirm": "Eliminare il quaderno «{name}»? Spariscono le sue pagine e la sua conversazione.",
       "deleteConfirmWithChat": "Eliminare il quaderno «{name}»? Spariscono le sue pagine e la sua conversazione: {count} messaggi.",
       "deleteFailed": "Non ho potuto eliminare il quaderno «{name}». Non ho toccato niente.",

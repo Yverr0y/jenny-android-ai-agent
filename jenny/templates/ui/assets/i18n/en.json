@@ -1067,7 +1067,7 @@
     },
     "notebook": {
       "rename": "Rename",
-      "eliminato": "Notebook “{name}” deleted",
+      "deleted": "Notebook “{name}” deleted",
       "deleteConfirm": "Delete the notebook “{name}”? Its pages and its conversation go with it.",
       "deleteConfirmWithChat": "Delete the notebook “{name}”? Its pages and its conversation go with it: {count} messages.",
       "deleteFailed": "I could not delete the notebook “{name}”. Nothing was changed.",

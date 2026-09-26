@@ -308,7 +308,7 @@ class App {
       index: 1,
       homeConversation: null,
       get chatIndex() { return this.order.indexOf('chat'); },
-      get corrente() { return this.order[this.index]; },
+      get current() { return this.order[this.index]; },
       indexOf(id) { return this.order.indexOf(id); },
       goTo(i) {
         this.index = i;
@@ -355,7 +355,7 @@ class App {
   __OPEN_SETTINGS__
   __PAINT_SETTINGS__
   __CHAT_NAME__
-  __HA_COMPOSER__
+  __HAS_COMPOSER__
   __PLACE_JENNY__
   __ASK_APP_NAMES__
   __OPEN_JENNY__
@@ -441,7 +441,7 @@ def _harness() -> str:
         .replace("__OPEN_SETTINGS__", member(src, "_openSettings"))
         .replace("__PAINT_SETTINGS__", member(src, "_paintSettings"))
         .replace("__CHAT_NAME__", member(src, "_chatName"))
-        .replace("__HA_COMPOSER__", member(src, "_haComposer"))
+        .replace("__HAS_COMPOSER__", member(src, "_hasComposer"))
         .replace("__PLACE_JENNY__", member(src, "_placeJenny"))
         .replace("__ASK_APP_NAMES__", member(src, "_askAppNames"))
         .replace("__OPEN_JENNY__", member(src, "openJenny"))
@@ -695,7 +695,7 @@ def test_back_from_any_page_lands_on_the_chat_wherever_it_sits() -> None:
       app.homePages.order = ['notebooks', 'app', 'settings', 'chat'];
       app.homePages.index = 0;
       app.handleHardwareBack();
-      assert.equal(app.homePages.corrente, 'chat');
+      assert.equal(app.homePages.current, 'chat');
       app.actions.length = 0;
       app.handleHardwareBack();
       assert.deepEqual(app.actions, [], 'dalla chat personale Indietro ha fatto qualcosa');
@@ -909,9 +909,9 @@ def test_the_pill_lives_only_on_a_pinned_notebook_page() -> None:
     """ + _IN_NOTEBOOKS + """
       app._applyHead();
       assert.equal(app.pagesPill.hidden, true, 'nei Quaderni la pastiglia e\\u2019 ancora in basso');
-      assert.equal(app._haComposer(app._entry), true, 'col quaderno aperto la barra non c\\u2019e\\u2019');
+      assert.equal(app._hasComposer(app._entry), true, 'col quaderno aperto la barra non c\\u2019e\\u2019');
       app.homePages.notebooksConversation = null;
-      assert.equal(app._haComposer(app._entry), false, 'l\\u2019elenco ha una barra dove scrivere');
+      assert.equal(app._hasComposer(app._entry), false, 'l\\u2019elenco ha una barra dove scrivere');
 
       app._entry = { id: 'q1', kind: 'conversation', ref: projectKey('orto') };
       app._applyHead();
@@ -1001,10 +1001,10 @@ def test_settings_is_a_page_and_back_from_it_is_the_chat() -> None:
       await app.switchConversation(projectKey('orto'));
       app.homePages.goToId('settings');
       assert.equal(app.view, 'chat', 'le impostazioni sono ancora una stanza');
-      assert.equal(app.homePages.corrente, 'settings');
+      assert.equal(app.homePages.current, 'settings');
       assert.ok(app.actions.includes('tu aperta'), 'la pagina non e\u2019 stata caricata');
       app.handleHardwareBack();
-      assert.equal(app.homePages.corrente, 'chat');
+      assert.equal(app.homePages.current, 'chat');
       assert.equal(sessionManager.currentKey, 'project:orto', 'e il quaderno e\u2019 rimasto');
     """)
 
@@ -1178,9 +1178,9 @@ def test_her_room_hangs_off_you_and_jenny() -> None:
       assert.equal(app.nameEl.textContent, i18n.t('home.jenny.title'), 'la testa non dice dove sei');
       app.handleHardwareBack();
       assert.equal(app.view, 'chat');
-      assert.equal(app.homePages.corrente, 'settings');
+      assert.equal(app.homePages.current, 'settings');
       app.handleHardwareBack();
-      assert.equal(app.homePages.corrente, 'chat');
+      assert.equal(app.homePages.current, 'chat');
     """)
 
 
@@ -1198,7 +1198,7 @@ def test_leaving_the_updates_room_stops_its_polling() -> None:
 
       app.goBackOneRoom();
       assert.equal(app.view, 'chat', 'da li si torna alle impostazioni');
-      assert.equal(app.homePages.corrente, 'settings');
+      assert.equal(app.homePages.current, 'settings');
       assert.ok(app.actions.includes('aggiornamenti chiusa'), 'il polling resta vivo');
 
       /* E anche uscendo da un'altra parte: il guscio non sa da dove vieni. */
@@ -1370,7 +1370,7 @@ def test_back_peels_the_layers_of_the_app_page_one_at_a_time() -> None:
       assert.equal(app.launcher.search.value, '', 'la ricerca non si svuota');
       assert.equal(app._closeOverlays(), false);
       app.handleHardwareBack();
-      assert.equal(app.homePages.corrente, 'chat');
+      assert.equal(app.homePages.current, 'chat');
     """)
 
 

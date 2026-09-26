@@ -847,7 +847,7 @@ def test_the_shell_says_which_page_is_on_from_the_first_frame() -> None:
         "  constructor() {\n"
         "    this.shell = { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };\n"
         "  }\n"
-        "  _haComposer() { return false; }\n"
+        "  _hasComposer() { return false; }\n"
         "  _placeJenny() {}\n"
         "  _applyHead() {}\n"
         "  _reportChatOnScreen() {}\n  "

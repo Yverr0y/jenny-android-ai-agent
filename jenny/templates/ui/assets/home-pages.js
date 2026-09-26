@@ -36,7 +36,7 @@ import { projectNameOf } from './shared/conversation-list.js';
 /** Quanto la pista si lascia tirare oltre il capo, in frazione di schermo.
  *  Serve a dire «di la' non c'e' niente» col dito invece che con un blocco
  *  secco, che sembra un difetto. */
-const BEYOND_NEWLINE = 0.06;
+const PULL_PAST_END = 0.06;
 
 /** Le pagine che ci sono sempre, nell'ordine di chi non ha mai spostato
  *  niente. E' la copia di `FIXED_PAGES` dello schema, e serve solo finche' il
@@ -478,16 +478,16 @@ export class HomePages {
    */
   _activateOnly(index) {
     if (!this.track) return;
-    const corrente = this.panelOf(index);
+    const current = this.panelOf(index);
     /* Fuori schermo non vuol dire fuori portata: senza `inert` il Tab della
        tastiera fisica, e chi legge lo schermo, finivano nelle pagine accanto —
        un campo di ricerca, un interruttore delle impostazioni — che si
        attivavano senza vederle. Vale per tutti i pannelli, fissi compresi. */
     for (const panel of Array.from(this.track.children)) {
-      panel.inert = panel !== corrente;
+      panel.inert = panel !== current;
     }
     for (const panel of this._panels()) {
-      if (panel === corrente) this._fill(panel);
+      if (panel === current) this._fill(panel);
       else this._empty(panel);
     }
     const id = this.order[index];
@@ -728,7 +728,7 @@ export class HomePages {
         const toFirst = this.index === 0 && dx > 0;
         const toLast = this.index === this.howMany - 1 && dx < 0;
         if (toFirst || toLast) {
-          offset = dx * BEYOND_NEWLINE * 2;
+          offset = dx * PULL_PAST_END * 2;
         }
         const base = -this.index * trackWidth;
         this.track.style.transform = `translateX(${(base + offset).toFixed(2)}px)`;
