@@ -1093,7 +1093,13 @@ class Config(BaseSettings):
     # (salvati in ``uploads/``) e letti on-demand dall'agente coi suoi tool,
     # senza iniettarne il testo nel contesto a ogni turno. Impostare a ``True``
     # per estrarre e inlinare subito il testo di PDF/documenti.
-    extract_document_text: bool = False
+    extract_document_text: bool = Field(
+        default=False,
+        # La grafia della documentazione. Senza l'alias ``extractDocumentText``
+        # finiva tra le chiavi ignote e l'impostazione non aveva effetto.
+        validation_alias=AliasChoices("extractDocumentText", "extract_document_text"),
+        serialization_alias="extractDocumentText",
+    )
     websocket: dict[str, Any] = Field(default_factory=dict)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)

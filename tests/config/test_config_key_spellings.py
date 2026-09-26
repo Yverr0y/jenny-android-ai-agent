@@ -160,3 +160,27 @@ async def test_truly_unknown_keys_are_still_kept_and_reported(tmp_path) -> None:
     assert any("agents.defaults.futureKnob" in w for w in warnings if "not recognised" in w)
     defaults = json.loads(path.read_text())["agents"]["defaults"]
     assert defaults["futureKnob"] == 1 and "max_tokens" not in defaults
+
+
+async def test_extract_document_text_is_read_under_its_documented_name(tmp_path) -> None:
+    """TD8: la documentazione scrive ``extractDocumentText``, e il modello lo leggeva
+    come chiave ignota: l'impostazione non aveva effetto."""
+    path = tmp_path / "config.json"
+    _write(path, {"extractDocumentText": True})
+    assert load_config(path).extract_document_text is True
+
+    await mutate(lambda _cfg: None, config_path=path)
+
+    data = json.loads(path.read_text())
+    assert data["extractDocumentText"] is True and "extract_document_text" not in data
+
+
+async def test_the_old_extract_document_text_spelling_is_still_read(tmp_path) -> None:
+    path = tmp_path / "config.json"
+    _write(path, {"extract_document_text": True})
+
+    await mutate(lambda _cfg: None, config_path=path)
+
+    data = json.loads(path.read_text())
+    assert data["extractDocumentText"] is True and "extract_document_text" not in data
+    assert load_config(path).extract_document_text is True
