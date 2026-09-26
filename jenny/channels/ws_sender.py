@@ -319,7 +319,23 @@ class OutboundSenderMixin:
         # della pipeline le firma/rifirma come qualsiasi media locale. Idempotente
         # sui retry: il dedup nell'ingest salta il fetch se già presente.
         if text or msg.media:
-            text, new_media = await self._media.localize_remote_media(text, msg.media)
+            # Con un tetto *totale*: siamo nel ciclo seriale del dispatcher, e
+            # finché si scarica nessun canale riceve niente (v.
+            # ``media_ingest.LOCALIZE_TOTAL_TIMEOUT_S``). Allo scadere si parte
+            # con gli URL remoti, come per un'immagine che non si scarica.
+            from jenny.webui import media_ingest
+
+            try:
+                text, new_media = await asyncio.wait_for(
+                    self._media.localize_remote_media(text, msg.media),
+                    timeout=media_ingest.LOCALIZE_TOTAL_TIMEOUT_S,
+                )
+            except TimeoutError:
+                self.logger.warning(
+                    "remote media not localized within {}s; sending the remote URLs",
+                    media_ingest.LOCALIZE_TOTAL_TIMEOUT_S,
+                )
+                new_media = msg.media
             if new_media != msg.media:
                 msg = dataclasses.replace(msg, media=new_media)
         wire_text = self._media.rewrite_local_markdown_images(text)

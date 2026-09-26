@@ -29,6 +29,14 @@ MediaDirProvider = Callable[[str | None], Path]
 
 # Limiti operativi.
 TIMEOUT_S = 15.0
+# Budget *totale* per localizzare le immagini remote di un messaggio. Il
+# chiamante (``WebSocketChannel.send``) gira dentro il ciclo seriale del
+# dispatcher: le immagini si scaricano una dopo l'altra, 15 s ciascuna al
+# peggio, e per tutto quel tempo nessun canale riceveva niente — i delta degli
+# altri turni si ammucchiavano e venivano scartati. Allo scadere il messaggio
+# parte con gli URL remoti com'erano; ciò che è già arrivato resta in cache e
+# serve al prossimo messaggio che lo cita.
+LOCALIZE_TOTAL_TIMEOUT_S = 8.0
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # allineato a media_decode.DEFAULT_MAX_BYTES
 REMOTE_MEDIA_BUDGET_BYTES = 200 * 1024 * 1024  # cap LRU del sottodir remote/
 _INGEST_CHANNEL = "remote"
