@@ -281,7 +281,14 @@ def test_serve_signed_media_svg_gets_extra_csp_header(media_root: Path) -> None:
     response = serve_signed_media(sig, payload, secret=_SECRET, media_dir=_media_dir(media_root))
 
     assert response.status_code == 200
-    assert "sandbox" in response.headers["Content-Security-Policy"]
+    # Il valore esatto, non «contiene sandbox»: un ``script-src *`` o un
+    # ``sandbox allow-scripts`` aggiunti passerebbero un controllo a sottostringa.
+    assert response.headers["Content-Security-Policy"] == (
+        "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox"
+    )
+    assert response.headers.get_all("Content-Security-Policy") == [
+        response.headers["Content-Security-Policy"]
+    ]
 
 
 def _range_request(range_value: str) -> WsRequest:
