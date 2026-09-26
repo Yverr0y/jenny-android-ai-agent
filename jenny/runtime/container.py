@@ -113,10 +113,15 @@ class GatewayContainer:
             return
         try:
             from jenny.config.loader import load_config as _reload_config
+            from jenny.config.loader import resolve_config_env_vars
             from jenny.providers.factory import make_provider as _make_provider
             from jenny.providers.factory import provider_fingerprint
 
-            new_config = _reload_config()
+            # Risolti come all'avvio (``gateway_runtime._load_runtime_config``):
+            # senza, il provider nuovo riceveva ``${VAR}`` alla lettera, e
+            # l'impronta — presa all'avvio sul config risolto — non coincideva
+            # mai, quindi ogni salvataggio lo ricostruiva rotto.
+            new_config = resolve_config_env_vars(_reload_config())
             # La guardia confronta *il config*, non l'oggetto provider gia'
             # costruito. Guardare l'oggetto significa scegliere a mano quali
             # attributi contano — ed era il difetto: modello, api_base e
@@ -584,10 +589,12 @@ class GatewayContainer:
 
         try:
             from jenny.config.loader import load_config as _reload_config
+            from jenny.config.loader import resolve_config_env_vars
             from jenny.providers.factory import make_provider as _make_provider
             from jenny.providers.factory import provider_fingerprint
 
-            new_config = _reload_config()
+            # Come all'avvio e nel hot reload: i ``${VAR}`` si risolvono qui.
+            new_config = resolve_config_env_vars(_reload_config())
             provider = _make_provider(new_config)
             # Da qui in poi c'e' un provider vivo: l'impronta e' quella del
             # config che l'ha prodotto, non piu' ``None``.
