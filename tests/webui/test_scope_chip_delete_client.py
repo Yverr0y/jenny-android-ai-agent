@@ -91,12 +91,16 @@ class Chip {
     this.reloaded = 0;
   }
   close() { this.closed++; }
-  leaveIfSelected(name) {
-    const mine = this.scope.kind === 'project' && this.scope.name === name;
-    if (mine) this.left.push(name);
-    return mine;
+  /* `leaveIfSelected` e' quello vero (TD17 della terza revisione: qui era
+     riscritto, e la sua logica — chi e' «lo scope aperto», l'elenco da buttare —
+     non la misurava nessuno). Il cambio di conversazione che fa, `select`, e'
+     un doppio che si ricorda da dove si e' usciti. */
+  select(scope) {
+    if (this.scope.kind === 'project') this.left.push(this.scope.name);
+    this.scope = scope;
   }
   async _loadProjects() { this.reloaded++; }
+  __LEAVE_IF_SELECTED__
   __PROJECTS__
   __PROJECT_ROW__
 }
@@ -115,6 +119,7 @@ def _harness() -> str:
     return (
         _HARNESS.replace("__TRANSLATIONS__", json.dumps({"it": locale("it")}))
         .replace("__LIST_URL__", LIST_JS.as_uri())
+        .replace("__LEAVE_IF_SELECTED__", member(_chip(), "leaveIfSelected"))
         .replace("__PROJECTS__", member(_chip(), "_projects"))
         .replace("__T__", member(I18N_JS.read_text(encoding="utf-8"), "t"))
         .replace("__PROJECT_ROW__", member(_chip(), "_projectRow"))
@@ -195,11 +200,14 @@ def test_deleting_the_open_project_leaves_its_scope() -> None:
     _run_js("""
       const chip = new Chip();
       chip.scope = { kind: 'project', name: 'patreon' };
+      chip._list.projects = [{ name: 'patreon' }];   // l'elenco letto prima
       const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
       assert.deepEqual(chip.left, ['patreon']);
+      assert.deepEqual(chip.scope, { kind: 'personal', name: null }, 'si torna nella personale');
       // Non serve ricaricare l'elenco: uscire dallo scope lo invalida già.
       assert.equal(chip.reloaded, 0);
+      assert.equal(chip._projects, null, "l'elenco con il progetto cancellato e' ancora in cache");
     """)
 
 
