@@ -295,3 +295,24 @@ assert.deepEqual(rows.slice(0, 2), ['you: hello', 'jenny: hello to you']);
 assert.ok(rows.slice(2).includes('jenny: live'), `la bolla viva e\\u2019 sparita: ${JSON.stringify(rows)}`);
 """)
 
+
+def test_a_superseded_read_that_fails_is_not_reported() -> None:
+    """Due letture in volo, la prima fallisce quando la seconda e' gia'
+    partita: decide l'ultima, e il suo filo non si segna come illeggibile."""
+    _run("""
+const app = await boot();
+let n = 0;
+hooks.fetch = async (u) => {
+  if (!u.pathname.endsWith('/webui-thread')) return undefined;
+  n += 1;
+  if (n === 1) { await tick(100); return failed(503); }
+  return undefined;
+};
+const a = app._readThread();
+await tick(10);
+const b = app._readThread();
+await Promise.all([a, b]);
+await tick(30);
+assert.equal(app._threadFailed, false, 'una lettura scavalcata segna il filo come fallito');
+assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+""")
