@@ -107,3 +107,37 @@ async def test_a_session_thread_keeps_its_own_base(tmp_path) -> None:
         manager.shutdown()
 
     assert _txt_files(ws) == ["from_a.txt"], _txt_files(ws)
+
+
+async def test_a_session_thread_keeps_an_explicit_base(tmp_path) -> None:
+    """Il ramo sessione con ``working_dir``: il thread scrive nella base chiesta.
+
+    Il thread di sessione chiama il namespace senza argomenti, e la base gliela
+    porta l'involucro. Qui la chiamata lenta chiede ``wikis/p`` e nel frattempo
+    un'altra, sulla stessa istanza, gira alla radice.
+    """
+    ws = tmp_path.resolve()
+    (ws / "wikis" / "p").mkdir(parents=True)
+    manager = _LateStartManager()
+    tool = _tool(ws, manager)
+    try:
+        a = asyncio.create_task(
+            _as_session(
+                "project:p",
+                tool.execute(
+                    code="open('from_a.txt', 'w').write('A')",
+                    working_dir="wikis/p",
+                    yield_time_ms=2000,
+                ),
+            ),
+        )
+        await asyncio.sleep(0.05)
+        await _as_session(
+            "unified:default", tool.execute(code="open('from_b.txt', 'w').write('B')"),
+        )
+        out = await a
+        assert "Exit code: 0" in out, out
+    finally:
+        manager.shutdown()
+
+    assert _txt_files(ws) == ["from_b.txt", "wikis/p/from_a.txt"], _txt_files(ws)
