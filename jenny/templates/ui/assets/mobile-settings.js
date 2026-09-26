@@ -838,7 +838,7 @@ export class SettingsController {
       <div id="provider-list">
         ${this._renderProviderListHtml(d.providers || [], d.default_provider)}
       </div>
-      <button class="settings-btn-add settings-btn-full" id="btn-add-provider"><i class="ti ti-plus"></i> ${i18n.t('settings.addProvider')}</button>
+      <button class="settings-btn-add settings-btn-full" id="btn-add-provider"><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.addProvider')}</button>
       <p class="settings-hint" style="margin:8px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.addProviderHint')}</p>`;
   }
 
@@ -1006,8 +1006,8 @@ export class SettingsController {
     const min = spec?.min ?? '';
     const max = spec?.max ?? '';
     return `<div class="settings-row">
-      <label class="settings-label">${label}</label>
-      <input type="number" class="settings-input" data-worker-key="${key}"
+      <label class="settings-label" for="settings-worker-${key}">${label}</label>
+      <input type="number" class="settings-input" id="settings-worker-${key}" data-worker-key="${key}"
         value="${escapeHtml(String(spec?.value ?? ''))}"
         ${min === '' ? '' : `min="${min}"`} ${max === '' ? '' : `max="${max}"`}>
     </div>`;
@@ -1366,7 +1366,7 @@ export class SettingsController {
       <p class="settings-hint" style="margin:6px 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('settings.ssh.hint')}</p>
       ${this._renderSshCredentialsLost(d)}
       ${list}
-      <button class="settings-btn-add" id="btn-ssh-add"><i class="ti ti-plus"></i> ${i18n.t('settings.ssh.addHost')}</button>`;
+      <button class="settings-btn-add" id="btn-ssh-add"><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.ssh.addHost')}</button>`;
   }
 
   /* Credenziali sparite da host che erano già stati verificati: quasi sempre
@@ -2187,9 +2187,11 @@ export class SettingsController {
      impilata: etichetta sopra, campo a tutta larghezza sotto. Vedi
      `.settings-row` nel foglio di stile per il motivo della classe nuova. */
   _field(label, type, key, value, placeholder = '') {
+    /* `for`/`id` legano l'etichetta al campo: senza, il lettore di schermo
+       annuncia un «campo di testo» senza dire quale. */
     return `<div class="settings-row">
-      <label class="settings-label">${label}</label>
-      <input type="${type}" class="settings-input" data-key="${key}" value="${escapeHtml(String(value))}"
+      <label class="settings-label" for="settings-${key}">${label}</label>
+      <input type="${type}" class="settings-input" id="settings-${key}" data-key="${key}" value="${escapeHtml(String(value))}"
         placeholder="${escapeHtml(placeholder)}">
     </div>`;
   }
@@ -2205,8 +2207,8 @@ export class SettingsController {
       return `<option value="${escapeHtml(v)}" ${v === value ? 'selected' : ''}>${escapeHtml(t) || '—'}</option>`;
     }).join('');
     return `<div class="settings-row">
-      <label class="settings-label">${label}</label>
-      <select class="settings-select" data-key="${key}">${opts}</select>
+      <label class="settings-label" for="settings-${key}">${label}</label>
+      <select class="settings-select" id="settings-${key}" data-key="${key}">${opts}</select>
     </div>`;
   }
 

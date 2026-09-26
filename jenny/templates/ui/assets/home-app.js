@@ -1784,7 +1784,7 @@ class HomeApp {
       x.dataset.remove = String(i);
       x.className = 'home-pending-x';
       x.setAttribute('aria-label', i18n.t('home.removeAttachment'));
-      x.innerHTML = '<i class="ti ti-x"></i>';
+      x.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
       item.appendChild(x);
       this.pending.appendChild(item);
     });
@@ -1919,8 +1919,8 @@ class HomeApp {
     this._running = running;
     this.send.classList.toggle('is-stop', running);
     this.send.innerHTML = running
-      ? '<i class="ti ti-player-stop-filled"></i>'
-      : '<i class="ti ti-arrow-up"></i>';
+      ? '<i class="ti ti-player-stop-filled" aria-hidden="true"></i>'
+      : '<i class="ti ti-arrow-up" aria-hidden="true"></i>';
     this.send.setAttribute('aria-label', i18n.t(running ? 'home.stop' : 'home.send'));
   }
 

@@ -221,12 +221,14 @@ export class ViewTitleController {
          indovina dall'icona: una casetta puo' voler dire tante cose, «Jenny»
          una sola. */
       if (action.pill) {
-        return `<button class="ibtn ibtn-action ibtn-pill${dangerClass}" data-action="${action.action}" title="${action.title}"${hiddenStyle}>
-          <i class="ti ${action.icon}"></i><span>${escapeHtml(action.pill)}</span>
+        return `<button class="ibtn ibtn-action ibtn-pill${dangerClass}" data-action="${action.action}" title="${escapeHtml(action.title)}"${hiddenStyle}>
+          <i class="ti ${action.icon}" aria-hidden="true"></i><span>${escapeHtml(action.pill)}</span>
         </button>`;
       }
-      return `<button class="ibtn ibtn-action${dangerClass}" data-action="${action.action}" title="${action.title}"${hiddenStyle}>
-        <i class="ti ${action.icon}"></i>
+      /* Solo icona: il nome per il lettore di schermo e' il `title`, detto
+         anche come `aria-label` perche' il `title` da solo non tutti lo leggono. */
+      return `<button class="ibtn ibtn-action${dangerClass}" data-action="${action.action}" title="${escapeHtml(action.title)}" aria-label="${escapeHtml(action.title)}"${hiddenStyle}>
+        <i class="ti ${action.icon}" aria-hidden="true"></i>
       </button>`;
     }).join('');
 

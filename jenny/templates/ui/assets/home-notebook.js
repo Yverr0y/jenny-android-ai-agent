@@ -65,7 +65,7 @@ export class NotebookCard {
     if (!this.sheet || !name) return;
     document.getElementById('home-notebook-sheet-title').innerHTML =
       `<div class="app-sheet-head">
-        <div class="app-sheet-icon"><i class="ti ti-notebook"></i></div>
+        <div class="app-sheet-icon"><i class="ti ti-notebook" aria-hidden="true"></i></div>
         <div class="app-sheet-name">${escapeHtml(name)}</div>
       </div>`;
 

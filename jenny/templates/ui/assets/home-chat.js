@@ -827,7 +827,7 @@ export class HomeChat {
     badge.className = 'home-origin';
     const icon = known ? known.icon : 'ti-arrows-exchange';
     const label = known ? i18n.t(known.key) : origin;
-    badge.innerHTML = `<i class="ti ${icon}"></i>${escapeHtml(label)}`;
+    badge.innerHTML = `<i class="ti ${icon}" aria-hidden="true"></i>${escapeHtml(label)}`;
     return badge;
   }
 

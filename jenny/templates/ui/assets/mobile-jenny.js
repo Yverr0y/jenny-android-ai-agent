@@ -81,7 +81,7 @@ export class JennyCompanion extends JennyMascot {
           <input class="jenny-mc-input" type="text" autocomplete="off">
         </div>
         <button class="jenny-mc-send compose-send" type="submit" disabled>
-          <i class="ti ti-arrow-up"></i>
+          <i class="ti ti-arrow-up" aria-hidden="true"></i>
         </button>
       </form>`;
 
