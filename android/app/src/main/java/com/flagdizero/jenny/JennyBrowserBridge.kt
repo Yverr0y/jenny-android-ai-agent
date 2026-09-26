@@ -20,11 +20,14 @@ import java.io.ByteArrayInputStream
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -66,6 +69,28 @@ class JennyBrowserBridge(context: Context) {
         private const val GATE_LOADING = 1
         private const val GATE_ABANDONED = 2
         private const val GATE_FAILED = 3
+
+        /**
+         * Tetto della cache dei verdetti per host. I nomi li sceglie la pagina
+         * (`JennyBrowserGuard.blocked` è visibile a ogni frame): senza tetto,
+         * una pagina che chiede nomi casuali in un ciclo la fa crescere fino
+         * alla fine della sessione. Oltre il tetto esce il meno usato di
+         * recente: un verdetto perso si ricalcola, non si sbaglia.
+         */
+        private const val MAX_HOST_VERDICTS = 256
+
+        /**
+         * Quanto il thread JavaBridge aspetta un DNS per la guardia lato
+         * pagina. Il costruttore di `WebSocket` è sincrono, quindi la pagina
+         * resta ferma finché il nativo non risponde; oltre il tetto si
+         * risponde «bloccato» (nel dubbio si blocca) e la risoluzione finisce
+         * da sola in cache per la volta dopo.
+         */
+        private const val GUARD_DNS_TIMEOUT_MS = 2_000L
+
+        /** Un avviso nel log al massimo ogni tanto, per le voci che una pagina
+         *  può far ripetere a piacere (v. [warnThrottled]). */
+        private const val WARN_INTERVAL_MS = 10_000L
 
         /**
          * Suffissi pubblici a due livelli, per non ridurre `amazon.co.uk` a
@@ -119,7 +144,24 @@ class JennyBrowserBridge(context: Context) {
     private val loading = AtomicBoolean(false)
     private val lastError = AtomicReference<String?>(null)
     private val lastFinishAt = AtomicReference(0L)
-    private val hostVerdicts = ConcurrentHashMap<String, Boolean>()
+    // LRU con tetto (v. MAX_HOST_VERDICTS); letta e scritta da più thread
+    // (IO di Chromium, JavaBridge, Python), sempre sotto il suo monitor.
+    private val hostVerdicts = object : LinkedHashMap<String, Boolean>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?) =
+            size > MAX_HOST_VERDICTS
+    }
+
+    // I DNS chiesti dalla guardia lato pagina, fuori dal thread JavaBridge (v.
+    // GUARD_DNS_TIMEOUT_MS). Due thread e una coda corta: una pagina che
+    // chiede mille nomi non crea mille thread, e una coda piena vuol dire
+    // «bloccato».
+    private val guardDns = ThreadPoolExecutor(
+        2, 2, 30L, TimeUnit.SECONDS, ArrayBlockingQueue(32),
+    ) { r -> Thread(r, "jenny-browser-guard-dns").apply { isDaemon = true } }
+        .apply { allowCoreThreadTimeOut(true) }
+
+    private val lastWarnAt = AtomicLong(0L)
+    private val suppressedWarnings = AtomicInteger(0)
 
     // L'ultimo indirizzo rifiutato dalla guardia. Serve a **dirlo**: un blocco
     // muto lascia il modello davanti a un about:blank vuoto, che sembra un sito
@@ -199,15 +241,35 @@ class JennyBrowserBridge(context: Context) {
 
     /** Verdetto per hostname, con cache. Risolve: **mai dal main thread**. */
     private fun isBlockedHost(host: String): Boolean {
-        hostVerdicts[host]?.let { return it }
+        cachedVerdict(host)?.let { return it }
         val verdict = try {
             InetAddress.getAllByName(host).any { isBlockedAddress(it) }
         } catch (e: Exception) {
-            Log.w(TAG, "DNS fallita per $host: ${e.message}")
+            // Il nome lo sceglie la pagina: un avviso per ogni nome nuovo
+            // sarebbe un log che la pagina scrive a piacere.
+            warnThrottled("DNS failed (${e.javaClass.simpleName}): host blocked")
             true   // in dubbio si blocca
         }
-        hostVerdicts[host] = verdict
+        synchronized(hostVerdicts) { hostVerdicts[host] = verdict }
         return verdict
+    }
+
+    private fun cachedVerdict(host: String): Boolean? = synchronized(hostVerdicts) { hostVerdicts[host] }
+
+    /**
+     * Un `Log.w` al massimo ogni [WARN_INTERVAL_MS], con il numero di quelli
+     * taciuti nel frattempo. Per le voci che una pagina visitata può far
+     * ripetere quanto vuole: nomi irrisolvibili, connessioni dirette rifiutate.
+     */
+    private fun warnThrottled(message: String) {
+        val now = System.currentTimeMillis()
+        val last = lastWarnAt.get()
+        if (now - last < WARN_INTERVAL_MS || !lastWarnAt.compareAndSet(last, now)) {
+            suppressedWarnings.incrementAndGet()
+            return
+        }
+        val skipped = suppressedWarnings.getAndSet(0)
+        Log.w(TAG, if (skipped > 0) "$message (+$skipped similar suppressed)" else message)
     }
 
     /** Controllo sincrono, senza DNS: è tutto ciò che si può fare sul main thread. */
@@ -254,16 +316,28 @@ class JennyBrowserBridge(context: Context) {
      *
      * Visibile a ogni pagina che la sessione apre, ed è voluto: dice soltanto
      * «bloccato o irrisolvibile» di un nome che la pagina ha già in mano, cioè
-     * quel che una `fetch` verso quel nome le direbbe comunque. Gira sul thread
-     * JavaBridge, quindi il DNS qui è permesso (mai dal main).
+     * quel che una `fetch` verso quel nome le direbbe comunque.
+     *
+     * Gira sul thread JavaBridge, e il JS della pagina aspetta la risposta
+     * (il costruttore di `WebSocket` è sincrono): un DNS lento lì congelava la
+     * pagina per tutta la sua durata. Il verdetto in cache risponde subito;
+     * altrimenti il DNS va su [guardDns] e si aspetta al massimo
+     * [GUARD_DNS_TIMEOUT_MS] — poi «bloccato», e la risoluzione arriva in
+     * cache da sola. Coda piena: «bloccato» anche lì.
      */
     private inner class NetworkGuard {
         @JavascriptInterface
         fun blocked(host: String): Boolean {
             val h = host.trim().removePrefix("[").removeSuffix("]")
             if (h.isEmpty()) return true
-            val verdict = isBlockedHost(h)
-            if (verdict) Log.w(TAG, "connessione diretta bloccata (WebSocket/WebTransport): $h")
+            val verdict = cachedVerdict(h) ?: try {
+                guardDns.submit(Callable { isBlockedHost(h) })
+                    .get(GUARD_DNS_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            } catch (e: Exception) {
+                // Timeout, coda piena o interruzione: nel dubbio si blocca.
+                true
+            }
+            if (verdict) warnThrottled("direct connection refused (WebSocket/WebTransport)")
             return verdict
         }
     }
@@ -332,7 +406,8 @@ class JennyBrowserBridge(context: Context) {
         }
         val host = uri.host ?: return null
         if (isBlockedHost(host)) {
-            Log.w(TAG, "richiesta bloccata: $uri")
+            // Una pagina può chiedere mille sotto-risorse private in un ciclo.
+            warnThrottled("request to a private or unresolvable host blocked")
             if (isMainFrame) lastBlocked.set(uri.toString())
             return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
         }
@@ -476,7 +551,7 @@ class JennyBrowserBridge(context: Context) {
             }
             if (p != null) wipeProfileOnMain(p)
         }
-        hostVerdicts.clear()
+        synchronized(hostVerdicts) { hostVerdicts.clear() }
         scopeDomain.set(null)
         lastBlocked.set(null)
         return """{"ok":true}"""
