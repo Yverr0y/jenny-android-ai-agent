@@ -110,3 +110,56 @@ async def test_a_delivered_reminder_does_not_run_again_after_a_kill(tmp_path) ->
     finally:
         restarted.stop()
     assert "A" not in ran
+
+
+# -- RC1: prima di ogni job si guarda lo store di adesso, non quello d'inizio giro
+
+
+async def _second_job_changed_while_first_runs(tmp_path, change) -> list[str]:
+    path = tmp_path / "cron" / "jobs.json"
+    started = asyncio.Event()
+    gate = asyncio.Event()
+    ran: list[str] = []
+
+    async def on_job(job):
+        ran.append(job.name)
+        if job.name == "A":
+            started.set()
+            await gate.wait()
+
+    service = CronService(path, on_job=on_job, max_sleep_ms=100)
+    await service.start()
+    try:
+        a = service.add_job("A", CronSchedule(kind="every", every_ms=_HOUR), "a", **_bound())
+        b = service.add_job("B", CronSchedule(kind="every", every_ms=_HOUR), "b", **_bound())
+        _make_due(service, a.id, b.id)
+        await asyncio.wait_for(started.wait(), 2)
+        change(service, b.id)
+        gate.set()
+        await _wait_until(lambda: not service._timer_active)
+    finally:
+        service.stop()
+    return ran
+
+
+async def test_a_job_paused_while_the_previous_one_runs_does_not_run(tmp_path) -> None:
+    def pause(service, job_id):
+        assert service.set_paused(job_id, True) == "paused"
+
+    assert await _second_job_changed_while_first_runs(tmp_path, pause) == ["A"]
+
+
+async def test_a_job_removed_while_the_previous_one_runs_does_not_run(tmp_path) -> None:
+    def remove(service, job_id):
+        assert service.remove_job(job_id) == "removed"
+
+    assert await _second_job_changed_while_first_runs(tmp_path, remove) == ["A"]
+
+
+async def test_a_job_paused_and_resumed_meanwhile_waits_for_its_new_time(tmp_path) -> None:
+    """Ripreso vuol dire «da adesso»: la scadenza vecchia non vale piu'."""
+    def pause_and_resume(service, job_id):
+        service.set_paused(job_id, True)
+        assert service.set_paused(job_id, False) == "resumed"
+
+    assert await _second_job_changed_while_first_runs(tmp_path, pause_and_resume) == ["A"]

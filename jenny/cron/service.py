@@ -1065,6 +1065,14 @@ class CronService:
             ]
 
             for job in due_jobs:
+                # ``due_jobs`` e' la foto d'inizio giro, e ogni job prima di
+                # questo e' stato un turno d'agente: nel frattempo l'officina
+                # puo' averlo messo in pausa, eliminato o ripreso con una
+                # scadenza nuova. Durante il giro lo store non si ricarica
+                # (``_load_store`` con ``_timer_active``), quindi quei gesti
+                # hanno mutato proprio questi oggetti: basta riguardarli.
+                if not self._still_due(job, now):
+                    continue
                 await self._execute_job(job)
                 # Dopo **ogni** job, non a fine giro: un giro dura quanto la somma
                 # dei suoi turni d'agente, e un kill (o lo spegnimento, che
@@ -1078,6 +1086,13 @@ class CronService:
         finally:
             self._timer_active = False
         self._arm_timer()
+
+    def _still_due(self, job: CronJob, now: int) -> bool:
+        """Il job e' ancora nello store, acceso e dovuto a *now*."""
+        if self._store is None or not any(j is job for j in self._store.jobs):
+            return False
+        next_run = job.state.next_run_at_ms
+        return bool(job.enabled and next_run and now >= next_run)
 
     @staticmethod
     def _reset_could_not_check(state: CronJobState) -> None:
