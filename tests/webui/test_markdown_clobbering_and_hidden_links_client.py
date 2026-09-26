@@ -235,3 +235,69 @@ def test_the_chat_gate_sees_links_that_are_not_anchors() -> None:
       assert.equal(contentLinkOf(host.querySelector('p')), null);
     """
     )
+
+
+def test_the_hook_prefixes_internal_references_of_a_drawing() -> None:
+    """I riferimenti interni di un SVG seguono il prefisso degli ``id``; un
+    link resta tolto, un'immagine ``data:`` o del gateway resta."""
+    run_js(
+        "import assert from 'node:assert/strict';\n"
+        """
+      const hooks = [];
+      globalThis.DOMPurify = { addHook(name, fn) { hooks.push(fn); }, sanitize: (h) => h };
+      """
+        f"await import('{MARKDOWN_JS.as_uri()}');\n"
+        """
+      const [fn] = hooks;
+      const svg = (localName) => ({ namespaceURI: 'http://www.w3.org/2000/svg', localName });
+      const run = (node, attrName, attrValue) => {
+        const data = { attrName, attrValue, keepAttr: true };
+        fn(node, data);
+        return data.keepAttr ? data.attrValue : null;
+      };
+      assert.equal(run(svg('rect'), 'fill', 'url(#g)'), 'url(#user-content-g)');
+      assert.equal(run(svg('rect'), 'stroke', "url('#g')"), "url('#user-content-g')");
+      assert.equal(run(svg('line'), 'marker-end', 'url( #a )'), 'url(#user-content-a)');
+      assert.equal(run(svg('rect'), 'style', 'fill:url(#g);stroke:red'),
+        'fill:url(#user-content-g);stroke:red');
+      assert.equal(run(svg('rect'), 'mask', 'url(https://x/#m)'), 'url(https://x/#m)');
+      assert.equal(run(svg('rect'), 'fill', 'url(#user-content-g)'), 'url(#user-content-g)',
+        'nessun doppio prefisso');
+      assert.equal(run(svg('linearGradient'), 'href', '#base'), '#user-content-base');
+      assert.equal(run(svg('textPath'), 'xlink:href', '#p'), '#user-content-p');
+      assert.equal(run(svg('a'), 'href', '#g'), null, 'un link in un disegno resta tolto');
+      assert.equal(run(svg('a'), 'xlink:href', '/html-mobile/index.html'), null);
+      assert.equal(run(svg('image'), 'href', 'data:image/png;base64,AA'), 'data:image/png;base64,AA');
+      assert.equal(run(svg('image'), 'href', '/api/media/x.png'), '/api/media/x.png');
+      for (const bad of ['https://evil/x.png', '//evil/x.png', 'javascript:alert(1)', 'data:text/html,x']) {
+        assert.equal(run(svg('image'), 'href', bad), null, bad);
+      }
+      assert.equal(run(svg('rect'), 'href', '/x'), null, 'un href che non e\\u2019 un riferimento');
+      const html = { namespaceURI: 'http://www.w3.org/1999/xhtml', localName: 'div' };
+      assert.equal(run(html, 'style', 'fill:url(#g)'), 'fill:url(#g)', 'fuori da un SVG non si tocca');
+    """
+    )
+
+
+@requires_jsdom
+def test_a_gradient_and_an_arrow_still_point_at_their_definitions() -> None:
+    _jsdom_run(
+        """
+      area.innerHTML = renderMarkdown('<svg width="100" height="40"><defs>'
+        + '<linearGradient id="g"><stop offset="0" stop-color="red"/></linearGradient>'
+        + '<linearGradient id="h" href="#g"/>'
+        + '<marker id="arrow"><path d="M0 0"/></marker></defs>'
+        + '<rect fill="url(#g)" width="100" height="40"/><rect fill="url(#h)"/>'
+        + '<line marker-end="url(#arrow)" x1="0" x2="10"/>'
+        + '<image href="data:image/png;base64,AA"/><image href="https://x/y.png"/></svg>');
+      for (const rect of area.querySelectorAll('svg rect')) {
+        const id = rect.getAttribute('fill').match(/^url\\(#(.+)\\)$/)[1];
+        assert.ok(area.querySelector(`[id="${id}"]`), `fill senza destinazione: ${area.innerHTML}`);
+      }
+      assert.equal(area.querySelector('#user-content-h').getAttribute('href'), '#user-content-g');
+      const end = area.querySelector('svg line').getAttribute('marker-end').match(/^url\\(#(.+)\\)$/)[1];
+      assert.equal(area.querySelector(`[id="${end}"]`)?.tagName.toLowerCase(), 'marker');
+      const images = [...area.querySelectorAll('svg image')].map((i) => i.getAttribute('href'));
+      assert.deepEqual(images, ['data:image/png;base64,AA', null]);
+    """
+    )

@@ -54,10 +54,46 @@ export const SANITIZE_CONFIG = Object.freeze({
  *    e la SPA si de-autenticava. Nessuna risposta ha bisogno di una mappa.
  *  - la terza non e' un'opzione ma un hook (`installHooks`): un `<a>` dentro un
  *    `<svg>` porta il suo `href`/`xlink:href`, e ha lo stesso effetto dell'area.
- *    Il link resta testo; il disegno resta. */
+ *    Il link resta testo; il disegno resta. Lo stesso hook riallinea al
+ *    prefisso i riferimenti interni del disegno (v. `svgHref`). */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let hooked = false;
+
+/* **Un disegno si riferisce a se stesso per id.** Un gradiente, una freccia in
+   fondo a una linea, una maschera: `fill="url(#g)"`, `marker-end="url(#a)"`,
+   un `<linearGradient href="#base">` che eredita da un altro. Il prefisso di
+   `SANITIZE_NAMED_PROPS` rinomina `id="g"` in `id="user-content-g"`, e i
+   riferimenti restavano a `#g`: il gradiente spariva, la freccia pure. Si
+   prefissano anche loro, e solo quelli a un `#…` di questo documento — un
+   `url(https://…)` non e' un riferimento interno e resta com'e'.
+
+   Il prefisso e' lo stesso di `SANITIZED_ID_PREFIX` in `shared/content-link.js`
+   (fisso nella libreria); qui e' ripetuto per non legare questo modulo a un
+   altro: diversi banchi lo caricano da solo. */
+const ID_PREFIX = 'user-content-';
+const URL_REF_ATTRS = new Set([
+  'fill', 'stroke', 'marker-start', 'marker-mid', 'marker-end', 'clip-path', 'mask', 'filter', 'style',
+]);
+const LOCAL_URL_REF = /url\(\s*(['"]?)#([^'")\s]+)\1\s*\)/g;
+/* Le immagini di un disegno: un `data:image/…` o un indirizzo di questo
+   stesso gateway, senza schema e senza `//` (un'altra origine, che la CSP
+   rifiuterebbe comunque). Un'immagine si guarda e basta: non naviga. */
+const SAFE_IMAGE_HREF = /^(?:data:image\/|(?![a-z][a-z0-9+.-]*:|\/\/))/i;
+
+function prefixedId(id) {
+  return id.startsWith(ID_PREFIX) ? id : ID_PREFIX + id;
+}
+
+/* Il valore che un `href` di un nodo SVG conserva, o `null` se se ne va. */
+function svgHref(node, value) {
+  const v = String(value ?? '').trim();
+  // Un `<a>` in un disegno e' un link che non passa da `a[href]`: via sempre.
+  if (node.localName === 'a' || !v) return null;
+  if (v.startsWith('#')) return `#${prefixedId(v.slice(1))}`;
+  if ((node.localName === 'image' || node.localName === 'feImage') && SAFE_IMAGE_HREF.test(v)) return v;
+  return null;
+}
 
 /* Una volta per libreria: gli hook di DOMPurify sono globali alla sua istanza,
    quindi valgono anche per il lettore delle pagine che sanifica da se' con
@@ -68,7 +104,15 @@ function installHooks() {
   if (hooked || typeof DOMPurify === 'undefined' || typeof DOMPurify.addHook !== 'function') return;
   DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
     if (node.namespaceURI !== SVG_NS) return;
-    if (data.attrName === 'href' || data.attrName === 'xlink:href') data.keepAttr = false;
+    if (data.attrName === 'href' || data.attrName === 'xlink:href') {
+      const kept = svgHref(node, data.attrValue);
+      if (kept === null) data.keepAttr = false;
+      else data.attrValue = kept;
+    } else if (URL_REF_ATTRS.has(data.attrName) && typeof data.attrValue === 'string') {
+      data.attrValue = data.attrValue.replace(
+        LOCAL_URL_REF, (_, q, id) => `url(${q}#${prefixedId(id)}${q})`,
+      );
+    }
   });
   hooked = true;
 }
