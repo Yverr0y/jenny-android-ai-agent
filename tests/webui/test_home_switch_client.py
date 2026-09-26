@@ -348,6 +348,7 @@ class App {
   __GO_HOME__
   __OPEN_CHAT__
   __APPLY_TRANSLATIONS__
+  __APPLY_CONVERSATION_TEXTS__
   __CREATE_NOTEBOOK__
   __OPEN_PAGES__
   __GO_BACK_ONE_ROOM__
@@ -430,6 +431,7 @@ def _harness() -> str:
         .replace("__GO_HOME__", member(src, "goHome"))
         .replace("__OPEN_CHAT__", member(src, "openChat"))
         .replace("__APPLY_TRANSLATIONS__", member(src, "_applyTranslations"))
+        .replace("__APPLY_CONVERSATION_TEXTS__", member(src, "_applyConversationTexts"))
         .replace("__CREATE_NOTEBOOK__", member(src, "createNotebook"))
         .replace("__PROJECT_WORDS__", _const_block(_read_create(), "PROJECT_WORDS"))
         .replace("__NOTEBOOK_WORDS__", _const_block(src, "NOTEBOOK_WORDS"))

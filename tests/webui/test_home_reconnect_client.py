@@ -47,7 +47,7 @@ class App {
   }
   _setWire(on) { this.log.push('wire:' + on); }
   _setRunning(running) { this._running = running; this.log.push('running:' + running); }
-  _applyTranslations() { this.log.push('translations'); }
+  _applyConversationTexts() { this.log.push('translations'); }
   _showThreadError() { this._threadFailed = true; this.log.push('error shown'); }
   __METHODS__
 }

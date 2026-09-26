@@ -485,7 +485,7 @@ class HomeApp {
          leggerla» di una storia che abbiamo appena letto. */
       if (this._threadFailed) {
         this._threadFailed = false;
-        this._applyTranslations();
+        this._applyConversationTexts();
       }
     } catch (err) {
       console.error('Thread load failed:', err);
@@ -1015,7 +1015,11 @@ class HomeApp {
     if (!target) return false;
     if (target === 'settings') {
       this._setView('chat');
-      this.homePages.goToId('settings', { animated: false });
+      /* Le stanze si aprono dalla pagina Impostazioni, e la pista di solito
+         e' ancora li': ripassarci sopra ridisegnava la fila per niente. */
+      if (this.homePages.order[this.homePages.index] !== 'settings') {
+        this.homePages.goToId('settings', { animated: false });
+      }
       return true;
     }
     this._setView(target);
@@ -1174,7 +1178,11 @@ class HomeApp {
       this.map?.stop();
       this._measureFloor?.();
       this.jenny.setOut(this._jennyWasOut);
-      this._applyConversation();
+      /* **Non** `_applyConversation`: la conversazione non e' cambiata, e
+         quello rifaceva le traduzioni di tutta la casa e ridisegnava fila e
+         Quaderni due volte a ogni ritorno (terza revisione, HJ13). Chi cambia
+         conversazione lo chiama da se' (`showConversation`); qui basta
+         l'intestazione, in fondo. */
       this.chat.keepBottom();
       this.focus?.restore();
     } else {
@@ -1189,6 +1197,7 @@ class HomeApp {
       this.input?.blur();
     }
     this._applyHead();
+    if (view === 'chat') this._reportChatOnScreen();
     return true;
   }
 
@@ -1314,10 +1323,12 @@ class HomeApp {
      tocco alla stanza in cui sei finito — e i Quaderni spostano la spunta. */
   _applyConversation() {
     const project = projectNameOf(sessionManager.currentKey);
-    this._applyTranslations();
+    /* Solo le frasi che cambiano con la conversazione, non le traduzioni di
+       tutta la casa; e la fila una volta sola, dal conteggio delle pagine
+       (`_paintPageCount`), invece di tre (HJ13). */
+    this._applyConversationTexts();
     this._applyHead();
     this._updatePagesCount(project);
-    this.strip?.draw();
     this.who?.render();
     this._reportChatOnScreen();
   }
@@ -1982,11 +1993,11 @@ class HomeApp {
     if (this.empty) this.empty.hidden = !visible;
   }
 
-  _applyTranslations() {
-    /* Tre frasi cambiano con la conversazione, e cambiano insieme: dentro un
-       quaderno il vuoto non dice «comincia tu» ma che quella conversazione non
-       c'e' ancora *e resta li'*, che e' l'unico punto in cui si puo' dire senza
-       spiegarlo che questa e' un'altra stanza. */
+  /* Tre frasi cambiano con la conversazione, e cambiano insieme: dentro un
+     quaderno il vuoto non dice «comincia tu» ma che quella conversazione non
+     c'e' ancora *e resta li'*, che e' l'unico punto in cui si puo' dire senza
+     spiegarlo che questa e' un'altra stanza. */
+  _applyConversationTexts() {
     const inNotebook = !!projectNameOf(sessionManager.currentKey);
     if (this.emptyText) {
       const empty = inNotebook ? 'home.emptyNotebook' : 'home.empty';
@@ -1995,6 +2006,10 @@ class HomeApp {
     if (this.input) {
       this.input.placeholder = i18n.t(inNotebook ? 'home.placeholderNotebook' : 'home.placeholder');
     }
+  }
+
+  _applyTranslations() {
+    this._applyConversationTexts();
     if (this.send) {
       this.send.setAttribute('aria-label', i18n.t(this._running ? 'home.stop' : 'home.send'));
     }
