@@ -1,6 +1,6 @@
 /** Mobile App — Entry point and orchestration. */
 
-import { AppState } from './shared/state.js';
+import { AppState, closeComposeMenus, composeMenuOpen } from './shared/state.js';
 import { sessionManager } from './shared/session-manager.js';
 import { scopeChip } from './shared/scope-chip.js';
 import { writeSwitch } from './shared/write-switch.js';
@@ -505,6 +505,14 @@ class MobileApp {
         name: 'drawer',
         present: () => !!this.drawer.activeDrawer,
         dismiss: () => { this.drawer.closeAll(); },
+      },
+      {
+        // Le tendine sopra il composer (scope, comandi). Stanno sulla vista,
+        // sotto ogni altro livello; prima nessuno le guardava, e Indietro tornava
+        // alla schermata di prima lasciandone una aperta (WJ5).
+        name: 'composeMenu',
+        present: () => composeMenuOpen(),
+        dismiss: () => closeComposeMenus(),
       },
     ];
   }

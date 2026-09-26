@@ -82,6 +82,7 @@ function claimComposeMenu(id) { AppState.set('composeMenu', id); }
 function onOtherComposeMenu(id, close) {
   AppState.on('composeMenu', (who) => { if (who !== id) close(); });
 }
+const composeMenus = new Set();
 __ARM_COMPOSE_MENU__
 
 /* Un elemento ridotto a quel che `render()` e `init()` toccano. `inner` decide
@@ -195,7 +196,9 @@ def test_a_second_init_registers_nothing() -> None:
         doc: docListeners, chip: chipEl.listeners, menu: menuEl.listeners,
         state: AppState.subs.length,
       };
-      assert.equal(after.doc, 2, 'click fuori ed Escape: due, non di più');
+      // Solo il tocco fuori: Escape arriva dalla catena di Indietro del guscio
+      // (WJ5 della terza revisione, v. `state.js::armComposeMenu`).
+      assert.equal(after.doc, 1, 'click fuori: uno, non di più');
 
       chip.init();
       chip.init();
@@ -213,7 +216,7 @@ def test_the_latch_does_not_swallow_the_first_init() -> None:
       const chip = mount();
       chip.init();
       assert.equal(chip._initialized, true);
-      assert.equal(docListeners, 2);
+      assert.equal(docListeners, 1);
       assert.deepEqual(AppState.subs.map(([key]) => key), ['composeMenu', 'readonlyTurn']);
       // E `init` disegna: il chip nomina la personale già prima di ogni rete.
       assert.equal(chipEl.dataset.scope, 'personal');

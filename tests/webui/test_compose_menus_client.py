@@ -165,15 +165,19 @@ def test_the_chip_click_toggles_and_does_not_reach_document() -> None:
     """)
 
 
-def test_outside_tap_and_escape_close_other_keys_do_not() -> None:
+def test_outside_tap_closes_and_escape_is_left_to_the_back_chain() -> None:
+    """Escape non e' piu' ascoltato qui: e' la scorciatoia di Indietro del
+    guscio, e la tendina e' un livello di quella catena. Ascoltato due volte,
+    la stessa pressione chiudeva la tendina **e** tornava indietro (WJ5 della
+    terza revisione; il livello e' provato in
+    ``test_compose_menu_back_layer_client.py``)."""
     _run_js(_ARMED + """
       const c = chip('commands');
       document.fire('click');
       assert.equal(c.closes, 1);
       document.fire('keydown', { key: 'Enter' });
-      assert.equal(c.closes, 1);
       document.fire('keydown', { key: 'Escape' });
-      assert.equal(c.closes, 2);
+      assert.equal(c.closes, 1);
     """)
 
 

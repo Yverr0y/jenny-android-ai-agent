@@ -60,25 +60,51 @@ function onOtherComposeMenu(id, close) {
   });
 }
 
+/* Le tendine agganciate, per chi deve sapere se ce n'è una aperta: il tasto
+   Indietro del guscio (`_overlayLayers` in `mobile-app.js`). */
+const composeMenus = new Set();
+
+/** Vero se una tendina del composer è aperta. */
+export function composeMenuOpen() {
+  for (const chip of composeMenus) if (chip._open) return true;
+  return false;
+}
+
+/** Chiude le tendine aperte; vero se ne ha chiusa almeno una. */
+export function closeComposeMenus() {
+  let closed = false;
+  for (const chip of composeMenus) {
+    if (!chip._open) continue;
+    chip.close();
+    closed = true;
+  }
+  return closed;
+}
+
 /** Aggancia una tendina della riga del composer: il chip la apre e la chiude,
- *  un tocco fuori o Escape la chiudono, e l'apertura di un'altra la chiude.
+ *  un tocco fuori la chiude, e l'apertura di un'altra la chiude.
  *
- *  *chip* porta `el`, `menu`, `toggle()` e `close()`. Il `stopPropagation()`
- *  sul click del chip è necessario — senza, il click che apre arriverebbe a
- *  `document` e la richiuderebbe nello stesso gesto — ed è anche il motivo per
- *  cui l'altro chip non vede mai quel click: per questo c'è
+ *  *chip* porta `el`, `menu`, `_open`, `toggle()` e `close()`. Il
+ *  `stopPropagation()` sul click del chip è necessario — senza, il click che
+ *  apre arriverebbe a `document` e la richiuderebbe nello stesso gesto — ed è
+ *  anche il motivo per cui l'altro chip non vede mai quel click: per questo c'è
  *  `onOtherComposeMenu`. I listener su `document` sono chiusure anonime e non
  *  si smontano: chi chiama si tiene il suo latch di `init`.
+ *
+ *  **Escape e Indietro non sono qui** (WJ5 della terza revisione). C'era un
+ *  `keydown` suo che chiudeva la tendina su Escape; ma Escape è anche la
+ *  scorciatoia del tasto Indietro del guscio, e la stessa pressione chiudeva la
+ *  tendina **e** tornava alla schermata di prima. Il tasto Indietro di Android,
+ *  al contrario, la scavalcava. Ora la tendina è un livello della catena di
+ *  Indietro (`composeMenuOpen`/`closeComposeMenus`): una pressione, un passo.
  */
 export function armComposeMenu(chip, id) {
+  composeMenus.add(chip);
   chip.el.addEventListener('click', (e) => {
     e.stopPropagation();
     chip.toggle();
   });
   chip.menu.addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('click', () => chip.close());
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') chip.close();
-  });
   onOtherComposeMenu(id, () => chip.close());
 }
