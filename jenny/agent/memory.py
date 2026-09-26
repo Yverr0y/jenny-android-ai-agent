@@ -558,17 +558,21 @@ class MemoryStore:
         content more tightly; this default only exists to catch unintentional
         large writes (e.g. an LLM echoing its input back as a "summary").
 
-        **Una sessione di progetto scrive qui, con la propria chiave** (08/09/2026).
+        **Una sessione di progetto scrive qui, con la propria chiave** (dall'08/09/2026).
         Fino a quel giorno questo metodo
         rifiutava una chiave ``project:`` e ritornava ``0``, e l'isolamento di un
         progetto era un'*assenza*. Adesso e' **una chiave piu' una destinazione**,
         ed e' un confine piu' stretto e non piu' largo: la chiave tiene la voce
-        fuori da ogni prompt (:meth:`read_recent_history_for_prompt`), e a valle
-        Dream puo' scriverne solo in ``USER.md`` (:meth:`build_dream_tools`).
+        fuori dal blocco di storia di ogni prompt
+        (:meth:`read_recent_history_for_prompt`), e a valle Dream puo' scriverne
+        solo in ``USER.md`` (:meth:`build_dream_tools`). **Non** la tiene fuori da
+        ``recall_history`` (``tools/memory_recall.py``): dalla chat personale quel
+        tool elenca e apre ogni voce del file, qualunque sia la chiave, quindi
+        anche i diari dei quaderni (progetti).
 
-        Il cancello e' caduto perche' guardava l'asse sbagliato. La regola
-        di confine e' «chi sei viaggia, dove altro
-        lavori no»: e' una regola sulla **categoria del fatto**, e questo era un
+        Il cancello e' caduto perche' guardava l'asse sbagliato. La regola del
+        confine fra progetti e' «chi sei viaggia, dove altro lavori no» (v.
+        ``docs/internals/security-model.md``): e' una regola sulla **categoria del fatto**, e questo era un
         cancello sull'**origine della sessione**. Nel verso in uscita le due
         coincidono, perche' esce solo l'identita'; in entrata no — un fatto
         identitario detto dentro un progetto e' identita', cioe' esattamente la
@@ -598,8 +602,9 @@ class MemoryStore:
         aggiornare dopo, perche' l'archiviazione gira in background: qualunque
         seconda scrittura arriverebbe a sessione ormai ricaricata, e salvare
         l'oggetto vecchio vorrebbe dire riscrivere sopra i messaggi del turno
-        intanto arrivato. Dream continua a vederla: e' la sola cosa che questo
-        flag non tocca.
+        intanto arrivato. Il flag tocca solo quel blocco: Dream continua a
+        vederla, e ``recall_history`` la elenca e la apre dalla chat personale
+        come ogni altra voce.
         """
         limit = max_chars if max_chars is not None else _HISTORY_ENTRY_HARD_CAP
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
