@@ -299,12 +299,15 @@
          Memoria — e la terza, la wiki, e' uscita del tutto dall'officina il
          21/09/2026: elenco, mappa e lettore vivono in casa. L'ordine del DOM
          e' anche quello del carosello orizzontale, che `_visibleModes()`
-         deriva da qui. -->
-    <div class="dock-item active" data-mode="chat" title="Console" data-i18n-title="nav.console"><span class="dock-flower" aria-hidden="true">✿</span><span class="dock-label" data-i18n="nav.console">Console</span></div>
-    <div class="dock-item" data-mode="brain" title="Cervello" data-i18n-title="nav.brain"><i class="ti ti-brain" aria-hidden="true"></i><span class="dock-label" data-i18n="nav.brain">Cervello</span></div>
-    <div class="dock-item" data-mode="hands" title="Mani" data-i18n-title="nav.hands"><i class="ti ti-hand-finger" aria-hidden="true"></i><span class="dock-label" data-i18n="nav.hands">Mani</span></div>
-    <div class="dock-item" data-mode="memory" title="Memoria" data-i18n-title="nav.memory"><i class="ti ti-database" aria-hidden="true"></i><span class="dock-label" data-i18n="nav.memory">Memoria</span></div>
-    <div class="dock-item" data-mode="onboarding" title="Setup" id="nav-onboarding" style="display:none" data-i18n-title="nav.onboarding"><i class="ti ti-rocket" aria-hidden="true"></i></div>
+         deriva da qui.
+         Sono `<button>` e non `<div>` (CS9 della terza revisione): con la
+         tastiera fisica del Titan 2 il dock si raggiunge col Tab e si apre con
+         Invio o Spazio, che il bottone traduce nello stesso `click`. -->
+    <button type="button" class="dock-item active" data-mode="chat" title="Console" data-i18n-title="nav.console"><span class="dock-flower" aria-hidden="true">✿</span><span class="dock-label" data-i18n="nav.console">Console</span></button>
+    <button type="button" class="dock-item" data-mode="brain" title="Cervello" data-i18n-title="nav.brain"><i class="ti ti-brain" aria-hidden="true"></i><span class="dock-label" data-i18n="nav.brain">Cervello</span></button>
+    <button type="button" class="dock-item" data-mode="hands" title="Mani" data-i18n-title="nav.hands"><i class="ti ti-hand-finger" aria-hidden="true"></i><span class="dock-label" data-i18n="nav.hands">Mani</span></button>
+    <button type="button" class="dock-item" data-mode="memory" title="Memoria" data-i18n-title="nav.memory"><i class="ti ti-database" aria-hidden="true"></i><span class="dock-label" data-i18n="nav.memory">Memoria</span></button>
+    <button type="button" class="dock-item" data-mode="onboarding" title="Setup" id="nav-onboarding" style="display:none" data-i18n-title="nav.onboarding" aria-label="Setup" data-i18n-aria="nav.onboarding"><i class="ti ti-rocket" aria-hidden="true"></i></button>
   </nav>
 
 </div><!-- /app -->

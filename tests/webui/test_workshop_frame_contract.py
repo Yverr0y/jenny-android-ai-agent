@@ -155,7 +155,10 @@ def test_the_language_switch_redoes_the_drawers_too() -> None:
 
 
 def _dock_entries() -> list[re.Match]:
-    return list(re.finditer(r'<div class="dock-item[^"]*"([^>]*)>(.*?)</div>', WORKSHOP))
+    # Bottoni dal 26/09/2026 (CS9): il ``class`` non e' piu' il primo attributo.
+    return list(
+        re.finditer(r'<button type="button" class="dock-item[^"]*"([^>]*)>(.*?)</button>', WORKSHOP)
+    )
 
 
 @pytest.mark.parametrize("mode", ("chat", "brain", "hands", "memory"))

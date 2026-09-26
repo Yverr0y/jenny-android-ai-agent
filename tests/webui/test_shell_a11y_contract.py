@@ -9,7 +9,8 @@ cose che la tengono in piedi e che si rompono in silenzio:
   (il composer della casa si chiamava «Allega» per TalkBack);
 - una `<label>` senza testo toglie al campo il nome che il segnaposto gli dava;
 - un'icona Tabler e' un glifo nell'area privata di Unicode: se non e' nascosta,
-  entra nel nome del bottone (« Jenny») o *e'* il nome (`#btn-send`).
+  entra nel nome del bottone (« Jenny») o *e'* il nome (`#btn-send`);
+- le voci del dock erano `<div>`: la tastiera del Titan 2 non ci arrivava.
 """
 
 from __future__ import annotations
@@ -174,6 +175,7 @@ _WORKSHOP_NAMED = {
     "btn-new-chat": "chat.newChat",
     "btn-attach": "chat.attach",
     "btn-send": "chat.send",
+    "nav-onboarding": "nav.onboarding",
 }
 
 
@@ -207,3 +209,40 @@ def test_the_home_fields_are_named_by_the_label_they_sit_next_to() -> None:
         node = _by_id(root, ident)
         assert node.attrs.get("aria-labelledby") == label, ident
         _by_id(root, label)
+
+
+# ── CS9: il dock dalla tastiera ─────────────────────────────────────────────
+
+
+def test_the_dock_items_are_buttons() -> None:
+    root = _tree("workshop.html")
+    dock = next(n for n in root.walk() if n.tag == "nav" and "dock" in n.classes())
+    items = [n for n in dock.walk() if "dock-item" in n.classes()]
+    assert len(items) == 5
+    for n in items:
+        assert n.tag == "button" and n.attrs.get("type") == "button", n.attrs
+        assert n.attrs.get("data-mode"), n.attrs
+    # Il fiore della Console e' testo: fuori dal nome, che e' «Console».
+    flower = next(n for n in dock.walk() if "dock-flower" in n.classes())
+    assert flower.attrs.get("aria-hidden") == "true"
+
+
+def test_the_dock_listeners_still_find_the_items() -> None:
+    """`mobile-app.js` aggancia il click per classe e `data-mode`, non per
+    tag: il bottone li porta tutti e due, e Invio/Spazio su un bottone
+    arrivano come lo stesso `click`."""
+    app = (ASSETS / "mobile-app.js").read_text(encoding="utf-8")
+    hook = re.search(
+        r"querySelectorAll\('\.dock-item\[data-mode\]'\)\.forEach\(item => \{\s*"
+        r"item\.addEventListener\('click', \(\) => this\.switchMode\(item\.dataset\.mode\)\);",
+        app,
+    )
+    assert hook, "il click del dock non si aggancia piu' a `.dock-item[data-mode]`"
+    assert not re.search(r"querySelectorAll\('div\.dock-item", app)
+
+
+def test_the_dock_button_wears_no_default_dress() -> None:
+    css = (ASSETS / "mobile-style.css").read_text(encoding="utf-8")
+    body = re.search(r"\n\.dock-item \{([^}]*)\}", css).group(1)
+    for decl in ("border: none", "background: none", "font: inherit", "margin: 0"):
+        assert decl in body, decl
