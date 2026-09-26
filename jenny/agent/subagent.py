@@ -1329,6 +1329,27 @@ class SubagentManager:
                     error_text,
                     origin, "error", origin_message_id,
                 )
+            elif result.stop_reason == "max_iterations":
+                # Il budget di iterazioni finito **non** e' un successo (AC7 della
+                # terza revisione): cadeva nel ramo buono, e l'annuncio diceva
+                # «completed successfully» con il testo di ripiego del runner come
+                # risultato. Si annuncia per quel che e', con i passi fatti. La
+                # storia Tier-2 si salva come sull'esito buono: la conversazione
+                # e' integra, e continuarla con ``subagent_send`` e' il rimedio.
+                hook.note_error("stopped: iteration budget exhausted")
+                status.state = "failed"
+                status.tool_events = list(result.tool_events)
+                partial = self._format_partial_progress(result)
+                status.result_summary = truncate_text(partial, MAX_RESULT_SUMMARY_CHARS)
+                logger.info("Subagent [{}] stopped at its iteration budget", task_id)
+                self._history.save(
+                    status.lineage_id,
+                    spec.records_key,
+                    getattr(result, "messages", None),
+                )
+                await self._announce_result(
+                    task_id, label, task, partial, origin, "budget", origin_message_id,
+                )
             else:
                 final_result = result.final_content or "Task completed but no final response was generated."
                 hook.note_result(len(final_result))
@@ -1486,6 +1507,7 @@ class SubagentManager:
             return
         status_text = {
             "ok": "completed successfully",
+            "budget": "stopped at its iteration budget before finishing",
             "cancelled": "was stopped by the user",
         }.get(status, "failed")
 
