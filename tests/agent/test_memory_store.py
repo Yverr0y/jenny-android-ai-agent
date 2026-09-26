@@ -197,6 +197,36 @@ class TestHistoryWithCursor:
         cursor = store.append_history("new event")
         assert cursor == 1
 
+    def test_next_cursor_survives_a_kill_after_an_entry_longer_than_one_block(self, store):
+        """AC11 della terza revisione: l'ultima voce si legge intera, qualunque sia la lunghezza.
+
+        ``_next_cursor`` prende il massimo fra ``.cursor`` e l'ultima voce su disco
+        proprio per il kill fra l'append e la riscrittura di ``.cursor``. Leggendo
+        solo gli ultimi 4096 byte, una voce più lunga arrivava a metà, il JSON non
+        si decodificava e restava solo ``.cursor``, indietro di uno: il cursore
+        successivo era un duplicato, e Dream saltava la seconda voce con quel numero.
+        """
+        store.append_history("breve")
+        lunga = "- [durable] " + ("dettaglio inventato " * 400)  # ~8 kB, due blocchi
+        assert store.append_history(lunga) == 2
+        # Il kill: la voce 2 è su disco, ``.cursor`` è rimasto a 1.
+        store._cursor_file.write_text("1", encoding="utf-8")
+
+        assert store.append_history("dopo il riavvio") == 3
+        cursors = [
+            json.loads(line)["cursor"]
+            for line in store.history_file.read_text(encoding="utf-8").splitlines()
+        ]
+        assert cursors == [1, 2, 3]
+
+    def test_read_last_entry_tolerates_trailing_blank_lines(self, store):
+        store.append_history("prima")
+        store.append_history("seconda " * 1000)
+        with open(store.history_file, "a", encoding="utf-8") as f:
+            f.write("\n\n   \n")
+        last = store._read_last_entry()
+        assert last is not None and last["cursor"] == 2
+
     def test_append_history_allocates_unique_cursors_under_concurrent_writes(self, store):
         """Regression: concurrent appends must not allocate duplicate cursors."""
         import threading

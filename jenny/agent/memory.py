@@ -878,20 +878,38 @@ class MemoryStore:
         return entries
 
     def _read_last_entry(self) -> dict[str, Any] | None:
-        """Read the last entry from the JSONL file efficiently."""
+        """Read the last entry from the JSONL file efficiently.
+
+        Legge all'indietro a blocchi **finché non trova l'inizio della voce**, e
+        non un blocco fisso. Con i soli ultimi 4096 byte una voce più lunga — un
+        riassunto del Consolidator arriva a 8.000 caratteri, un dump grezzo a
+        16.000 — arrivava tagliata, il JSON non si decodificava e
+        :meth:`_next_cursor` restava col solo ``.cursor``: che dopo un kill fra
+        l'append e la sua riscrittura è indietro di uno, cioè un cursore
+        duplicato (AC11 della terza revisione). Lo split sui byte ``\\n`` è
+        sicuro in UTF-8: quel byte non compare mai dentro un carattere multibyte.
+        """
+        block = 4096
         try:
             with open(self.history_file, "rb") as f:
                 f.seek(0, 2)
-                size = f.tell()
-                if size == 0:
+                pos = f.tell()
+                buf = b""
+                while pos > 0:
+                    step = min(block, pos)
+                    pos -= step
+                    f.seek(pos)
+                    buf = f.read(step) + buf
+                    tail = buf.rstrip()
+                    if not tail:
+                        continue
+                    newline = tail.rfind(b"\n")
+                    if newline >= 0:
+                        return json.loads(tail[newline + 1:].decode("utf-8"))
+                tail = buf.strip()
+                if not tail:
                     return None
-                read_size = min(size, 4096)
-                f.seek(size - read_size)
-                data = f.read().decode("utf-8")
-                lines = [line for line in data.split("\n") if line.strip()]
-                if not lines:
-                    return None
-                return json.loads(lines[-1])
+                return json.loads(tail.decode("utf-8"))
         except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
             return None
 
