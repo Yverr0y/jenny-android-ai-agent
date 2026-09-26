@@ -288,6 +288,10 @@ class HomeApp {
 
     this._wireTimer = null;
     this._threadFailed = false;
+    /* Le letture del filo in volo (v. `_readThread`), e la riga che dice che
+       non e' arrivato quando il filo non e' vuoto (v. `_showThreadError`). */
+    this._threadReads = 0;
+    this._threadNote = null;
     /* Il payload delle impostazioni, chiesto una volta e diviso fra le due
        stanze che ne leggono un campo per uno. */
     this._settings = null;
@@ -438,31 +442,74 @@ class HomeApp {
        sempre. */
     this._readName();
 
-    /* In volo: una riconnessione che arrivasse adesso non deve far partire
-       una seconda lettura sopra questa (v. `_resyncAfterReconnect`). */
-    this._threadLoading = true;
+    /* Un `session_boundary` rilegge il filo da qui, cosi' una lettura che
+       non arriva si dice come tutte le altre. */
+    this.chat.onSessionBoundary = () => this._readThread();
+    /* Un filo che non e' arrivato si riprova quando torni a guardare: la casa
+       e' il launcher, e fra un'occhiata e l'altra il gateway e' tornato. */
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'hidden') this._retryThread();
+    });
+    await this._readThread({ fresh: false });
+  }
+
+  /** Legge il filo — all'avvio, a un cambio di conversazione, dopo una
+   *  riconnessione o un `session_boundary` — e dice com'e' andata.
+   *
+   *  **Un posto solo**, e non quattro `try` diversi: prima l'avvio mostrava
+   *  l'errore e non riprovava piu', il resync lo scriveva nel log e basta, e
+   *  il `session_boundary` lasciava un rifiuto di promessa senza padrone
+   *  (terza revisione, HJ5/HJ6). Le letture si contano: finche' ce n'e' una
+   *  in volo una riconnessione non ne fa partire un'altra, e se partono lo
+   *  stesso disegna solo l'ultima (v. `HomeChat._read`). */
+  async _readThread({ fresh = true } = {}) {
+    this._threadReads += 1;
     try {
-      await this.chat.load();
+      const shown = await (fresh ? this.chat.reload() : this.chat.load());
+      if (shown === null) return;  // scavalcata: decide la lettura dopo
+      /* Una lettura riuscita toglie il messaggio d'errore precedente: se
+         restasse, il vuoto di questa conversazione direbbe «non riesco a
+         leggerla» di una storia che abbiamo appena letto. */
+      if (this._threadFailed) {
+        this._threadFailed = false;
+        this._applyTranslations();
+      }
     } catch (err) {
       console.error('Thread load failed:', err);
       api.clientLog('error', 'home.thread', String(err && err.stack || err));
       this._showThreadError();
-      return;
     } finally {
-      this._threadLoading = false;
+      this._threadReads -= 1;
     }
-    this.chat.syncEmpty();
+  }
+
+  /* Un filo che non e' arrivato, riprovato: a visibilita', a Home, quando la
+     chat torna a schermo. Niente se e' arrivato, o se una lettura e' gia' in
+     volo. */
+  _retryThread() {
+    if (!this._threadFailed || this._threadReads > 0) return;
+    this._readThread();
   }
 
   /* La storia non e' arrivata. Non si finge una conversazione vuota: una chat
      vuota e una chat irraggiungibile sono due cose diverse, e confonderle
-     significa far credere di aver perso tutto. */
+     significa far credere di aver perso tutto.
+
+     Se nel filo c'e' gia' qualcosa — un resync fallito tiene quel che c'era —
+     il vuoto non si vede, e l'avviso va **nel filo**, una riga come quelle di
+     un rifiuto: la rilettura riuscita la toglie. Una sola, anche se i
+     tentativi falliti sono tanti. */
   _showThreadError() {
     /* Il flag e' quel che impedisce a un cambio di lingua di riscriverci sopra
        "non c'e' ancora niente qui" — cioe' esattamente la bugia che questo
        messaggio esiste per non dire. */
     this._threadFailed = true;
-    if (this.emptyText) this.emptyText.textContent = i18n.t('home.threadError');
+    const text = i18n.t('home.threadError');
+    if (this.chat && !this.chat.isBlank) {
+      if (!this._threadNote?.isConnected) this._threadNote = this.chat.showNote(text);
+      return;
+    }
+    if (this.emptyText) this.emptyText.textContent = text;
     this._showEmpty(true);
   }
 
@@ -518,20 +565,7 @@ class HomeApp {
       this._autosize();
     }
     this._applyConversation();
-    try {
-      await this.chat.reload();
-      /* Una lettura riuscita toglie il messaggio d'errore precedente: se
-         restasse, il vuoto di questa conversazione direbbe «non riesco a
-         leggerla» di una storia che abbiamo appena letto. */
-      if (this._threadFailed) {
-        this._threadFailed = false;
-        this._applyTranslations();
-      }
-    } catch (err) {
-      console.error('Conversation switch failed:', err);
-      api.clientLog('error', 'home.switch', String(err && err.stack || err));
-      this._showThreadError();
-    }
+    await this._readThread();
   }
 
   /** Un quaderno nuovo, e ci si entra.
@@ -951,6 +985,8 @@ class HomeApp {
        dall'avviso di un quaderno cancellato (v. `onGoneChanged`). */
     if (!this._haComposer(entry) || this.homePages?.goneHere?.()) this.input?.blur();
     else this.focus?.restore();
+    // La chat torna a schermo: un filo che non era arrivato si riprova.
+    if (this._haComposer(entry)) this._retryThread();
     this._placeJenny();
     this.strip?.draw();
     this._applyHead();
@@ -1403,6 +1439,8 @@ class HomeApp {
        il lettore di un quaderno sopra la chat personale. */
     if (!this._setView('chat', () => this.goHome())) return;
     this.switchConversation(null);
+    // Gia' a casa, con un filo che non era arrivato: si riprova.
+    this._retryThread();
     /* Con la tastiera fisica non c'e' niente da chiudere, e a casa si torna
        per scrivere: il fuoco resta sul campo. */
     if (!this.focus?.restore()) this.input?.blur();
@@ -1526,6 +1564,7 @@ class HomeApp {
     this._closeAllOverlays();
     if (!this._setView('chat', () => this.openChat())) return true;
     this.switchConversation(null);
+    this._retryThread();
     this.chat.scrollToBottom();
     return true;
   }
@@ -1859,20 +1898,9 @@ class HomeApp {
   async _resyncAfterReconnect() {
     this._releaseTurn();
     this.jenny?._releaseTrackedTurn?.();
-    if (this._threadLoading) return;
+    if (this._threadReads > 0) return;
     if (!this._threadFailed && !this.chat.following) return;
-    this._threadLoading = true;
-    try {
-      await this.chat.reload();
-      if (this._threadFailed) {
-        this._threadFailed = false;
-        this._applyTranslations();
-      }
-    } catch (err) {
-      console.warn('home: thread resync after reconnect failed', err);
-    } finally {
-      this._threadLoading = false;
-    }
+    await this._readThread();
   }
 
   /** Vero quando il socket e' aperto. Una caduta breve non si annuncia. */

@@ -261,6 +261,7 @@ class App {
     this._personalName = 'Jenny';
     this._drafts = new Map();
     this._threadFailed = false;
+    this._threadReads = 0;
     this._running = false;
     /* Cosa è successo, in ordine. */
     this.actions = [];
@@ -330,6 +331,8 @@ class App {
   _showThreadError() { this._threadFailed = true; this.actions.push('non si legge'); }
   __SWITCH__
   __SHOW__
+  __READ_THREAD__
+  __RETRY_THREAD__
   __APPLY_CONVERSATION__
   __RELEASE_TURN__
   __CLOSE_OVERLAYS__
@@ -410,6 +413,8 @@ def _harness() -> str:
         # e qui non c'e' una pista — quindi passa dritto al corpo, che e' la
         # cosa che questo banco misura.
         .replace("__SHOW__", member(src, "showConversation"))
+        .replace("__READ_THREAD__", member(src, "_readThread"))
+        .replace("__RETRY_THREAD__", member(src, "_retryThread"))
         .replace("__APPLY_CONVERSATION__", member(src, "_applyConversation"))
         .replace("__RELEASE_TURN__", member(src, "_releaseTurn"))
         .replace("__CLOSE_OVERLAYS__", member(src, "_closeOverlays"))

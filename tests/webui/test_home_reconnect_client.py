@@ -24,11 +24,15 @@ pytestmark = requires_node
 _HARNESS = """
 import assert from 'node:assert/strict';
 
+/* Il log del client: una lettura fallita ci scrive, e qui non va da nessuna parte. */
+const api = { clientLog() {} };
+
 class App {
   constructor() {
     this.log = [];
     this._running = true;
     this._threadFailed = false;
+    this._threadReads = 0;
     this.activity = { stop: () => this.log.push('activity.stop') };
     this.jenny = { _releaseTrackedTurn: () => this.log.push('jenny.release') };
     this.gate = null;
@@ -44,6 +48,7 @@ class App {
   _setWire(on) { this.log.push('wire:' + on); }
   _setRunning(running) { this._running = running; this.log.push('running:' + running); }
   _applyTranslations() { this.log.push('translations'); }
+  _showThreadError() { this._threadFailed = true; this.log.push('error shown'); }
   __METHODS__
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -53,7 +58,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 def _run(script: str) -> None:
     src = APP_JS.read_text(encoding="utf-8")
     methods = "\n  ".join(
-        member(src, name) for name in ("_onWireOpen", "_resyncAfterReconnect", "_releaseTurn")
+        member(src, name)
+        for name in ("_onWireOpen", "_resyncAfterReconnect", "_readThread", "_releaseTurn")
     )
     run_js(_HARNESS.replace("__METHODS__", methods) + "\n" + script)
 
@@ -115,6 +121,7 @@ def test_a_thread_that_never_arrived_is_retried_even_on_the_first_open() -> None
 def test_a_failed_resync_keeps_the_error_and_does_not_throw() -> None:
     _run("""
       console.warn = () => {};
+      console.error = () => {};
       const app = new App();
       app._threadFailed = true;
       app.failReload = true;

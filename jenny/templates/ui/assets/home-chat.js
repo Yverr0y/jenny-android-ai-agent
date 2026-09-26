@@ -139,6 +139,8 @@ export class HomeChat {
     /* Il campo del messaggio è del guscio, non del filo: quando un messaggio
        torna indietro, il testo glielo ridà lui. */
     this.onSendRejected = null;
+    /* Chi rilegge il filo dopo un `session_boundary` (v. `_message`). */
+    this.onSessionBoundary = null;
 
     /* **Uno `scroll` non e' sempre un gesto.** Quando una riga compare sotto il
        filo — gli allegati in attesa, la riga di lavoro — il contenitore si
@@ -511,8 +513,12 @@ export class HomeChat {
   _message(msg) {
     if (msg.session_boundary) {
       /* Il contesto e' stato azzerato. La storia sul server e' cambiata sotto i
-         piedi: si ricarica invece di indovinare. */
-      this.reload();
+         piedi: si ricarica invece di indovinare. La rilettura la fa chi sa
+         dire che non e' arrivata (il guscio, `onSessionBoundary`); senza di
+         lui un fallimento finisce nel log, e non resta un rifiuto di promessa
+         che nessuno prende (HJ6). */
+      if (this.onSessionBoundary) this.onSessionBoundary();
+      else this.reload().catch((err) => console.warn('home: thread reload after a boundary failed', err));
       return;
     }
     // Un suggerimento di strumento e' esattamente cio' che la casa non mostra.
@@ -594,6 +600,18 @@ export class HomeChat {
     node.textContent = text;
     this._append(node);
     this.scrollToBottom();
+    return node;
+  }
+
+  /** Una riga detta dal guscio, come quelle di un rifiuto: la rilettura
+   *  dopo la toglie. Torna il nodo. */
+  showNote(text) {
+    return this._appendNote(text);
+  }
+
+  /** Vero se nel filo non c'e' niente: ne' messaggi ne' righe. */
+  get isBlank() {
+    return !this.el.querySelector(THREAD_NODES);
   }
 
   /* Un messaggio entrato da un'altra superficie mentre la chat e' aperta. */

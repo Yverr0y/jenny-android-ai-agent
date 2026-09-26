@@ -28,7 +28,9 @@ pytestmark = requires_jsdom
 
 _HEAD = """
 import assert from 'node:assert/strict';
-import { boot, tick, frame, threads, hooks, failed, thread, unhandled, FakeWS, $ } from './boot.mjs';
+import {
+  boot, tick, frame, threads, hooks, failed, thread, unhandled, FakeWS, locales, $,
+} from './boot.mjs';
 threads['websocket:default'] = { messages: [
   { role: 'user', text: 'hello' },
   { role: 'assistant', text: 'hello to you', turnId: 'h' },
@@ -131,4 +133,82 @@ assert.ok(thread().some((row) => row.startsWith('note: ')), 'la nota non e\\u201
 await app.showConversation('websocket:default');
 await tick(20);
 assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+""")
+
+
+def test_a_history_that_failed_at_startup_is_read_again() -> None:
+    """HJ5: la prima lettura fallisce; la visibilita', Home e l'apertura della
+    chat la riprovano, e finche' non riesce lo si dice."""
+    _run("""
+let reads = 0;
+let down = true;
+hooks.fetch = async (u) => {
+  if (!u.pathname.endsWith('/webui-thread')) return undefined;
+  reads += 1;
+  return down ? failed(503) : undefined;
+};
+const app = await boot();
+await tick(50);
+const errorText = app.emptyText.textContent;
+assert.ok(reads >= 1);
+assert.equal($('home-empty').hidden, false, 'la chat irraggiungibile sembra vuota');
+assert.ok([locales.it.home.threadError, locales.en.home.threadError].includes(errorText), errorText);
+let before = reads;
+
+// Ancora giu': la visibilita' riprova, e l'avviso resta.
+document.dispatchEvent(new window.Event('visibilitychange'));
+await tick(50);
+assert.equal(reads, before + 1, 'tornare a guardare non riprova');
+assert.equal(app.emptyText.textContent, errorText);
+
+// Home riprova.
+before = reads;
+app.goHome();
+await tick(50);
+assert.equal(reads, before + 1, 'Home non riprova');
+
+// L'apertura della chat da un avviso riprova, e stavolta arriva.
+down = false;
+before = reads;
+app.openChat();
+await tick(80);
+assert.equal(reads, before + 1, 'aprire la chat non riprova');
+assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+assert.equal($('home-empty').hidden, true);
+""")
+
+
+def test_a_failed_resync_keeps_the_thread_and_says_so() -> None:
+    """HJ6: la rilettura dopo una riconnessione fallisce. Il filo non si
+    svuota in silenzio: quel che c'era resta, e una riga dice che non e'
+    stato riletto; la volta dopo si riprova."""
+    _run("""
+const app = await boot();
+let down = true;
+hooks.fetch = async (u) => (down && u.pathname.endsWith('/webui-thread') ? failed(503) : undefined);
+await reconnect();
+await tick(80);
+const rows = thread();
+assert.deepEqual(rows.slice(0, 2), ['you: hello', 'jenny: hello to you'], 'il filo si e\\u2019 svuotato');
+assert.equal(rows.length, 3);
+assert.ok(rows[2].startsWith('note: '), 'il fallimento non si vede');
+down = false;
+document.dispatchEvent(new window.Event('visibilitychange'));
+await tick(80);
+assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
+assert.deepEqual(unhandled, []);
+""")
+
+
+def test_a_session_boundary_that_cannot_be_read_is_not_an_unhandled_rejection() -> None:
+    """HJ6: il ``session_boundary`` rilegge il filo; se la lettura fallisce,
+    lo si dice e non resta un rifiuto di promessa senza padrone."""
+    _run("""
+const app = await boot();
+hooks.fetch = async (u) => (u.pathname.endsWith('/webui-thread') ? failed(503) : undefined);
+frame({ event: 'message', chat_id: 'default', session_boundary: true });
+await tick(80);
+assert.deepEqual(unhandled, []);
+const rows = thread();
+assert.ok(rows.at(-1).startsWith('note: '), `nessun avviso: ${JSON.stringify(rows)}`);
 """)
