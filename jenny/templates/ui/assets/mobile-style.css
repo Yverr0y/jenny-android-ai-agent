@@ -6314,7 +6314,7 @@ body {
    un `transform` su `:active` non e' ne' l'una ne' l'altra: il bottone
    rimpiccioliva lo stesso, a scatto. Fino al 25/09/2026 lo spegnevano solo le
    tre pillole del composer e le altre venti no, quindi la stessa preferenza
-   valeva per meta' dei bottoni (revisione, voce bassa). Adesso vale per tutti,
+   valeva per meta' dei bottoni. Adesso vale per tutti,
    come dicevano le pillole: il rimpicciolimento e' la parte che quella
    preferenza chiede di togliere. Il riscontro al tocco resta a fondo, colore
    e opacita' (v. `.ibtn:active` sotto `hover: none`).

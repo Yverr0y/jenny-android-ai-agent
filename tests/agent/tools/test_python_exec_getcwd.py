@@ -23,8 +23,8 @@ working directory riportata sono la stessa cosa.** Un sandbox che risolve
 è un guardrail, è una trappola — e ci si cade scrivendo codice del tutto
 ragionevole.
 
-Ne discende, gratis, la coerenza che il review di Round 2 aveva schedato a
-parte: ``os.path.abspath`` e ``Path.resolve()`` passano entrambe da
+Ne discende, gratis, un'altra coerenza: ``os.path.abspath`` e
+``Path.resolve()`` passano entrambe da
 ``os.getcwd`` (verificato su CPython 3.11, la versione Chaquopy del device, e su
 3.14), quindi allineare `getcwd` allinea anche loro all'``open``.
 """

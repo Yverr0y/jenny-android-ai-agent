@@ -480,8 +480,8 @@ def _active_path_base() -> str | None:
 # `os.path.abspath`, `os.path.realpath`, `Path.resolve()`, `Path.absolute()` e
 # `Path.cwd()` passano tutte da `os.getcwd()` (o da `os.getcwdb()` per gli
 # argomenti `bytes`) — verificato sul 3.11 di Chaquopy, non dedotto dal
-# sorgente locale. Chiude perciò anche l'incoerenza schedata a parte dal review
-# di Round 2: `os.path.abspath("data.txt")` rispondeva `/data.txt` mentre
+# sorgente locale. Chiude perciò anche un'altra incoerenza:
+# `os.path.abspath("data.txt")` rispondeva `/data.txt` mentre
 # `open("data.txt")` leggeva dalla base, quindi il modello poteva CALCOLARE un
 # percorso con una chiamata e vederselo RIFIUTARE dalla successiva.
 #
