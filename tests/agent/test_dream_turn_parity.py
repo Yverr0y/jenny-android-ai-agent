@@ -12,6 +12,7 @@ diversamente di proposito (il cron scrive nel log).
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -166,6 +167,8 @@ async def _via_command(tmp: Path, scenario: dict[str, Any]) -> tuple[_Memory, li
         published.append(message.content)
 
     loop = SimpleNamespace(
+        # Come ``AgentLoop._schedule_background``: ``cmd_dream`` passa da qui.
+        _schedule_background=asyncio.create_task,
         bus=SimpleNamespace(publish_outbound=_publish),
         context=SimpleNamespace(memory=memory, timezone=None),
         sessions=SimpleNamespace(sessions_dir=tmp / "cmd-sessions"),

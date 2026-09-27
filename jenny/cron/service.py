@@ -4,13 +4,13 @@ import asyncio
 import json
 import time
 import uuid
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, NamedTuple
 
-from filelock import SoftFileLock
+from filelock import SoftFileLock, Timeout
 from loguru import logger
 
 from jenny.cron.session_turns import is_bound_cron_job
@@ -39,6 +39,12 @@ if TYPE_CHECKING:
     from jenny.cron.heartbeat_followup import HeartbeatFollowup
 
 _LockClass = SoftFileLock
+# Quanto aspettare il file lock del giornale prima di considerarlo stantio.
+# ``SoftFileLock`` e' un file creato con ``O_EXCL``: un processo ucciso dentro
+# il ``with`` — su Android e' il modo normale in cui il processo finisce — lo
+# lascia li', e senza timeout il prossimo avvio si pianta in ``_load_store``,
+# sincrono sull'event loop, watchdog compreso.
+_LOCK_TIMEOUT_S = 5.0
 
 
 class _LoadedStore(NamedTuple):
@@ -557,7 +563,7 @@ class CronService:
             if job_id := params.get("job_id"):
                 jobs_map.pop(job_id, None)
 
-        with self._lock:
+        with self._locked():
             with open(self._action_path, "r", encoding="utf-8") as f:
                 changed = False
                 for line in f:
@@ -579,6 +585,31 @@ class CronService:
                 self._action_path.write_text("", encoding="utf-8")
                 self._save_store()
         return
+
+    @contextmanager
+    def _locked(self):
+        """Il file lock del giornale, con timeout e recupero del lock stantio.
+
+        Il lock difende ``action.jsonl`` fra istanze; il gateway gira in un
+        solo processo, quindi un lock che non si libera entro
+        ``_LOCK_TIMEOUT_S`` e' di un processo morto e va tolto. Un secondo
+        timeout dopo la rimozione propaga: meglio un avvio che fallisce
+        rumorosamente di uno che resta appeso per sempre.
+        """
+        try:
+            self._lock.acquire(timeout=_LOCK_TIMEOUT_S)
+        except Timeout:
+            logger.warning(
+                "Cron lock {} held for more than {}s: assuming a dead holder and removing it",
+                self._lock.lock_file, _LOCK_TIMEOUT_S,
+            )
+            with suppress(OSError):
+                Path(self._lock.lock_file).unlink()
+            self._lock.acquire(timeout=_LOCK_TIMEOUT_S)
+        try:
+            yield
+        finally:
+            self._lock.release()
 
     def _load_store(self) -> CronStore | None:
         """Load jobs from disk. Reloads automatically if file was modified externally.
@@ -1203,7 +1234,7 @@ class CronService:
 
     def _append_action(self, action: Literal["add", "del"], params: dict):
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock:
+        with self._locked():
             with open(self._action_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps({"action": action, "params": params}, ensure_ascii=False) + "\n")
 

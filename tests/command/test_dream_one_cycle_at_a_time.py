@@ -91,6 +91,7 @@ class _GatedLoop:
         self.published: list[Any] = []
         self.prompts: list[str] = []
         self.gate: asyncio.Event | None = None
+        self._background_tasks: list[asyncio.Task] = []
 
     async def _publish(self, message: Any) -> None:
         self.published.append(message)
@@ -100,6 +101,12 @@ class _GatedLoop:
         if self.gate is not None:
             await self.gate.wait()
         return SimpleNamespace(content="done", metadata={"_stop_reason": "completed"})
+
+    def _schedule_background(self, coro: Any) -> None:
+        # Come ``AgentLoop._schedule_background``: il task nasce da
+        # ``asyncio.create_task``, cosi' i test che lo sostituiscono vedono
+        # ancora la stessa chiamata.
+        self._background_tasks.append(asyncio.create_task(coro))
 
     def evict_pruned_sessions(self, _keys: Any) -> None:
         pass

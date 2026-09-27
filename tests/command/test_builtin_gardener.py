@@ -41,7 +41,9 @@ def _ctx(key: str, args: str = "") -> CommandContext:
     )
     return CommandContext(
         msg=msg, session=None, key=key, raw=msg.content, args=args,
-        loop=SimpleNamespace(bus=None),
+        # ``_schedule_background`` come nell'``AgentLoop`` vero: passa da
+        # ``asyncio.create_task``, che la fixture ``started`` inghiotte.
+        loop=SimpleNamespace(bus=None, _schedule_background=asyncio.create_task),
     )
 
 

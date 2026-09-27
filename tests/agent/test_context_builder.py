@@ -136,6 +136,37 @@ class TestLoadBootstrapFiles:
         assert "Rules." in result
         assert "Soul." in result
 
+    def test_a_non_utf8_bootstrap_file_does_not_break_the_prompt(self, tmp_path):
+        """Un byte latin-1 in ``USER.md`` non spegne ogni turno dell'installazione.
+
+        I file di identita' si leggono per ogni specie di sessione: prima un
+        ``UnicodeDecodeError`` risaliva fino a «Sorry, I encountered an error»
+        su tutti i turni finche' qualcuno non ri-salvava il file.
+        """
+        (tmp_path / "AGENTS.md").write_text("Rules.", encoding="utf-8")
+        (tmp_path / "USER.md").write_bytes(b"Nome: Andr\xe9\n")
+        builder = _builder(tmp_path)
+        result = builder._load_bootstrap_files()
+        assert "## AGENTS.md" in result
+        assert "## USER.md" in result
+        assert "Nome: Andr\ufffd" in result
+
+    def test_an_unreadable_bootstrap_file_is_skipped(self, tmp_path, monkeypatch):
+        """Un ``OSError`` in lettura salta quel file e tiene gli altri."""
+        (tmp_path / "AGENTS.md").write_text("Rules.", encoding="utf-8")
+        (tmp_path / "SOUL.md").write_text("Soul.", encoding="utf-8")
+        original = Path.read_text
+
+        def _read_text(self, *args, **kwargs):
+            if self.name == "SOUL.md":
+                raise PermissionError("denied")
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _read_text)
+        result = _builder(tmp_path)._load_bootstrap_files()
+        assert "## AGENTS.md" in result
+        assert "## SOUL.md" not in result
+
     def test_all_bootstrap_files(self, tmp_path):
         for name in ContextBuilder.BOOTSTRAP_FILES:
             (tmp_path / name).write_text(f"Content of {name}", encoding="utf-8")

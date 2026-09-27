@@ -978,3 +978,31 @@ async def test_list_jobs_during_on_job_does_not_cause_stale_reload(tmp_path) -> 
         next_run = j["state"]["nextRunAtMs"]
         assert next_run is not None
         assert next_run > now_ms, f"Job '{j['name']}' next_run should be in the future"
+
+
+def test_a_stale_cron_lock_does_not_hang_the_store(tmp_path, monkeypatch):
+    """Un ``cron.lock`` lasciato da un processo morto viene tolto, non aspettato per sempre.
+
+    ``SoftFileLock`` e' un file creato con ``O_EXCL``: un kill dentro il
+    ``with`` lo lascia li', e senza timeout ``_load_store`` — sincrono, chiamato
+    da ``register_system_job`` al boot — bloccava l'event loop intero.
+    """
+    from jenny.cron import service as service_module
+
+    monkeypatch.setattr(service_module, "_LOCK_TIMEOUT_S", 0.2)
+    store_path = tmp_path / "cron" / "jobs.json"
+    store_path.parent.mkdir(parents=True)
+    # Il giornale esiste (vuoto): e' cio' che fa passare ``_load_store`` dal lock.
+    (store_path.parent / "action.jsonl").write_text("", encoding="utf-8")
+    stale_lock = tmp_path / "cron.lock"
+    stale_lock.write_text("", encoding="utf-8")
+    service = CronService(store_path)
+    assert service._lock.lock_file == str(stale_lock)
+
+    started = time.monotonic()
+    store = service._load_store()
+
+    assert store is not None
+    assert time.monotonic() - started < 2.0
+    assert not service._lock.is_locked
+    assert not stale_lock.exists()

@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from support.home_dom import requires_jsdom
 from support.js_harness import ASSETS, member, requires_node, run_module
 
 SETTINGS = (ASSETS / "mobile-settings.js").read_text(encoding="utf-8")
@@ -48,6 +49,7 @@ def _dom_run(body: str) -> dict:
 
 
 @requires_node
+@requires_jsdom
 def test_each_workshop_row_labels_its_own_control() -> None:
     """Etichetta e controllo sono legati: ``label.control`` è il campo accanto."""
     result = _dom_run(f"""
@@ -82,6 +84,7 @@ console.log(JSON.stringify({{ rows, unique: new Set(ids).size === ids.length }})
 
 
 @requires_node
+@requires_jsdom
 def test_the_icon_only_header_button_has_a_name() -> None:
     """Il bottone solo-icona si chiama come il suo ``title``; le icone tacciono."""
     result = _dom_run(f"""

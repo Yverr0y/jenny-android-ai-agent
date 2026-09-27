@@ -296,6 +296,59 @@ async def test_message_tool_allows_workspace_absolute_media_when_restricted(tmp_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("restricted", [True, False])
+@pytest.mark.parametrize(
+    "name", ["config.json", "config.json.bak", "config.json.ab12.tmp", "config.corrupt-1700.json"]
+)
+async def test_message_tool_never_attaches_the_gateway_config(tmp_path, restricted, name) -> None:
+    """``config.json`` e i suoi compagni non escono dal telefono come allegato.
+
+    Il security model promette che chiavi del provider, token Telegram e
+    password SSH non lasciano il device via ``openFile``/``shareFile``: un
+    allegato di ``message`` verso Telegram e' la stessa uscita.
+    """
+    sent: list[OutboundMessage] = []
+
+    async def _send(msg: OutboundMessage) -> None:
+        sent.append(msg)
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    secret = workspace / name
+    secret.write_text('{"apiKey": "sk-live"}', encoding="utf-8")
+    tool = MessageTool(send_callback=_send, workspace=workspace, restrict_to_workspace=restricted)
+
+    for spec in (name, str(secret)):
+        result = await tool.execute(
+            content="here you go", channel="telegram", chat_id="1", media=[spec]
+        )
+        assert result.startswith("Error: media path is not allowed"), result
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_message_tool_still_attaches_a_project_config_json(tmp_path) -> None:
+    """Il rifiuto e' sul file del gateway, non sul nome: ``proj/config.json`` passa."""
+    sent: list[OutboundMessage] = []
+
+    async def _send(msg: OutboundMessage) -> None:
+        sent.append(msg)
+
+    workspace = tmp_path / "workspace"
+    (workspace / "proj").mkdir(parents=True)
+    other = workspace / "proj" / "config.json"
+    other.write_text("{}", encoding="utf-8")
+    tool = MessageTool(send_callback=_send, workspace=workspace, restrict_to_workspace=True)
+
+    result = await tool.execute(
+        content="see attached", channel="websocket", chat_id="1", media=["proj/config.json"]
+    )
+
+    assert result == "Message sent to websocket:1 with 1 attachments"
+    assert sent[0].media == [str(other.resolve())]
+
+
+@pytest.mark.asyncio
 async def test_message_tool_passes_through_absolute_media_paths() -> None:
     sent: list[OutboundMessage] = []
 

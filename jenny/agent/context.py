@@ -1386,7 +1386,16 @@ class ContextBuilder:
             # ``CLAUDE.md``: sotto un nome che sul disco non c'e', ogni ``edit``
             # che il modello prova manca il bersaglio.
             filename = file_path.name
-            content = file_path.read_text(encoding="utf-8")
+            try:
+                # ``errors="replace"``: un byte non UTF-8 in ``USER.md`` (file
+                # copiato via adb, backup di un altro device) non deve spegnere
+                # ogni turno dell'installazione — i tre file di identita' si
+                # leggono per ogni specie di sessione. Stessa scelta gia' fatta
+                # per la mappa della wiki in ``_wiki_index_text``.
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                logger.warning("Bootstrap file {} is unreadable, skipped: {}", file_path, exc)
+                continue
             if not content.strip():
                 # File esistente ma senza contenuto: un heading con sotto il
                 # nulla, pagato a ogni turno e senza nemmeno dire cosa manca.

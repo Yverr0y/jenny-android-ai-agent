@@ -409,7 +409,11 @@ async def cmd_dream(ctx: CommandContext) -> OutboundMessage:
             channel=msg.channel, chat_id=msg.chat_id, content=DREAM_ALREADY_RUNNING,
         )
     try:
-        asyncio.create_task(_run_dream())
+        # Tracciato dal loop, non ``create_task`` nudo: cosi' lo shutdown lo
+        # aspetta (o lo cancella passando dal ``finally``) invece di lasciare
+        # Dream a meta' riscrittura di ``MEMORY.md``, e asyncio non puo'
+        # perderne il riferimento a meta' ciclo.
+        loop._schedule_background(_run_dream())
     except BaseException:
         # Se il task non arriva nemmeno a esistere, il suo ``finally`` non girerà:
         # la presa va restituita qui o resta appesa a un ciclo che non c'è.
@@ -611,7 +615,9 @@ async def cmd_gardener(ctx: CommandContext) -> OutboundMessage:
             metadata={"render_as": "text"},
         ))
 
-    asyncio.create_task(_run())
+    # Tracciato dal loop (v. ``cmd_dream``): una passata che sta scrivendo
+    # pagine non va cancellata secca dal teardown al riavvio.
+    loop._schedule_background(_run())
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id,
         content=f"Gardening {target}...",

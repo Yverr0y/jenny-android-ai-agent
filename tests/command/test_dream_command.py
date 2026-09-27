@@ -14,6 +14,7 @@ memoria non sarebbe più un comando e finirebbe al modello come messaggio.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -98,6 +99,8 @@ def loop(workspace: Path, memory: MemoryStore, published: list) -> SimpleNamespa
         return SimpleNamespace(content="done", metadata={"_stop_reason": "completed"})
 
     return SimpleNamespace(
+        # Come ``AgentLoop._schedule_background``: ``cmd_dream`` passa da qui.
+        _schedule_background=asyncio.create_task,
         bus=SimpleNamespace(publish_outbound=_publish),
         context=SimpleNamespace(memory=memory, timezone=None),
         sessions=SimpleNamespace(sessions_dir=workspace / "sessions"),

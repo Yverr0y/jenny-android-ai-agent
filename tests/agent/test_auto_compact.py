@@ -1,6 +1,7 @@
 """Tests for auto compact (idle TTL) feature."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -296,6 +297,68 @@ class TestAutoCompact:
         assert loop.auto_compact._is_expired(ts) is True
         assert loop.auto_compact._is_expired(None) is False
         assert loop.auto_compact._is_expired("") is False
+        await loop.close_background_tasks()
+
+    @pytest.mark.asyncio
+    async def test_is_expired_tolerates_an_unreadable_timestamp(self, tmp_path):
+        """Un ``updated_at`` illeggibile non e' una scadenza, e non alza.
+
+        Il valore arriva grezzo dal file di sessione (backup di un'altra
+        versione, edit a mano): prima, ``fromisoformat`` alzava dentro il giro
+        TTL di ``AgentLoop.run`` e il gateway moriva a ogni riavvio.
+        """
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        assert loop.auto_compact._is_expired("not-a-date") is False
+        assert loop.auto_compact._is_expired(1_700_000_000) is False  # type: ignore[arg-type]
+        await loop.close_background_tasks()
+
+    @pytest.mark.asyncio
+    async def test_check_expired_survives_a_corrupt_session_metadata(self, tmp_path):
+        """Un file di sessione con ``updated_at`` rovinato viene saltato, non fatto esplodere."""
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        session = loop.sessions.get_or_create(UNIFIED_SESSION_KEY)
+        session.add_message("user", "hello")
+        loop.sessions.save(session)
+        loop.sessions.invalidate(UNIFIED_SESSION_KEY)
+        path = loop.sessions._get_session_path(UNIFIED_SESSION_KEY)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert '"updated_at"' in lines[0]
+        meta = json.loads(lines[0])
+        meta["updated_at"] = "yesterday-ish"
+        path.write_text("\n".join([json.dumps(meta), *lines[1:]]) + "\n", encoding="utf-8")
+
+        scheduled: list = []
+        loop.auto_compact.check_expired(scheduled.append, active_session_keys=())
+
+        assert scheduled == []
+        await loop.close_background_tasks()
+
+    @pytest.mark.asyncio
+    async def test_run_survives_a_failing_ttl_check(self, tmp_path):
+        """``check_expired`` gira dentro un ``except``: se alza, ``run()`` non deve uscire.
+
+        Un'eccezione in un gestore ``except`` non e' ripresa dall'``except
+        Exception`` gemello dello stesso ``try``: senza la guardia dedicata
+        usciva da ``run()`` fino al ``gather`` del container.
+        """
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        ticks = 0
+
+        async def _consume_inbound():
+            nonlocal ticks
+            ticks += 1
+            if ticks >= 2:
+                loop._running = False
+            raise asyncio.TimeoutError
+
+        loop.bus.consume_inbound = _consume_inbound  # type: ignore[method-assign]
+        loop.auto_compact.check_expired = MagicMock(side_effect=RuntimeError("boom"))
+        loop._last_ttl_check = 0.0
+
+        await loop.run()
+
+        assert loop.auto_compact.check_expired.call_count >= 1
+        assert ticks == 2
         await loop.close_background_tasks()
 
     @pytest.mark.asyncio

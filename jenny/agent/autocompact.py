@@ -130,7 +130,16 @@ class AutoCompact:
         if self._ttl <= 0 or not ts:
             return False
         if isinstance(ts, str):
-            ts = datetime.fromisoformat(ts)
+            try:
+                ts = datetime.fromisoformat(ts)
+            except ValueError:
+                # ``updated_at`` arriva grezzo dal file di sessione (un backup
+                # di un'altra versione, un edit a mano): un valore illeggibile
+                # non e' una scadenza, e alzare qui — dentro il giro TTL di
+                # ``AgentLoop.run`` — spegnerebbe il gateway a ogni riavvio.
+                return False
+        if not isinstance(ts, datetime):
+            return False
         return ((now or datetime.now()) - ts).total_seconds() >= self._ttl * 60
 
     @staticmethod

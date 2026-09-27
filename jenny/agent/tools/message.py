@@ -1,6 +1,7 @@
 """Message tool for sending messages to users."""
 
 from contextvars import ContextVar
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -248,8 +249,37 @@ class MessageTool(Tool, ContextAware):
             "Do NOT use read_file to send files — that only reads content for your own analysis."
         )
 
+    # I file di configurazione nella radice del workspace: ``config.json``, il
+    # suo ``.bak``, i temporanei dello store e le copie in quarantena. Sono gli
+    # stessi nomi che il listing della WebUI nasconde
+    # (``webui/workspace_files._DEFAULT_INTERNAL_PATTERNS``) e che il
+    # ``FileProvider`` Kotlin rifiuta di condividere.
+    _CONFIG_FILE_PATTERNS = ("config.json*", "config.corrupt-*.json")
+
+    def _is_config_file(self, path: Path) -> bool:
+        """*path* e' uno dei file di configurazione nella radice del workspace?
+
+        Il security model promette che le chiavi del provider e i segreti non
+        escono dal telefono tramite ``openFile``/``shareFile``: un allegato di
+        ``message`` verso Telegram e' la stessa uscita, e va chiusa allo stesso
+        modo. Si guarda il nome **e** la cartella: un ``config.json`` di un
+        progetto dell'utente resta un file come un altro.
+        """
+        try:
+            resolved = path.resolve()
+            root = Path(self._workspace).resolve()
+        except OSError:
+            return False
+        return resolved.parent == root and any(
+            fnmatch(resolved.name, pattern) for pattern in self._CONFIG_FILE_PATTERNS
+        )
+
     def _resolve_media(self, media: list[str]) -> list[str]:
-        """Resolve local media attachments and enforce workspace restriction when enabled."""
+        """Resolve local media attachments and enforce workspace restriction when enabled.
+
+        Raises ``ValueError`` when an attachment is one of the gateway's own
+        configuration files: those never leave the device as an attachment.
+        """
         resolved: list[str] = []
         access = current_tool_workspace(
             self._workspace,
@@ -259,14 +289,20 @@ class MessageTool(Tool, ContextAware):
         for p in media:
             if p.startswith(("http://", "https://")):
                 resolved.append(p)
-            elif not access.restrict_to_workspace:
+                continue
+            if not access.restrict_to_workspace:
                 try:
                     path = _safe_expanduser(p)
                 except (RuntimeError, OSError):
                     path = Path(p)
-                resolved.append(p if path.is_absolute() else str(workspace / path))
+                local = p if path.is_absolute() else str(workspace / path)
             else:
-                resolved.append(str(resolve_workspace_path(p, workspace, access.allowed_root)))
+                local = str(resolve_workspace_path(p, workspace, access.allowed_root))
+            if self._is_config_file(Path(local)):
+                raise ValueError(
+                    f"'{p}' is a gateway configuration file and cannot be sent as an attachment"
+                )
+            resolved.append(local)
         return resolved
 
     async def execute(

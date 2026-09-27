@@ -195,6 +195,11 @@ class _FakeAgent:
         self.snapshot_before_dream = snapshot_before_dream
         self.turn_explodes = turn_explodes
         self._memory = memory
+        self._background_tasks: list[asyncio.Task] = []
+
+    def _schedule_background(self, coro: Any) -> None:
+        # Come ``AgentLoop._schedule_background``: ``cmd_dream`` passa da qui.
+        self._background_tasks.append(asyncio.create_task(coro))
 
     async def _publish(self, message: Any) -> None:
         self.published.append(message)

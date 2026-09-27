@@ -1612,10 +1612,18 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 now = time.monotonic()
                 if now - self._last_ttl_check >= self._TTL_CHECK_INTERVAL_S:
                     self._last_ttl_check = now
-                    self.auto_compact.check_expired(
-                        self._schedule_background,
-                        active_session_keys=self._pending_queues.keys(),
-                    )
+                    # Siamo dentro un gestore ``except``: un'eccezione qui non
+                    # e' ripresa dall'``except Exception`` gemello e uscirebbe
+                    # da ``run()`` — cioe' il gateway giu' per un file di
+                    # sessione rovinato, e giu' di nuovo a ogni riavvio finche'
+                    # il file resta. Il giro TTL non deve poter spegnere il loop.
+                    try:
+                        self.auto_compact.check_expired(
+                            self._schedule_background,
+                            active_session_keys=self._pending_queues.keys(),
+                        )
+                    except Exception:
+                        logger.exception("Auto-compact TTL check failed; continuing")
                 continue
             except asyncio.CancelledError:
                 # Preserve real task cancellation so shutdown can complete cleanly.
