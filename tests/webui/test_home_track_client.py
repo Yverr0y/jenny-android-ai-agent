@@ -966,6 +966,29 @@ def test_the_clipping_and_the_moving_are_two_different_elements() -> None:
     assert i < j, "l'involucro non sta piu' attorno alla pista"
 
 
+def test_the_window_has_no_room_to_scroll_sideways() -> None:
+    """Il difetto del 27/09/2026 sul Titan 2: App, poi Jenny, e la casa intera
+    resta spostata a sinistra di ~52 px CSS — fila, chat, composer.
+
+    Jenny sporge dal guscio a destra (`right` negativo), e quel che sporge era
+    spazio scorrevole della finestra: `overflow: hidden` sul `body` la ferma
+    al dito, non a un `focus()` o a uno scorrimento verso un campo che entra
+    da destra a meta' scivolata. Il guscio ritaglia in orizzontale, e con
+    `clip`: un `hidden` sarebbe di nuovo scorrevole da programma, cioe' lo
+    stesso difetto un livello piu' giu'.
+    """
+    css = (ASSETS / "home-style.css").read_text(encoding="utf-8")
+    shell = css.split("\n.home-shell {", 1)[1].split("}", 1)[0]
+    rules = re.findall(r"^\s*(overflow(?:-x)?)\s*:\s*([^;]+);", shell, re.M)
+    assert ("overflow-x", "clip") in rules, (
+        f"il guscio non ritaglia piu' in orizzontale ({rules}): quel che Jenny "
+        "sporge torna a essere spazio in cui la finestra scorre di lato"
+    )
+    assert all(v.strip() == "clip" for _, v in rules), (
+        f"{rules}: solo `clip` ritaglia senza diventare scorrevole"
+    )
+
+
 # ── Il gesto che arriva da dentro una app ───────────────────────────────────
 #
 # La pagina di una Jenny App e' **tutta** l'app, intestazione compresa: il dito

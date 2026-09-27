@@ -37,6 +37,18 @@ body.home {
      gesture di home. */
   padding-bottom: env(safe-area-inset-bottom, 0);
   box-sizing: border-box;
+  /* **La radice non deve poter scorrere di lato.** Jenny sporge a destra
+     apposta (`right` negativo, v. `.jenny-duo`), e quello che sporge dal
+     guscio diventava spazio scorrevole del documento: il `hidden` del `body`
+     passa alla finestra, che non scorre col dito ma scorre eccome da
+     programma. Toccando App e poi Jenny, a meta' scivolata qualcosa portava a
+     vista il composer che entrava da destra, e la finestra scorreva dei ~56 px
+     che lei sporge: fila, chat e composer tutti spostati a sinistra, e cosi'
+     restavano (Titan 2, 27/09/2026).
+     `clip` e non `hidden`: ritaglia senza diventare scorrevole, e il bordo del
+     guscio e' il bordo dello schermo, quindi taglia solo quel che era gia'
+     fuori vista. Solo in orizzontale: in verticale non sporge niente. */
+  overflow-x: clip;
 }
 
 /* ── La fila delle pagine ──
@@ -1381,8 +1393,9 @@ body.home {
    Non bastano i rimedi soliti: un piano di composizione proprio
    (`translateZ(0)`) sulla cornice o sul pannello non cambia niente, e nemmeno
    montarla a scivolata finita.
-   Il ritaglio **non** puo' salire al guscio: Jenny e' `position:absolute` con
-   un `right` negativo — sporge apposta — e li' verrebbe tagliata. */
+   Il ritaglio della pista **non** sale al guscio: la' ce n'e' un altro, solo
+   orizzontale e col bordo dello schermo, che esiste per un'altra ragione —
+   Jenny che sporge (v. `.home-shell`). */
 .home-showcase {
   flex: 1;
   min-height: 0;
