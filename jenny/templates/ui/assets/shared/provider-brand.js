@@ -92,8 +92,8 @@ export function getProviderBrand(name) {
  *
  *  I nomi propri (OpenAI, Mistral) sono gli stessi in ogni lingua e stanno
  *  nella tabella. Due no, e hanno la loro chiave i18n (`labelKey`): «Anthropic
- *  Compatible», che e' una descrizione e non un marchio, e la marca che manca
- *  (WJ18 della terza revisione). `label` resta in inglese per chi la legge
+ *  Compatible», che e' una descrizione e non un marchio, e la marca che manca.
+ *  `label` resta in inglese per chi la legge
  *  come dato — `shortBrand` in `home-model.js` ne toglie « Compatible» — e
  *  qui fa da ripiego se la traduzione non c'e'. *t* e' un appiglio e non un
  *  `import`, per la stessa ragione di `shared/wire-error.js`.

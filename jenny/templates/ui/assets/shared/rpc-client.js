@@ -18,7 +18,7 @@
  *  Qui passano anche le operazioni **distruttive** del file manager
  *  (`workspace.delete`/`rename`/`copy`), che non portano contenuto ma cambiano
  *  il disco: fino al 26/09/2026 erano GET di /api/, superficie di sola lettura
- *  (decisione D3 della terza revisione).
+ *  che un `<img src>` con il token nell'indirizzo poteva raggiungere.
  */
 
 import { wsManager } from './ws-manager.js';
@@ -36,8 +36,8 @@ const WS_OPEN = 1;
  *  dell'officina nascono pigri: nell'onboarding, o in un'officina aperta
  *  direttamente sul file manager, nessuno lo aveva ancora aperto e ogni comando
  *  rifiutava con «gateway offline» su un gateway vivo. Da quando qui passano
- *  anche le chiavi del provider e i comandi del file manager (terza revisione,
- *  D3 e WA2) quel caso non e' piu' raro. `connectChat` e' idempotente. Un
+ *  anche le chiavi del provider e i comandi del file manager, quel caso non
+ *  e' piu' raro. `connectChat` e' idempotente. Un
  *  `wsManager` senza `connectChat` (i finti dei banchi) si usa com'e'. */
 function whenOpen() {
   if (typeof wsManager.connectChat !== 'function') return Promise.resolve();
@@ -157,7 +157,7 @@ export const rpc = {
   /* ── I segreti ──────────────────────────────────────────────────────────
      Chiave del provider, token Telegram, password SSH: viaggiavano nella
      query di una GET, cioe' nella riga di richiesta che log e traceback
-     vedono (terza revisione, WA2). Qui stanno nel frame. Li chiamano i
+     vedono. Qui stanno nel frame. Li chiamano i
      metodi omonimi di `api`, con la stessa firma di prima. */
 
   /** L'elenco dei modelli di un provider, anche con una chiave non salvata. */

@@ -200,7 +200,7 @@
   document.addEventListener('DOMContentLoaded', syncDialogs);
 
   window.addEventListener('message', (event) => {
-    /* Solo dal guscio che ci ospita (WJ15 della terza revisione). Senza il
+    /* Solo dal guscio che ci ospita. Senza il
        controllo, qualunque frame annidato nell'app — una mappa, un video, una
        pagina esterna — poteva mandare `jenny:ui-query` e ricevere
        `outerHTML` dell'app intera, o cambiarle tema e navigazione. */

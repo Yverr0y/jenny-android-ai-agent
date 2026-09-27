@@ -163,7 +163,7 @@ export async function migrateUsage(native, local) {
  */
 /* `window.localStorage` solleva gia' alla lettura della proprieta', con i dati
    del sito bloccati: senza storage l'ordine dei lanci non si ricorda, ma il
-   lanciatore si apre (WJ21 della terza revisione). */
+   lanciatore si apre. */
 function pageStorage() {
   try {
     return typeof window === 'undefined' ? null : window.localStorage;

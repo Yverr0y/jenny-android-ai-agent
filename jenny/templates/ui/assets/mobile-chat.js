@@ -455,7 +455,7 @@ export class ChatController {
       // controllo "Apri nell'editor" funzionava ma mostrava anche il toast del
       // link inerte, perché `#workspace` non è un'ancora della conversazione.
       // `contentLinkOf` e non `closest('a[href]')`: anche `<area href>` e il
-      // `<a xlink:href>` di un `<svg>` sono link (WJ3 della terza revisione).
+      // `<a xlink:href>` di un `<svg>` sono link.
       const link = contentLinkOf(e.target);
       if (link && this.chatArea.contains(link)) {
         if (!e.defaultPrevented) this._handleContentLink(e, link);
@@ -824,8 +824,8 @@ export class ChatController {
       // in cima a un thread che c'è (`_renderThreadMessages` accoda, non
       // sostituisce).
       this._clearHistoryError();
-      /* La storia va **sopra** quel che e' arrivato vivo durante le attese
-         (WJ2 della terza revisione). Se Jenny sta rispondendo nella
+      /* La storia va **sopra** quel che e' arrivato vivo durante le attese.
+         Se Jenny sta rispondendo nella
          conversazione che si apre — un cambio di chat, una riconnessione, un
          /new — i suoi delta disegnano la bolla nella chat appena svuotata, e la
          storia accodata dopo le finiva sotto: la risposta in corso in cima e la
@@ -1824,7 +1824,7 @@ export class ChatController {
     const finalText = fullText || this._deltaBuffer;
     /* Un segmento che ha perso **tutti** i suoi delta (il bus li scarta sotto
        backpressure, e allora il gateway rimanda il testo intero nello
-       `stream_end`: PC3 della terza revisione) non ha un blocco aperto: senza
+       `stream_end`) non ha un blocco aperto: senza
        aprirlo qui, la risposta dal vivo non si vedeva affatto. Solo col testo
        del frame: un segmento di soli tool chiude senza testo, e non deve
        lasciare una bolla vuota. */
@@ -2179,7 +2179,7 @@ export class ChatController {
       item.innerHTML = `<i class="ti ti-file-code"></i><span class="chat-file-edit-name">${escapeHtml(path)}</span>${diffHtml}`;
       item.addEventListener('click', async (e) => {
         e.stopPropagation();
-        // Relativo al quaderno, in un quaderno: l'editor apre dalla radice (WJ8).
+        // Relativo al quaderno, in un quaderno: l'editor apre dalla radice.
         await this._openFileInWorkspace(
           workspacePathIn(sessionManager.currentKey, path, scopeChip.projectsDir),
         );
@@ -3406,8 +3406,7 @@ export class ChatController {
     preview.style.display = 'flex';
     // Immagini → thumbnail; qualsiasi altro file → chip con icona e nome.
     // `kind`, il secchio di `ImageHandler`: c'era `item.isImage`, un campo che
-    // l'handler non scrive piu' da `2e42db88`, e ogni foto era un chip «file»
-    // (WJ7 della terza revisione).
+    // l'handler non scrive piu' da `2e42db88`, e ogni foto era un chip «file».
     preview.innerHTML = items.map((item, i) => {
       const remove = `<button class="attach-remove" data-idx="${i}"><i class="ti ti-x"></i></button>`;
       if (item.kind === 'image') {
@@ -3450,7 +3449,7 @@ export class ChatController {
   }
 
   /* Scrive *text* nel composer **senza mandarlo** e senza buttare quel che
-   * c'era (WJ9 della terza revisione).
+   * c'era.
    *
    * Lo usano i comandi con un argomento (`/model `) e «Chiedi a Jenny» delle
    * altre viste (`MobileApp.sendInChat`). Prima riscrivevano il campo, e la
@@ -3777,8 +3776,7 @@ export class ChatController {
 
     /* La conversazione aperta, com'e' davvero: la chiave del gateway e il suo
        spazio (`websocket` per la personale, `project` per un quaderno). Erano
-       «default» e «websocket» scritti fissi, anche dentro un quaderno (WJ17
-       della terza revisione). */
+       «default» e «websocket» scritti fissi, anche dentro un quaderno. */
     const sessionId = sessionManager.currentKey || sessionManager.personalKey;
     const channel = sessionId.includes(':') ? sessionId.slice(0, sessionId.indexOf(':')) : sessionId;
 

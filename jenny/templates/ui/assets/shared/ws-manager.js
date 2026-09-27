@@ -145,7 +145,7 @@ class WebSocketManager extends EventTarget {
   /** Smette di seguire una conversazione: la toglie dall'elenco che viene
    *  ri-attaccato a ogni reconnect e, se e' un quaderno, lo dice al gateway.
    *
-   *  **Una detach lato server, dal 26/09/2026** (HJ17 della terza revisione).
+   *  **Una detach lato server, dal 26/09/2026**.
    *  Prima il gateway conosceva solo `attach`, e la connessione aperta
    *  continuava a ricevere i frame di ogni quaderno lasciato — il lavoro di
    *  un turno in un altro progetto, spedito a una vista che lo buttava. Ora

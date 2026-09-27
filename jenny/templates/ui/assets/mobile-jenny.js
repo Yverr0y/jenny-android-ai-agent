@@ -120,8 +120,8 @@ export class JennyCompanion extends JennyMascot {
      tiene aggiornato lo scope chip (`syncPlaceholder` in
      `shared/scope-chip.js`). La minichat manda nella stessa conversazione e
      con lo stesso modo, ma diceva sempre «Chiedi qualcosa»: dal Cervello si
-     scriveva in un progetto, o in sola lettura, senza saperlo (WJ14 della
-     terza revisione). Si rilegge a ogni apertura: finche' la minichat e'
+     scriveva in un progetto, o in sola lettura, senza saperlo.
+     Si rilegge a ogni apertura: finche' la minichat e'
      aperta, il chip non si puo' toccare. */
   _syncPlaceholder() {
     const chat = document.getElementById('chat-input')?.placeholder;
@@ -259,7 +259,7 @@ export class JennyCompanion extends JennyMascot {
        `agent/loop.py`), e la risposta arriva con quell'id. Si segue quindi quel
        turno — e non «il primo frame che si vede», che poteva essere di un altro
        — ma senza mostrarne il segmento che stava scorrendo: quello risponde
-       alla domanda di prima (WJ6 della terza revisione). */
+       alla domanda di prima. */
     this._streamTurnId = this._liveTurnId;
     this._skipSegment = !!this._liveTurnId && this._liveSegment;
 
@@ -388,8 +388,8 @@ export class JennyCompanion extends JennyMascot {
       case 'error':
         this.awaiting = false;
         this._skipSegment = false;
-        /* Le parole di un rifiuto sono quelle della chat (WJ13 della terza
-           revisione): `detail` e' per il log, e `reason` e' un identificatore.
+        /* Le parole di un rifiuto sono quelle della chat:
+           `detail` e' per il log, e `reason` e' un identificatore.
            Prima il fumetto mostrava l'uno o l'altro com'erano. Niente
            `plainText`: e' gia' testo, e toglierebbe i `_` dal codice. */
         this._showReply(describeWireError(msg, (key) => i18n.t(key)).text);

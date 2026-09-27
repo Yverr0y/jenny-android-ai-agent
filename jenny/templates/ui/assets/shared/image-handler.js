@@ -91,7 +91,7 @@ export class ImageHandler {
          provider che sparisce, un permesso revocato) e' un rifiuto come gli
          altri, detto con la parola del server (`decode`): prima il rifiuto
          saliva senza padrone e si portava via anche i file dopo di lui, e il
-         `onChange` finale non arrivava mai (WJ23 della terza revisione). */
+         `onChange` finale non arrivava mai. */
       let dataUrl;
       try {
         dataUrl = await this._readAsDataUrl(file);

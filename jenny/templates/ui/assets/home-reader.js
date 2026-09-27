@@ -324,7 +324,7 @@ export class HomeReader {
 
   _onClick(e) {
     /* Non solo `a[href]`: un `<area>` o un link SVG che il sanificatore
-       lasciasse passare navigherebbe il frame principale (WJ3). */
+       lasciasse passare navigherebbe il frame principale. */
     const a = contentLinkOf(e.target);
     if (!a) return;
     e.preventDefault();

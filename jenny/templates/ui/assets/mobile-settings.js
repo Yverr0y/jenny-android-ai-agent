@@ -218,7 +218,7 @@ export class SettingsController {
     try {
       const settings = await api.getSettings();
       if (this._stale(gen)) return;
-      /* Un render solo per ingresso (WJ11 della terza revisione). Passando da
+      /* Un render solo per ingresso. Passando da
          un cassetto all'altro `setDrawer` ha gia' disegnato coi dati in cache,
          e `activate()` rilegge comunque: se il server risponde con gli stessi
          dati il secondo render butterebbe via un DOM identico, e con lui

@@ -6,8 +6,8 @@
 (function () {
   // `localStorage` puo' sollevare (dati del sito bloccati, anteprima): qui
   // un errore fermerebbe l'intero script, e con lui il tema e la lingua
-  // della pagina. Si legge null e non si scrive (WJ21, HJ19 della terza
-  // revisione); la stessa regola di `readStorage` in shared/utils.js.
+  // della pagina. Si legge null e non si scrive;
+  // la stessa regola di `readStorage` in shared/utils.js.
   function read(key) {
     try { return localStorage.getItem(key); } catch (_) { return null; }
   }

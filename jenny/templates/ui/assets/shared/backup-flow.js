@@ -46,8 +46,8 @@ export const NATIVE_ANSWER_GRACE_MS = 60000;
 
 /** La risposta del nativo a *start()*, per lo slot *slot* di `_pending`.
  *
- *  **Con una cintura**, come i dialoghi di questo file (WJ16 della terza
- *  revisione): se la risposta non arriva mai — il picker ucciso, un
+ *  **Con una cintura**, come i dialoghi di questo file:
+ *  se la risposta non arriva mai — il picker ucciso, un
  *  `evaluateJavascript` perso — la Promise restava appesa, e con lei `_busy`:
  *  export, import e restore morivano in silenzio fino al ricaricamento della
  *  pagina. Ora, tornati visibili dopo il picker, se entro

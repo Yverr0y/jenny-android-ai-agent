@@ -211,7 +211,7 @@ export function setTheme(id) {
   const theme = getTheme(MIGRATION[id] || id) || getTheme(DEFAULT_THEME);
   document.documentElement.setAttribute('data-theme', theme.id);
   // Una preferenza: se lo storage la rifiuta, il tema si applica lo stesso
-  // e al prossimo avvio si riparte dal default (WJ21 della terza revisione).
+  // e al prossimo avvio si riparte dal default.
   try {
     localStorage.setItem('tc-theme', theme.id);
   } catch (_) {

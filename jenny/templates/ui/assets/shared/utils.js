@@ -145,7 +145,7 @@ export async function copyToClipboard(text) {
  *  attempting to fetch resource» in Firefox, «Load failed» in Safari. Tutto il
  *  resto — un `TypeError` del codice, un `Error('Cron failed: 500')` — non e'
  *  la rete, e dire «errore di rete» a chi ha il Wi-Fi acceso lo manda a
- *  cercare il guasto nel posto sbagliato (WJ23 della terza revisione). */
+ *  cercare il guasto nel posto sbagliato. */
 export function isNetworkFailure(reason) {
   if (!reason || reason.name !== 'TypeError') return reason?.name === 'NetworkError';
   return /failed to fetch|networkerror|load failed|network request failed/i.test(
@@ -158,7 +158,7 @@ export function isNetworkFailure(reason) {
    piena, `localStorage` **solleva** — gia' leggendo la proprieta', non solo
    scrivendo. Chiamato nudo dal caricamento di un modulo (`state.js` leggeva il
    tema cosi') l'errore si portava via l'intero grafo degli import, cioe' la
-   pagina (WJ21, HJ19 della terza revisione). Qui si legge `null` e si scrive
+   pagina. Qui si legge `null` e si scrive
    niente: sono tutte preferenze, e senza si riparte dai default. */
 
 export function readStorage(key) {

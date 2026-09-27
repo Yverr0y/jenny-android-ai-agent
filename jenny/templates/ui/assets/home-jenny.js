@@ -249,7 +249,7 @@ export class HomeJenny {
       if (err?.status !== 404) {
         console.warn('home.jenny: rules not read', err);
         /* E si richiedono alla prossima apertura: col segno alzato il campo
-           restava vuoto fino al riavvio della casa (HJ12). */
+           restava vuoto fino al riavvio della casa. */
         this._rulesAsked = false;
         return;
       }

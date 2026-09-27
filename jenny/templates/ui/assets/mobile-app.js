@@ -46,7 +46,7 @@ window.addEventListener('unhandledrejection', (e) => {
   console.error('Unhandled rejection:', e.reason);
   const detail = e.reason && e.reason.stack ? e.reason.stack : String(e.reason);
   api.clientLog('error', 'unhandledrejection', detail);
-  // Non ogni rifiuto e' la rete (WJ23): un difetto del codice si dice tale.
+  // Non ogni rifiuto e' la rete: un difetto del codice si dice tale.
   showToast(i18n.t(isNetworkFailure(e.reason) ? 'common.networkError' : 'common.genericError'), 'error');
 });
 
@@ -367,7 +367,7 @@ class MobileApp {
     /* Cmd/Ctrl+,: le impostazioni, cioe' il Cervello (modello e provider),
        la prima delle tre voci del dock che le dividono. Apriva il modo
        `settings`, che non e' nel dock: tutti i sedici gruppi in una pagina e
-       nessuna voce accesa (WJ12 della terza revisione). Gia' dentro uno dei
+       nessuna voce accesa. Gia' dentro uno dei
        tre cassetti, non si fa niente: si e' gia' nelle impostazioni. */
     keyboard.register('mod+,', () => {
       if (VIEW_OF[this.currentMode] === 'settings') return;
@@ -516,7 +516,7 @@ class MobileApp {
       {
         // Le tendine sopra il composer (scope, comandi). Stanno sulla vista,
         // sotto ogni altro livello; prima nessuno le guardava, e Indietro tornava
-        // alla schermata di prima lasciandone una aperta (WJ5).
+        // alla schermata di prima lasciandone una aperta.
         name: 'composeMenu',
         present: () => composeMenuOpen(),
         dismiss: () => closeComposeMenus(),
@@ -715,7 +715,7 @@ class MobileApp {
     const chat = this.controllers?.chat;
     if (!chat?.input) return;
     /* Da `prefillComposer`: la bozza che c'era non si butta, torna appena la
-       richiesta parte (WJ9 della terza revisione). */
+       richiesta parte. */
     chat.prefillComposer(text);
   }
 
@@ -850,8 +850,8 @@ class MobileApp {
        vorrebbe dire un frame col cassetto di prima. */
     next.setDrawer?.(VIEW_OF[mode] === 'settings' ? mode : null);
     if (next.ready) {
-      /* Il `ready` puo' risolvere dopo che si e' gia' andati altrove (WJ4 della
-         terza revisione): attivare allora vorrebbe dire una chat attiva su una
+      /* Il `ready` puo' risolvere dopo che si e' gia' andati altrove:
+         attivare allora vorrebbe dire una chat attiva su una
          vista nascosta, che chiama `chatOpened` e cancella avvisi che nessuno
          ha visto. Si attiva solo se il modo e' ancora questo. E un `ready`
          rifiutato non resta un rifiuto non gestito. */

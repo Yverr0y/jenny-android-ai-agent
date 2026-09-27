@@ -77,7 +77,7 @@ const HISTORY_PAGE_SIZE = 50;
 
 /* I nodi che fanno il filo: quel che una rilettura butta e ridisegna. Le
    righe di rifiuto (`.home-note`) comprese: sono un fatto della conversazione
-   in cui sono nate, e senza restavano nel filo di quella dopo (HJ10). La
+   in cui sono nate, e senza restavano nel filo di quella dopo. La
    storia non le porta, quindi una rilettura della stessa le perde — ed e' il
    prezzo giusto: quel rifiuto l'hai gia' letto, e il messaggio e' tornato nel
    campo. */
@@ -115,7 +115,7 @@ export class HomeChat {
        scrivendo, un messaggio tuo. Quei nodi nascono *durante* la lettura e
        vanno *sotto* la storia che arriva dopo di loro — prima la storia si
        appendeva in fondo, e la bolla viva finiva sopra tutta la
-       conversazione (terza revisione, HJ1).
+       conversazione.
 
        `_shownKey` e' la conversazione che il filo mostra: una rilettura della
        stessa tiene quel che c'e' finche' la storia non e' pronta, una di
@@ -127,7 +127,7 @@ export class HomeChat {
     /* **Una lettura sola disegna: l'ultima.** Due riletture della stessa
        conversazione insieme — un resync durante un cambio, un
        `session_boundary` durante un resync — disegnavano ognuna la sua
-       storia, e il filo usciva doppio (HJ7). Chi parte dopo sa di piu', e
+       storia, e il filo usciva doppio. Chi parte dopo sa di piu', e
        quella partita prima si scarta da se' quando torna. */
     this._readGen = 0;
     this._live = new WeakSet();
@@ -210,7 +210,7 @@ export class HomeChat {
   _onClick(e) {
     /* Una pastiglia di file e' un `<a>` anche lei, ma non e' un link del
        testo: non e' Jenny ad averla scritta, e la regola dei link la dava per
-       inerte (HJ4, regressione di `a1b8b1e3`). Si apre col visore. */
+       inerte (una regressione di `a1b8b1e3`). Si apre col visore. */
     const file = e.target.closest('a.home-file');
     if (file && this.el.contains(file)) {
       e.preventDefault();
@@ -218,7 +218,7 @@ export class HomeChat {
       return;
     }
     /* Non solo `a[href]`: un `<area href>` o un link SVG sono link anche loro,
-       e un tocco lasciato passare navigava il frame principale (WJ3). */
+       e un tocco lasciato passare navigava il frame principale. */
     const link = contentLinkOf(e.target);
     if (link && this.el.contains(link)) {
       if (!e.defaultPrevented) this._openLink(e, link);
@@ -234,7 +234,7 @@ export class HomeChat {
     e.preventDefault();
     const target = contentLinkTarget(contentLinkHref(a), window.location);
     if (target?.kind === 'hash') {
-      /* L'id del titolo e' quello sanificato (`user-content-…`, HJ8), e si
+      /* L'id del titolo e' quello sanificato (`user-content-…`), e si
          cerca solo dentro il filo: un id del guscio non e' un bersaglio. */
       const anchor = findContentAnchor(this.el, target.id);
       if (anchor) anchor.scrollIntoView({ block: 'start' });
@@ -528,7 +528,7 @@ export class HomeChat {
     this._cancelRender();
     /* Un segmento che ha perso **tutti** i suoi delta — il bus li scarta
        sotto backpressure, e lo `stream_end` porta allora il testo intero
-       (terza revisione, PC3) — arriva qui senza un blocco aperto: il testo
+       — arriva qui senza un blocco aperto: il testo
        va disegnato lo stesso, o dal vivo la risposta non si vede. */
     if (!this.blockNode && fullText) this._ensureBlock();
     const finalText = fullText || this.buffer;
@@ -549,7 +549,7 @@ export class HomeChat {
          piedi: si ricarica invece di indovinare. La rilettura la fa chi sa
          dire che non e' arrivata (il guscio, `onSessionBoundary`); senza di
          lui un fallimento finisce nel log, e non resta un rifiuto di promessa
-         che nessuno prende (HJ6). */
+         che nessuno prende. */
       if (this.onSessionBoundary) this.onSessionBoundary();
       else this.reload().catch((err) => console.warn('home: thread reload after a boundary failed', err));
       return;

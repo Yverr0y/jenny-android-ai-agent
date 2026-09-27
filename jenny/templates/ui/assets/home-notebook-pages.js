@@ -219,7 +219,7 @@ export class NotebookPages {
   /* La mappa si chiede al guscio, che la importa al primo tocco. Se non
      arriva — il modulo, o il suo disegno — lo si dice nella linguetta: prima
      la promessa non la prendeva nessuno, e la linguetta restava vuota con un
-     rifiuto senza padrone (terza revisione, HJ18). Il guscio dimentica
+     rifiuto senza padrone. Il guscio dimentica
      l'import fallito, quindi il tocco dopo riprova. */
   async _needMap() {
     const token = this._token;

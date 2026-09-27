@@ -90,7 +90,7 @@ export function projectNameOf(key) {
  *  Nella chat di un quaderno i percorsi — quelli dei file che Jenny ha
  *  modificato, per esempio — sono relativi al quaderno (`<dir>/<nome>/`), e
  *  l'editor dell'officina li apre dalla radice del workspace: aperti com'erano
- *  davano 404 (WJ8 della terza revisione). Nella personale, o con un percorso
+ *  davano 404. Nella personale, o con un percorso
  *  assoluto, si torna com'e'.
  *
  *  @param {string} key   la chiave della conversazione

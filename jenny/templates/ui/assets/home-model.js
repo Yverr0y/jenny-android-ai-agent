@@ -222,7 +222,7 @@ export class HomeModel {
       showToast(i18n.t('home.model.keySaved'), 'success');
     } catch (err) {
       /* Il motivo nel log, e a schermo una frase nella lingua di chi legge:
-         `err.message` era il testo inglese del server (HJ14). */
+         `err.message` era il testo inglese del server. */
       console.warn('home.model: key not saved', err);
       showToast(i18n.t('home.model.keyFailed'), 'error');
     }
@@ -247,8 +247,8 @@ export class HomeModel {
     if (!provider || !this.modelsEl) return;
     /* Un elenco che non e' arrivato non si tiene: si richiede alla prossima
        apertura. Tenuto, la stanza diceva «non e' arrivato» fino al riavvio
-       della casa, che e' il launcher e vive per giorni (terza revisione,
-       HJ12). Quel che il provider ha risposto — anche «serve una chiave» —
+       della casa, che e' il launcher e vive per giorni.
+       Quel che il provider ha risposto — anche «serve una chiave» —
        si tiene: e' una risposta, non una rete andata male. */
     if (this._catalogs.has(provider) && !this._catalogs.get(provider).failed) {
       this._paintModels();

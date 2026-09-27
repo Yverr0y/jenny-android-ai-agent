@@ -210,7 +210,7 @@ export class WorkspaceController {
     // user navigates rapidly (only the latest navigateTo() writes the grid).
     this._navToken = 0;
     // Lo stesso per `openFile`: due tocchi in fila fanno due letture, e vince
-    // l'ultimo tocco, non l'ultima risposta (terza revisione, WJ1).
+    // l'ultimo tocco, non l'ultima risposta.
     this._openToken = 0;
     // Object URL delle thumbnail correnti, revocati a ogni re-render della
     // griglia per non accumulare blob in memoria.
@@ -413,7 +413,7 @@ export class WorkspaceController {
        della scheda di Memoria (`mount`), che non e' una richiesta di chiudere
        niente: riportare la vista a `explorer` rendeva il file modificato
        irraggiungibile — `activate` rimanda a Memoria — e il testo restava in un
-       viewer nascosto, perso alla prossima apertura (terza revisione, WJ1). La
+       viewer nascosto, perso alla prossima apertura. La
        griglia si disegna lo stesso; chi apre un altro file passa dalla
        conferma di `openFile`. Un editor pulito si lascia andare come prima. */
     if (!(this.viewMode === 'editor' && this._dirty)) {
@@ -880,7 +880,7 @@ export class WorkspaceController {
       window.mobileApp?.switchMode('workspace');
       return;
     }
-    // Un altro file al posto di un buffer sporco: prima si chiede (WJ1).
+    // Un altro file al posto di un buffer sporco: prima si chiede.
     if (this._dirty && !(await this._mayReplaceBuffer())) return;
 
     const token = ++this._openToken;
@@ -913,8 +913,7 @@ export class WorkspaceController {
    *
    *  Lo chiamano le strade che **riempiono** l'editor con un altro file —
    *  `openFile`, e il ripiego di `openWithSystemApp` — perche'
-   *  `_enterEditorView` il buffer lo azzera: prima lo facevano senza chiedere
-   *  (terza revisione, WJ1). */
+   *  `_enterEditorView` il buffer lo azzera: prima lo facevano senza chiedere. */
   async _mayReplaceBuffer() {
     if (!this._dirty) return true;
     // La tastiera giu' prima della modale: v. `_confirmDiscard`.
@@ -957,7 +956,7 @@ export class WorkspaceController {
         if (await bridge.openFile(fullPath)) return;
       } catch (e) { /* bridge rotto: si ripiega sul download */ }
     }
-    // Il ripiego occupa la vista dell'editor: non sopra un buffer sporco (WJ1).
+    // Il ripiego occupa la vista dell'editor: non sopra un buffer sporco.
     if (this._dirty && !(await this._mayReplaceBuffer())) return;
     this._enterEditorView(fullPath, name);
     this.renderBinary(name, fullPath);
@@ -1070,8 +1069,8 @@ export class WorkspaceController {
       }
       /* Pulito solo se nell'editor c'e' ancora **quel** testo di **quel** file.
          Quel che si e' scritto durante l'`await` non e' salvato, e azzerare il
-         flag lo faceva credere: la conferma di uscita non sarebbe comparsa
-         (terza revisione, WJ22). Il bottone torna attivo per salvarlo. */
+         flag lo faceva credere: la conferma di uscita non sarebbe comparsa.
+         Il bottone torna attivo per salvarlo. */
       if (this.currentPath !== path || this.editor?.getValue() !== content) {
         if (btn) { btn.textContent = i18n.t('workspace.save'); btn.disabled = false; }
         return;
@@ -1131,8 +1130,8 @@ export class WorkspaceController {
   }
 
   /* «Scarica» era un `<a download>` verso `/api/workspace/download`: un link
-     nudo non porta il Bearer, e il gateway rispondeva 401 — sempre (terza
-     revisione, WJ10). Adesso e' un bottone che passa da `_downloadBinary`. */
+     nudo non porta il Bearer, e il gateway rispondeva 401 — sempre.
+     Adesso e' un bottone che passa da `_downloadBinary`. */
   renderBinary(filename, path) {
     this.viewerEl.innerHTML = `
       <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--text-faint);">

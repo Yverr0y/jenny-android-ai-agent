@@ -172,7 +172,7 @@ export class HomePages {
    *
    *  **Una scrittura manda l'elenco intero**, quindi scriverne uno mai letto
    *  vuol dire riscrivere sul server le sole pagine fisse: il primo «Metti
-   *  come pagina» cancellava tutte quelle che c'erano (terza revisione, HJ2).
+   *  come pagina» cancellava tutte quelle che c'erano.
    *  Finche' e' falso non parte nessuna scrittura (v. `ensureKnown`). */
   get known() {
     return this._known;

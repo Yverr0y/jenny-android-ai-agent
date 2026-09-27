@@ -15,8 +15,8 @@
  */
 
 /* Letture e scritture che non sollevano: con lo storage negato le preferenze
-   tornano ai default e non si salvano, ma la mascotte c'e' (HJ19, WJ21 della
-   terza revisione). La regola di `readStorage` in `utils.js`, qui a mano
+   tornano ai default e non si salvano, ma la mascotte c'e'.
+   La regola di `readStorage` in `utils.js`, qui a mano
    perche' questo modulo non importa niente. */
 function readStorage(key) {
   try {

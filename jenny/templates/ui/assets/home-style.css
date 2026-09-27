@@ -344,7 +344,7 @@ body.home {
 .home-path-root:active { color: var(--text); }
 
 /* Cede, ma non fino a sparire: a 360 px del nome del quaderno restavano 15 px
-   — «U.» — e a 320 niente (CS13 della terza revisione). Cinque em sono
+   — «U.» — e a 320 niente. Cinque em sono
    quattro o cinque lettere maiuscole spaziate piu' i puntini: abbastanza per
    riconoscere il quaderno, che il resto della pagina ripete per esteso. */
 .home-path-here {
@@ -407,7 +407,7 @@ body.home {
 
 /* Su uno schermo stretto l'interruttore tiene le icone e il numero, e le
    parole le dice solo a chi non vede: «Chat | Pagine 3» sono 172 px, che a
-   360 lasciavano al nome del quaderno una lettera (CS13). Nascoste alla
+   360 lasciavano al nome del quaderno una lettera. Nascoste alla
    vista e non tolte — sono il nome dei due bottoni per TalkBack. Il Titan 2
    (590 px) le vede ancora tutte. */
 @media (max-width: 480px) {
@@ -453,8 +453,8 @@ body.home {
 }
 /* Sul fondo acceso il grigio del numero non si legge: prende il colore della
    parola. Non piu' «un po' piu' tenue» con l'opacita': a 0,75 il numero
-   scendeva sotto 4,5:1 nei temi in cui `--on-accent` ci sta appena sopra
-   (CS4). Lo distingue dalla parola il peso, 500 contro 600. */
+   scendeva sotto 4,5:1 nei temi in cui `--on-accent` ci sta appena sopra.
+   Lo distingue dalla parola il peso, 500 contro 600. */
 .home-view-seg.is-on .home-view-count {
   color: var(--on-accent);
 }
@@ -645,7 +645,7 @@ body.home {
   align-items: center;
   gap: 4px;
   /* Il margine a sinistra sta sul campo (`.home-input`) e non qui: la
-     pastiglia e' un `<div>` e non piu' una `<label>` (CS2), e un tocco sul
+     pastiglia e' un `<div>` e non piu' una `<label>`, e un tocco sul
      margine deve cadere ancora nel campo. */
   padding: 0 4px 0 0;
   border: 1px solid var(--border);
@@ -662,7 +662,7 @@ body.home {
 
 /* Il fuoco del campo: bordo del colore dell'anello **e** piu' spesso (1px di
    ombra piena sopra il bordo). Solo il colore non basta: in Fumetto bordo,
-   bordo forte e accento sono lo stesso nero (CS5). Si accende quando il fuoco
+   bordo forte e accento sono lo stesso nero. Si accende quando il fuoco
    si vede: il campo sempre, la graffetta solo da tastiera — un suo tocco col
    dito non accende la pastiglia (v. `.compose-pill` in officina). */
 .home-field:has(:focus-visible) { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
@@ -1090,8 +1090,7 @@ body.home {
 }
 /* L'area di tocco e' piu' grande del disegno: la crocetta resta da 20 px, ma
    un anello invisibile di 6 px tutt'attorno porta il bersaglio a 32 px —
-   sopra i 24 di WCAG 2.5.8, che 20 px da soli non facevano (CS16 della terza
-   revisione). */
+   sopra i 24 di WCAG 2.5.8, che 20 px da soli non facevano. */
 .home-pending-x::after {
   content: '';
   position: absolute;
@@ -1599,7 +1598,7 @@ body.home {
   font-weight: 600;
 }
 
-/* La pastiglia e' un `<div>` (CS2/CS10): il campo la copre tutta, lente
+/* La pastiglia e' un `<div>`: il campo la copre tutta, lente
    compresa, cosi' un tocco ovunque ci scrive — che era l'unica cosa per cui
    c'era la `<label>`, e la `<label>` vuota toglieva al campo il nome. */
 .home-search {
@@ -1626,7 +1625,7 @@ body.home {
 .home-search[hidden] { display: none; }
 
 /* Il campo toglie il suo anello (`outline: none` qui sotto): il fuoco lo dice
-   la pastiglia, come il composer. Prima non lo diceva nessuno (CS5). */
+   la pastiglia, come il composer. Prima non lo diceva nessuno. */
 .home-search:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 
 .home-search-input {
@@ -1709,7 +1708,7 @@ body.home {
 
    Quindi qui `concepts` prendeva `--ok`, e `entities` restava `--error`.
    Dal 26/09/2026 nessuno dei due: un'entita' non e' un errore, e in Y2K il
-   verde di `--ok` stava a 1,7:1 sul fondo (CS14 della terza revisione). La
+   verde di `--ok` stava a 1,7:1 sul fondo. La
    coppia e' `--group-concepts`/`--group-entities` (in `mobile-style.css`),
    scelta per separarsi in tutti e sette i temi — lo misura il banco. Il
    grafo dell'officina ha lo stesso scontro e non l'ho toccato — la' la legenda
@@ -1792,7 +1791,7 @@ body.home {
   /* Un URL o una parola piu' lunghi della riga vanno a capo invece di
      allargare la pagina: prima il lettore intero scorreva di lato (957 px di
      contenuto in 590). `break-word` e non `anywhere`: non tocca la larghezza
-     minima delle celle, che le tabelle qui sotto non devono spezzare (CS6). */
+     minima delle celle, che le tabelle qui sotto non devono spezzare. */
   overflow-wrap: break-word;
 }
 
@@ -1972,7 +1971,7 @@ body.home {
    si stringe sotto le parole che contiene: nessuna parola spezzata a meta'
    in una cella, e la pagina resta ferma. La stessa resa in tre posti — la
    chat e il lettore della casa, la chat dell'officina — perche' e' la stessa
-   tabella (CS6/CS17 della terza revisione). `fit-content`: la scatola e'
+   tabella. `fit-content`: la scatola e'
    larga quanto la tabella, cosi' il bordo non gira attorno a un vuoto. */
 .home-reader-body table {
   display: block;
@@ -2104,7 +2103,7 @@ body.home {
   color: var(--bg);
   /* Piu' tenue del nome, ma non quanto prima: a 0,62 la frase stava sotto
      4,5:1 sul fondo invertito in Kyoto (4,23) e Synthwave (4,44), misurato
-     in Chrome (CS4). */
+     in Chrome. */
   opacity: 0.8;
 }
 
@@ -2202,7 +2201,7 @@ body.home {
      le regole `[data-theme]` di `mobile-style.css` le riscrivono i token: un
      `var()` qui dentro e' il grigio *di quel tema* sul fondo *di questo* —
      «Fumetto» a 2,76:1 su Kyoto. Il colore gia' calcolato dal genitore arriva
-     invece intatto (CS4). */
+     invece intatto. */
   color: inherit;
   font-family: inherit;
   font-size: 10px;
@@ -2608,7 +2607,7 @@ body.home {
    il bottone era identico a quello di un aggiornamento qualunque. */
 .home-save.is-critical {
   background: var(--error);
-  /* Non `#fff`: su `--error` il bianco sta a 3,6:1 nel tema di serie (CS12). */
+  /* Non `#fff`: su `--error` il bianco sta a 3,6:1 nel tema di serie. */
   color: var(--on-error);
 }
 

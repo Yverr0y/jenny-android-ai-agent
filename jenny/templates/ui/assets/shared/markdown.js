@@ -37,7 +37,7 @@ export const SANITIZE_CONFIG = Object.freeze({
   FORBID_TAGS: ['form', 'input', 'button', 'textarea', 'select', 'area', 'map'],
   SANITIZE_NAMED_PROPS: true,
 });
-/*  Le altre tre righe, del 26/09/2026 (HJ8, WJ3 della terza revisione):
+/*  Le altre tre righe, del 26/09/2026:
  *
  *  - **`SANITIZE_NAMED_PROPS`**: DOMPurify di serie conserva `id` e `name`. Una
  *    risposta con `<span id="oc-confirm-ok">` metteva nel documento un secondo

@@ -2,8 +2,8 @@
 
 /* Il tema salvato, letto **al caricamento del modulo**, prima di tutto il
    resto: un `localStorage` che solleva (dati del sito bloccati, anteprima)
-   qui si portava via l'intero grafo degli import, cioe' la pagina (WJ21 della
-   terza revisione). La stessa regola di `readStorage` in `utils.js`, scritta
+   qui si portava via l'intero grafo degli import, cioe' la pagina.
+   La stessa regola di `readStorage` in `utils.js`, scritta
    qui perche' questo modulo non importa niente, e i banchi lo sanno. */
 function savedTheme() {
   try {
@@ -104,7 +104,7 @@ export function closeComposeMenus() {
  *  `onOtherComposeMenu`. I listener su `document` sono chiusure anonime e non
  *  si smontano: chi chiama si tiene il suo latch di `init`.
  *
- *  **Escape e Indietro non sono qui** (WJ5 della terza revisione). C'era un
+ *  **Escape e Indietro non sono qui**. C'era un
  *  `keydown` suo che chiudeva la tendina su Escape; ma Escape è anche la
  *  scorciatoia del tasto Indietro del guscio, e la stessa pressione chiudeva la
  *  tendina **e** tornava alla schermata di prima. Il tasto Indietro di Android,

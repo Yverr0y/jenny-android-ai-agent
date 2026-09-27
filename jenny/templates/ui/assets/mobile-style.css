@@ -32,7 +32,7 @@
      cui la tinta del riempimento non arriva a 4,5:1 come parola (Synthwave,
      Kyoto, Y2K): la stessa tonalita', piu' chiara sui fondi scuri e piu' scura
      su quelli chiari. Il riempimento resta `--accent`, con `--on-accent` sopra
-     (CS4 della terza revisione; il banco e' in `test_home_you_contract.py`). */
+     (il banco e' in `test_home_you_contract.py`). */
   --text-accent: var(--accent);
   /* L'anello del fuoco da tastiera (la tastiera fisica del Titan 2). Non
      `--accent`: in Y2K il riempimento sta a 2,2:1 sul fondo, e in Fumetto
@@ -40,7 +40,7 @@
      solo colore del bordo li' non cambia niente. `--text-accent` arriva a
      4,5:1 su ogni fondo per costruzione (lo misura il banco), e i campi lo
      portano **piu' spesso** del bordo, cosi' si vede anche dove il colore
-     coincide (CS5 della terza revisione). */
+     coincide. */
   --focus-ring: var(--text-accent);
   --ok:            #f4f1ea;
   --ok-rgb:        244, 241, 234;
@@ -64,8 +64,8 @@
   /* I due gruppi delle pagine di un quaderno (il pallino dell'elenco, il nodo
      della mappa): una coppia di tinte **sue**, non due stati. Erano `--ok` ed
      `--error`, cioe' «riuscito» e «sbagliato»: ogni entita' aveva il pallino
-     di un errore, e in Y2K il verde dei concetti stava a 1,7:1 sul fondo (CS14
-     della terza revisione). Blu e oro, piu' scuri nei tre temi chiari: sopra
+     di un errore, e in Y2K il verde dei concetti stava a 1,7:1 sul fondo.
+     Blu e oro, piu' scuri nei tre temi chiari: sopra
      3:1 su ogni fondo (e' un segno, non una parola), lontani fra loro e dal
      grigio di «altro». Il banco e' in `test_notebook_groups_contract.py`. */
   --group-concepts: #6aa9e8;
@@ -1068,7 +1068,7 @@ body {
   flex: 1;
   min-width: 0;
   padding: 7px 0 9px;
-  /* Le voci sono `<button>` (CS9): via il vestito di serie, cosi' restano
+  /* Le voci sono `<button>`: via il vestito di serie, cosi' restano
      identiche a quando erano `<div>`. */
   margin: 0;
   border: none;
@@ -1212,8 +1212,7 @@ body {
 .drawer-close i, .launcher-close i { font-size: 13px; }
 /* L'area di tocco e' piu' grande del disegno: la crocetta resta da 22 px, ma
    un anello invisibile di 5 px tutt'attorno porta il bersaglio a 32 px —
-   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano (CS16 della terza
-   revisione). */
+   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano. */
 .drawer-close::after, .launcher-close::after,
 .file-preview-close::after, .session-info-close::after {
   content: '';
@@ -1569,8 +1568,8 @@ body {
   transform: translateY(8px);
   pointer-events: none;
   /* Nascosto davvero, non solo trasparente: a opacita' 0 restava nell'ordine
-     del Tab, e la tastiera fisica ci si fermava sopra senza mostrare niente
-     (CS11 della terza revisione). `visibility` scatta **dopo** la dissolvenza
+     del Tab, e la tastiera fisica ci si fermava sopra senza mostrare niente.
+     `visibility` scatta **dopo** la dissolvenza
      quando sparisce (ritardo 0,15s) e subito quando compare. */
   visibility: hidden;
   transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
@@ -1998,7 +1997,7 @@ body {
    si stringe sotto le parole che contiene: nessuna parola spezzata a meta'
    in una cella, e la pagina resta ferma. La stessa resa in tre posti — la
    chat e il lettore della casa, la chat dell'officina — perche' e' la stessa
-   tabella (CS6/CS17 della terza revisione). `fit-content`: la scatola e'
+   tabella. `fit-content`: la scatola e'
    larga quanto la tabella, cosi' il bordo non gira attorno a un vuoto. */
 .chat-content table {
   display: block;
@@ -3145,8 +3144,7 @@ body {
 .launcher-search-clear i { font-size: 12px; }
 /* L'area di tocco e' piu' grande del disegno: la crocetta resta da 22 px, ma
    un anello invisibile di 5 px tutt'attorno porta il bersaglio a 32 px —
-   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano (CS16 della terza
-   revisione). */
+   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano. */
 .launcher-search-clear::after {
   content: '';
   position: absolute;
@@ -3333,7 +3331,7 @@ body {
   max-width: 90vw;
   word-break: break-word;
   /* Uno sotto l'altro, non uno sopra l'altro: due toast di fila stavano
-     tutti e due a `top: 50px`, e il secondo copriva il primo (CS12). Ogni
+     tutti e due a `top: 50px`, e il secondo copriva il primo. Ogni
      toast e' un'ancora (`--toast`) e si mette sotto il **precedente** — il
      browser sceglie come ancora l'ultimo toast venuto prima di lui, mai se'
      stesso — con 8 px d'aria; il primo non ne ha e resta a 50 px. Quando uno
@@ -5515,7 +5513,7 @@ body {
    restava ingrandito e del colore di passaggio. Prima lo si «annullava» con
    `revert` sotto `(hover: none)`, ma `revert` torna al foglio **del
    browser**, non allo stile di base: dopo un tocco il bottone diventava
-   grigio di sistema con il testo bianco (CS8 della terza revisione). Qui il
+   grigio di sistema con il testo bianco. Qui il
    passaggio del mouse non si accende affatto, e non c'e' niente da annullare. */
 @media (hover: hover) {
   .onboarding-btn:not(:disabled):hover { transform: scale(1.03); }

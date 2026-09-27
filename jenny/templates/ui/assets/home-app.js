@@ -110,7 +110,7 @@ const REPORT_SHEET = 'home-audit-dialog';
 /* I dialoghi condivisi con l'officina (`shared/dialog.js`): «Elimina
    quaderno?», «Nuovo nome per …», il dettaglio. Si aprono *da* una scheda o da
    una pagina, quindi stanno sopra a tutto il resto, e Indietro li chiude per
-   primi (terza revisione, HJ3). */
+   primi. */
 const SHARED_DIALOGS = ['oc-confirm-dialog', 'oc-prompt-dialog', 'oc-detail-dialog'];
 
 /* Le stesse domande dell'officina, dette come si dicono in casa.
@@ -285,8 +285,8 @@ class HomeApp {
        del server (4 immagini, 8 MB l'una): superarli fa rifiutare il messaggio
        intero, quindi i limiti devono stare da una parte sola. */
     /* **Uno per conversazione**, come le bozze: una foto scelta dentro un
-       quaderno partiva col primo messaggio della conversazione personale
-       (terza revisione, HJ9). `this.files` e' quello della conversazione a
+       quaderno partiva col primo messaggio della conversazione personale.
+       `this.files` e' quello della conversazione a
        schermo, e cambia con lei (v. `showConversation`). */
     this._attachments = new Map();
     this.files = this._filesFor(sessionManager.currentKey);
@@ -304,7 +304,7 @@ class HomeApp {
        senza chiederlo: un salvataggio, un nome, la finestra flottante, una
        versione. Una lettura partita prima di uno di questi non ridipinge piu'
        niente quando torna — prima riportava a schermo il modello e il nome di
-       prima del salvataggio (terza revisione, HJ11). */
+       prima del salvataggio. */
     this._settingsGen = 0;
     this._running = false;
 
@@ -464,8 +464,8 @@ class HomeApp {
    *
    *  **Un posto solo**, e non quattro `try` diversi: prima l'avvio mostrava
    *  l'errore e non riprovava piu', il resync lo scriveva nel log e basta, e
-   *  il `session_boundary` lasciava un rifiuto di promessa senza padrone
-   *  (terza revisione, HJ5/HJ6). Le letture si contano: finche' ce n'e' una
+   *  il `session_boundary` lasciava un rifiuto di promessa senza padrone.
+   *  Le letture si contano: finche' ce n'e' una
    *  in volo una riconnessione non ne fa partire un'altra, e se partono lo
    *  stesso disegna solo l'ultima (v. `HomeChat._read`). */
   async _readThread({ fresh = true } = {}) {
@@ -1173,7 +1173,7 @@ class HomeApp {
       this.jenny.setOut(this._jennyWasOut);
       /* **Non** `_applyConversation`: la conversazione non e' cambiata, e
          quello rifaceva le traduzioni di tutta la casa e ridisegnava fila e
-         Quaderni due volte a ogni ritorno (terza revisione, HJ13). Chi cambia
+         Quaderni due volte a ogni ritorno. Chi cambia
          conversazione lo chiama da se' (`showConversation`); qui basta
          l'intestazione, in fondo. */
       this.chat.keepBottom();
@@ -1318,7 +1318,7 @@ class HomeApp {
     const project = projectNameOf(sessionManager.currentKey);
     /* Solo le frasi che cambiano con la conversazione, non le traduzioni di
        tutta la casa; e la fila una volta sola, dal conteggio delle pagine
-       (`_paintPageCount`), invece di tre (HJ13). */
+       (`_paintPageCount`), invece di tre. */
     this._applyConversationTexts();
     this._applyHead();
     this._updatePagesCount(project);
@@ -1369,8 +1369,7 @@ class HomeApp {
 
   /* L'etichetta del bottone delle pagine, per chi non vede il libro: il
      quaderno e quante pagine ha. La rifa' anche `_applyTranslations`: scritta
-     solo dal conteggio, dopo un cambio di lingua restava nella precedente
-     (terza revisione, RC9). */
+     solo dal conteggio, dopo un cambio di lingua restava nella precedente. */
   _labelPagesButton() {
     const notebook = this._pageCount?.notebook || null;
     if (!notebook) return;
@@ -1395,7 +1394,7 @@ class HomeApp {
    *
    *  In casa non aspetta niente: la coda di chi aspettava la pagina visibile
    *  era copiata dall'officina, dove la usa l'onboarding, e qui nessuno ci
-   *  metteva niente (terza revisione, HJ16). Il metodo resta perche' il
+   *  metteva niente. Il metodo resta perche' il
    *  guscio nativo lo chiama comunque, e un `undefined` sarebbe un TypeError
    *  dentro la sua `evaluateJavascript`. */
   onNativeReady() {
@@ -1531,7 +1530,7 @@ class HomeApp {
        `close()` solo se nessuno l'ha rifiutato — cosi' chi aspettava la
        risposta la riceve, ed e' un no. Mancavano: Indietro portava via la
        pagina sotto «Elimina quaderno?», e la domanda restava aperta sopra
-       un'altra (HJ3). */
+       un'altra. */
     for (const id of SHARED_DIALOGS) {
       const dialog = document.getElementById(id);
       if (dialog?.open) {

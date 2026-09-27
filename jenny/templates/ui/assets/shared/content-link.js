@@ -76,7 +76,7 @@ export function findContentAnchor(root, id) {
  *
  *  Non basta `closest('a[href]')`: un `<area href>` o un `<a xlink:href>` dentro
  *  un `<svg>` sono link anche loro, e un tocco lasciato passare navigava il
- *  frame principale (WJ3 della terza revisione). Il sanificatore oggi li
+ *  frame principale. Il sanificatore oggi li
  *  toglie; questo e' il secondo cancello, per quel che una sua versione futura
  *  lasciasse passare. `[*|href]` prende l'attributo in qualunque namespace. */
 export function contentLinkOf(target) {

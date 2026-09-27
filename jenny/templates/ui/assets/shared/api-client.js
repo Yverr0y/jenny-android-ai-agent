@@ -348,8 +348,8 @@ class ApiClient {
 
   /* Rinomina, cancellazione e copia viaggiano sul WebSocket (`rpc`, comandi
      `workspace.rename`/`delete`/`copy`): cambiano il disco, e fino al
-     26/09/2026 erano GET su /api/, che e' per letture e parametri corti
-     (decisione D3 della terza revisione). Stanno qui con
+     26/09/2026 erano GET su /api/, che e' per letture e parametri corti,
+     e un `<img src>` con il token nell'indirizzo poteva farli partire. Stanno qui con
      la stessa firma perche' i chiamanti non cambino; l'errore porta il `code`
      del comando e il messaggio del server. Import **dinamico** per la stessa
      ragione di `savePages`. */
@@ -391,7 +391,7 @@ class ApiClient {
      `updateProvider`, `saveTelegramToken`, `saveSshHost` — viaggiano sul
      WebSocket (`rpc`): la chiave API, il token del bot e la password SSH
      stavano nella query di una GET, cioe' nella riga di richiesta che log e
-     traceback vedono (terza revisione, WA2). Firma e forma della risposta sono
+     traceback vedono. Firma e forma della risposta sono
      quelle di prima, cosi' i chiamanti non cambiano; l'errore porta il
      messaggio del server e il `code` del comando. Import **dinamico** per la
      stessa ragione di `savePages`. */
