@@ -160,8 +160,12 @@ def test_she_is_on_top_of_everything_in_the_workshop() -> None:
 
 
 
+# La soglia dello schermo basso: la stessa per il dock e per lei.
+SHORT_SCREEN = "380px"
+
+
 def test_a_short_screen_hides_her_only_where_the_dock_goes() -> None:
-    """Sotto i 500 px d'altezza l'officina toglie il dock, e lei con lui. La
+    """A schermo basso l'officina toglie il dock, e lei con lui. La
     casa il dock non ce l'ha: la regola valeva anche li', e la nascondeva
     senza motivo (misurato il 25/09/2026). E nessun `!important` per
     nasconderla: le regole vincono per ordine, e il commento che diceva il
@@ -169,7 +173,7 @@ def test_a_short_screen_hides_her_only_where_the_dock_goes() -> None:
     css = WORKSHOP_CSS.read_text(encoding="utf-8")
     short = [
         (sel, body) for sel, body, ctx in css_levels.rules(css)
-        if any("max-height: 500px" in at for at in ctx) and "jenny" in sel
+        if any(f"max-height: {SHORT_SCREEN}" in at for at in ctx) and "jenny" in sel
     ]
     assert short, "la regola che la nasconde a schermo basso non si trova piu'"
     for sel, _ in short:
@@ -180,3 +184,23 @@ def test_a_short_screen_hides_her_only_where_the_dock_goes() -> None:
         if "jenny" in sel and "display: none" in body
     ]
     assert hidden and not [c for c in hidden if "!important" in c], hidden
+
+
+def test_the_square_emulator_keeps_the_workshop_dock() -> None:
+    """Con la soglia a 500 px il dock spariva sul quadrato di `jenny_square`
+    (1440 px a 480 dpi: 480 px CSS, 432 tolte barra di stato e barra dei
+    gesti), e l'officina restava senza navigazione. La soglia sta sotto quel
+    quadrato, ed e' una sola per dock e mascotte."""
+    css = WORKSHOP_CSS.read_text(encoding="utf-8")
+    dock = {
+        at for sel, body, ctx in css_levels.rules(css)
+        if sel.strip() == ".dock" and "display: none" in body
+        for at in ctx if "max-height" in at
+    }
+    assert len(dock) == 1, f"il dock sparisce sotto piu' soglie, o nessuna: {dock}"
+    (query,) = dock
+    m = re.search(r"max-height:\s*(\d+)px", query)
+    assert m and int(m.group(1)) < 432, f"il dock sparisce sul quadrato dell'emulatore: {query}"
+    assert f"max-height: {SHORT_SCREEN}" in query, (
+        "dock e mascotte non spariscono piu' alla stessa altezza"
+    )
