@@ -5,8 +5,7 @@ La mappa arriva con ``import()`` al primo tocco sulla sua linguetta
 (``HomeApp._drawMap``), e ``_drawMap`` rilancia l'errore apposta, cosi' il
 tocco dopo riprova. Ma chi la chiamava — ``NotebookPages.showTab`` — non la
 aspettava ne' la prendeva: un modulo che non arrivava (rete giu', un file
-mancante nel pacchetto) era un ``unhandledrejection`` e una linguetta vuota
-(terza revisione, HJ18).
+mancante nel pacchetto) era un ``unhandledrejection`` e una linguetta vuota.
 """
 
 from __future__ import annotations

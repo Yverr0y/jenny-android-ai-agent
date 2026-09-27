@@ -1,6 +1,6 @@
 """Ctrl+, apre un cassetto del dock, non una schermata che il dock non ha.
 
-WJ12 della terza revisione (26/09/2026). La scorciatoia faceva
+La scorciatoia faceva
 ``switchMode('settings')``: un modo che esiste ancora (serve ai banchi e al
 controller istanziato da solo) ma non e' nel dock — sedici gruppi in una
 pagina e nessuna voce accesa. Ora apre il Cervello, o niente se si e' gia' in

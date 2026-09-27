@@ -4,8 +4,7 @@
 del chiamante (Python) dentro un ``catch`` muto. L'API è ``@UiThread``, e anche
 sul main rifiuta un profilo già caricato in memoria (lo dice la documentazione
 di ``ProfileStore``): la cancellazione non riusciva mai, e nessuno lo vedeva.
-Cookie e login sopravvivevano a ``browser_close`` e ai riavvii (H4 della
-revisione profonda, 25/09).
+Cookie e login sopravvivevano a ``browser_close`` e ai riavvii.
 
 La regola ha tre pezzi, e il Kotlin non gira in CI: si fissa sul **codice**
 (commenti e stringhe esclusi, v. ``support/kotlin_source.py``).

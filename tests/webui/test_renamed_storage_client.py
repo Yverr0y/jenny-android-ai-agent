@@ -78,7 +78,7 @@ def test_the_first_paint_reads_the_old_mascot_keys_too() -> None:
     l'aggiornamento la chiave nuova non c'e' ancora, e senza il nome vecchio la
     mascotte nascosta lampeggerebbe visibile per un fotogramma."""
     source = (ASSETS / "bootstrap.js").read_text(encoding="utf-8")
-    # `read` e' la lettura protetta del file (WJ21 della terza revisione).
+    # `read` e' la lettura protetta del file.
     assert "read('jenny-mascotte-visible')" in source
     assert "read('jenny-mascotte-size')" in source
 

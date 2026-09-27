@@ -1,4 +1,4 @@
-"""``my set`` con una chiave puntata passa dalla stessa allowlist delle chiavi semplici (TL9).
+"""``my set`` con una chiave puntata passa dalla stessa allowlist delle chiavi semplici.
 
 Una chiave semplice su un attributo reale del loop è modificabile solo se è in
 ``RESTRICTED`` (o è ``model_preset``): capability fail-closed. Con una chiave
@@ -7,7 +7,7 @@ foglia contro i dunder e i nomi sensibili, poi faceva ``setattr``:
 ``tools_config.restrict_to_workspace=false`` passava (con ``allowSet`` acceso,
 spento di serie). Ora ogni segmento passa da ``BLOCKED`` e un attributo annidato
 non è mai scrivibile; ``tools_config`` è bloccato anche in lettura, come gli
-altri confini di sicurezza. Terza revisione.
+altri confini di sicurezza.
 """
 
 from __future__ import annotations

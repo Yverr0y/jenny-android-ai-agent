@@ -1,6 +1,6 @@
 """Lasciare un quaderno lo dice al gateway; lasciare la chat personale no.
 
-HJ17 della terza revisione (26/09/2026), lato client. ``detachChat``
+Lato client. ``detachChat``
 (``shared/ws-manager.js``) toglieva la chat solo dall'elenco locale: il gateway
 conosceva solo ``attach``, e la connessione continuava a ricevere i frame di
 ogni quaderno lasciato. Ora, a socket aperto e per una chiave ``project:``,

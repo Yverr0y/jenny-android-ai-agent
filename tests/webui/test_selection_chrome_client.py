@@ -177,7 +177,7 @@ def test_a_tap_on_the_text_itself_is_left_to_the_browser() -> None:
 
 
 def test_a_selection_inside_a_field_is_not_a_reading_selection() -> None:
-    """TD16 della terza revisione: ``activeElement`` era sempre ``null`` qui, e
+    """``activeElement`` era sempre ``null`` qui, e
     ``inEditableField`` non girava mai — toglierlo lasciava tutto verde. Un
     campo col fuoco (il composer, un input, un ``contenteditable``) ha una sua
     selezione, che non e' la lettura di una bolla: niente chrome trasparente."""

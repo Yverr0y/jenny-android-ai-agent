@@ -174,7 +174,7 @@ def test_sweep_safety_copies(tmp_path: Path) -> None:
 
 
 def test_a_fresh_safety_copy_of_an_old_workspace_is_kept(tmp_path: Path) -> None:
-    """CF14: la copia di sicurezza e' il workspace **rinominato**, e il rename tiene
+    """La copia di sicurezza e' il workspace **rinominato**, e il rename tiene
     l'mtime della cartella — l'ultima volta che nella sua radice si e' creato o
     tolto qualcosa, magari mesi prima. La pulizia all'avvio, che gira subito dopo
     il ripristino, la cancellava al primo boot. L'eta' e' quella del restore,

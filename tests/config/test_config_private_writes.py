@@ -2,7 +2,7 @@
 
 Portano le chiavi API e il secret che emette i token della WebUI. Prima si
 scriveva il file, lo si rinominava al suo posto e solo dopo si faceva ``chmod``:
-per quella finestra il file definitivo aveva i permessi di default (CF18).
+per quella finestra il file definitivo aveva i permessi di default.
 Qui si guarda il temporaneo **nel momento della rename**.
 """
 

@@ -4,8 +4,7 @@
 solo a successo: ogni ritorno d'errore (pagina non partita, blocco della
 guardia, errore di rete) lasciava la pagina di prima caricata e **senza
 perimetro**, cioè libera di portare la sessione ovunque con un click. Durante
-l'apertura il perimetro è già sospeso da ``openInFlight``; azzerarlo non serve
-(M13 della revisione profonda, 25/09).
+l'apertura il perimetro è già sospeso da ``openInFlight``; azzerarlo non serve.
 
 Il Kotlin non gira in CI: la regola si fissa sul **codice**, commenti e
 stringhe esclusi (``support/kotlin_source.py``).

@@ -1,4 +1,4 @@
-"""AC5 della terza revisione: un surrogato UTF-16 isolato non avvelena la sessione.
+"""Un surrogato UTF-16 isolato non avvelena la sessione.
 
 ``json.loads`` accetta ``"\\ud83d"`` — metà di un'emoji, quel che resta di un frame
 tagliato nel mezzo — e ne fa una stringa Python con un code point che in UTF-8 non

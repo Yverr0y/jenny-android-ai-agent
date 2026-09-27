@@ -3,7 +3,7 @@
 ``SshBridge.get`` confrontava ``maxBytes`` con la dimensione che il server
 dichiara (``stat``) e poi scaricava senza contare: un file che cresce durante
 il trasferimento, o un server che mente sulla dimensione, scriveva sul telefono
-oltre il tetto (voce AN16 della terza revisione). Ora lo stream conta, si
+oltre il tetto. Ora lo stream conta, si
 interrompe oltre il tetto, e il download finisce su un ``.part`` rinominato
 solo a trasferimento completo, così un'interruzione non lascia un file tronco.
 """

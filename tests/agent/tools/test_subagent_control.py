@@ -167,8 +167,8 @@ def test_system_prompt_follows_the_mode(tmp_path: Path) -> None:
 class _OwnsTheTestIds:
     """I subagent dei test (``abc``, ``xyz``) sono della sessione del tool.
 
-    ``cancel``/``restart``/``send`` controllano la sessione d'origine (TL16
-    della terza revisione): i fake la dichiarano con gli stessi due metodi che
+    ``cancel``/``restart``/``send`` controllano la sessione d'origine:
+    i fake la dichiarano con gli stessi due metodi che
     il manager vero espone.
     """
 
@@ -526,7 +526,7 @@ def test_orchestrator_prompt_teaches_send_vs_spawn() -> None:
     assert "Follow-ups" in prompt
 
 
-# -- la sessione d'origine (TL16, terza revisione) ------------------------------
+# -- la sessione d'origine ------------------------------
 
 
 class _TwoSessionsManager:

@@ -1,6 +1,6 @@
 """Un solo ``on_progress`` muto per i run interni, e un esito Dream senza doppioni.
 
-Basse della revisione profonda: ``_silent`` stava in quattro copie (Dream, il suo
+Due doppioni: ``_silent`` stava in quattro copie (Dream, il suo
 review pass, il giardiniere, i job di sistema del cron); ``DreamTurnResult``
 portava ``resp``, che nessuno leggeva, e ``advanced``, da tenere allineato a mano
 a ``outcome`` in ogni ``return``.

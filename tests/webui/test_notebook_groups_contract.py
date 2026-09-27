@@ -1,4 +1,4 @@
-"""I gruppi delle pagine hanno tinte loro, non quelle degli stati (CS14 della terza revisione).
+"""I gruppi delle pagine hanno tinte loro, non quelle degli stati.
 
 Il pallino di un'entita' era `--error` — il colore di «qualcosa e' andato
 storto» su ogni persona e luogo di un quaderno — e quello di un concetto era

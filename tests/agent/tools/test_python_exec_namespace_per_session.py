@@ -1,4 +1,4 @@
-"""Ogni sessione ha il suo namespace ``python_exec`` (TL8, terza revisione).
+"""Ogni sessione ha il suo namespace ``python_exec``.
 
 Il tool è uno per processo e il suo ``PythonNamespace`` teneva un solo dizionario
 di globali per tutte le sessioni: una variabile assegnata dentro un quaderno si

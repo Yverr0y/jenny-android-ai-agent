@@ -1,18 +1,18 @@
 """Il testo non salvato dell'editor del workspace non si perde per strada.
 
-Terza revisione, tre voci dell'officina, in node sui metodi veri di
+Tre difetti dell'officina, in node sui metodi veri di
 ``mobile-workspace.js`` (gli altri sono stub: il DOM finto misurerebbe se'
 stesso):
 
-* **WJ1** — il buffer sporco si perdeva senza una domanda. Il cassetto di
+* il buffer sporco si perdeva senza una domanda. Il cassetto di
   Memoria ridisegna la scheda (``mount`` → ``navigateTo``), ``navigateTo``
   riportava la vista a ``explorer`` e l'editor diventava irraggiungibile;
   aprire un altro file (``openFile`` → ``_enterEditorView``) lo sovrascriveva.
   E ``openFile`` non aveva un token: la risposta di una lettura vecchia poteva
   arrivare dopo quella nuova e aprire il file sbagliato.
-* **WJ22** — ``saveFile`` rimetteva ``_dirty = false`` dopo l'``await``: quel
+* ``saveFile`` rimetteva ``_dirty = false`` dopo l'``await``: quel
   che si era scritto *durante* il salvataggio risultava salvato e non lo era.
-* **WJ10** — il «Scarica» dei binari era un ``<a download>`` verso
+* il «Scarica» dei binari era un ``<a download>`` verso
   ``/api/workspace/download``, senza il Bearer: 401, sempre.
 """
 
@@ -170,7 +170,7 @@ def _run(script: str) -> None:
     run_js(_harness() + "\n" + script + "\nconsole.log('ok');")
 
 
-# -- WJ1 ---------------------------------------------------------------------
+# -- Il buffer sporco non si perde senza una domanda ------------------------
 
 
 def test_redrawing_the_card_keeps_a_dirty_editor_reachable() -> None:
@@ -293,7 +293,7 @@ assert.equal(c._dirty, true);
 """)
 
 
-# -- WJ22 --------------------------------------------------------------------
+# -- Quel che si scrive durante il salvataggio resta da salvare -------------
 
 
 def test_typing_during_a_save_keeps_the_buffer_dirty() -> None:
@@ -322,7 +322,7 @@ assert.equal(c._dirty, false);
 """)
 
 
-# -- WJ10 --------------------------------------------------------------------
+# -- «Scarica» porta il Bearer ----------------------------------------------
 
 
 def test_the_binary_download_carries_the_credentials() -> None:

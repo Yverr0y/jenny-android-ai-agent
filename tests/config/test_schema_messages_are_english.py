@@ -1,4 +1,4 @@
-"""I messaggi dello schema della casa sono in inglese (Q6 della revisione).
+"""I messaggi dello schema della casa sono in inglese, come i log (AGENTS.md).
 
 Finiscono nel log (``casa page dropped (...)``) e nella risposta di un
 salvataggio rifiutato: AGENTS.md vuole i log in inglese, e un rifiuto che il

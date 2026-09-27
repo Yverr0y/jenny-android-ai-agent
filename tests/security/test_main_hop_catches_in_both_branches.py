@@ -3,7 +3,7 @@
 La KDoc lo prometteva «sempre», ma il ramo che esegue il blocco sul posto (già
 sul main) non aveva il ``try``: un'eccezione lì risaliva al chiamante. Oggi
 nessun chiamante arriva dal main thread, ma la regola scritta deve valere
-sulla carta e nel codice. Visto dalla revisione finale della pulizia (25/09).
+sulla carta e nel codice.
 
 Il Kotlin non gira in CI: la regola si fissa sul sorgente — **senza commenti**
 e cercando la struttura, non le parole: il commento del ramo dice già «log e
@@ -34,7 +34,7 @@ MAIN_HOP = (
 )
 
 # ``block()`` dentro un ``try``, con un ``catch (e: Throwable)`` subito dopo: un
-# ``Error`` sul main abbatte il processo quanto un'eccezione (voce AN10).
+# ``Error`` sul main abbatte il processo quanto un'eccezione.
 _TRY_BLOCK_CATCH = re.compile(
     r"\btry\s*\{[^{}]*\bblock\(\)[^{}]*\}\s*catch\s*\(\s*e\s*:\s*Throwable\s*\)\s*\{([^{}]*)\}"
 )
@@ -77,7 +77,7 @@ def test_the_posted_branch_catches_too() -> None:
 
 def test_a_timed_out_block_does_not_run_later() -> None:
     """A tetto scaduto ``call`` risponde *fallback*; il blocco restava in coda e
-    girava dopo, facendo ciò che si era appena detto non fatto (voce AN10).
+    girava dopo, facendo ciò che si era appena detto non fatto.
     Ora il blocco postato prende lo stato prima di partire, e il chiamante lo
     abbandona prima di rispondere: uno dei due soltanto."""
     body = _call_body()

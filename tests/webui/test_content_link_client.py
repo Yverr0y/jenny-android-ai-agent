@@ -198,7 +198,7 @@ def test_the_home_chat_opens_the_web_outside() -> None:
 
 def test_the_home_chat_does_not_let_an_image_map_navigate() -> None:
     """Un ``<area href>`` non e' un ``a[href]``: il tocco passava e navigava il
-    frame principale (WJ3). Oggi il sanificatore toglie ``<area>``; questo e' il
+    frame principale. Oggi il sanificatore toglie ``<area>``; questo e' il
     secondo cancello."""
     run_js(
         _home_chat()
@@ -213,7 +213,7 @@ def test_the_home_chat_does_not_let_an_image_map_navigate() -> None:
 
 def test_the_home_chat_scrolls_to_the_sanitized_anchor() -> None:
     """``#sezione`` porta al titolo che il sanificatore ha chiamato
-    ``user-content-sezione`` (HJ8)."""
+    ``user-content-sezione``."""
     run_js(
         _home_chat()
         + """

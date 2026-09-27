@@ -3,8 +3,8 @@
 Erano nella query di una GET (``/api/settings/provider/update?api_key=``,
 ``provider-models``, ``/api/telegram/save?token=``,
 ``/api/settings/ssh/host/save?password=``): la riga di richiesta la vedono il
-log di accesso, i traceback con le variabili locali e chiunque logghi un URL
-(terza revisione, WA2). Il gateway non legge body HTTP, quindi sono comandi
+log di accesso, i traceback con le variabili locali e chiunque logghi un URL.
+Il gateway non legge body HTTP, quindi sono comandi
 dell'RPC WebSocket in ``webui/commands.py``. La logica e' rimasta in
 ``settings_api``/``telegram_api``/``ssh_api``: qui si prova il trasporto — i
 parametri, i ganci dopo il salvataggio, la traduzione degli errori.

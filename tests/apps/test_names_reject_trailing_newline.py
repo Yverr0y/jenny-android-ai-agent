@@ -5,8 +5,7 @@
 fondo, quindi ``"todo\\n"`` passava. Per slug e azioni l'effetto era solo un
 «non trovato» più in là; per una collezione ``storage._collection_path``
 costruiva ``data/notes\\n.jsonl`` — un file con l'a capo nel nome. È lo stesso
-difetto corretto sugli id del filo in ``security/wire_ids.py``. Trovato dalla
-revisione finale della pulizia (25/09).
+difetto corretto sugli id del filo in ``security/wire_ids.py``.
 """
 
 from __future__ import annotations

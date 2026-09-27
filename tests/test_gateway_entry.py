@@ -107,7 +107,7 @@ def test_run_gateway_does_not_retry_a_keyboard_interrupt(
 def test_run_gateway_resets_loop_bound_state_before_every_attempt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """CF8: i ``reset_*`` girano a ogni tentativo, non una volta prima del ciclo.
+    """I ``reset_*`` girano a ogni tentativo, non una volta prima del ciclo.
 
     Il primo tentativo lega il lock di ``config.store`` al suo loop (basta un
     secondo scrittore in coda) e muore; il secondo scrive la config. Con il
@@ -190,7 +190,7 @@ def test_ensure_minimal_config_is_idempotent(tmp_path: Path):
 
 
 def test_loop_bound_reset_includes_the_app_storage_locks(monkeypatch: pytest.MonkeyPatch):
-    """CF8: anche i lock per collezione delle Jenny App si rimettono a nuovo.
+    """Anche i lock per collezione delle Jenny App si rimettono a nuovo.
 
     Sono ``asyncio.Lock`` di modulo come quello di ``config.store``: un
     tentativo morto li lascerebbe legati al suo loop.

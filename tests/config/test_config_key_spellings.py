@@ -1,4 +1,4 @@
-"""Un campo della config scritto con un'altra grafia (CF1 della terza revisione).
+"""Un campo della config scritto con un'altra grafia.
 
 ``config.json`` accetta ``max_tokens`` come ``maxTokens``, ma lo riscrive sempre con
 la grafia del modello. Prima il loader riportava la grafia vecchia in coda al dump
@@ -163,7 +163,7 @@ async def test_truly_unknown_keys_are_still_kept_and_reported(tmp_path) -> None:
 
 
 async def test_extract_document_text_is_read_under_its_documented_name(tmp_path) -> None:
-    """TD8: la documentazione scrive ``extractDocumentText``, e il modello lo leggeva
+    """La documentazione scrive ``extractDocumentText``, e il modello lo leggeva
     come chiave ignota: l'impostazione non aveva effetto."""
     path = tmp_path / "config.json"
     _write(path, {"extractDocumentText": True})

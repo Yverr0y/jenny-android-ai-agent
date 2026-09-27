@@ -1,4 +1,4 @@
-"""AC7 della terza revisione: un subagent che esaurisce le iterazioni non ha «finito».
+"""Un subagent che esaurisce le iterazioni non ha «finito».
 
 Il ramo dei risultati conosceva ``tool_error`` ed ``error``; tutto il resto era un
 successo. Un subagent fermato da ``max_iterations`` veniva annunciato «completed

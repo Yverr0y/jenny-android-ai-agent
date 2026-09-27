@@ -331,7 +331,7 @@ def test_a_node_of_an_unforeseen_group_is_still_painted() -> None:
 
     La mappa non passa da `sanitizeGroup` come l'elenco: il nodo porta
     `home-group-<quel che arriva>`, e senza un `fill` di ripiego SVG lo
-    dipinge nero — invisibile nel tema scuro (revisione del 25/09/2026, M20).
+    dipinge nero — invisibile nel tema scuro (misurato il 25/09/2026).
     """
     css = (ASSETS / "home-style.css").read_text(encoding="utf-8")
     fallback = re.search(r"\n\.home-map-node \{([^}]*)\}", css)

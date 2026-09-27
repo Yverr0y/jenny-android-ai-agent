@@ -1,11 +1,11 @@
 """Un contenuto non deve poter rubare un id del guscio, ne' nascondere un link.
 
-Due difetti della terza revisione (26/09/2026), entrambi in ``shared/markdown.js``:
+Due difetti, entrambi in ``shared/markdown.js``:
 
-- **HJ8** — DOMPurify di serie conserva ``id`` e ``name``. Una risposta con
+- DOMPurify di serie conserva ``id`` e ``name``. Una risposta con
   ``<span id="oc-confirm-ok">`` metteva nel documento un secondo elemento con
   l'id del «Conferma» vero, e il dialogo restava muto (*clobbering*, non XSS).
-- **WJ3** — ``<area href>`` (dentro una ``<map>``) e ``<a xlink:href>`` dentro
+- ``<area href>`` (dentro una ``<map>``) e ``<a xlink:href>`` dentro
   un ``<svg>`` sono link che non sono ``a[href]``: le chat li lasciavano
   passare, e il tocco navigava il frame principale verso un documento del
   guscio, senza ``#bs=`` — la SPA de-autenticata.

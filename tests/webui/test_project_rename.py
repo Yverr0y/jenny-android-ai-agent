@@ -85,7 +85,7 @@ def test_after_a_rename_no_trace_carries_the_old_name(workspace) -> None:
 
 
 def test_the_rename_logs_in_english(workspace) -> None:
-    """AGENTS.md: log in inglese (Q6 della revisione profonda)."""
+    """AGENTS.md: log in inglese."""
     from loguru import logger
 
     rows: list[str] = []
@@ -381,7 +381,7 @@ async def test_the_command_refuses_while_a_turn_is_running_there(
 async def test_the_expected_refusals_carry_their_own_code(
     workspace, config, prepare, code
 ) -> None:
-    """Q4: il client dice questi rifiuti nella sua lingua, e per farlo gli serve
+    """Il client dice questi rifiuti nella sua lingua, e per farlo gli serve
     il codice, non il testo inglese del server."""
     from jenny.webui import commands
     from jenny.webui.commands import CommandError

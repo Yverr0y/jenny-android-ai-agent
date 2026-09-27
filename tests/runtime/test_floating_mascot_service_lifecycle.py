@@ -75,8 +75,8 @@ def test_detach_stops_every_animator_before_the_views_go() -> None:
     """Il respiro è ``INFINITE`` e resta registrato presso l'AnimationHandler
     anche con la vista staccata: ``detach`` lo lasciava chiedere un fotogramma
     a ogni vsync finché il GC non raccoglieva la colonna, e uno scivolamento in
-    corso finiva ricollocando viste appena tolte (voce AN12 della terza
-    revisione)."""
+    corso finiva ricollocando viste appena tolte.
+    """
     body = function_body(_controller(), "detach")
     removal = body.index("wm.removeView(v)")
     for stop in (

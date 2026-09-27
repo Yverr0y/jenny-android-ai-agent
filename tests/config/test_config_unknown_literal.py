@@ -1,4 +1,4 @@
-"""Un valore fuori da un ``Literal`` costa il suo campo, non il file (CF12).
+"""Un valore fuori da un ``Literal`` costa il suo campo, non il file.
 
 Prima un ``providerRetryMode`` che questa versione non conosce (scritto da una
 versione piu' nuova, o a mano) faceva rifiutare ``config.json`` intero — e il

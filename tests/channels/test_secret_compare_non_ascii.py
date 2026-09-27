@@ -1,4 +1,4 @@
-"""Un segreto non ASCII non fa esplodere l'autenticazione del gateway (WA1).
+"""Un segreto non ASCII non fa esplodere l'autenticazione del gateway.
 
 ``hmac.compare_digest`` su due ``str`` accetta solo ASCII: con un ``é`` nel
 token solleva ``TypeError`` *prima* dell'autenticazione, e il traceback (con

@@ -3,7 +3,7 @@
 `var(--x, fallback)` con una `--x` che nessuno definisce non e' un errore: vale
 il ripiego, in silenzio e per sempre. Cosi' `--danger`, `--danger-bg` e
 `--code-bg` hanno dato per mesi lo stesso rosso e lo stesso grigio in tutti e
-sette i temi (revisione del 25/09/2026), mentre chi leggeva il foglio credeva
+sette i temi (misurato il 25/09/2026), mentre chi leggeva il foglio credeva
 di vedere dei token.
 
 Una variabile e' definita se un foglio la dichiara (`--x:` in una regola) o se

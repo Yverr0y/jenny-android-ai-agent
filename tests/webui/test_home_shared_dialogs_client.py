@@ -5,7 +5,7 @@
 nel top layer, sopra tutto. La casa chiudeva i suoi fogli e non questi, quindi
 Indietro portava via la pagina **sotto** la domanda e la domanda restava
 aperta sopra un'altra pagina — un «Conferma» che cancellava un quaderno da
-una stanza in cui non eri piu' (terza revisione, HJ3). E la chat che ci stava
+una stanza in cui non eri piu'. E la chat che ci stava
 sotto contava come vista, cancellando avvisi mai letti.
 
 Come l'officina (``mobile-app.js``, ``_dismissTopDialog``): il dialogo si

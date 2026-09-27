@@ -29,7 +29,7 @@ def test_anthropic_error_captures_retry_after_from_headers() -> None:
     assert response.retry_after == 20.0
 
 
-# ── PC7 della terza revisione: il Retry-After ha un tetto anche in standard ──
+# ── Il Retry-After ha un tetto anche in standard ──────────────────────────────
 
 
 async def test_a_huge_retry_after_is_capped_in_standard_mode(monkeypatch) -> None:

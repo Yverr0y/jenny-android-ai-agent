@@ -271,8 +271,8 @@ def lint(root):
 def wiki_workspace(tmp_path, monkeypatch):
     """Workspace il cui ``lint_wiki.py`` impacchettato è ``_WIKI_SCRIPT``.
 
-    Gli script si leggono dal pacchetto, mai dal workspace (TL10 della terza
-    revisione): lo script finto si inietta lì, sostituendo la lettura.
+    Gli script si leggono dal pacchetto, mai dal workspace:
+    lo script finto si inietta lì, sostituendo la lettura.
     """
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 

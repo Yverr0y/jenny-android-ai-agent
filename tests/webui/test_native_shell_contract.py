@@ -125,7 +125,7 @@ def test_the_activity_absorbs_the_config_changes_that_really_happen() -> None:
         "keyboard",
         "navigation",
         "layoutDirection",
-        # 26/09/2026 (AN8): il «testo in grassetto» di Accessibilità (API 31),
+        # 26/09/2026: il «testo in grassetto» di Accessibilità (API 31),
         # accanto alla dimensione carattere; e due cambi senza risorse da
         # ri-risolvere (v. il test qui sotto).
         "fontWeightAdjustment",
@@ -289,7 +289,7 @@ def test_the_alert_notification_carries_a_routable_action() -> None:
 def test_only_our_open_chat_clears_the_alerts() -> None:
     """L'activity è esportata (è il launcher): l'action la scrive chiunque, e il
     ramo del tap **cancella gli avvisi**. Un'altra app poteva far sparire dalla
-    tendina i messaggi proattivi non letti (voce AN15 della terza revisione).
+    tendina i messaggi proattivi non letti.
     Ora l'intent nostro porta un gettone casuale tenuto nelle preferenze private,
     e i due rami — ``onNewIntent`` e il gemello in ``onCreate`` — lo esigono."""
     kotlin = _main_activity()

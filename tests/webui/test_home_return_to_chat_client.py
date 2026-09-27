@@ -5,7 +5,7 @@ traduzioni di tutta la casa, e con loro la fila, i Quaderni, le pagine e le
 stanze delle Impostazioni — e poi ridisegnava di nuovo fila e Quaderni, e il
 conteggio delle pagine una terza volta. Tornare da «Jenny» alla pagina
 Impostazioni disegnava la fila quattro volte e i Quaderni due, per una
-conversazione che non era cambiata (terza revisione, HJ13).
+conversazione che non era cambiata.
 
 La conversazione cambia in ``showConversation``, ed e' li' che si ridisegna
 quel che la dice; un ritorno alla chat rimette solo l'intestazione.

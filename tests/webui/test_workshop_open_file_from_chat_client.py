@@ -1,6 +1,6 @@
 """Un link a un file in chat apre l'editor, e Indietro torna in chat.
 
-Il difetto (H5 della revisione profonda): ``_openFileInWorkspace`` faceva
+Il difetto: ``_openFileInWorkspace`` faceva
 ``switchMode('workspace')`` *prima* di aprire il file. Con l'editor ancora
 chiuso ``WorkspaceController.activate()`` rimandava in Memoria, e lo faceva in
 modo sincrono **dentro** lo stesso ``switchMode``: il secondo ``switchMode``

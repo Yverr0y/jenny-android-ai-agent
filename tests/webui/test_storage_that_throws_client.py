@@ -1,6 +1,6 @@
 """Un ``localStorage`` che solleva non porta giu' la pagina.
 
-WJ21 e HJ19 della terza revisione (26/09/2026). Nella WebView con i dati del
+Nella WebView con i dati del
 sito bloccati, in un'anteprima o con la quota piena ``localStorage`` solleva —
 gia' leggendo la proprieta'. ``shared/state.js`` lo leggeva nudo **al
 caricamento del modulo**, cioe' prima di tutto: l'errore si portava via l'intero

@@ -1,6 +1,6 @@
 """Un picker di backup che non risponde non blocca i backup per sempre.
 
-WJ16 della terza revisione (26/09/2026). ``runImportFlow`` (e l'export)
+``runImportFlow`` (e l'export)
 aspettava la risposta del nativo in una Promise senza cintura: se non arrivava
 mai — il picker ucciso, un ``evaluateJavascript`` perso — restava appesa, e con
 lei ``_busy``. Export, import e restore morivano in silenzio fino al

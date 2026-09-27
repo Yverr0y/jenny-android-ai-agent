@@ -1,4 +1,4 @@
-"""Un provider sostituito chiude il suo client httpx (PC17).
+"""Un provider sostituito chiude il suo client httpx.
 
 Ogni cambio di impostazioni del provider ne costruisce uno nuovo
 (``GatewayContainer._on_settings_changed``), e il vecchio restava con il suo

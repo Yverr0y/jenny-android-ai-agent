@@ -1,6 +1,6 @@
 """«Apri nell'editor» dall'anteprima apre il file dal workspace.
 
-RC4 della terza revisione (26/09/2026): la correzione recente per cui
+La correzione recente per cui
 ``_renderFilePreview`` (``mobile-chat.js``) apre ``data.workspace_path`` — il
 percorso dal workspace che il server rimanda, dove quello scritto in chat e'
 relativo al quaderno (e spesso alla sua ``wiki/``) — non aveva un test: una

@@ -1,4 +1,4 @@
-"""La base di ``python_exec`` è della chiamata, non dell'istanza (TL2, terza revisione).
+"""La base di ``python_exec`` è della chiamata, non dell'istanza.
 
 ``PythonExecTool.execute`` scriveva la base risolta su ``self.namespace.exec_base``
 — un attributo dell'istanza condivisa da tutte le sessioni — e ``_enter_guard``

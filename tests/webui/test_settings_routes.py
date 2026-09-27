@@ -184,7 +184,7 @@ async def test_settings_update_swallows_on_settings_changed_exception(config_pat
 
 
 # ---------------------------------------------------------------------------
-# Le quattro rotte con un segreto nella query non ci sono piu' (WA2)
+# Le quattro rotte con un segreto nella query non ci sono piu'
 # ---------------------------------------------------------------------------
 
 
@@ -200,8 +200,8 @@ async def test_settings_update_swallows_on_settings_changed_exception(config_pat
 )
 async def test_the_routes_that_carried_a_secret_are_gone(config_path, path: str) -> None:
     """La chiave del provider, il token Telegram e la password SSH viaggiavano
-    nella query, cioe' nella riga di richiesta che log e traceback vedono
-    (terza revisione, WA2). Sono comandi RPC: ``tests/webui/test_secret_commands.py``."""
+    nella query, cioe' nella riga di richiesta che log e traceback vedono.
+    Sono comandi RPC: ``tests/webui/test_secret_commands.py``."""
     router = _router()
     assert await router.dispatch(_request(path), path.split("?", 1)[0]) is None
 

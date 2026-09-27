@@ -163,7 +163,7 @@ def test_she_is_on_top_of_everything_in_the_workshop() -> None:
 def test_a_short_screen_hides_her_only_where_the_dock_goes() -> None:
     """Sotto i 500 px d'altezza l'officina toglie il dock, e lei con lui. La
     casa il dock non ce l'ha: la regola valeva anche li', e la nascondeva
-    senza motivo (revisione del 25/09/2026). E nessun `!important` per
+    senza motivo (misurato il 25/09/2026). E nessun `!important` per
     nasconderla: le regole vincono per ordine, e il commento che diceva il
     contrario era falso."""
     css = WORKSHOP_CSS.read_text(encoding="utf-8")

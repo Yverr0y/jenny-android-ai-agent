@@ -1,8 +1,8 @@
 """Uno ``stream_end`` che porta il testo intero, senza delta prima.
 
 Sotto backpressure il bus scarta dei delta; per non perdere il testo, lo
-``stream_end`` di quello stream porta il testo intero dello stream (terza
-revisione, PC3, lato server). Se un segmento ha perso **tutti** i suoi delta,
+``stream_end`` di quello stream porta il testo intero dello stream (lato
+server). Se un segmento ha perso **tutti** i suoi delta,
 nella casa non c'era un blocco aperto, e ``_streamEnd`` quel testo lo
 ignorava: dal vivo la risposta non si vedeva, e compariva solo rileggendo.
 """

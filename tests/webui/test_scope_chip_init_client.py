@@ -197,7 +197,7 @@ def test_a_second_init_registers_nothing() -> None:
         state: AppState.subs.length,
       };
       // Solo il tocco fuori: Escape arriva dalla catena di Indietro del guscio
-      // (WJ5 della terza revisione, v. `state.js::armComposeMenu`).
+      // (v. `state.js::armComposeMenu`).
       assert.equal(after.doc, 1, 'click fuori: uno, non di più');
 
       chip.init();

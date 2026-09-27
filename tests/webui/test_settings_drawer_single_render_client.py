@@ -1,6 +1,6 @@
 """Passare da un cassetto all'altro disegna una volta, non due.
 
-WJ11 della terza revisione (26/09/2026). Cervello, Mani e Memoria sono un
+Cervello, Mani e Memoria sono un
 controller solo: ``switchMode`` chiama ``setDrawer`` (che ridisegna coi dati in
 cache) e poi ``activate()`` (che rilegge ``/api/settings`` e ridisegnava di
 nuovo). Due render per ingresso, e con loro due giri delle letture dei blocchi

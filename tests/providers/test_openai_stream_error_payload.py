@@ -3,7 +3,7 @@
 Lo status della risposta era 200: il gateway (OpenRouter, o un proxy davanti a un
 modello sovraccarico) scrive l'errore come chunk SSE. Il ramo Chat Completions lo
 scartava: ``finish_reason="stop"`` col testo arrivato fin lì, o vuoto, e nessun
-retry (PC2 della terza revisione, tre casi riprodotti). Qui gli stessi tre casi.
+retry: tre casi riprodotti, e qui ci sono gli stessi tre.
 """
 
 from __future__ import annotations

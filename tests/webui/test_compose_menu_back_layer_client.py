@@ -1,6 +1,6 @@
 """Una tendina del composer si chiude con una pressione di Indietro, e basta.
 
-WJ5 della terza revisione (26/09/2026). Le tendine sopra il composer (scope,
+Le tendine sopra il composer (scope,
 comandi) avevano un ``keydown`` loro che le chiudeva su Escape; ma Escape e'
 anche la scorciatoia del tasto Indietro del guscio (``keyboard.register
 ('escape', …)`` in ``mobile-app.js``), quindi la stessa pressione chiudeva la

@@ -288,7 +288,7 @@ def test_she_is_on_top_of_everything_in_the_house() -> None:
     casa carica anche `mobile-style.css`, e il JS che condivide con l'officina
     ci costruisce dentro la mini-app (`.app-frame-overlay`, 110) e la lightbox
     (`.image-lightbox`, allora 1000): col suo 5, lei finiva sotto tutte e due.
-    Misurato con `elementFromPoint` dalla revisione del 25/09/2026; la
+    Misurato con `elementFromPoint` il 25/09/2026; la
     decisione dell'utente (D3) e' «Jenny sempre sopra», anche a mini-app e
     immagini. Adesso il suo livello e' quello di `.jenny-duo` nel foglio
     dell'officina, lo stesso nelle due interfacce, e qui si controlla ogni
@@ -512,7 +512,7 @@ def test_the_workshop_icon_is_legible_on_the_inverted_card_in_every_theme() -> N
         )
 
 
-# ── Il contrasto di ogni parola, in ogni tema (CS3/CS4) ─────────────────────
+# ── Il contrasto di ogni parola, in ogni tema ─────────────────────
 
 # I token che colorano **parole**, e i fondi su cui stanno. `--text-faint` non
 # c'e' di proposito: e' per le decorazioni (separatori, segnaposto, icone
@@ -528,7 +528,7 @@ _TRACK_INKS = ("text", "heading", "text-muted")
 # Le coppie «parola su un riempimento».
 _FILLED = (
     ("on-accent", "accent"),
-    ("on-error", "error"),  # toast d'errore, «Installa» critico (CS12)
+    ("on-error", "error"),  # toast d'errore, «Installa» critico
     ("bubble-user-text", "bubble-user-bg"),
 )
 
@@ -571,8 +571,7 @@ def test_every_text_token_reads_in_every_theme() -> None:
 
 
 # Le parole che stavano in `--text-faint` (2,70:1 nel tema di serie): frasi,
-# etichette, voci del dock, bottoni. Il registro della terza revisione le
-# elenca per riga; qui per selettore.
+# etichette, voci del dock, bottoni. Qui sono elencate per selettore.
 _REAL_WORDS = {
     "home-style.css": (
         ".home-empty-text", ".home-seconds", ".home-origin", ".home-key-hint.is-faint",
@@ -782,8 +781,7 @@ def test_the_export_is_recorded_only_after_the_system_screen() -> None:
     l'unico posto in cui si sa che il file c'e' davvero — e non dopo la
     chiamata che prepara il container."""
     flow = (ASSETS / "shared" / "backup-flow.js").read_text(encoding="utf-8")
-    # Dopo la risposta del picker (`_awaitNative`, con la sua cintura: WJ16
-    # della terza revisione), non prima.
+    # Dopo la risposta del picker (`_awaitNative`, con la sua cintura), non prima.
     after = re.search(r"_awaitNative\('export'(.*?)\n    return ok;", flow, re.S)
     assert after, "l'attesa del picker non si trova piu'"
     assert "if (ok) api.noteBackupExported()" in after.group(1), (
@@ -816,7 +814,7 @@ def test_the_house_takes_its_typefaces_from_the_theme() -> None:
     Il tema Fumetto cambia `--font-sans`; il corpo della casa, il codice nei
     messaggi e le etichette della mappa avevano il carattere scritto a mano
     ('Inter', 'Fira Code'), e in Fumetto la casa restava in Inter mentre
-    l'officina passava a Comic Neue (revisione del 25/09/2026).
+    l'officina passava a Comic Neue (misurato il 25/09/2026).
     """
     css = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
     by_hand = [

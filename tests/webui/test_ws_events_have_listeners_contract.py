@@ -48,7 +48,7 @@ WITHOUT_LISTENER = {
     # ha niente da farci.
     "ready": "conferma di protocollo",
     "attached": "conferma di protocollo",
-    # L'eco di ``{"type": "detach"}`` (HJ17): il client ha già tolto la chat
+    # L'eco di ``{"type": "detach"}``: il client ha già tolto la chat
     # dalle sue prima di mandarlo, e non aspetta la risposta.
     "detached": "conferma di protocollo",
 }
@@ -194,8 +194,7 @@ def test_a_bare_mention_is_not_a_listener() -> None:
 # La mascotte (`shared/jenny-mascot.js`) li ascolta quasi tutti per animarsi, e
 # vive in tutti e due i gusci: contato insieme a lei, il gestore `'error'` della
 # chat si poteva togliere lasciando il banco verde — e un rifiuto del gateway
-# diventava una faccina triste e nessuna parola (TD11 della terza revisione,
-# regressione di T3).
+# diventava una faccina triste e nessuna parola.
 CHAT_MODULE = {
     "index.html": "home-chat.js",
     "workshop.html": "mobile-chat.js",

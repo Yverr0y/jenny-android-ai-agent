@@ -410,7 +410,7 @@ def _count_skill_reads(monkeypatch) -> list[str]:
 
 
 def test_a_second_summary_reads_no_skill_file_again(tmp_path: Path, monkeypatch) -> None:
-    """AC16 della terza revisione: le skill si leggono una volta, finché non cambiano.
+    """Le skill si leggono una volta, finché non cambiano.
 
     Ogni costruzione del prompt rileggeva e riparsava in YAML ogni ``SKILL.md``
     più volte (elenco, requisiti, descrizione, always): 56 letture per prompt sul

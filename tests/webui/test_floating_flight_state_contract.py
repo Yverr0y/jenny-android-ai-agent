@@ -1,7 +1,5 @@
 """Un volo della mascotte flottante non lascia due stati sbagliati dietro di sé.
 
-Voce AN13 della terza revisione:
-
 - **la taglia cambiata in volo non arrivava mai**: ``applyMascotSize`` in volo
   esce (la fisica è costruita col lato di partenza) e il KDoc prometteva che
   «il volo successivo nasce con quella» — ma nessuno la applicava: la finestra

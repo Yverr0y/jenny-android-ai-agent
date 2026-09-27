@@ -171,7 +171,7 @@ _ASKS_FOR_ITSELF = {
     # il comportamento futuro (wall timeout, chip del goal, iniezione «keep
     # working»). Stessa famiglia di un job cron, stesso rifiuto.
     "agent/tools/long_task.py": "registra un goal sostenuto via sessions.save, non un path",
-    # TL3 (terza revisione). Stava in ``_OUT_OF_SCOPE`` con «scrive su una
+    # Stava in ``_OUT_OF_SCOPE`` con «scrive su una
     # macchina remota», ma ``ssh_transfer direction=down`` scrive **sul
     # telefono**: un subagent nato in sola lettura riscriveva ``SOUL.md`` da un
     # file remoto. La destinazione passa da ``resolve_allowed_path`` con

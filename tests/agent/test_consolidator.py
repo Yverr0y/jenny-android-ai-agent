@@ -338,7 +338,7 @@ class TestConsolidatorTokenBudget:
         assert session.last_consolidated > 0
 
     async def test_a_failed_summary_does_not_advance_last_consolidated(self, consolidator):
-        """AC2 della terza revisione: un riassunto fallito non conta come consolidato.
+        """Un riassunto fallito non conta come consolidato.
 
         Il cursore avanzava comunque, con un dump grezzo tagliato a 16.000
         caratteri per «briciola»: i messaggi dopo il taglio restavano nella
@@ -612,7 +612,7 @@ class TestCompactIdleSession:
     async def test_llm_failure_dumps_nothing_and_keeps_the_session(
         self, real_consolidator, mock_provider, store
     ):
-        """AC2 della terza revisione: a LLM giu' la compattazione per inattivita' non tronca.
+        """A LLM giu' la compattazione per inattivita' non tronca.
 
         Prima tagliava comunque, e il dump grezzo che doveva fare da copia era
         troncato a 16.000 caratteri: in una conversazione lunga la maggior parte

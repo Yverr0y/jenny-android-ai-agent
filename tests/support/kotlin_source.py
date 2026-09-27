@@ -154,7 +154,7 @@ def read_source(name: Path | str) -> str:
 
     È la lettura di default dei contratti Kotlin: nessun test deve leggere il
     ``.kt`` grezzo, perché un'asserzione soddisfatta da un commento resta verde
-    dopo che il codice è stato commentato (voce TD12 della terza revisione).
+    dopo che il codice è stato commentato.
     """
     return strip_comments(_read(name))
 

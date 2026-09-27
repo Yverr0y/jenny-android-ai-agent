@@ -1,4 +1,4 @@
-"""Uno snapshot cancellato a meta' tiene il lock finche' il suo thread non finisce (CF17).
+"""Uno snapshot cancellato a meta' tiene il lock finche' il suo thread non finisce.
 
 ``stop()`` cancella il task del timer, e se quel task e' dentro ``snapshot_now``
 la cancellazione arriva all'``await`` di ``asyncio.to_thread``: il coroutine

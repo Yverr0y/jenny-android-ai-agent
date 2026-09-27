@@ -1,7 +1,7 @@
 """Uno stream Anthropic che si interrompe non è una risposta completa.
 
-Due modi di interrompersi, entrambi osservati dall'audit (PC1 della terza
-revisione): un ``event: error`` a metà stream (``overloaded_error`` sotto
+Due modi di interrompersi, entrambi osservati dall'audit:
+un ``event: error`` a metà stream (``overloaded_error`` sotto
 carico) e lo stream chiuso senza ``message_stop``. In tutti e due i casi il
 provider restituiva ``finish_reason="stop"`` col testo arrivato fin lì — una
 risposta troncata salvata come completa, senza retry — e un ``tool_use`` a

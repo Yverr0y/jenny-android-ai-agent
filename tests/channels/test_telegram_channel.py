@@ -100,7 +100,7 @@ def _update(
     return {"update_id": 1, "message": message}
 
 
-# --- pairing: solo da una chat privata, e poi solo da quella persona (PC16) -----
+# --- pairing: solo da una chat privata, e poi solo da quella persona -----
 
 
 async def test_a_group_cannot_pair_even_with_the_right_code() -> None:

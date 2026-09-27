@@ -78,8 +78,8 @@ class TestTheMarkdownIsItsOwn:
 
     def test_a_render_that_throws_falls_back_to_the_text(self):
         """La conversazione si ridisegna tutta a ogni risposta: un testo che fa
-        sollevare Markwon rompeva ogni render finché restava nella storia (voce
-        AN11 della terza revisione). Ora ``setMarkdown`` sta in un ``try`` e il
+        sollevare Markwon rompeva ogni render finché restava nella storia.
+        Ora ``setMarkdown`` sta in un ``try`` e il
         ripiego è il testo com'è scritto; ``Throwable``, perché un annidamento
         profondo è uno ``StackOverflowError``."""
         body = _fun(_read(), "private fun bubbleView(ctx: Context, line: Line): TextView")

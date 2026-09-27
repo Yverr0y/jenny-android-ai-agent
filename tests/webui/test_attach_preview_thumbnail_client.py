@@ -1,6 +1,6 @@
 """Una foto allegata si vede come miniatura, non come chip «file».
 
-WJ7 della terza revisione (26/09/2026), regressione di ``2e42db88``:
+Regressione di ``2e42db88``:
 ``_renderAttachPreview`` (``mobile-chat.js``) sceglieva la miniatura su
 ``item.isImage``, un campo che ``ImageHandler`` non scrive piu' — il secchio e'
 ``kind``. Ogni foto finiva nel ramo dei file generici. Qui il metodo vero, con

@@ -1434,7 +1434,7 @@ def test_the_builtin_returns_the_error_and_not_the_words_no_output(tmp_path, mon
 
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 
-    # Gli script veri: il builtin li legge dal pacchetto (TL10).
+    # Gli script veri: il builtin li legge dal pacchetto.
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
@@ -1651,7 +1651,7 @@ def test_the_builtin_returns_the_findings_it_already_had(tmp_path, monkeypatch):
     # Uno script che stampa dei risultati e **poi** scoppia: è la forma esatta
     # del difetto, e iniettarla è l'unico modo di non dipendere da quale bug
     # sopravvive nello script vero. Si inietta nella copia impacchettata, da cui
-    # il builtin legge (mai dal workspace: TL10 della terza revisione).
+    # il builtin legge (mai dal workspace, che il modello può scrivere).
     exploding = (
         "def lint(root):\n"
         "    print('🔴 Dead wikilinks (2):')\n"

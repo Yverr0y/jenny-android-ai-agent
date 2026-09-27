@@ -1,6 +1,6 @@
 """Chiave del provider, token Telegram e password SSH non passano da un URL.
 
-Terza revisione, WA2: ``api.getProviderModels``/``updateProvider``/
+``api.getProviderModels``/``updateProvider``/
 ``saveTelegramToken``/``saveSshHost`` mettevano il segreto nella query di una
 GET. Ora sono comandi RPC (``settings.provider.models``/``update``,
 ``telegram.save``, ``ssh.host.save``) con la stessa firma: qui si prova che

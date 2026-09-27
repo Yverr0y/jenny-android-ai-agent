@@ -1,4 +1,4 @@
-"""Due reload di Telegram ravvicinati non lasciano un poller orfano (PC9).
+"""Due reload di Telegram ravvicinati non lasciano un poller orfano.
 
 ``reload_telegram`` ferma il canale vecchio, rilegge la config e ne crea uno
 nuovo. Senza serializzazione, un secondo reload arrivato mentre il primo

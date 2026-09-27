@@ -65,7 +65,7 @@ class TestBuildDreamPrompt:
         assert "skill-creator" in prompt
 
     def test_a_long_entry_reaches_the_prompt_whole(self, store):
-        """AC1 della terza revisione: niente taglio per voce.
+        """Niente taglio per voce.
 
         Fino al 26/09 ogni voce passava da ``truncate_text(..., 500)`` e il cursore
         avanzava oltre: i fatti dopo il cinquecentesimo carattere di un riassunto

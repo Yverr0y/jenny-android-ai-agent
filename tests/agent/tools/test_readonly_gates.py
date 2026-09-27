@@ -103,7 +103,7 @@ async def test_edit_file_is_refused_and_leaves_the_file_alone(readonly: Path) ->
 
 
 async def test_apply_patch_is_refused_but_its_dry_run_is_not(readonly: Path) -> None:
-    """TL18 (terza revisione): il dry-run non scrive, quindi in sola lettura resta.
+    """Il dry-run non scrive, quindi in sola lettura resta.
 
     Prima passava da ``_resolve_write`` come la patch vera e veniva rifiutato:
     proprio l'anteprima che serve a descrivere «cosa avrei cambiato».

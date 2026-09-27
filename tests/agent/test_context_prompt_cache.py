@@ -224,7 +224,7 @@ def test_recent_history_truncated_at_max_tokens(tmp_path) -> None:
 
 
 def test_recent_history_over_budget_keeps_the_newest_entries(tmp_path) -> None:
-    """AC13 della terza revisione: oltre il tetto restano le voci **nuove**.
+    """Oltre il tetto restano le voci **nuove**.
 
     Il taglio era sul testo intero, dalla fine: sopra il budget il blocco teneva
     le voci più vecchie e buttava proprio quelle appena scritte, cioè la parte che

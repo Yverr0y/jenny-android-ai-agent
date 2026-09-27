@@ -1,4 +1,4 @@
-"""URL lunghi e tabelle larghe: la stessa resa nei tre posti (CS6/CS17 della terza revisione).
+"""URL lunghi e tabelle larghe: la stessa resa nei tre posti.
 
 Misurato in Chrome sulla pagina vera (una pagina di prova con un URL di 130
 caratteri e una tabella di sei colonne), prima della correzione:

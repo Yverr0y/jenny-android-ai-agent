@@ -2,9 +2,9 @@
 
 Due KDoc di fila vogliono dire che la prima non documenta niente: la sua
 dichiarazione è stata tolta o spostata, e il commento è rimasto a descrivere
-qualcosa che non c'è più — o, peggio, sembra descrivere quella dopo. La
-revisione profonda del 25/09 ne ha trovate in ``FloatingOverlayController``
-(tre), ``JennyBrowserBridge`` e ``MainActivity``.
+qualcosa che non c'è più — o, peggio, sembra descrivere quella dopo. Il 25/09
+se ne sono trovate in ``FloatingOverlayController`` (tre), ``JennyBrowserBridge``
+e ``MainActivity``.
 
 Qui il bersaglio sono proprio i commenti, quindi si legge il sorgente grezzo.
 """

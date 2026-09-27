@@ -1,4 +1,4 @@
-"""I nomi accessibili e la tastiera dei due gusci (CS2, CS9, CS10 della terza revisione).
+"""I nomi accessibili e la tastiera dei due gusci.
 
 Struttura, non comportamento: il markup di `index.html` e `workshop.html` letto
 come un albero. La misura vera — i nomi che l'albero AX di Chrome calcola, e il
@@ -102,7 +102,7 @@ def _has_key(d: dict, key: str) -> bool:
     return isinstance(d, str) and bool(d.strip())
 
 
-# ── CS2: la label del composer ──────────────────────────────────────────────
+# ── La label del composer ──────────────────────────────────────────────
 
 
 def test_no_label_wraps_a_button() -> None:
@@ -159,7 +159,7 @@ def test_the_page_search_has_a_name() -> None:
     assert icon and "pointer-events: none" in icon.group(1)
 
 
-# ── CS10: icone e nomi ──────────────────────────────────────────────────────
+# ── Icone e nomi ──────────────────────────────────────────────────────
 
 
 def test_every_tabler_icon_is_hidden_from_the_accessibility_tree() -> None:
@@ -211,7 +211,7 @@ def test_the_home_fields_are_named_by_the_label_they_sit_next_to() -> None:
         _by_id(root, label)
 
 
-# ── CS9: il dock dalla tastiera ─────────────────────────────────────────────
+# ── Il dock dalla tastiera ─────────────────────────────────────────────
 
 
 def test_the_dock_items_are_buttons() -> None:
@@ -248,7 +248,7 @@ def test_the_dock_button_wears_no_default_dress() -> None:
         assert decl in body, decl
 
 
-# ── CS11: il FAB nascosto fuori dal Tab ─────────────────────────────────────
+# ── Il FAB nascosto fuori dal Tab ─────────────────────────────────────
 
 
 def _css_rule(css: str, selector: str) -> str:

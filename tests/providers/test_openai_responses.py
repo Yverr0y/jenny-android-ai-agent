@@ -731,7 +731,7 @@ class TestConsumeSse:
 
     @pytest.mark.asyncio
     async def test_incomplete_response_is_a_length_stop_with_usage(self):
-        """``response.incomplete`` chiude lo stream al tetto di token (PC4).
+        """``response.incomplete`` chiude lo stream al tetto di token.
 
         È l'evento terminale al posto di ``response.completed``: ignorarlo
         lasciava ``finish_reason="stop"`` e usage vuoto, e il runner non

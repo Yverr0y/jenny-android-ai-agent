@@ -1,6 +1,6 @@
 """La storia di una conversazione va sopra la risposta che arriva mentre si carica.
 
-WJ2 della terza revisione (26/09/2026), gemello di HJ1 in casa: aprire una
+Lo stesso difetto che la casa aveva nel suo filo: aprire una
 conversazione mentre Jenny ci sta rispondendo — un cambio di chat, una
 riconnessione, un /new — svuota la chat e poi *aspetta* bootstrap e thread. In
 quell'attesa i delta del turno in corso disegnano la loro bolla nella chat

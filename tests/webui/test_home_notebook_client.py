@@ -444,7 +444,7 @@ def test_a_rename_refused_while_jenny_works_there_is_said_in_the_readers_languag
     ],
 )
 def test_the_expected_refusals_are_said_in_the_readers_language(code, expected) -> None:
-    """Q4 della revisione profonda: «a folder named viaggi already exists» finiva
+    """«a folder named viaggi already exists» finiva
     tale e quale dentro la frase italiana. Il nome occupato e' quello **nuovo**,
     il quaderno sparito e' il **vecchio**; nessuno dei due porta il testo del
     server."""

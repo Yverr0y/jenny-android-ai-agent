@@ -52,7 +52,7 @@ def _disk_jobs(path: Path) -> dict[str, dict]:
     return {j["name"]: j for j in json.loads(path.read_text(encoding="utf-8"))["jobs"]}
 
 
-# -- CF3: lo stato di ogni job arriva su disco appena il job finisce -----------
+# -- Lo stato di ogni job arriva su disco appena il job finisce ----------------
 
 
 async def test_a_job_that_ran_is_on_disk_before_the_next_one_starts(tmp_path) -> None:
@@ -112,7 +112,7 @@ async def test_a_delivered_reminder_does_not_run_again_after_a_kill(tmp_path) ->
     assert "A" not in ran
 
 
-# -- RC1: prima di ogni job si guarda lo store di adesso, non quello d'inizio giro
+# -- Prima di ogni job si guarda lo store di adesso, non quello d'inizio giro
 
 
 async def _second_job_changed_while_first_runs(tmp_path, change) -> list[str]:
@@ -165,7 +165,7 @@ async def test_a_job_paused_and_resumed_meanwhile_waits_for_its_new_time(tmp_pat
     assert await _second_job_changed_while_first_runs(tmp_path, pause_and_resume) == ["A"]
 
 
-# -- RC2: una pausa arrivata mentre il job stesso gira --------------------------
+# -- Una pausa arrivata mentre il job stesso gira ------------------------------
 
 
 async def test_a_pause_during_the_job_own_run_leaves_no_next_run(tmp_path) -> None:
@@ -196,7 +196,7 @@ async def test_a_pause_during_the_job_own_run_leaves_no_next_run(tmp_path) -> No
     assert _disk_jobs(path)["x"]["state"]["nextRunAtMs"] is None
 
 
-# -- TD22: la cancellazione di ``stop()`` e il tetto al riavvio -----------------
+# -- La cancellazione di ``stop()`` e il tetto al riavvio -----------------------
 
 
 async def test_stop_during_a_job_cancels_it_instead_of_recording_an_error(tmp_path) -> None:

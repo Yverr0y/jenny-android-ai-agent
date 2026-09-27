@@ -1,6 +1,6 @@
 """Il pager crede al server quando dice che dietro non c'e' altro.
 
-TD15 della terza revisione (26/09/2026): nessun banco passava davvero
+Nessun banco passava davvero
 ``has_more_before`` a ``shared/history-pager.js`` — ogni finto rispondeva con
 una pagina senza quel campo, e ``adopt`` lo legge con ``!== false``. Mutato
 (``hasMore`` sempre vero, o il campo ignorato) restava tutto verde. Qui il

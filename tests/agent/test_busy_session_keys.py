@@ -3,8 +3,8 @@
 La chiede ``project.rename``, che non deve spostare una conversazione di progetto
 mentre qualcuno ci sta scrivendo: altrimenti a fine lavoro quel qualcuno scrive
 sotto il nome vecchio, e resta una chat senza cartella. La prima guardia
-(``41c7d20``) leggeva solo i turni di chat in volo (``active_session_keys``); la
-seconda revisione ha trovato gli altri due scrittori:
+(``41c7d20``) leggeva solo i turni di chat in volo (``active_session_keys``), e
+gli scrittori erano altri due in piu':
 
 - **un subagent** lanciato dal quaderno sopravvive al turno che l'ha creato, e a
   fine lavoro scrive i suoi record e annuncia il risultato sotto la chiave
@@ -12,7 +12,7 @@ seconda revisione ha trovato gli altri due scrittori:
 - **una passata del giardiniere** gira sotto una chiave sua (``gardener:…``) ma
   scrive nella cartella della wiki.
 
-La revisione profonda (M1) ha trovato il quarto: **l'autocompact**, che compattando
+Poi se n'e' trovato un quarto: **l'autocompact**, che compattando
 o raccogliendo il diario rilegge e salva la sessione dopo una chiamata LLM.
 
 ``active_session_keys`` resta com'era: l'autocompact e il giardiniere la leggono
@@ -104,7 +104,7 @@ async def test_a_diary_harvest_keeps_its_project_busy_until_it_saves(tmp_path) -
     """La finestra vera: la sessione si rilegge e si salva **dopo** la chiamata LLM.
 
     Si entra da ``check_expired``, cioe' dalla porta vera, e non si aggiunge la
-    chiave a mano (TD4 della terza revisione): il test che la aggiungeva da se'
+    chiave a mano: il test che la aggiungeva da se'
     restava verde anche togliendo l'``add`` di ``check_expired``, cioe' proprio
     la riga che la regressione di M1 aveva perso.
     """

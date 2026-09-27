@@ -1,6 +1,6 @@
 """Le parole dell'officina passano dall'i18n, anche quelle di ripiego.
 
-WJ18 della terza revisione (26/09/2026): ``'New session started.'`` come testo
+``'New session started.'`` come testo
 di un confine senza parole del server, un ``|| 'Close'`` morto (``i18n.t``
 torna la chiave, mai un falso), e in ``shared/provider-brand.js`` le due
 etichette che non sono nomi propri — ``'Unknown'`` e ``'Anthropic

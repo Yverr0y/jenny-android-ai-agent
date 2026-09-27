@@ -160,8 +160,8 @@ def test_the_shell_keeps_the_native_contract_and_no_dead_doors() -> None:
     erano copiati dall'officina e in casa non li chiamava nessuno: ne' il
     Kotlin (che chiama i sei metodi del contratto), ne' i moduli che la casa
     carica — ``mobile-onboarding.js``, l'unico che chiama ``whenShellReady``,
-    e' dell'officina. Codice morto che sembra un contratto (terza revisione,
-    HJ16). ``onNativeReady`` resta: il guscio nativo lo chiama comunque."""
+    e' dell'officina. Codice morto che sembra un contratto.
+    ``onNativeReady`` resta: il guscio nativo lo chiama comunque."""
     src = APP_JS.read_text(encoding="utf-8")
     for name in (
         "onNativeReady",

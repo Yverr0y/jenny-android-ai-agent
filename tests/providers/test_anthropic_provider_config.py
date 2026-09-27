@@ -178,7 +178,7 @@ def test_the_factory_hands_the_anthropic_provider_its_config() -> None:
 def test_a_remote_endpoint_gets_the_tight_timeout() -> None:
     provider = _provider()
 
-    # Stretto su connect/write; la read copre il budget del primo token (PC5).
+    # Stretto su connect/write; la read copre il budget del primo token.
     assert provider._http_client.timeout.connect == DEFAULT_REQUEST_TIMEOUT_S
     assert provider._http_client.timeout.read == read_timeout_s(local=False)
 

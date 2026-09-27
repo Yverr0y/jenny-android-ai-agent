@@ -1,10 +1,10 @@
-"""Le immagini remote non fermano il dispatcher più di un budget (PC11).
+"""Le immagini remote non fermano il dispatcher più di un budget.
 
 ``WebSocketChannel.send`` scarica in locale le immagini remote del messaggio
 (``localize_remote_media``) una dopo l'altra, con 15 s di timeout ciascuna, e
 lo fa dentro il ciclo seriale del dispatcher: finché scarica, nessun canale
 riceve niente — nemmeno i delta di un altro turno, che intanto si ammucchiano e
-vengono scartati (PC3). Qui l'ingest finto impiega 1 s per immagine: tre
+vengono scartati. Qui l'ingest finto impiega 1 s per immagine: tre
 immagini tenevano ``send`` fermo tre secondi. Ora c'è un budget totale, e allo
 scadere il messaggio parte con gli URL remoti com'erano.
 """

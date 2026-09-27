@@ -474,7 +474,7 @@ async def test_exhausted_stall_retries_keep_the_error_and_carry_the_text_aside(
     Prima i segmenti già mostrati si anteponevano al messaggio d'errore: il
     runner lo pubblicava come finale, e l'utente rivedeva tutto il testo di
     nuovo con l'errore in coda; ``partial_content`` invece restava vuoto,
-    quindi la history perdeva ciò che era stato mostrato (PC13).
+    quindi la history perdeva ciò che era stato mostrato.
     """
     provider = ScriptedProvider([_stall("Uno. "), _stall("Due. "), _stall("Tre. "), _stall("Quattro.")])
 

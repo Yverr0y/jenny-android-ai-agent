@@ -197,7 +197,7 @@ def test_a_user_quoting_a_subagent_line_keeps_the_bubble(tmp_path, monkeypatch) 
                                  "project:a..b"])
 @pytest.mark.parametrize("route", ["webui-thread", "file-preview"])
 def test_a_key_that_is_not_a_project_name_is_not_a_project(handler, key, route) -> None:
-    """WA15: ``project:..`` passava come chiave leggibile e arrivava al session
+    """``project:..`` passava come chiave leggibile e arrivava al session
     manager e alla trascrizione come un quaderno. Un progetto è tale solo se il
     suo nome è un nome di progetto (``is_valid_project_name``)."""
     quoted = urllib.parse.quote(key, safe="")

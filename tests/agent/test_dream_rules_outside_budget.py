@@ -1,4 +1,4 @@
-"""TD19 della terza revisione: le regole dell'utente in SOUL.md restano fuori dal budget ovunque.
+"""Le regole dell'utente in SOUL.md restano fuori dal budget ovunque.
 
 Il blocco con le regole che l'utente ha dato a Jenny non e' di Dream — lo proietta
 l'app da ``.jenny/soul_rules.md`` — e il budget esiste per limitare quel che scrive

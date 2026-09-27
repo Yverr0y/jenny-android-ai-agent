@@ -1,4 +1,4 @@
-"""Il nome del quaderno nel percorso non si riduce a una lettera (CS13 della terza revisione).
+"""Il nome del quaderno nel percorso non si riduce a una lettera.
 
 Misurato in Chrome sulle pagine di un quaderno dal nome lungo: a 360 px del
 nome restavano 15 px («U.»), a 320 niente; l'interruttore «Chat | Pagine 1»

@@ -242,7 +242,7 @@ class TestTheRoundSchedulesTheHarvest:
 
 
 class TestTheIndexFollowsTheSession:
-    """AC8 della terza revisione: l'indice segue la sessione, e segna solo quel che e' entrato.
+    """L'indice segue la sessione, e segna solo quel che e' entrato.
 
     Era una posizione assoluta nei messaggi: dopo ``/new`` restava al valore di
     prima, e i messaggi nuovi — meno di quelli vecchi — non entravano mai nel

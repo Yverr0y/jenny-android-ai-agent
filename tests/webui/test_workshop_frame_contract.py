@@ -155,7 +155,7 @@ def test_the_language_switch_redoes_the_drawers_too() -> None:
 
 
 def _dock_entries() -> list[re.Match]:
-    # Bottoni dal 26/09/2026 (CS9): il ``class`` non e' piu' il primo attributo.
+    # Bottoni dal 26/09/2026: il ``class`` non e' piu' il primo attributo.
     return list(
         re.finditer(r'<button type="button" class="dock-item[^"]*"([^>]*)>(.*?)</button>', WORKSHOP)
     )
@@ -522,7 +522,7 @@ def test_an_icon_button_fades_under_the_finger_on_the_phone() -> None:
     """Sul telefono (`hover: none`) il bottone-icona sbiadisce al tocco.
 
     La regola stava nel blocco «Responsive / Touch», tolto da 0116b1f insieme
-    alla wiki (revisione del 25/09/2026): da allora il tocco restava col solo
+    alla wiki (misurato il 25/09/2026): da allora il tocco restava col solo
     rimpicciolimento, che a movimento ridotto non c'e'.
     """
     blocks = re.findall(r"@media \(hover: none\) \{(.*?)^\}", CSS, re.S | re.M)

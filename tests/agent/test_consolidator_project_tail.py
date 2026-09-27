@@ -214,7 +214,7 @@ class TestPersonalSession:
     async def test_llm_failure_leaves_the_session_whole(
         self, consolidator, mock_provider, project_root, store, tmp_path
     ):
-        """(c) La conversazione personale, dalla terza revisione (AC2): a LLM giu'
+        """(c) La conversazione personale: a LLM giu'
         niente dump, niente troncatura e nessuna copia dentro un progetto — la
         sessione resta intera e la finestra dopo riprova."""
         mock_provider.chat_with_retry.side_effect = RuntimeError("LLM unavailable")

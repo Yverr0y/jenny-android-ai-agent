@@ -1,4 +1,4 @@
-"""``wiki_lint``/``wiki_audit``/``wiki_scaffold`` eseguono la copia impacchettata (TL10).
+"""``wiki_lint``/``wiki_audit``/``wiki_scaffold`` eseguono la copia impacchettata.
 
 Gli script si caricavano da ``<workspace>/skills/llm-wiki/scripts``, dentro
 ``_path_guard_bypass()``, e il commento diceva che lì «non c'è niente da
@@ -7,7 +7,7 @@ cartella è nel workspace, quindi il modello la scrive con ``write_file``, e il
 codice di primo livello dello script girava senza confine di percorso. Ora il
 sorgente viene dal pacchetto (``jenny/skills``, sul telefono l'asset dell'APK),
 cioè dagli stessi byte che l'avvio copia nel workspace; la copia del workspace
-non si esegue più. Terza revisione.
+non si esegue più.
 """
 
 from __future__ import annotations

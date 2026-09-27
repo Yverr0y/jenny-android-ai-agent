@@ -79,7 +79,7 @@ def test_save_preserves_explicit_different_tz(config_path, monkeypatch) -> None:
 
 
 async def test_a_write_without_a_detected_timezone_keeps_auto(config_path, monkeypatch) -> None:
-    """CF13: senza fuso rilevato "" si risolve in UTC, e una scrittura qualunque lo
+    """Senza fuso rilevato "" si risolve in UTC, e una scrittura qualunque lo
     congelava come scelta esplicita: il giorno che il rilevamento torna a
     funzionare, il fuso non seguiva piu' il telefono."""
     _set_device_tz(monkeypatch, None)

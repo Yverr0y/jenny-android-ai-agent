@@ -6,7 +6,7 @@ known_hosts. Fino al 26/09/2026 la chiave era codificata con
 sembrava funzionare, ma quelli ECDSA (104 byte) e RSA≥3072 sì, e jsch rifiuta
 allora l'**intero** file (``fromBase64: invalid base64 data``) — anche gli host
 già pinnati smettono di connettersi. Provato con jsch 2.28.6, la versione del
-``build.gradle.kts`` (voce AN1 della terza revisione).
+``build.gradle.kts``.
 
 L'impronta ``SHA256:`` resta senza padding, com'è in ``ssh-keygen -l``. E i
 file già scritti male si leggono riparati: il pin fatto prima della correzione

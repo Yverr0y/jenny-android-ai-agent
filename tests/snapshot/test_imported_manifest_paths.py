@@ -1,4 +1,4 @@
-"""Un manifest che arriva da un ``.jbk`` e' dato non fidato (CF10).
+"""Un manifest che arriva da un ``.jbk`` e' dato non fidato.
 
 La guardia zip-slip di ``_extract_backup`` controlla i nomi **dello zip**, non i
 percorsi scritti **dentro** i manifest dello store importato. Quei manifest

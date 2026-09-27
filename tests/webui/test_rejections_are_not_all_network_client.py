@@ -1,6 +1,6 @@
 """Non ogni rifiuto e' un errore di rete, e un file illeggibile e' un rifiuto.
 
-WJ23 della terza revisione (26/09/2026), due meta':
+Due meta':
 
 - il gestore globale ``unhandledrejection`` dell'officina diceva «errore di
   rete» a **ogni** rifiuto, anche a un difetto del codice: ora lo dice solo

@@ -6,9 +6,8 @@ quello del telefono — ``Path.resolve(strict=False)`` davanti a un loop solleva
 ``RuntimeError``; dal 3.13 ``pathlib`` passa da ``os.path.realpath`` e il loop
 resta nel percorso, irrisolto. ``_resolve_path`` lasciava uscire la
 ``RuntimeError`` dal gate unico: le rotte del file manager rispondevano 500, il
-wrapper di ``python_exec`` la girava al codice dell'utente (TL15), e il loop non
-si poteva nemmeno cancellare, perche' anche la cancellazione passa dal gate
-(terza revisione, WA8).
+wrapper di ``python_exec`` la girava al codice dell'utente, e il loop non
+si poteva nemmeno cancellare, perche' anche la cancellazione passa dal gate.
 
 Questi test vanno fatti girare **su 3.11** (il venv del repo): su 3.14 erano
 verdi anche prima.

@@ -219,7 +219,7 @@ class TestCheckExpired:
         assert self.UNIFIED in ac._archiving
 
     async def test_a_failed_compaction_waits_before_retrying(self, monkeypatch):
-        """AC2: a LLM giu' la sessione resta scaduta, e il giro TTL passa ogni minuto.
+        """A LLM giu' la sessione resta scaduta, e il giro TTL passa ogni minuto.
 
         Senza un'attesa la compattazione riproverebbe a ogni giro, una chiamata al
         minuto per tutta la durata del guasto.

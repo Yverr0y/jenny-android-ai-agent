@@ -32,12 +32,12 @@ _NEIGHBORS = {
     "ws-manager.js": "export const wsManager = new EventTarget();\n",
     "session-manager.js": "export const sessionManager = { currentKey: 'websocket:default' };\n",
     "i18n.js": "export const i18n = { t: (k) => k, locale: 'it', load: async () => {} };\n",
-    "mascot.js": """
+    "mascot.js":"""
 export const OUT_SHIFT_RATIO = 0.5;
 export function mascotVisible() { return true; }
 export function applyMascotSize() {}
 """,
-    "mascot-drag.js": """
+    "mascot-drag.js":"""
 export function bindMascotDrag() {}
 export function buildFlyLayer() {}
 """,
@@ -176,7 +176,7 @@ def test_turn_end_after_a_reply_keeps_the_reply() -> None:
 
 def test_error_shows_its_text_and_the_sad_face() -> None:
     """Le parole del rifiuto sono quelle di ``describeWireError``, come in
-    chat (WJ13 della terza revisione): prima il fumetto mostrava ``detail`` o
+    chat: prima il fumetto mostrava ``detail`` o
     ``reason`` grezzi, un testo per il log o un identificatore."""
     _run(
         """
@@ -288,7 +288,7 @@ def test_an_empty_message_means_thinking_as_in_the_mother() -> None:
 
 
 def test_a_question_asked_mid_answer_follows_that_turn_but_not_its_old_words() -> None:
-    """WJ6 della terza revisione. Una domanda fatta alla minichat mentre Jenny
+    """Una domanda fatta alla minichat mentre Jenny
     sta rispondendo in chat non apre un turno suo: il gateway la inietta nel
     turno in volo. La minichat adottava «il primo turno che vede» e ne mostrava
     il segmento che stava scorrendo — la risposta alla domanda **di prima**.
@@ -345,7 +345,7 @@ def test_a_question_asked_at_rest_adopts_its_own_turn() -> None:
 
 
 def test_the_minichat_names_where_and_how_it_sends() -> None:
-    """WJ14 della terza revisione: la minichat manda nella conversazione aperta
+    """La minichat manda nella conversazione aperta
     e col modo di scrittura scelto, ma diceva sempre «Chiedi qualcosa». Ora
     prende il placeholder della chat vera, che lo scope chip tiene aggiornato
     col progetto e con la sola lettura."""

@@ -1,8 +1,7 @@
 """Il lavoro in coda sul main thread non tocca la pagina dopo un «no».
 
 Un tetto scaduto non toglie un blocco dalla coda del main: gira dopo. In
-``JennyBrowserBridge.open`` un cancello decide già chi vince; due buchi restavano
-(basse della revisione profonda, 25/09):
+``JennyBrowserBridge.open`` un cancello decide già chi vince; due buchi restavano:
 
 - ``evaluate`` (quindi ``act``) non aveva cancello: dopo il «timeout» detto al
   modello, il blocco in ritardo eseguiva lo script — un **click tardivo**;

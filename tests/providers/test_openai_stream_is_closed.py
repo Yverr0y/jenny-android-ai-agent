@@ -1,4 +1,4 @@
-"""La risposta in streaming si chiude sempre, anche quando lo stream non finisce (PC6).
+"""La risposta in streaming si chiude sempre, anche quando lo stream non finisce.
 
 Un ``/stop`` (cancellazione del task), uno stallo o un'eccezione a metà lasciavano
 la risposta httpx aperta: la connessione restava in piedi e l'upstream

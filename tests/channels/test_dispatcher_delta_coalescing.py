@@ -282,7 +282,7 @@ class TestDispatchOutboundWithCoalescing:
             metadata={},  # Regular message
         ))
 
-        # Il ciclo vero, non una sua copia (TD5 della terza revisione): la copia
+        # Il ciclo vero, non una sua copia: la copia
         # restava verde anche togliendo la coalescenza dal dispatcher. Qui, se
         # ``_dispatch_outbound`` non rimette in coda il messaggio che
         # ``_coalesce_stream_deltas`` ha tolto dal bus per guardarlo, «Final»
@@ -394,7 +394,7 @@ class TestRetryWaitDelivery:
     """L'avviso d'attesa del provider arriva come riga di progresso, mai come risposta.
 
     Era scartato del tutto: con un ``Retry-After`` lungo l'utente guardava una
-    bolla ferma senza sapere perché (PC7 della terza revisione). Il difetto
+    bolla ferma senza sapere perché. Il difetto
     più vecchio che lo scarto correggeva — il diagnostico recapitato come se
     fosse una risposta — resta corretto: l'avviso diventa ``_progress``, quindi
     la WebUI lo rende come riga subordinata, e un canale che non vuole progress

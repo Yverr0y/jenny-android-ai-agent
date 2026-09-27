@@ -1,4 +1,4 @@
-"""AC9 della terza revisione: un overflow di contesto riduce la finestra del turno, non del processo.
+"""Un overflow di contesto riduce la finestra del turno, non del processo.
 
 Il callback ``_on_context_overflow`` scriveva la finestra dimezzata in
 ``AgentLoop.context_window_tokens`` e nel Consolidator: da lì valeva per ogni

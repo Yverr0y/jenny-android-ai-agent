@@ -1,4 +1,4 @@
-"""``grep`` e ``find_files`` non seguono un link che esce dal confine (TL12, terza revisione).
+"""``grep`` e ``find_files`` non seguono un link che esce dal confine.
 
 ``read_file`` rifiuta un symlink del workspace che punta fuori; ``grep`` lo apriva
 e ne stampava il contenuto (``apiKey=…`` di un file esterno), e ``find_files``

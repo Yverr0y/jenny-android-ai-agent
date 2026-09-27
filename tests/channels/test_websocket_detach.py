@@ -1,4 +1,4 @@
-"""Lasciare un quaderno lo lascia anche sul server (HJ17, lato gateway).
+"""Lasciare un quaderno lo lascia anche sul server (lato gateway).
 
 Il client aveva ``detachChat`` ma il gateway conosceva solo ``attach``: la
 connessione restava iscritta a ogni quaderno mai aperto e continuava a

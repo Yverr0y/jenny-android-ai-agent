@@ -90,7 +90,7 @@ async def test_maybe_continue_turn_queues_internal_message():
 
 @pytest.mark.asyncio
 async def test_a_full_pending_queue_skips_the_continuation_instead_of_blocking():
-    """AC10 della terza revisione: niente ``await put()`` su una coda che nessuno svuota.
+    """Niente ``await put()`` su una coda che nessuno svuota.
 
     La coda la drena il turno stesso, che qui e' fermo ad aspettare: con la coda
     piena (20 messaggi arrivati durante un goal lungo) ``put`` restava sospeso

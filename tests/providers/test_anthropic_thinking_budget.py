@@ -1,4 +1,4 @@
-"""Il budget di thinking Anthropic sta dentro il ``max_tokens`` configurato (PC15).
+"""Il budget di thinking Anthropic sta dentro il ``max_tokens`` configurato.
 
 Con effort ``high`` il budget era ``max(8192, max_tokens)`` e il ``max_tokens``
 finale ``budget + 4096``: con un ``max_tokens`` configurato al tetto del modello

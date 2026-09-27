@@ -90,7 +90,7 @@ def test_retain_recent_legal_suffix_adjusts_last_consolidated():
 
 
 def test_retain_recent_legal_suffix_shifts_the_diary_harvest_mark():
-    """AC8: l'indice della raccolta del diario scorre con i messaggi, come il cursore."""
+    """L'indice della raccolta del diario scorre con i messaggi, come il cursore."""
     from jenny.session.manager import DIARY_HARVEST_METADATA_KEY
 
     session = Session(key="project:esempio")

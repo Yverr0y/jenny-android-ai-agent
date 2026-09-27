@@ -7,7 +7,7 @@ quel che resta visibile sta nella fascia in cui Android legge uno swipe come
 scorre le finestre dall'alto e a ognuna conta l'esclusione solo dentro l'area
 toccabile che quelle sopra non coprono ancora (``touchableRegion.op(unhandled,
 INTERSECT)``). La maniglia le sta sopra (aggiunta dopo), toccabile e grande
-uguale: alla finestra di lei non restava area (voce AN4 della terza revisione).
+uguale: alla finestra di lei non restava area.
 """
 
 from __future__ import annotations

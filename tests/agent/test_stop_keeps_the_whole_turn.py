@@ -1,4 +1,4 @@
-"""AC3 della terza revisione: dopo /stop o un kill la storia ha tutto il turno.
+"""Dopo /stop o un kill la storia ha tutto il turno.
 
 Il checkpoint di un turno in volo portava solo l'**ultima** iterazione: il
 messaggio dell'assistente con le sue tool call e i risultati di quelle. Ripristinato

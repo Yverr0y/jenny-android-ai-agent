@@ -1,4 +1,4 @@
-"""AC12 della terza revisione: Dream progredisce anche quando gli ambiti si alternano.
+"""Dream progredisce anche quando gli ambiti si alternano.
 
 Un batch di Dream ha un tipo solo — personale o di progetto — perché i due tipi
 hanno prompt, cassetta e destinazioni diverse. Fino al 26/09 il batch si fermava

@@ -192,7 +192,7 @@ def test_update_happy_path(env) -> None:
 
 
 def test_update_writes_no_content_or_description_from_the_query(env) -> None:
-    """WA12: ``content`` e ``description`` in query non si scrivono più.
+    """``content`` e ``description`` in query non si scrivono più.
 
     Erano decodificati due volte (``parse_qs`` e poi ``unquote``: un ``%25``
     del testo diventava altro) e portavano contenuto su una GET, contro
@@ -219,7 +219,7 @@ def test_update_writes_no_content_or_description_from_the_query(env) -> None:
 @pytest.mark.parametrize("raw_name", ["%2e%2e", "%2E%2E", ".%2e", "%2e", ".", "..",
                                       "%2ehidden", "a%00b"])
 def test_update_rejects_a_dot_name_after_decoding(env, raw_name: str) -> None:
-    """WA12: ``%2e%2e`` supera la regex del path e, decodificato, è ``..``:
+    """``%2e%2e`` supera la regex del path e, decodificato, è ``..``:
     ``skills/../SKILL.md`` è un file fuori da ``skills/`` che veniva riscritto."""
     outside = env.workspace / "SKILL.md"
     outside.write_text('---\ndescription: "fuori"\n---\nfuori\n', encoding="utf-8")

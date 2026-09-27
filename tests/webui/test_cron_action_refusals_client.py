@@ -1,6 +1,6 @@
 """Un job protetto non si sente dire che la sua ora e' passata.
 
-Voce passata da F5 nella terza revisione (26/09/2026): il gateway risponde 409
+Il gateway risponde 409
 sia a un promemoria scaduto (``expired``) sia, ora, a un job di sistema
 (``protected``), col motivo nel corpo. Il toast di ``_runCronAction``
 (``mobile-settings.js``) leggeva solo lo stato e diceva «scaduto» a tutti e

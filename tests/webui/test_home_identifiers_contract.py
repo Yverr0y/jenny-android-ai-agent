@@ -1,4 +1,4 @@
-"""Gli identificatori della casa sono inglesi (terza revisione, HJ15).
+"""Gli identificatori della casa sono inglesi.
 
 La fase 2 del rinomino ne aveva lasciati alcuni, e due erano rinomini
 sbagliati: ``BEYOND_NEWLINE`` era «oltre il capo» letto come «a capo», e

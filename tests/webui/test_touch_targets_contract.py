@@ -1,4 +1,4 @@
-"""Le crocette piccole hanno un bersaglio da almeno 24 px (CS16 della terza revisione).
+"""Le crocette piccole hanno un bersaglio da almeno 24 px.
 
 Misurato in Chrome con `elementFromPoint` dal centro verso i quattro lati: la
 crocetta dei cassetti e la pulizia della ricerca rispondevano su 22×22 px, la

@@ -56,7 +56,7 @@ def test_a_backup_picker_queued_after_on_destroy_does_not_crash() -> None:
     """``shutdown`` lascia finire la coda di ``nativeExecutor``: un
     ``exportBackup``/``importBackup`` accodato prima di ``onDestroy`` gira dopo,
     quando i launcher di ActivityResult sono già deregistrati, e ``launch``
-    sollevava sul thread UI (voce AN7 della terza revisione)."""
+    sollevava sul thread UI."""
     code = _main()
     for command, launcher in (
         ("exportBackup", "exportBackupLauncher.launch("),

@@ -1,4 +1,4 @@
-"""TD20 della terza revisione: un loop di symlink non fa cadere i ganci di provenienza.
+"""Un loop di symlink non fa cadere i ganci di provenienza.
 
 Su Python 3.11 ``Path.resolve()`` su un loop di symlink solleva ``RuntimeError``
 (dalla 3.13 non piu'), e i due ganci — :func:`_provenance_guard` della passata del

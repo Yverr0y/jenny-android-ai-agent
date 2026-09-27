@@ -113,7 +113,7 @@ class TestEnforceRoleAlternation:
         assert result[2]["role"] == "tool"
 
     def test_list_and_string_user_turns_are_joined_not_dropped(self):
-        """Due ``user`` di fila, uno a blocchi: si uniscono (PC12).
+        """Due ``user`` di fila, uno a blocchi: si uniscono.
 
         Prima vinceva l'ultimo e il primo spariva: un messaggio rimasto senza
         risposta (turno fallito) seguito da una foto perdeva il testo, e al

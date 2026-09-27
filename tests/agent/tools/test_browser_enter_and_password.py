@@ -1,4 +1,4 @@
-"""``press Enter`` e i campi password nella sessione del browser (TL13, terza revisione).
+"""``press Enter`` e i campi password nella sessione del browser.
 
 Due buchi nella politica di ``browser_do``:
 

@@ -3,8 +3,8 @@
 La bozza del campo e' per conversazione dal primo giorno (``_drafts``): mezza
 frase scritta in casa non deve partire nel quaderno che apri dopo. Gli
 allegati in attesa no — erano uno solo per tutta la casa — e una foto scelta
-dentro un quaderno partiva col primo messaggio della conversazione personale
-(terza revisione, HJ9). Stessa famiglia di guasto, un attimo prima.
+dentro un quaderno partiva col primo messaggio della conversazione personale.
+Stessa famiglia di guasto, un attimo prima.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 """I comandi ``workspace.delete``/``rename``/``copy`` del file manager.
 
 Fino al 26/09/2026 erano tre GET di ``/api/workspace/*``: scritture sul disco
-su una superficie che il gateway vuole di sola lettura. Decisione D3
-della terza revisione: sono comandi dell'RPC WebSocket (``webui/commands.py``),
+su una superficie che il gateway vuole di sola lettura. Per questo
+sono comandi dell'RPC WebSocket (``webui/commands.py``),
 come ``project.delete`` e ``page.write``. I test delle rotte che restano sono in
 ``tests/webui/test_workspace_routes.py``.
 """
@@ -147,7 +147,7 @@ async def test_the_tree_work_runs_off_the_event_loop(
     fn: str,
 ) -> None:
     """``rmtree``/``copytree`` di una cartella grande sul loop fermavano il
-    gateway (terza revisione, WA10)."""
+    gateway."""
     import shutil
     import threading
 
@@ -170,7 +170,7 @@ async def test_a_filesystem_error_does_not_leak_the_absolute_path(
     ctx: CommandContext, workspace_root: Path, config_path: Path
 ) -> None:
     """``str(OSError)`` porta il percorso assoluto della cartella privata
-    dell'app fino al toast (terza revisione, WA16)."""
+    dell'app fino al toast."""
     (workspace_root / "a").mkdir()
     err = await _refused(ctx, "workspace.rename", {"old_path": "a", "new_path": "a/dentro"})
     assert err.code == "bad_request"
@@ -251,7 +251,7 @@ async def test_copy_rejects_an_empty_dest(ctx: CommandContext, workspace_root: P
 
 
 # ---------------------------------------------------------------------------
-# WA6: ``workspace.write`` su config.json passa da ``store.mutate``
+# ``workspace.write`` su config.json passa da ``store.mutate``
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ def live_config(workspace_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 async def test_writing_config_json_goes_through_the_store(
     ctx: CommandContext, live_config: Path
 ) -> None:
-    """L'editor riscriveva ``config.json`` a mano (terza revisione, WA6): 600
+    """L'editor riscriveva ``config.json`` a mano: 600
     diventava 644 — le chiavi API leggibili —, niente lock, niente ``.bak``, e
     la copia che l'editor aveva aperto cancellava le scritture fatte intanto
     dalle Impostazioni."""
@@ -436,7 +436,7 @@ async def test_a_non_string_base_is_refused(
 
 
 # ---------------------------------------------------------------------------
-# WA3: la radice, la cartella dei quaderni e i loro antenati non si cancellano
+# La radice, la cartella dei quaderni e i loro antenati non si cancellano
 # ---------------------------------------------------------------------------
 
 
@@ -451,8 +451,8 @@ def _notebook(workspace_root: Path, rel: str = "wikis/orto") -> Path:
 async def test_delete_refuses_the_workspace_root(
     ctx: CommandContext, workspace_root: Path, config_path: Path, path: str
 ) -> None:
-    """``path=.`` faceva la ``rmtree`` della radice del workspace (terza
-    revisione, WA3): config, sessioni, memoria, tutto."""
+    """``path=.`` faceva la ``rmtree`` della radice del workspace:
+    config, sessioni, memoria, tutto."""
     (workspace_root / "sub").mkdir()
     (workspace_root / "USER.md").write_text("io", encoding="utf-8")
     err = await _refused(ctx, "workspace.delete", {"path": path})
@@ -515,7 +515,7 @@ async def test_delete_allows_a_notebooks_folder_without_notebooks(
 
 
 # ---------------------------------------------------------------------------
-# WA4: rinomina e copia non spostano quaderni, non sovrascrivono, e rispettano
+# Rinomina e copia non spostano quaderni, non sovrascrivono, e rispettano
 # ``workspace.allow_write``
 # ---------------------------------------------------------------------------
 
@@ -532,7 +532,7 @@ async def test_rename_refuses_to_move_a_notebook(
     ctx: CommandContext, workspace_root: Path, config_path: Path, old: str, new: str
 ) -> None:
     """Il rinomino dal file manager spostava la cartella e lasciava la chat sotto
-    il nome vecchio (terza revisione, WA4): si fa con ``project.rename``."""
+    il nome vecchio: si fa con ``project.rename``."""
     pages = _notebook(workspace_root)
     err = await _refused(ctx, "workspace.rename", {"old_path": old, "new_path": new})
     assert err.code == "forbidden"
@@ -614,7 +614,7 @@ async def test_copy_does_not_overwrite_a_file(
 
 
 # ---------------------------------------------------------------------------
-# WA5: cancellare e rinominare un link agisce sul link, non su cosa indica
+# Cancellare e rinominare un link agisce sul link, non su cosa indica
 # ---------------------------------------------------------------------------
 
 
@@ -640,7 +640,7 @@ async def test_delete_removes_the_link_not_its_target(
     ctx: CommandContext, workspace_root: Path, config_path: Path, linked, name: str
 ) -> None:
     """La ``rmtree`` seguiva il link: cancellare ``link-dentro`` svuotava la
-    cartella vera (terza revisione, WA5); un link verso fuori non si poteva
+    cartella vera; un link verso fuori non si poteva
     cancellare affatto, perche' il gate risolveva il bersaglio."""
     import os
 

@@ -1,4 +1,4 @@
-"""La read timeout di httpx non scade prima del budget del primo token (PC5).
+"""La read timeout di httpx non scade prima del budget del primo token.
 
 Su un endpoint remoto la read timeout era 120 s e il budget del primo token 300:
 un modello che ragiona in silenzio veniva tagliato da httpx a 120 s, con un

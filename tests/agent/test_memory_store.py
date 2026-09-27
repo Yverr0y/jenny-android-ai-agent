@@ -198,7 +198,7 @@ class TestHistoryWithCursor:
         assert cursor == 1
 
     def test_next_cursor_survives_a_kill_after_an_entry_longer_than_one_block(self, store):
-        """AC11 della terza revisione: l'ultima voce si legge intera, qualunque sia la lunghezza.
+        """L'ultima voce si legge intera, qualunque sia la lunghezza.
 
         ``_next_cursor`` prende il massimo fra ``.cursor`` e l'ultima voce su disco
         proprio per il kill fra l'append e la riscrittura di ``.cursor``. Leggendo
@@ -261,7 +261,7 @@ class TestHistoryWithCursor:
         store.append_history("event 3")
         store.append_history("event 4")
         store.append_history("event 5")
-        # Solo quel che Dream ha gia' letto si taglia (AC12 della terza revisione).
+        # Solo quel che Dream ha gia' letto si taglia.
         store.set_last_dream_cursor(5)
         store.compact_history()
         entries = store.read_unprocessed_history(since_cursor=0)

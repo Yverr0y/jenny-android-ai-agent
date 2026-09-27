@@ -4,8 +4,7 @@ Da Android 12 un FGS non parte da background, salvo un'allowlist che lo
 permetta. Senza ``SCHEDULE_EXACT_ALARM`` e senza esenzione dalla batteria
 nessuna sveglia e nessun job la concede (v.
 ``test_gateway_fgs_fallback_needs_exact_alarms``): un gateway morto restava
-morto finché l'utente non apriva l'app, e nessuno glielo diceva (voce AN2
-della terza revisione).
+morto finché l'utente non apriva l'app, e nessuno glielo diceva.
 
 Il tocco su una notifica la concede invece: ``NotificationManagerService``
 registra ogni ``PendingIntent`` di una notifica con

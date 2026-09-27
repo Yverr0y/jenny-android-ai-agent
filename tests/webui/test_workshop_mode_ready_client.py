@@ -1,10 +1,10 @@
 """Un controller pronto in ritardo non si attiva su una vista che non c'e' piu'.
 
-WJ4 della terza revisione (26/09/2026): ``switchMode`` aspettava il ``ready`` di
+``switchMode`` aspettava il ``ready`` di
 un controller e poi lo attivava **comunque**. Entrare in chat e andare altrove
 prima che fosse pronta lasciava una chat attiva su una vista nascosta, che
 chiamava ``chatOpened`` e cancellava avvisi mai visti. E un ``ready`` rifiutato
-restava un rifiuto non gestito (WJ23): il toast generico «errore di rete».
+restava un rifiuto non gestito: il toast generico «errore di rete».
 
 Si esegue in node lo ``switchMode`` vero del guscio, come in
 ``test_workshop_open_file_from_chat_client.py``.

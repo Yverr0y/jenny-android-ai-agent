@@ -164,7 +164,7 @@ def test_the_payload_is_built_off_the_event_loop(workspace, monkeypatch):
 
 
 def test_the_store_is_read_on_the_loop_not_in_the_thread(workspace, monkeypatch):
-    """RC3: ``list_jobs`` in un thread riassegnava ``CronService._store`` sotto al
+    """``list_jobs`` in un thread riassegnava ``CronService._store`` sotto al
     loop. Un giro del timer in corso salvava poi la copia vecchia, e il job appena
     eseguito tornava dovuto e ripartiva. Il payload lavora su una copia."""
     import threading
@@ -258,7 +258,7 @@ def test_the_service_s_refusals_become_status_codes(workspace, service):
     time.sleep(0.4)
 
     # 409 e non 403: il client legge 401/403 come token scaduto e ricarica la
-    # SPA (``api-client.js``), cioe' un rifiuto diventava un logout (RC10).
+    # SPA (``api-client.js``), cioe' un rifiuto diventava un logout.
     assert _dispatch(handler, "/api/webui/cron/dream/pause").status_code == 409
     assert _dispatch(handler, "/api/webui/cron/dream/remove").status_code == 409
     assert b"protected" in _dispatch(handler, "/api/webui/cron/dream/remove").body
@@ -285,7 +285,7 @@ def test_run_now_is_still_not_a_route(workspace, service):
 
 
 def test_the_logs_of_a_failing_getter_are_in_english(workspace):
-    """RC7: i log sono in inglese (AGENTS.md), anche quando il getter solleva."""
+    """I log sono in inglese (AGENTS.md), anche quando il getter solleva."""
     from jenny.webui.cron_routes import CronRoutes
 
     def _boom():

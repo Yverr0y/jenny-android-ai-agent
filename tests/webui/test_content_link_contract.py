@@ -98,7 +98,7 @@ def test_the_chat_intercepts_every_anchor_before_anything_else() -> None:
     assert listener, "listener click della chatArea non trovato"
     body = _strip_comments(listener.group(1))
     # ``contentLinkOf`` e non ``closest('a[href]')``: anche ``<area href>`` e il
-    # ``<a xlink:href>`` di un ``<svg>`` sono link (WJ3 della terza revisione).
+    # ``<a xlink:href>`` di un ``<svg>`` sono link.
     assert "contentLinkOf(e.target)" in body, "nessun ramo per i link del markdown"
     assert body.index("contentLinkOf(e.target)") < body.index("closest('.chat-code-copy')"), (
         "il ramo dei link deve precedere gli altri handler della chat"

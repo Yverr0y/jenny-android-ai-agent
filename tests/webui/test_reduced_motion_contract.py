@@ -3,8 +3,8 @@
 La regola `*` della sezione «Reduced Motion» di `mobile-style.css` azzera
 durate e animazioni. Un `transform: scale(...)` su `:active` non e' ne' l'una
 ne' l'altra, quindi sopravvive — e fino al 25/09/2026 lo spegnevano solo le tre
-pillole del composer, mentre una ventina di bottoni rimpicciolivano lo stesso
-(revisione di quel giorno). La scelta e' quella che le pillole avevano gia'
+pillole del composer, mentre una ventina di bottoni rimpicciolivano lo stesso.
+La scelta e' quella che le pillole avevano gia'
 fatto: a movimento ridotto il tocco non rimpicciolisce, mai.
 
 Il banco lo legge dai fogli invece di elencare i bottoni: un bottone nuovo con

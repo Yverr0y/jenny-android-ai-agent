@@ -1,4 +1,4 @@
-"""Un delta scartato sotto backpressure non si perde per sempre (PC3).
+"""Un delta scartato sotto backpressure non si perde per sempre.
 
 La coda outbound è limitata (512 in produzione) e i delta passano da
 ``try_publish_outbound``, che li scarta quando è piena; il finale del turno è

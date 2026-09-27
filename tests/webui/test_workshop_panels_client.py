@@ -1,6 +1,6 @@
 """I pannelli di un host SSH e di una marca seguono l'oggetto che mostrano.
 
-Tre difetti dello stesso tipo (M17 della revisione profonda): i pannelli si
+Tre difetti dello stesso tipo: i pannelli si
 disegnano all'apertura, e poi nessuno li riallineava.
 
 * Il segno di attesa di «Verifica» cercava il bottone in ``contentEl``, ma il

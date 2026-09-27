@@ -1,6 +1,6 @@
 """Il giro di cancellazione di un progetto (``shared/project-delete.js``), col modulo vero.
 
-Dalla seconda revisione (25/09/2026) il gateway rifiuta ``project.delete`` con
+Dal 25/09/2026 il gateway rifiuta ``project.delete`` con
 ``conflict`` mentre qualcuno sta ancora scrivendo in quel quaderno (un turno, un
 subagent, una passata del giardiniere). È una condizione attesa, e va detta com'è
 — «sto ancora lavorando lì» — invece del fallimento generico «non ho potuto

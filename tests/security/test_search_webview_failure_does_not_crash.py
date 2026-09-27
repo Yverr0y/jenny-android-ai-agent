@@ -4,7 +4,7 @@
 WebView e il ``loadUrl``. Senza ``try``, un costruttore che solleva — succede
 mentre Android aggiorna il provider WebView — lancia l'eccezione sul main
 thread, e il processo muore con il gateway dentro. Il browser dell'agente era
-già protetto (``MainHop``); la ricerca no (M12 della revisione profonda, 25/09).
+già protetto (``MainHop``); la ricerca no.
 
 Il Kotlin non gira in CI: la regola si fissa sul **codice**, commenti e
 stringhe esclusi (``support/kotlin_source.py``).

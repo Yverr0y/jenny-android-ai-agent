@@ -392,7 +392,7 @@ def test_saving_and_syncing_share_one_lock(tmp_path: Path) -> None:
 
 
 def test_the_sync_after_dream_waits_for_the_lock_too(tmp_path: Path) -> None:
-    """L'altra meta' della serratura (TD18 della terza revisione).
+    """L'altra meta' della serratura.
 
     Il banco qui sopra prova che ``save_rules`` aspetta; nessuno provava che
     aspettasse ``sync_soul``, la strada del loop dopo ogni passata di Dream:

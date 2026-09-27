@@ -6,7 +6,7 @@ solleva â€” il costruttore della WebView, mentre Android aggiorna il provider â€
 se il main thread non risponde in tempo. Con ``Unit`` come esito, ``open`` non
 se ne accorgeva: aspettava un caricamento inesistente e rispondeva
 ``{"ok":true}`` con indirizzo e titolo vuoti, che al modello sembra una pagina
-bianca aperta davvero. Trovato dalla revisione finale della pulizia (25/09).
+bianca aperta davvero.
 
 Il Kotlin non gira in CI: la regola si fissa sul sorgente, come in
 ``test_webview_debugging_is_gated.py``.

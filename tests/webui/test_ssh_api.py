@@ -735,7 +735,7 @@ async def test_route_layer_maps_auth_and_errors(env, monkeypatch) -> None:
         assert response is not None and response.status_code == 401, path
 
     # Il salvataggio di un host non e' piu' una rotta: porta la password, e la
-    # query la metteva nella riga di richiesta (terza revisione, WA2). E' il
+    # query la metteva nella riga di richiesta. E' il
     # comando ``ssh.host.save`` (``tests/webui/test_secret_commands.py``).
     assert await router.dispatch(
         request("/api/settings/ssh/host/save?alias=prod&host=example.com&username=root"),

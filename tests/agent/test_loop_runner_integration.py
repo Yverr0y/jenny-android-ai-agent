@@ -319,7 +319,7 @@ async def test_subagent_max_iterations_announces_the_budget_stop(tmp_path, monke
 
     mgr._announce_result.assert_awaited_once()
     args = mgr._announce_result.await_args.args
-    # AC7 della terza revisione: non un successo, e non il testo di ripiego.
+    # Non un successo, e non il testo di ripiego.
     assert args[5] == "budget"
     assert "list_dir" in args[3]
     assert "Task completed but no final response" not in args[3]

@@ -86,7 +86,7 @@ def test_load_config_prefers_the_backup_over_defaults(tmp_path) -> None:
 
 
 def test_the_file_promoted_from_the_backup_is_private(tmp_path) -> None:
-    """TD21: il file rimesso al suo posto dal ``.bak`` porta gli stessi segreti.
+    """Il file rimesso al suo posto dal ``.bak`` porta gli stessi segreti.
 
     ``write_text`` qui sotto lascia il file rotto e il backup con i permessi di
     default (644 con l'umask comune): il file promosso deve uscire comunque 600.

@@ -624,7 +624,7 @@ class TestAutoCompactEdgeCases:
 
     @pytest.mark.asyncio
     async def test_auto_compact_archive_failure_keeps_the_whole_session(self, tmp_path):
-        """A LLM giu' la compattazione per inattivita' non tronca (AC2 della terza revisione)."""
+        """A LLM giu' la compattazione per inattivita' non tronca."""
         loop = _make_loop(tmp_path, session_ttl_minutes=15)
         session = loop.sessions.get_or_create("internal:test")
         _add_turns(session, 6, prefix="important")

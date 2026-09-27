@@ -5,8 +5,8 @@ Aprire la pagina Impostazioni rilegge ``/api/settings`` (``_openSettings``,
 ``fresh``), e il payload e' pesante: sul telefono la risposta arriva dopo un
 giro. Se nel frattempo scegli un modello in «Chi risponde», il salvataggio
 torna col payload nuovo e la stanza lo mostra — poi arriva la rilettura
-partita **prima** e ridipinge tutto com'era: modello, marca, nome (terza
-revisione, HJ11). Sul server e' salvato giusto, a schermo no.
+partita **prima** e ridipinge tutto com'era: modello, marca, nome.
+Sul server e' salvato giusto, a schermo no.
 
 La regola: ogni cosa che il guscio sa di nuovo dopo aver chiesto — un
 salvataggio, un nome, la finestra flottante, una versione — fa scadere le

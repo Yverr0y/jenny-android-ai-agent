@@ -1,4 +1,4 @@
-"""Una riga più lunga del tetto di ``read_file`` si legge a pezzi (TL6, terza revisione).
+"""Una riga più lunga del tetto di ``read_file`` si legge a pezzi.
 
 Con la prima riga della finestra oltre i 128K caratteri il taglio non teneva
 nessuna riga: «Showing lines 1-0 … Use offset=1 to continue», cioè lo stesso

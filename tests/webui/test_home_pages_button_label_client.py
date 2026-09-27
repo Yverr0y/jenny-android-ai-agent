@@ -3,8 +3,7 @@
 ``#home-notebook-pages-open`` non ha testo: chi non vede il libro sente
 l'``aria-label`` («Pagine del quaderno: orto, 3 pagine»). La scriveva solo il
 conteggio delle pagine, cioe' un cambio di conversazione; ``_applyTranslations``
-la saltava, e dopo un cambio di lingua restava nella precedente (terza
-revisione, RC9).
+la saltava, e dopo un cambio di lingua restava nella precedente.
 """
 
 from __future__ import annotations

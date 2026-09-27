@@ -1,6 +1,6 @@
 """KDoc e commenti del lato Android che descrivevano un codice che non c'è più.
 
-Voce AN17 della terza revisione. Qui si leggono **i commenti**, apposta: sono
+Qui si leggono **i commenti**, apposta: sono
 loro il difetto. Ogni frase tolta è fissata dall'assenza, e dove si può si
 lega il commento al codice che descrive, così una prossima deriva si vede.
 

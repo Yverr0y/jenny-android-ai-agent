@@ -44,7 +44,7 @@ def _dom_order() -> list[str]:
     """
     html = WORKSHOP_HTML.read_text("utf-8")
     modes: list[str] = []
-    # ``<button>`` dal 26/09/2026 (CS9 della terza revisione): il dock si
+    # ``<button>`` dal 26/09/2026: il dock si
     # raggiunge dalla tastiera. Il ``<div>`` resta per chi lo riportasse.
     for tag in re.findall(r"<(?:button|div)\b[^>]*>", html):
         classes = re.search(r'class="([^"]*)"', tag)

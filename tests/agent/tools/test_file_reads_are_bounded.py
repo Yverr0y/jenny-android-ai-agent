@@ -1,4 +1,4 @@
-"""``read_file`` e ``grep`` misurano un file prima di leggerlo (TL7, terza revisione).
+"""``read_file`` e ``grep`` misurano un file prima di leggerlo.
 
 ``grep`` leggeva ogni file per intero e solo dopo guardava il tetto: 600 MB di
 RSS per saltare un video. ``read_file`` leggeva il file due volte (tre con la

@@ -1,4 +1,4 @@
-"""Un ``app.json`` con un tipo sbagliato e' un'app rotta, non un'eccezione (CF2).
+"""Un ``app.json`` con un tipo sbagliato e' un'app rotta, non un'eccezione.
 
 ``op``, ``method`` e ``view.kind`` si confrontavano con un ``set`` senza
 guardarne il tipo: una lista o un dict sollevava ``TypeError: unhashable``, che

@@ -610,7 +610,7 @@ class TestTheReplayWindow:
         assert "Already processed, shown again" in history
 
     def test_an_already_consumed_entry_is_shown_again_whole(self, store):
-        """AC1: la finestra rimostra la voce intera, non i suoi primi 500 caratteri."""
+        """La finestra rimostra la voce intera, non i suoi primi 500 caratteri."""
         lunga = "prima cosa di progetto " + "coda inventata " * 80 + "ultima parola"
         first = store.append_history(lunga, session_key=PROJECT)
         store.set_last_dream_cursor(first)

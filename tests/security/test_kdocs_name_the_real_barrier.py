@@ -1,16 +1,16 @@
 """Due KDoc che vendevano come barriera ciò che non lo è.
 
-Voci AN6 e AN14 della terza revisione. Il codice resta com'è — tutti e due i
+Il codice resta com'è — tutti e due i
 controlli sono giusti — ma il commento diceva di più, e un commento di
 sicurezza che promette troppo è peggio di nessuno: chi lo legge smette di
 cercare.
 
-- **AN6** — ``NativeCommandListener`` esige ``isMainFrame`` «perché nessuna
+- ``NativeCommandListener`` esige ``isMainFrame`` «perché nessuna
   cornice — nemmeno della stessa origine — ha motivo di parlare col nativo».
   Una cornice della stessa origine non ne ha bisogno: raggiunge
   ``parent.JennyNativePort`` e lo chiama da lì, col frame principale come
   mittente. La barriera è l'origine; il frame principale è difesa in profondità.
-- **AN14** — ``ReplyReceiver`` «lo raggiunge solo il nostro PendingIntent, che
+- ``ReplyReceiver`` «lo raggiunge solo il nostro PendingIntent, che
   porta la nostra identità». Quello della risposta è mutabile: un'app con
   l'accesso alle notifiche lo manda con un testo suo.
 

@@ -1,4 +1,4 @@
-"""AC6 della terza revisione: i token dei subagent e del Consolidator si contano.
+"""I token dei subagent e del Consolidator si contano.
 
 ``TokenUsageHook`` era montato solo sui turni di ``AgentLoop``: un subagent gira
 nel suo ``AgentRunner`` e il Consolidator chiama il provider da sé, quindi la loro

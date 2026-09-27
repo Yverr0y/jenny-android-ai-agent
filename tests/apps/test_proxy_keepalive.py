@@ -1,4 +1,4 @@
-"""Il proxy della vista esterna e le connessioni keep-alive (CF6).
+"""Il proxy della vista esterna e le connessioni keep-alive.
 
 Il proxy riscriveva solo la **prima** richiesta di una connessione (Host,
 prefisso di ``baseUrl``, cookie-capability tolto) e poi pompava byte grezzi: la

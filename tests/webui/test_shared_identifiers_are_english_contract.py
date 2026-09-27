@@ -1,6 +1,6 @@
 """Gli identificatori di ``shared/`` sono in inglese, come dice AGENTS.md.
 
-WJ19 della terza revisione (26/09/2026): dopo la fase 2 ne restavano alcuni in
+Dopo la fase 2 ne restavano alcuni in
 italiano — le chiavi i18n ``skills.integrataBloccata``, ``skills.tuaBloccata``,
 ``skills.integrate``, il campo ``_annunciate``, il valore ``'piena'`` dello
 stato di una pagina, le variabili ``visto`` e ``su``. Nessuno era persistito

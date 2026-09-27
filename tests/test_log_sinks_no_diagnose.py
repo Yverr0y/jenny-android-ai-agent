@@ -1,4 +1,4 @@
-"""Un traceback nel log non porta i valori delle variabili locali (WA1/WA2).
+"""Un traceback nel log non porta i valori delle variabili locali.
 
 Il sink di default di loguru ha ``diagnose=True``: ogni ``logger.exception``
 stampa il valore di ogni locale di ogni frame, e un'eccezione in una route

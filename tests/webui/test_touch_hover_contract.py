@@ -1,4 +1,4 @@
-"""Un tocco non lascia il bottone del colore del browser (CS8 della terza revisione).
+"""Un tocco non lascia il bottone del colore del browser.
 
 Su un telefono `:hover` resta acceso dopo un tocco. L'onboarding lo «annullava»
 con `revert` sotto `@media (hover: none)`, ma `revert` torna al foglio

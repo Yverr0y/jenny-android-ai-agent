@@ -69,7 +69,7 @@ def test_a_garbage_version_degrades_to_zero_instead_of_raising() -> None:
 
 @pytest.mark.parametrize("version", ["1e400", "2.5", '"3"', "true", "-1", "null", "[]"])
 def test_a_version_that_is_not_a_plain_integer_costs_nothing_else(tmp_path, version) -> None:
-    """CF15: ``1e400`` (infinito per ``json``) faceva sollevare ``OverflowError`` fuori
+    """``1e400`` (infinito per ``json``) faceva sollevare ``OverflowError`` fuori
     dal recupero — crash-loop del gateway; ``2.5``, ``"3"``, ``true`` o ``-1`` facevano
     rifiutare il file intero, e si ripartiva sui default di tutto."""
     path = tmp_path / "config.json"

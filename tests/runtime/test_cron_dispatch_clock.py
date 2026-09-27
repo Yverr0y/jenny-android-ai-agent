@@ -2,8 +2,7 @@
 
 ``utils/clock.now_ms`` era nato per togliere quattro copie di
 ``int(time.time() * 1000)`` (1f38c06); ``CronDispatcher`` ne teneva ancora una
-sua, come default del parametro ``now_ms``. Visto dalla revisione finale della
-pulizia (25/09).
+sua, come default del parametro ``now_ms``.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""``tools.pythonExec.maxOutputChars`` è il tetto vero dell'output (TL14, terza revisione).
+"""``tools.pythonExec.maxOutputChars`` è il tetto vero dell'output.
 
 ``create`` passava il valore di config al costruttore, che lo salvava in
 ``self.max_output_chars``; ma ``execute`` ripiegava sulla costante di classe

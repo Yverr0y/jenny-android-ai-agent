@@ -66,7 +66,7 @@ def test_shell_assets_are_in_manifest():
 
 
 def test_the_shell_guard_bites_on_the_workshop():
-    """Il banco guardava solo `index.html` (TD13 della terza revisione): un
+    """Il banco guardava solo `index.html`: un
     riferimento rotto nell'officina passava verde. Qui si toglie dal manifest
     un file che solo l'officina carica, e il banco deve accorgersene."""
     only_workshop = set(_shell_asset_refs("workshop.html")) - set(_shell_asset_refs("index.html"))

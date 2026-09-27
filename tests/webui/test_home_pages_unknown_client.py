@@ -5,7 +5,7 @@ le sole quattro fisse, ed e' giusto — meglio una casa che apre. Ma la
 scrittura manda **l'elenco intero** (``home.pages.set``): con la pista vuota
 per una lettura fallita, il primo «Metti come pagina» o il primo «Fatto» della
 modalita' ordina riscriveva sul server un elenco senza le pagine che c'erano,
-cioe' le cancellava tutte (terza revisione, HJ2).
+cioe' le cancellava tutte.
 
 Qui la regola: finche' l'elenco non e' stato letto nessuna scrittura parte. Al
 primo uso si rilegge; se la rilettura riesce si scrive sull'elenco vero, se no

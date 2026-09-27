@@ -1,6 +1,6 @@
 """Il kit delle app ascolta solo il guscio che lo ospita.
 
-WJ15 della terza revisione (26/09/2026). Il listener ``message`` di
+Il listener ``message`` di
 ``apps/jenny-sdk.js`` non guardava ``event.source``: un frame annidato
 nell'app (una mappa, un video, una pagina esterna) poteva mandare
 ``jenny:ui-query`` e ricevere l'``outerHTML`` dell'app intera, o cambiarle tema

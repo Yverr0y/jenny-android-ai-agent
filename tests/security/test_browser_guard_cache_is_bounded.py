@@ -1,8 +1,7 @@
 """La guardia della sessione di navigazione non si fa pilotare dalla pagina.
 
 ``JennyBrowserGuard.blocked(host)`` è visibile a ogni frame che la sessione
-apre, e il nome lo sceglie la pagina. Tre conseguenze che erano aperte (voce
-AN9 della terza revisione):
+apre, e il nome lo sceglie la pagina. Tre conseguenze che erano aperte:
 
 - la cache dei verdetti era una ``ConcurrentHashMap`` senza tetto: nomi casuali
   in un ciclo la facevano crescere per tutta la sessione;

@@ -113,7 +113,7 @@ console.log(JSON.stringify({{
 _ICON_TAG = re.compile(r"<i class=\"ti[^\"]*\"[^>]*>")
 
 # I file dove ogni icona scritta come markup deve essere nascosta: i due punti
-# segnalati dalla revisione (intestazione e minichat dell'officina, «Aggiungi
+# dove mancava (intestazione e minichat dell'officina, «Aggiungi
 # provider») e l'intero guscio della casa, che oggi ne è già quasi tutto pulito
 # e così resta.
 _SHELL_FILES = sorted(p.name for p in ASSETS.glob("home-*.js")) + [

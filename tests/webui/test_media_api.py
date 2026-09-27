@@ -133,7 +133,7 @@ def test_sign_or_stage_copies_outside_file_into_websocket_channel(
 def test_sign_or_stage_copies_a_file_once_across_renders(
     tmp_path: Path, media_root: Path
 ) -> None:
-    """WA7: ogni render della chat ricopiava l'allegato, disco senza limite.
+    """Ogni render della chat ricopiava l'allegato, disco senza limite.
 
     La copia ha un nome stabile per percorso + mtime + dimensione: un secondo
     render trova la copia e firma lo stesso URL.

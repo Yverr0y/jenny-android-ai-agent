@@ -1,4 +1,4 @@
-"""Commenti e docstring che la revisione profonda ha trovato falsi.
+"""Commenti e docstring che dicevano il falso.
 
 Un commento falso costa piu' di nessun commento: chi lo legge ci crede. Qui si
 fissano le affermazioni verificabili, perche' non tornino a divergere.

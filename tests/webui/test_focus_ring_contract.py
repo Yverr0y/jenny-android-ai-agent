@@ -1,4 +1,4 @@
-"""Il fuoco da tastiera si vede in ogni tema (CS5 della terza revisione).
+"""Il fuoco da tastiera si vede in ogni tema.
 
 Il Titan 2 ha una tastiera fisica: Tab e le frecce spostano il fuoco davvero.
 Due modi in cui il fuoco spariva:

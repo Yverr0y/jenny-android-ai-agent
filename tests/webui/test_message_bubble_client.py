@@ -227,7 +227,7 @@ def test_a_message_does_not_lose_the_tail_of_an_open_stream() -> None:
 
 
 def test_a_stream_that_lost_every_delta_still_shows_its_text() -> None:
-    """PC3 della terza revisione (lato client). Sotto backpressure il bus scarta
+    """Lato client: sotto backpressure il bus scarta
     i delta, e il gateway rimanda il testo intero dello stream nello
     ``stream_end``. Se il segmento li ha persi **tutti** non c'e' un blocco
     aperto, e il client ignorava quel testo: dal vivo la risposta non si vedeva.

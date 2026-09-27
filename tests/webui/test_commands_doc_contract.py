@@ -2,8 +2,8 @@
 
 ``docs/reference/websocket.md`` finisce anche sul sito (``jenny-site``): un
 comando che manca dalla tabella, o un codice d'errore che il gateway manda e la
-pagina non nomina, e' un contratto sbagliato per chiunque scriva un client. Q3
-della revisione profonda: ``conflict`` era descritto solo come «il file e'
+pagina non nomina, e' un contratto sbagliato per chiunque scriva un client.
+Per esempio ``conflict`` era descritto solo come «il file e'
 cambiato sotto», mentre rinomino e cancellazione lo usano per «Jenny sta ancora
 lavorando li'».
 """

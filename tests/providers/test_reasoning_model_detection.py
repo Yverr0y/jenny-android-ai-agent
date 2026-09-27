@@ -40,7 +40,7 @@ def test_supports_temperature_uses_slug_matching() -> None:
 
 
 def test_an_effort_drops_the_temperature_only_for_reasoning_models() -> None:
-    """Col default ``reasoning_effort="medium"`` la temperatura non partiva mai (PC10).
+    """Col default ``reasoning_effort="medium"`` la temperatura non partiva mai.
 
     La regola «un effort impostato spegne la temperatura» valeva per ogni
     modello, mentre a rifiutarla sono i modelli reasoning OpenAI (GPT-5, o1/o3/o4)

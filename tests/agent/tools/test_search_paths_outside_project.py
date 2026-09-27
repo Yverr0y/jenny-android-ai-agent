@@ -1,11 +1,11 @@
-"""Un percorso restituito da ``grep``/``find_files`` si apre con ``read_file`` (TL17).
+"""Un percorso restituito da ``grep``/``find_files`` si apre con ``read_file``.
 
 Dentro un progetto i percorsi relativi si misurano dalla cartella del progetto,
 ma le letture arrivano a tutta l'installazione (``_read_allowed_root``). Un file
 trovato fuori dal progetto — la skill in ``skills/`` — era mostrato relativo alla
 radice della *ricerca* (``llm-wiki/SKILL.md``), che ``read_file`` risolveva
 dentro il progetto: «File not found» per un percorso che il tool stesso aveva
-appena dato. Terza revisione.
+appena dato.
 """
 
 from __future__ import annotations

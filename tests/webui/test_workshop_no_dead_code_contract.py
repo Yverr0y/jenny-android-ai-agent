@@ -1,6 +1,6 @@
 """Niente import mai usati, niente metodi vuoti tenuti in vita da nessuno.
 
-WJ20 della terza revisione (26/09/2026): ``batteryExemptionNeeded`` importato e
+``batteryExemptionNeeded`` importato e
 mai chiamato in ``mobile-settings.js``, ``isOpenableProjectName`` in
 ``shared/scope-chip.js``, un ``_voiceTimerInterval`` scritto e mai letto e un
 ``handleAction(action) {}`` vuoto in ``mobile-chat.js`` (il guscio lo chiama

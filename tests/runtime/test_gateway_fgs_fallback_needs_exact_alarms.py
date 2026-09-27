@@ -8,7 +8,7 @@ sveglia per «rientrare dall'allowlist»; ma senza ``SCHEDULE_EXACT_ALARM``
 ``TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED`` (AOSP,
 ``android14-release`` e ``main``). La sveglia rientrava in un contesto che
 rifiutava l'avvio come il primo: niente rialzava il gateway, e i KDoc dicevano
-il contrario (voce AN2 della terza revisione; il Titan 2 lo maschera perché
+il contrario (il Titan 2 lo maschera perché
 l'app è esente dall'ottimizzazione batteria, e lì l'avvio non è mai rifiutato).
 
 ``setAlarmClock`` non è un'alternativa (è esatta, stesso permesso: verificato

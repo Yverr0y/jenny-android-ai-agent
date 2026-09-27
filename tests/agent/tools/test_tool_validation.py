@@ -499,7 +499,7 @@ def test_cast_nullable_param_no_crash() -> None:
 
 
 def test_cast_params_object_for_a_string_becomes_json() -> None:
-    """TL5 (terza revisione): un dict o una lista per un parametro ``string``.
+    """Un dict o una lista per un parametro ``string``.
 
     Il modello a volte manda ``write_file(content={...})``. Prima diventava il
     ``repr`` Python (``{'a': True, 'b': None}``): un file che nessun lettore JSON

@@ -4,15 +4,15 @@ rilettura, una lettura che non arriva.
 Il filo si rilegge in quattro occasioni — l'avvio, un cambio di conversazione,
 una riconnessione, un ``session_boundary`` — e in tutte la lettura e' una
 fetch che dura: nel frattempo il socket continua a portare frame. I difetti
-misurati dalla terza revisione stanno tutti in quell'attesa:
+misurati qui stanno tutti in quell'attesa:
 
-- **HJ1**: la bolla viva che arriva durante la lettura finiva *sopra* tutta la
+- la bolla viva che arriva durante la lettura finiva *sopra* tutta la
   storia, perche' la storia si appendeva dopo di lei;
-- **HJ7**: due riletture della stessa conversazione insieme disegnavano il
+- due riletture della stessa conversazione insieme disegnavano il
   filo due volte;
-- **HJ10**: la riga di un rifiuto restava nella conversazione dopo, perche'
+- la riga di un rifiuto restava nella conversazione dopo, perche'
   la ricarica toglieva i messaggi e i confini ma non le note;
-- **HJ5/HJ6**: una lettura fallita all'avvio non si riprovava piu', una
+- una lettura fallita all'avvio non si riprovava piu', una
   fallita al resync lasciava il filo vuoto senza dirlo, e quella del
   ``session_boundary`` era un rifiuto di promessa che nessuno prendeva.
 
@@ -62,7 +62,7 @@ def _run(body: str) -> str:
 
 
 def test_a_live_answer_stays_below_the_history_when_you_enter_its_conversation() -> None:
-    """HJ1: entri nel quaderno mentre Jenny ci sta rispondendo."""
+    """Entri nel quaderno mentre Jenny ci sta rispondendo."""
     _run("""
 const app = await boot();
 slowThread(120);
@@ -80,7 +80,7 @@ assert.deepEqual(thread(), [
 
 
 def test_a_live_answer_stays_below_the_history_across_a_resync() -> None:
-    """HJ1, il resync a meta' turno: i delta arrivati durante la rilettura
+    """Il resync a meta' turno: i delta arrivati durante la rilettura
     stanno sotto la storia riletta."""
     _run("""
 const app = await boot();
@@ -96,7 +96,7 @@ assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you', 'you: and now?'
 
 
 def test_two_reloads_of_the_same_conversation_draw_it_once() -> None:
-    """HJ7: due riletture insieme, e il filo resta uno."""
+    """Due riletture insieme, e il filo resta uno."""
     _run("""
 const app = await boot();
 slowThread(40);
@@ -106,7 +106,7 @@ assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
 
 
 def test_a_reconnect_during_a_switch_does_not_duplicate_the_thread() -> None:
-    """HJ7, la forma che capita davvero: si cambia conversazione e il socket
+    """Due riletture, nella forma che capita davvero: si cambia conversazione e il socket
     si riapre mentre la lettura e' in volo."""
     _run("""
 const app = await boot();
@@ -123,7 +123,7 @@ assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
 
 
 def test_a_refusal_note_does_not_follow_you_into_another_conversation() -> None:
-    """HJ10: la riga di rifiuto e' della conversazione in cui e' nata."""
+    """La riga di rifiuto e' della conversazione in cui e' nata."""
     _run("""
 const app = await boot();
 await app.showConversation('project:orto');
@@ -137,7 +137,7 @@ assert.deepEqual(thread(), ['you: hello', 'jenny: hello to you']);
 
 
 def test_a_history_that_failed_at_startup_is_read_again() -> None:
-    """HJ5: la prima lettura fallisce; la visibilita', Home e l'apertura della
+    """La prima lettura fallisce; la visibilita', Home e l'apertura della
     chat la riprovano, e finche' non riesce lo si dice."""
     _run("""
 let reads = 0;
@@ -179,7 +179,7 @@ assert.equal($('home-empty').hidden, true);
 
 
 def test_a_failed_resync_keeps_the_thread_and_says_so() -> None:
-    """HJ6: la rilettura dopo una riconnessione fallisce. Il filo non si
+    """La rilettura dopo una riconnessione fallisce. Il filo non si
     svuota in silenzio: quel che c'era resta, e una riga dice che non e'
     stato riletto; la volta dopo si riprova."""
     _run("""
@@ -201,7 +201,7 @@ assert.deepEqual(unhandled, []);
 
 
 def test_a_session_boundary_that_cannot_be_read_is_not_an_unhandled_rejection() -> None:
-    """HJ6: il ``session_boundary`` rilegge il filo; se la lettura fallisce,
+    """Il ``session_boundary`` rilegge il filo; se la lettura fallisce,
     lo si dice e non resta un rifiuto di promessa senza padrone."""
     _run("""
 const app = await boot();

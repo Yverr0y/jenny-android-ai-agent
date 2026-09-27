@@ -152,7 +152,7 @@ window.HTMLElement.prototype.scrollIntoView = function () {{ scrolled.push(this)
 @requires_jsdom
 def test_a_table_of_contents_link_scrolls_to_its_heading() -> None:
     """L'indice (`toc`) del server porta ai titoli con ``#id``; il sanificatore
-    li fa uscire ``user-content-…`` (HJ8). Il lettore cercava l'id com'e'
+    li fa uscire ``user-content-…``. Il lettore cercava l'id com'e'
     scritto nell'href e non trovava niente: l'indice era morto."""
     run_home(
         _PURIFY_BOOT

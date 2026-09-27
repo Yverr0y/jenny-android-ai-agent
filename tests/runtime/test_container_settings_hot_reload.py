@@ -232,7 +232,7 @@ def test_fingerprint_without_an_active_provider() -> None:
     assert provider_fingerprint(empty) != provider_fingerprint(_config())
 
 
-# -- CF16: i riferimenti ``${VAR}`` si risolvono anche dopo l'avvio --------------
+# -- I riferimenti ``${VAR}`` si risolvono anche dopo l'avvio --------------------
 #
 # L'avvio passa da ``gateway_runtime._load_runtime_config``, che risolve i
 # ``${VAR}``; il hot reload e la nascita dell'agente dopo l'onboarding rileggevano
@@ -311,7 +311,7 @@ async def test_the_agent_born_after_onboarding_resolves_env_references(monkeypat
 
 
 def test_replaced_provider_is_closed_in_background(container_with_agent, monkeypatch) -> None:
-    """Il provider sostituito chiude il suo client httpx (PC17).
+    """Il provider sostituito chiude il suo client httpx.
 
     Prima restava vivo, con pool e connessioni, uno per salvataggio.
     """

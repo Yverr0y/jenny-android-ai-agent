@@ -62,7 +62,7 @@ def test_custom_provider_parse_chunks_deduplicates_parallel_tool_call_ids() -> N
 
 
 def test_parallel_tool_calls_without_index_are_not_merged() -> None:
-    """Chiamate parallele senza ``index``, una per chunk, con id distinti (PC14).
+    """Chiamate parallele senza ``index``, una per chunk, con id distinti.
 
     Senza ``index`` il ripiego era la posizione nel chunk, cioè 0 per tutte: gli
     argomenti delle due chiamate finivano concatenati in una sola, con il nome

@@ -1,5 +1,5 @@
 """Due letture delle stanze delle Impostazioni che, fallite una volta, non si
-riprovavano piu' (terza revisione, HJ12).
+riprovavano piu'.
 
 - Il catalogo dei modelli in «Chi risponde» si tiene per provider, per non
   richiederlo a ogni apertura: ma si teneva anche il fallimento, e da li'

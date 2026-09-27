@@ -1,6 +1,6 @@
 """Cancellare, rinominare e copiare dal file manager passa dal WebSocket.
 
-Decisione D3 della terza revisione: ``api.deleteWorkspace``/``renameWorkspace``/
+``api.deleteWorkspace``/``renameWorkspace``/
 ``copyWorkspace`` mandavano una GET a ``/api/workspace/*`` che scriveva sul
 disco. Ora sono i comandi RPC ``workspace.delete``/``rename``/``copy``, con la
 stessa firma — ``mobile-workspace.js`` non cambia — e un errore lanciato col
@@ -8,7 +8,7 @@ messaggio del server.
 
 Secondo pezzo: ``rpc-client.js`` apre il socket se nessuno l'ha ancora aperto.
 Nell'officina lo apre il controller della chat, che nasce pigro: nell'onboarding
-(dove ora passano le chiavi del provider, WA2) o sul file manager aperto per
+(dove ora passano le chiavi del provider) o sul file manager aperto per
 primo, ogni comando rifiutava con «gateway offline».
 
 In node sui file veri: ``api-client.js`` e ``rpc-client.js`` si importano davvero,
@@ -84,7 +84,7 @@ console.log('ok');
 
 
 def test_a_taken_name_is_said_in_the_users_language() -> None:
-    """Rinomina e copia non sovrascrivono piu' (WA4): il rifiuto ``name_taken``
+    """Rinomina e copia non sovrascrivono piu': il rifiuto ``name_taken``
     arriva all'utente tradotto, gli altri col perche' del server."""
     import json
 

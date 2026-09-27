@@ -1,4 +1,4 @@
-"""I toast: opachi, leggibili, e uno sotto l'altro (CS12 della terza revisione).
+"""I toast: opachi, leggibili, e uno sotto l'altro.
 
 Misurato in Chrome, tre toast di fila (successo, errore, info), prima:
 

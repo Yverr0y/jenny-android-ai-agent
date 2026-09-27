@@ -5,7 +5,7 @@ copiano nella cartella Download, visibile a tutte. Il recinto era l'intero
 ``filesDir`` e il FileProvider esponeva ``path="."``: dentro c'erano la chiave
 privata SSH (``files/ssh/``, tenuta fuori dal workspace apposta), lo store degli
 snapshot, lo staging dei backup, e nel workspace ``config.json`` con le chiavi
-dei provider (voce AN5 della terza revisione).
+dei provider.
 
 Ora il recinto è il workspace — dove stanno i file dell'esploratore e gli
 allegati della chat (``uploads/``, ``.jenny/media/``, gli unici path che il JS

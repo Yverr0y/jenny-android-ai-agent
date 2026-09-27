@@ -3,9 +3,8 @@
 ``.chat-thinking-header i, .tool-events-header i`` (specificità 0,1,1) dava
 colore accento e 12px all'icona della testata, ma prendeva anche la freccina in
 fondo, e vinceva su ``.chat-thinking-chevron`` / ``.tool-events-chevron``
-(0,1,0) che la vogliono tenue a 11px. Visto dalla revisione finale della
-pulizia (25/09); il confronto degli stili calcolati nel browser ha mostrato
-che la correzione cambia solo le due freccine.
+(0,1,0) che la vogliono tenue a 11px. Il confronto degli stili calcolati nel
+browser ha mostrato che la correzione cambia solo le due freccine.
 
 Si guardano **tutte** le regole dei due fogli che la chat carica, non la prima
 che somiglia: un ``i`` nudo in una regola più in basso (o nel foglio della

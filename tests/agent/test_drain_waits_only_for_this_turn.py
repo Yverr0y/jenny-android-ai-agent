@@ -1,4 +1,4 @@
-"""AC4 della terza revisione: un turno aspetta solo i subagent che ha lanciato lui.
+"""Un turno aspetta solo i subagent che ha lanciato lui.
 
 ``_drain_pending`` si bloccava fino a 300 secondi quando **qualunque** subagent
 della sessione era vivo, anche uno lanciato da un turno precedente: un «ciao» con

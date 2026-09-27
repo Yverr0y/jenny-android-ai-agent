@@ -1,4 +1,4 @@
-"""Il controllo SSRF risolve i nomi fuori dal loop (CF9 e TL11, terza revisione).
+"""Il controllo SSRF risolve i nomi fuori dal loop.
 
 Le tre policy di ``security/network.py`` chiamano ``socket.getaddrinfo``, che è
 bloccante, e tutti i chiamanti asincroni le chiamavano sul thread del loop: un

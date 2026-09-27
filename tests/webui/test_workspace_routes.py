@@ -7,7 +7,7 @@ traversal (delegato a ``workspace_files.validate_path``).
 
 La **scrittura** non è più una route (il contenuto di un file non entra in un
 header HTTP): i suoi test sono in ``tests/webui/test_commands.py``. Cancellazione,
-rinomina e copia nemmeno (D3 della terza revisione): i loro sono in
+rinomina e copia nemmeno: i loro sono in
 ``tests/webui/test_workspace_commands.py``.
 """
 
@@ -130,7 +130,7 @@ async def test_list_survives_a_dangling_symlink(
 
     ``item.stat()`` segue il link: su un bersaglio che non c'e' solleva
     ``FileNotFoundError``, e la rotta rispondeva «path not found» per l'intera
-    cartella — che invece c'e' (terza revisione, WA9). Stesso per un loop.
+    cartella — che invece c'e'. Stesso per un loop.
     """
     import os
 
@@ -440,7 +440,7 @@ async def test_mkdir_happy_path(
 
 
 # ---------------------------------------------------------------------------
-# rename / delete / copy: non piu' rotte (D3 della terza revisione)
+# rename / delete / copy: non piu' rotte, ma comandi dell'RPC
 # ---------------------------------------------------------------------------
 
 
@@ -545,8 +545,8 @@ async def test_download_names_any_file_safely(
 ) -> None:
     """Il nome del file finiva crudo fra virgolette nell'header: un'emoji o un
     accento facevano rifiutare l'header a ``websockets`` (500), un ``"`` lo
-    chiudeva prima, e un a-capo nel nome ne apriva un altro (terza revisione,
-    WA11). Ora c'e' il ``filename*`` di RFC 6266 in UTF-8 percent-encodato, e un
+    chiudeva prima, e un a-capo nel nome ne apriva un altro.
+    Ora c'e' il ``filename*`` di RFC 6266 in UTF-8 percent-encodato, e un
     ``filename`` ASCII di ripiego con ``"`` e ``\\`` escapati."""
     from urllib.parse import quote
 
@@ -584,7 +584,7 @@ async def test_a_filesystem_error_does_not_leak_the_absolute_path(
 ) -> None:
     """Il 400 portava ``str(OSError)`` — ``[Errno 21] Is a directory:
     '/data/user/0/…/workspace/adir'`` —, cioe' il percorso assoluto della cartella
-    privata dell'app (terza revisione, WA16). Resta il perche', senza il dove."""
+    privata dell'app. Resta il perche', senza il dove."""
     import os
 
     (workspace_root / "adir").mkdir()
@@ -598,7 +598,7 @@ async def test_a_filesystem_error_does_not_leak_the_absolute_path(
 
 
 # ---------------------------------------------------------------------------
-# WA10: il disco fuori dall'event loop
+# Il disco fuori dall'event loop
 # ---------------------------------------------------------------------------
 
 
@@ -619,7 +619,7 @@ async def test_the_disk_work_runs_off_the_event_loop(
     fn: str,
 ) -> None:
     """Leggere fino a un file intero (``read_bytes``) o elencare una cartella
-    grande sul loop fermava il gateway per tutti (terza revisione, WA10)."""
+    grande sul loop fermava il gateway per tutti."""
     import threading
 
     from jenny.webui import workspace_files

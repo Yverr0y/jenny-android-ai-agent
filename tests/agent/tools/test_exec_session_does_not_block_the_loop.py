@@ -1,4 +1,4 @@
-"""L'attesa di una sessione ``python_exec`` non ferma l'event loop (TL1, terza revisione).
+"""L'attesa di una sessione ``python_exec`` non ferma l'event loop.
 
 ``_PythonSession.poll()`` faceva ``time.sleep()`` sul thread del loop: con
 ``python_exec(yield_time_ms=30000)`` tutto il gateway (WebSocket, cron, gli altri

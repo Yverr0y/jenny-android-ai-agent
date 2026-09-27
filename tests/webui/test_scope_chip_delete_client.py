@@ -91,7 +91,7 @@ class Chip {
     this.reloaded = 0;
   }
   close() { this.closed++; }
-  /* `leaveIfSelected` e' quello vero (TD17 della terza revisione: qui era
+  /* `leaveIfSelected` e' quello vero (qui era
      riscritto, e la sua logica — chi e' «lo scope aperto», l'elenco da buttare —
      non la misurava nessuno). Il cambio di conversazione che fa, `select`, e'
      un doppio che si ricorda da dove si e' usciti. */

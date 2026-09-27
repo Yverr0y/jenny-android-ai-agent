@@ -59,8 +59,9 @@ _FAKE_SCAFFOLD = "def scaffold(root, title):\n    print(f'scaffolded {root}')\n"
 def fake_scripts(monkeypatch: pytest.MonkeyPatch) -> None:
     """Lo script finto si inietta nella copia **impacchettata**.
 
-    Da TL10 (terza revisione) gli script si leggono dal pacchetto, mai dal
-    workspace: scriverli in ``<workspace>/skills`` non li farebbe più girare.
+    Gli script si leggono dal pacchetto, mai dal workspace, perché quella
+    cartella la scrive il modello: scriverli in ``<workspace>/skills`` non li
+    farebbe più girare.
     """
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 

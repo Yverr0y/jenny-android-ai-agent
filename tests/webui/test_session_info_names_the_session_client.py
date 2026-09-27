@@ -1,6 +1,6 @@
 """Info sessione dice in quale conversazione si e', non «default» sempre.
 
-WJ17 della terza revisione (26/09/2026). ``_showSessionInfo``
+``_showSessionInfo``
 (``mobile-chat.js``) scriveva la sessione e il canale fissi, ``default`` e
 ``websocket``, anche dentro un quaderno. Si esegue il metodo vero su un
 documento finto e si legge il popover.

@@ -1,6 +1,6 @@
 """«N file modificati» in un quaderno apre il file del quaderno.
 
-WJ8 della terza revisione (26/09/2026). I percorsi dei ``file_edit`` sono
+I percorsi dei ``file_edit`` sono
 relativi alla radice del turno, cioe' al quaderno (``wikis/<nome>/``) in una
 chat di quaderno; l'editor dell'officina apre dalla radice del workspace. La
 lista li apriva com'erano: 404. Si esegue il ``_renderCollapsibleFileEdits``

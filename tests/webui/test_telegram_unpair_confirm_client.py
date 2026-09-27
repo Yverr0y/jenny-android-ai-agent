@@ -76,7 +76,7 @@ def test_the_confirm_speaks_both_languages() -> None:
 
 @requires_node
 def test_an_operation_started_during_the_question_is_not_overrun() -> None:
-    """RC6 della terza revisione: la domanda viene *prima* di ``_busy``, quindi
+    """La domanda viene *prima* di ``_busy``, quindi
     mentre e' aperta un'altra operazione del widget (l'interruttore) puo'
     partire. Il secondo controllo di ``_busy`` dopo il si' e' quel che impedisce
     di scollegare sopra di lei — e di rimettere ``_busy`` a falso sotto i suoi

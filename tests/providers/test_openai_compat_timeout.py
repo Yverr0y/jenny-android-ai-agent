@@ -34,7 +34,7 @@ async def test_openai_compat_provider_sets_timeout_on_http_client() -> None:
     client_kwargs = mock_http_client.call_args.kwargs
     # Endpoint in loopback: il limite è quello lungo, perché il prompt
     # processing di un model server locale può durare minuti. La read copre in
-    # più il budget del primo token (PC5 della terza revisione).
+    # più il budget del primo token.
     assert client_kwargs["timeout"].connect == _LOCAL_REQUEST_TIMEOUT_S
     assert client_kwargs["timeout"].read == read_timeout_s(local=True)
     assert client_kwargs["limits"].keepalive_expiry == 0

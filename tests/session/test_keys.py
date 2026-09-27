@@ -42,7 +42,7 @@ def test_dream_keys_never_collide_with_unified() -> None:
 
 @pytest.mark.parametrize("chat_id", ["default", "altro-chat", "12345"])
 def test_mapping_a_chat_id_does_not_warn_about_an_unknown_key(chat_id: str) -> None:
-    """AC14 della terza revisione: un ``chat_id`` non e' una session key.
+    """Un ``chat_id`` non e' una session key.
 
     ``session_key_for_channel`` chiedeva a ``is_project_session_key`` se il
     ``chat_id`` fosse un progetto, cioe' lo classificava come fosse una chiave di

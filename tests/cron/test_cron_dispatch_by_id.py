@@ -1,4 +1,4 @@
-"""Il dispatcher sceglie il gestore dal job di sistema, non dal nome (CF4).
+"""Il dispatcher sceglie il gestore dal job di sistema, non dal nome.
 
 Il nome di un job dell'utente lo sceglie l'utente (o il modello, dal tool
 ``cron``): un promemoria chiamato «dream» o «heartbeat» faceva partire un ciclo

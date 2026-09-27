@@ -482,7 +482,7 @@ def test_saving_an_empty_key_does_nothing() -> None:
 def test_a_key_that_is_not_saved_says_so_in_the_readers_language() -> None:
     """Il toast diceva ``err.message``: il testo inglese del server, o
     quello del client («Provider update failed: 500»), in una casa che parla
-    italiano (terza revisione, HJ14). Il motivo resta nel log."""
+    italiano. Il motivo resta nel log."""
     _run_js("""
       console.warn = () => {};
       const data = settings([{ name: 'groq', api_key_hint: '' }], 'groq', '');

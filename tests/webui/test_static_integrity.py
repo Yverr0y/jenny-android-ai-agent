@@ -110,7 +110,7 @@ def test_font_asset_is_served_from_disk(tmp_path):
 def test_another_spelling_of_a_manifest_path_still_gets_the_canonical_bytes(
     tmp_path, spelling
 ):
-    """WA13: ``//`` o ``./`` nel path non devono aggirare il confronto col manifest.
+    """``//`` o ``./`` nel path non devono aggirare il confronto col manifest.
 
     Il browser e il filesystem leggono ``assets//x.js`` come ``assets/x.js``;
     il confronto col manifest no, e la copia manomessa su disco veniva servita.

@@ -4,7 +4,7 @@ Un PDF, un vocale: il filo li mostra come una pastiglia col nome, un ``<a>``
 verso l'URL firmato. Da ``a1b8b1e3`` ogni ``<a>`` del filo passa da
 ``shared/content-link.js`` — giusto per il markdown di Jenny, che non deve
 poter navigare la casa — e un indirizzo della stessa origine li' e' «link non
-apribile»: la pastiglia non apriva piu' niente (terza revisione, HJ4).
+apribile»: la pastiglia non apriva piu' niente.
 
 Si apre come in officina (``mobile-chat.js``, ``_openMediaFile``): col ponte
 nativo, che lo passa al visore di sistema; se il ponte c'e' e fallisce lo si

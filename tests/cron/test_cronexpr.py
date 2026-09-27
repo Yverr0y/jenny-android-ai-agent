@@ -29,8 +29,7 @@ Le tre differenze volute:
    stessa lo trattava così: il 2099 è il limite del settimo campo);
 4. con il campo dell'anno la ricerca arriva al suo ultimo anno, non a
    cinquant'anni da oggi: ``0 9 1 1 * 0 2080`` scatta nel 2080, dove croniter
-   (e la prima stesura di questo modulo) si arrendeva (seconda revisione,
-   25/09/2026).
+   (e la prima stesura di questo modulo) si arrendeva.
 """
 
 from __future__ import annotations

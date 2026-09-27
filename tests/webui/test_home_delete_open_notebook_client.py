@@ -1,4 +1,4 @@
-"""Cancellare un quaderno mentre e' aperto nei Quaderni (terza revisione, RC5).
+"""Cancellare un quaderno mentre e' aperto nei Quaderni.
 
 Dal 26/09/2026 un quaderno si apre nella pagina Quaderni, dove l'hai toccato
 (``HomePages.notebooksConversation``), e la sua scheda si apre da li' con una

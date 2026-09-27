@@ -19,7 +19,7 @@ def _file(app_dir):
 
 
 async def test_an_append_after_a_line_cut_short_keeps_the_new_record(tmp_path) -> None:
-    """CF7: un append interrotto lascia una riga senza a capo, e il successivo le si
+    """Un append interrotto lascia una riga senza a capo, e il successivo le si
     attaccava: la riga unita non si legge, e spariva anche il record nuovo."""
     path = _file(tmp_path)
     path.parent.mkdir(parents=True)
@@ -65,7 +65,7 @@ def _contend(app_dir) -> None:
 
 
 def test_a_lock_left_by_a_previous_loop_is_forgotten_by_the_reset(tmp_path) -> None:
-    """CF8: il gateway riparte nello stesso processo, con un loop nuovo."""
+    """Il gateway riparte nello stesso processo, con un loop nuovo."""
     from jenny.apps.storage import reset_storage_locks
 
     reset_storage_locks()
@@ -79,7 +79,7 @@ def test_a_lock_left_by_a_previous_loop_is_forgotten_by_the_reset(tmp_path) -> N
 
 
 async def test_update_respects_the_collection_size_cap(tmp_path) -> None:
-    """CF11: ``append`` e ``set`` rifiutano una collezione oltre il tetto, ``update``
+    """``append`` e ``set`` rifiutano una collezione oltre il tetto, ``update``
     no: bastava aggiornare lo stesso record con un campo enorme per farla crescere
     senza limite."""
     first = await execute_storage_action(tmp_path, _action("append"), {"testo": "x"})

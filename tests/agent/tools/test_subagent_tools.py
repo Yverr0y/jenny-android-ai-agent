@@ -336,7 +336,7 @@ async def test_drain_pending_blocks_while_subagents_running(tmp_path):
         await asyncio.Event().wait()
 
     hang_task = asyncio.create_task(_hang_forever())
-    # Il subagent nasce **dentro** il turno (AC4 della terza revisione): uno gia'
+    # Il subagent nasce **dentro** il turno: uno gia'
     # vivo all'inizio del dispatch e' di un turno precedente, e non si aspetta.
     spawned_in_turn["register"] = lambda: (
         loop.subagents._session_tasks.setdefault(session.key, set()).add("sub-drain-1"),
@@ -479,7 +479,7 @@ async def test_drain_pending_timeout(tmp_path):
         await asyncio.Event().wait()
 
     hang_task = asyncio.create_task(_hang_forever())
-    # Il subagent nasce **dentro** il turno (AC4 della terza revisione): uno gia'
+    # Il subagent nasce **dentro** il turno: uno gia'
     # vivo all'inizio del dispatch e' di un turno precedente, e non si aspetta.
     spawned_in_turn["register"] = lambda: (
         loop.subagents._session_tasks.setdefault(session.key, set()).add("sub-timeout-1"),

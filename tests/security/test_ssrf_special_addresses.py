@@ -1,4 +1,4 @@
-"""Indirizzi che nessuna delle tre policy SSRF deve lasciar passare (CF5, terza revisione).
+"""Indirizzi che nessuna delle tre policy SSRF deve lasciar passare.
 
 ``::`` (non specificato) su Linux raggiunge l'host stesso, come ``0.0.0.0``: con
 ``::1`` bloccato e ``::`` no, un servizio in ascolto sul telefono era

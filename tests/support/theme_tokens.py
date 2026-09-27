@@ -1,6 +1,6 @@
 """I token dei sette temi di `mobile-style.css`, risolti come li risolve il browser.
 
-Serve ai banchi di contrasto (CS3/CS4 della terza revisione): il foglio dichiara
+Serve ai banchi di contrasto: il foglio dichiara
 i token in `:root`, li riscrive per tema in `[data-theme="…"]`, e qualche regola
 di gruppo vale per piu' temi insieme — guardarne solo l'ultima direbbe che agli
 altri quel valore non arriva. Qui le regole si leggono **in ordine**, l'ultima
