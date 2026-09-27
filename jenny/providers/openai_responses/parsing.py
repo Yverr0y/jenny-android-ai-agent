@@ -426,6 +426,14 @@ def parse_response_output(response: Any) -> LLMResponse:
     usage = _usage_from_response_obj(response)
 
     status = response.get("status")
+    if status == "failed":
+        # Una risposta ``failed`` non e' una risposta vuota ma un errore del
+        # provider, come ``response.failed`` nel ramo stream: stessi metadati per
+        # la retry policy, e un messaggio generico quando ``error`` manca o e'
+        # ``null``. Senza, la turn vedeva un ``finish_reason="error"`` muto.
+        nested = _as_mapping(response.get("error"))
+        detail = nested if nested else {"message": "the response failed"}
+        return stream_error_response(detail, partial_content="".join(content_parts) or None)
     finish_reason = map_finish_reason(status)
 
     return LLMResponse(

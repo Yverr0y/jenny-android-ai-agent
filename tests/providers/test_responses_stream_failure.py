@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from jenny.providers.base import LLMProvider
 from jenny.providers.openai_compat_provider import OpenAICompatProvider
 
@@ -106,3 +108,49 @@ async def test_a_completed_stream_is_still_a_stop() -> None:
     )
 
     assert (result.finish_reason, result.content) == ("stop", "Ecco la ri")
+
+
+# ── Il ramo non-stream ────────────────────────────────────────────────────
+#
+# Una risposta intera con ``status: "failed"`` e' lo stesso errore di
+# ``response.failed``: deve arrivare alla retry policy con gli stessi metadati,
+# anche quando il server non scrive il corpo dell'errore.
+
+
+def _parsed(response: dict):
+    from jenny.providers.openai_responses import parse_response_output
+
+    return parse_response_output(response)
+
+
+@pytest.mark.parametrize("error", [None, "absent"])
+def test_a_failed_whole_response_without_error_details_is_a_provider_error(error) -> None:
+    body: dict = {"output": [], "status": "failed", "usage": {}}
+    if error != "absent":
+        body["error"] = error
+    result = _parsed(body)
+
+    assert result.finish_reason == "error"
+    assert result.error_kind == "stream_error"
+    assert result.content == "Error: the response failed"
+
+
+def test_a_failed_whole_response_keeps_its_error_details() -> None:
+    result = _parsed({
+        "output": [], "status": "failed",
+        "error": {"code": "server_error", "message": "The server had an error"},
+    })
+
+    assert result.finish_reason == "error"
+    assert result.error_kind == "stream_error"
+    assert result.error_status_code == 500
+    assert "The server had an error" in (result.content or "")
+    assert LLMProvider._is_transient_response(result)
+
+
+async def test_a_stream_failed_without_details_matches_the_whole_response() -> None:
+    streamed = await _stream({"type": "response.failed",
+                              "response": {"status": "failed", "error": None}})
+    whole = _parsed({"output": [], "status": "failed", "error": None})
+
+    assert (whole.content, whole.error_kind) == (streamed.content, streamed.error_kind)
