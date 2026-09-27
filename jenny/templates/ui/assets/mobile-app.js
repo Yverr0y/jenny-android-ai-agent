@@ -17,7 +17,7 @@ import { WorkspaceController } from './mobile-workspace.js';
 import { AppsSource } from './shared/apps-source.js';
 import { AppsActions } from './shared/apps-actions.js';
 import { SettingsController, VIEW_OF, viewElement } from './mobile-settings.js';
-import { OnboardingController } from './mobile-onboarding.js';
+import { isFirstRun } from './shared/first-run.js';
 import { JennyCompanion } from './mobile-jenny.js';
 import { UiQueryResponder } from './mobile-ui-query.js';
 import { keyboard } from './shared/keyboard.js';
@@ -83,7 +83,6 @@ class MobileApp {
       brain:  settings,
       hands:      settings,
       memory:   settings,
-      onboarding: () => new OnboardingController(),
     };
     this.controllers = {};
 
@@ -93,30 +92,16 @@ class MobileApp {
     // in fondo. `history.length` non risponde alla domanda: conta l'intera
     // sessione del WebView (iframe delle mini-app, reload) e non cala mai.
     this._navPos = 0;
-    // Gate di readiness dello shell nativo: alcune animazioni d'ingresso (es. la
-    // caduta della mini Jenny nell'onboarding) devono partire solo quando il
-    // loading nativo è sparito e il WebView è visibile, altrimenti scorrono
-    // dietro l'overlay e se ne vede solo la coda.
-    this._shellReady = false;
-    this._shellReadyCbs = [];
     window.mobileApp = this;
     this.init();
   }
 
   /* Invocato dal guscio Android (MainActivity.hideLoading) a fade completato.
-     Fuori dallo shell nativo lo emula whenShellReady via requestAnimationFrame. */
+     Qui non aspetta niente: la coda `whenShellReady` serviva alla caduta della
+     mini Jenny dell'onboarding, che adesso vive in `onboarding.html`. Il metodo
+     resta perche' il guscio nativo lo chiama comunque. */
   onNativeReady() {
-    if (this._shellReady) return;
-    this._shellReady = true;
-    this._shellReadyCbs.splice(0).forEach((cb) => cb());
-  }
-
-  /* Esegue `cb` quando lo shell è pronto (loading nascosto). In un browser
-     normale — senza il bridge JennyNative — parte al frame successivo. */
-  whenShellReady(cb) {
-    if (this._shellReady) return cb();
-    this._shellReadyCbs.push(cb);
-    if (!window.JennyNative) requestAnimationFrame(() => this.onNativeReady());
+    // Niente da fare: v. sopra.
   }
 
   async init() {
@@ -125,6 +110,19 @@ class MobileApp {
       await api.bootstrap();
     } catch (err) {
       console.error('Bootstrap failed:', err);
+    }
+
+    /* Il primo avvio non si fa qui: e' un documento suo, `onboarding.html`, e
+       l'officina ci rimanda come la casa. Un «non lo so» (impostazioni non
+       lette: gateway a meta' avvio, token non ancora valido) non manda da
+       nessuna parte — v. `shared/first-run.js`. */
+    const firstRun = await isFirstRun(() => api.getSettings());
+    if (firstRun === true) {
+      api.navigate('/html-mobile/onboarding.html', { replace: true });
+      return;
+    }
+    if (firstRun === null) {
+      api.clientLog('warning', 'boot-first-run', 'settings unavailable at boot');
     }
 
     // Load i18n and update sidebar
@@ -225,8 +223,14 @@ class MobileApp {
     /* I tre cassetti si chiamavano `cervello`, `mani` e `memoria` fino al
        25/09/2026, e `mobile-last-mode` puo' averne salvato uno. */
     initialMode = { cervello: 'brain', mani: 'hands', memoria: 'memory' }[initialMode] || initialMode;
+    /* L'onboarding era un modo dell'officina fino al 27/09/2026: un
+       `mobile-last-mode` salvato a meta' wizard non e' piu' una vista, e
+       `onboarding-complete` — il marcatore che ne chiudeva il blocco — non lo
+       legge piu' nessuno. */
+    if (initialMode === 'onboarding') initialMode = 'chat';
+    removeStorage('onboarding-complete');
 
-    // Radice dello stack, marcata *prima* dei due await qui sotto. I listener
+    // Radice dello stack, marcata *prima* dell'await qui sotto. I listener
     // del dock sono già registrati da un pezzo: un tap durante il boot impilava
     // la propria entry sopra una radice non ancora marcata, e la marcatura
     // tardiva la riscriveva con pos 0 riportando indietro la vista da sé — tap
@@ -234,60 +238,18 @@ class MobileApp {
     this._navPos = 0;
     this.replaceNav(this._navStateFor(initialMode));
 
-    // Check first-run: redirect to onboarding (always when first_run is true)
-    let firstRunKnown = false;
-    try {
-      const settings = await api.getSettings();
-      firstRunKnown = true;
-      if (settings?.first_run) {
-        initialMode = 'onboarding';
-        removeStorage('onboarding-complete');
-        this._setFirstRunLock(true);
-      }
-    } catch (err) {
-      // "Non lo so" non è "onboarding già fatto". Se le impostazioni non si
-      // leggono (gateway a metà avvio, token non ancora valido, rete), trattare
-      // l'ignoto come configurazione completa cancellava il marcatore locale e
-      // portava in chat una Jenny senza provider, senza più alcuna strada verso
-      // il wizard. Qui si sospende il giudizio: nessuno stato viene riscritto,
-      // La contabilità vera è `firstRunKnown`, che resta false: qui basta
-      // lasciarne traccia nel log.
-      //
-      // Questo commento prometteva anche che «il wizard resta raggiungibile da
-      // Impostazioni → Riesegui configurazione». **Non è più vero** dal
-      // 20/09/2026: quel bottone è uscito con il giro degli aggiornamenti, per
-      // una ragione misurata (`save_onboarding` sostituisce l'elenco dei
-      // provider invece di aggiungere). Chi si ritrova senza provider ci rimedia
-      // dalla casa, dove la marca ha il suo «Aggiungi».
-      api.clientLog('warning', 'boot-first-run',
-        `settings unavailable at boot: ${err?.message || err}`);
-    }
-
-    // After onboarding completed: force chat mode, clear stale state.
-    // Solo se sappiamo davvero che il primo avvio è alle spalle: consumare il
-    // marcatore su un "non lo so" lo perde per sempre.
-    if (firstRunKnown && !this._firstRun && readStorage('onboarding-complete')) {
-      removeStorage('onboarding-complete');
-      writeStorage('mobile-last-mode', 'chat');
-      initialMode = 'chat';
-    }
-
     // Initialize sessions and load module
     await this._initSessions();
 
-    // Un tap sul dock durante i due await qui sopra ha già scelto la vista e
+    // Un tap sul dock durante l'await qui sopra ha già scelto la vista e
     // impilato la propria entry sopra la radice (marcata prima di partire):
-    // quella pressione va onorata, non annullata. Il primo avvio è l'unica
-    // eccezione — finché l'onboarding non è finito la navigazione è bloccata,
-    // quindi la vista scelta dal tap non è una destinazione lecita.
-    if (!this.currentMode || this._firstRun) {
+    // quella pressione va onorata, non annullata.
+    if (!this.currentMode) {
       // La entry iniziale *è* già la vista iniziale: va riscritta, non
       // impilata. Prima si faceva replaceState + switchMode(push) e restavano
       // due entry identiche, così il primo Indietro veniva ingoiato da
       // switchMode (`mode === currentMode`) senza cambiare niente a schermo —
-      // da lì la sensazione che il tasto "salti" una pagina. Si riscrive di
-      // nuovo perché `initialMode` può essere cambiato durante gli await
-      // (primo avvio → onboarding, onboarding appena concluso → chat).
+      // da lì la sensazione che il tasto "salti" una pagina.
       this._navPos = 0;
       this.replaceNav(this._navStateFor(initialMode));
       this.switchMode(initialMode, false);
@@ -571,7 +533,7 @@ class MobileApp {
     }
 
     // 6. Sotto-stato della sezione corrente (cartella del workspace, editor,
-    //    step dell'onboarding, popover Info sessione, focus sul grafo, catalogo
+    //    popover Info sessione, focus sul grafo, catalogo
     //    modelli): risalire di un livello dentro la sezione viene prima di
     //    uscirne.
     if (this.controllers[this.currentMode]?.handleBack?.()) return;
@@ -625,9 +587,9 @@ class MobileApp {
     // e lo stack non calava mai: dieci Home = dieci entry, tutte da smaltire
     // una pressione alla volta prima di arrivare al fondo.
     this.switchMode('chat', false);
-    // Il blocco del primo avvio può aver dirottato lo switch sull'onboarding:
-    // in quel caso la radice non descrive la schermata iniziale, e marcarla
-    // comunque scriverebbe nella entry corrente una vista che non è a schermo.
+    // Uno switch fallito (controller della chat che non si costruisce) lascia
+    // a schermo un'altra vista: marcare comunque la radice scriverebbe nella
+    // entry corrente una vista che non è a schermo.
     if (this.currentMode !== 'chat') return;
     this._navPos = 0;
     this.replaceNav(this._navStateFor('chat'));
@@ -646,9 +608,8 @@ class MobileApp {
      descrivere la *vista home* mentre a schermo c'era la chat, e con una vista
      home diversa da chat il primo Indietro atterrava dove l'utente non era mai
      stato — più un activate/deactivate di troppo sul controller di mezzo.
-     Qui la chat *diventa* la radice. Ritorna false se non ci si è arrivati (il
-     blocco del primo avvio dirotta sull'onboarding), così il guscio nativo sa
-     che non deve ancora cancellare la notifica. */
+     Qui la chat *diventa* la radice. Ritorna false se non ci si è arrivati,
+     così il guscio nativo sa che non deve ancora cancellare la notifica. */
   openChat() {
     this._dismissAllOverlays();
     Object.values(this.controllers).forEach((c) => c.collapseToRoot?.());
@@ -719,43 +680,8 @@ class MobileApp {
     chat.prefillComposer(text);
   }
 
-  /** Blocco del dock durante il primo avvio, in un interruttore solo.
-   *
-   *  Prima esisteva solo il ramo che *accende*: `grep -rn nav-disabled` dava
-   *  due righe, una che aggiungeva la classe e una che la leggeva, e nessuna
-   *  che la togliesse — né toglieva `pointer-events: none`, l'opacità 0.4 o la
-   *  voce onboarding dal dock. Finito il wizard, l'unica cosa che sbloccava
-   *  l'interfaccia era il reload che segue: qualunque percorso che completasse
-   *  l'onboarding senza ricaricare (il ripristino da backup) lasciava il dock
-   *  spento a tempo indeterminato. Un blocco a senso unico è un blocco che non
-   *  si sa togliere: qui accensione e spegnimento sono lo stesso codice. */
-  _setFirstRunLock(on) {
-    this._firstRun = !!on;
-    const navOnb = document.getElementById('nav-onboarding');
-    if (navOnb) navOnb.style.display = on ? '' : 'none';
-    document.querySelectorAll('.dock-item[data-mode]').forEach((item) => {
-      if (item.dataset.mode === 'onboarding') return;
-      item.classList.toggle('nav-disabled', !!on);
-      item.style.pointerEvents = on ? 'none' : '';
-      item.style.opacity = on ? '0.4' : '';
-    });
-  }
-
-
-  /** Apre il cassetto delle app (pulsante nella riga del composer, D1).
-   *
-   *  Il blocco del primo avvio vale anche qui, con la stessa guardia di
-   *  `switchMode`: finché l'onboarding non è finito non si va da nessuna
-   *  parte, e un foglio che si apre sopra il wizard è una strada per uscirne
-   *  senza averlo finito. Si dirotta invece di ignorare, esattamente come fa
-   *  `switchMode`: durante il primo avvio la vista è già `onboarding`, quindi
-   *  a schermo non cambia niente. */
+  /** Apre il cassetto delle app (pulsante nella riga del composer, D1). */
   openLauncher() {
-    if (!readStorage('onboarding-complete') && this._firstRun) {
-      console.warn('Onboarding not complete - redirecting to onboarding');
-      this.switchMode('onboarding');
-      return;
-    }
     this.launcher.open();
   }
 
@@ -780,13 +706,6 @@ class MobileApp {
   }
 
   switchMode(mode, pushState = true) {
-    // Block ANY navigation if onboarding is not complete
-    if (mode !== 'onboarding' && !readStorage('onboarding-complete') && this._firstRun) {
-      console.warn('Onboarding not complete - redirecting to onboarding');
-      this.switchMode('onboarding', pushState);
-      return;
-    }
-
     if (mode === this.currentMode) return;
     if (!this.controllerFactories[mode]) {
       console.warn(`Unknown mode: ${mode}`);
@@ -880,10 +799,8 @@ class MobileApp {
   }
 
   // Ordered list of navigable modes, derived from the dock DOM order.
-  // Skips hidden (onboarding when not first-run) and disabled items.
   _visibleModes() {
     return Array.from(document.querySelectorAll('.dock-item[data-mode]'))
-      .filter(el => el.style.display !== 'none' && !el.classList.contains('nav-disabled'))
       .map(el => el.dataset.mode);
   }
 
@@ -930,8 +847,6 @@ class MobileApp {
     watchHorizontalSwipe(main, {
       canStart: () => {
         view = null; neighbors = null;
-        // Guardia: durante il primo avvio la navigazione e' bloccata.
-        if (this._firstRun && !readStorage('onboarding-complete')) return false;
         // Guardia: un cassetto aperto possiede il proprio gesto (verticale).
         if (this.drawer.activeDrawer) return false;
         // Guardia: c'e' del testo selezionato. Trascinare per aggiustare i
@@ -943,7 +858,7 @@ class MobileApp {
 
         const modes = this._visibleModes();
         const idx = modes.indexOf(this.currentMode);
-        if (idx === -1) return false; // onboarding non e' nel dock — niente carosello
+        if (idx === -1) return false; // un file aperto non e' nel dock — niente carosello
 
         /* Il giro si chiude: da Memoria a destra si torna in Console, e da
            Console a sinistra si va in Memoria. Con quattro voci in fila i due

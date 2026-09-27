@@ -260,11 +260,13 @@ _UI_MANIFEST = [
     "assets/mobile-header.js",
     "assets/mobile-jenny.js",
     "assets/mobile-launcher.js",
-    "assets/mobile-onboarding.js",
     "assets/mobile-settings.js",
     "assets/mobile-style.css",
     "assets/mobile-ui-query.js",
     "assets/mobile-workspace.js",
+    # Il primo avvio: un documento suo, di nessuno dei due gusci.
+    "assets/onboarding-app.js",
+    "assets/onboarding-wizard.js",
     "assets/shared/api-client.js",
     "assets/shared/apps-actions.js",
     "assets/shared/apps-source.js",
@@ -275,6 +277,7 @@ _UI_MANIFEST = [
     "assets/shared/conversation-list.js",
     "assets/shared/cron-view.js",
     "assets/shared/dialog.js",
+    "assets/shared/first-run.js",
     "assets/shared/history-pager.js",
     "assets/shared/horizontal-swipe.js",
     "assets/shared/i18n.js",
@@ -398,14 +401,16 @@ _UI_MANIFEST = [
     "assets/vendor/highlight.js@11.11.1/styles/github.min.css",
     "assets/vendor/marked@15.0.7/LICENSE",
     "assets/vendor/marked@15.0.7/marked.min.js",
-    # I due documenti-guscio (v. _SHELL_DOCUMENTS in jenny/webui/ws_http.py).
+    # I documenti della WebUI (v. _SHELL_DOCUMENTS in jenny/webui/ws_http.py).
     # Chi ne aggiunge uno e si dimentica questa riga non ottiene un 404:
-    # `_serve_static` ricade su index.html e serve l'altra interfaccia.
+    # `_serve_static` ricade su index.html e serve un'altra interfaccia.
     # ``index.html`` e' **la casa**: e' il documento che il guscio nativo carica
     # (GATEWAY_PATH = "/html-mobile/") e su cui ricade ogni percorso ignoto.
-    # L'officina ha il suo nome e si raggiunge di proposito.
+    # L'officina ha il suo nome e si raggiunge di proposito; l'onboarding e' il
+    # primo avvio, e ci rimandano entrambe quando non c'e' ancora un provider.
     "index.html",
     "workshop.html",
+    "onboarding.html",
 ]
 
 _extracted_registry: dict[str, Path] = {}

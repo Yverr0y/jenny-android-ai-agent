@@ -21,9 +21,10 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKSHOP_HTML = ROOT / "jenny" / "templates" / "ui" / "workshop.html"
 TOUR_DOC = ROOT / "docs" / "using" / "webui-tour.md"
 
-# ``onboarding`` è il sesto slot, nascosto dopo il primo avvio: la pagina lo
-# descrive a parte e non nella tabella, quindi resta fuori dal confronto.
-_HIDDEN_MODES = {"onboarding"}
+# Slot del dock che la tabella non elenca. Era ``onboarding``, la voce nascosta
+# del primo avvio: dal 27/09/2026 il wizard ha un documento suo e nel dock non
+# c'e' piu'.
+_HIDDEN_MODES: set[str] = set()
 
 # Come la tabella nomina ciascun mode. La chiave è il ``data-mode`` del DOM.
 _DOC_LABELS = {

@@ -1,7 +1,13 @@
-/** Mobile Onboarding Controller — 4-step setup wizard. */
+/** Il wizard del primo avvio, in quattro passi.
+ *
+ *  Vive in un documento suo, `onboarding.html`, ospitato da `onboarding-app.js`:
+ *  non appartiene ne' alla casa ne' all'officina. Era un «modo» dell'officina, e
+ *  quando la casa e' diventata il documento di partenza nessuno ci arrivava piu',
+ *  perche' il controllo del primo avvio stava solo nell'officina. Dall'host
+ *  vuole soltanto `window.mobileApp.whenShellReady`. */
 
 import { api } from './shared/api-client.js';
-import { escapeHtml, showToast, writeStorage } from './shared/utils.js';
+import { escapeHtml, showToast } from './shared/utils.js';
 import { i18n } from './shared/i18n.js';
 import { runImportFlow } from './shared/backup-flow.js';
 import { TelegramPairingWidget } from './shared/telegram-pairing.js';
@@ -92,9 +98,6 @@ export class OnboardingController {
     // Una fetch modelli in volo non deve più scrivere niente: al rientro il
     // wizard riparte dallo step in cui era, e il form è stato ri-renderizzato.
     this._modelsToken++;
-    // La voce nel dock qui non si tocca: fuori dal primo avvio non c'è, e
-    // durante il primo avvio la accende e la spegne `_setFirstRunLock`, che è
-    // l'unico a sapere quando quel blocco comincia e finisce.
     this._stopJenny();
     if (this._tgWidget) {
       this._tgWidget.destroy();
@@ -155,17 +158,11 @@ export class OnboardingController {
     });
     this.contentEl.querySelector('#btn-next-0').addEventListener('click', () => this._goToStep1());
     // Ripristino da backup: al riavvio post-restore la config importata ha già
-    // i provider, quindi first_run è false e si atterra direttamente in chat.
-    this.contentEl.querySelector('#btn-restore-backup').addEventListener('click', async () => {
-      const staged = await runImportFlow();
-      if (!staged) return;
-      writeStorage('onboarding-complete', '1');
-      // Il blocco del primo avvio va tolto insieme al marcatore, sempre. Il
-      // ripristino può concludersi senza riavvio immediato (il dialog di
-      // riavvio è rifiutabile finché resta a schermo): senza questo, il dock
-      // restava spento — classe `nav-disabled`, pointer-events:none e opacità
-      // 0.4 — con l'onboarding già dato per concluso da tutto il resto.
-      window.mobileApp?._setFirstRunLock(false);
+    // i provider, quindi first_run è false e il guscio nativo riparte dalla
+    // casa (`?mode=chat`). Qui non c'è niente da ripulire: nessun marcatore,
+    // nessun dock da riaccendere — il riavvio lo fa `runImportFlow`.
+    this.contentEl.querySelector('#btn-restore-backup').addEventListener('click', () => {
+      runImportFlow();
     });
   }
 
@@ -334,7 +331,7 @@ export class OnboardingController {
     if (customInput) {
       customInput.addEventListener('input', () => {
         this.model = customInput.value.trim();
-        document.querySelectorAll('.onboarding-model-item').forEach(el => el.classList.remove('selected'));
+        this.contentEl.querySelectorAll('.onboarding-model-item').forEach(el => el.classList.remove('selected'));
         this._updateSelectedDisplay();
         this._validateLaunch();
       });
@@ -523,14 +520,9 @@ export class OnboardingController {
       this._batteryCard.destroy();
       this._batteryCard = null;
     }
-    writeStorage('onboarding-complete', 'true');
-    writeStorage('mobile-last-mode', 'chat');
-    // Stesso motivo del ramo restore: il lock si toglie con lo stesso setter
-    // che l'ha messo. Qui segue un reload, ma affidarsi al reload significa
-    // avere un percorso che non ripulisce — ed è esattamente com'era nato il
-    // blocco a senso unico.
-    window.mobileApp?._setFirstRunLock(false);
-    api.reload();
+    // Alla casa, su Jenny, dove il saluto scritto da `onboarding.save` aspetta.
+    // `replace`: Indietro dalla casa non deve riportare a un wizard concluso.
+    api.navigate('/html-mobile/', { replace: true });
   }
 
   _showLoadingOverlay() {

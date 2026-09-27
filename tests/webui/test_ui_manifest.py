@@ -39,9 +39,10 @@ DEAD_TOKENS = [
 ]
 
 
-# I due gusci: la casa (`index.html`, il default) e l'officina (`workshop.html`).
-# Un riferimento rotto nell'uno o nell'altro e' un 404 silenzioso su Android.
-SHELLS = ["index.html", "workshop.html"]
+# I documenti: la casa (`index.html`, il default), l'officina (`workshop.html`) e
+# il primo avvio (`onboarding.html`). Un riferimento rotto in uno di loro e' un
+# 404 silenzioso su Android.
+SHELLS = ["index.html", "workshop.html", "onboarding.html"]
 
 
 def _shell_asset_refs(shell: str) -> list[str]:

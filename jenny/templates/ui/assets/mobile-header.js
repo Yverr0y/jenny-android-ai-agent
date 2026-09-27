@@ -1,9 +1,9 @@
 /** View Title Controller — in-content view headings and actions.
  *
  * Replaces the old fixed 40px header: each view owns a `.view-title-mount`
- * (officina.html) where the big scrolling-style title and its action buttons
- * are rendered. Only onboarding has no mount: la chat ne ha uno dal
- * 21/09/2026 — v. `chat` in `modeConfigs`.
+ * (workshop.html) where the big scrolling-style title and its action buttons
+ * are rendered. Ogni vista ne ha uno: la chat dal 21/09/2026 — v. `chat` in
+ * `modeConfigs`; l'onboarding, che non ne aveva, e' uscito dall'officina.
  */
 
 import { i18n } from './shared/i18n.js';

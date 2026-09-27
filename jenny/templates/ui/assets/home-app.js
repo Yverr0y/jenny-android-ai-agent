@@ -56,6 +56,7 @@ import { deleteProjectFlow } from './shared/project-delete.js';
 import { moveLayoutKey } from './shared/map-layout.js';
 import { showToast } from './shared/utils.js';
 import { api } from './shared/api-client.js';
+import { isFirstRun } from './shared/first-run.js';
 import { ImageHandler } from './shared/image-handler.js';
 import { confirmDialog, promptDialog } from './shared/dialog.js';
 import { rpc } from './shared/rpc-client.js';
@@ -375,6 +376,11 @@ class HomeApp {
       console.error('Bootstrap failed:', err);
       api.clientLog('error', 'home.bootstrap', String(err && err.stack || err));
     }
+
+    /* Senza un provider la casa non ha nessuno che risponda: il primo avvio si
+       fa in `onboarding.html`, e ci si va prima di aprire il filo o leggere la
+       storia. */
+    if (await this._goToOnboardingIfFirstRun()) return;
 
     /* Le traduzioni prima della storia: la conversazione porta etichette
        tradotte (la provenienza di un messaggio entrato da fuori), e disegnarla
@@ -920,6 +926,23 @@ class HomeApp {
 
      `fresh` la rilegge comunque: lo chiede l'apertura delle Impostazioni, che
      e' il momento in cui quel che si mostra deve essere di adesso. */
+  /** Se e' il primo avvio, va a `onboarding.html` e restituisce `true`.
+   *
+   *  Un «non lo so» (lettura fallita) non manda da nessuna parte, e con
+   *  `retry` lascia `_firstRunUnknown` acceso perche' `_onWireOpen` richieda.
+   *  `replace`: Indietro dal wizard non deve tornare a una casa che non aveva
+   *  nessuno a rispondere. */
+  async _goToOnboardingIfFirstRun({ fresh = false, retry = true } = {}) {
+    const first = await isFirstRun(() => this._askSettings({ fresh }));
+    if (first === null) {
+      this._firstRunUnknown = retry;
+      return false;
+    }
+    if (!first) return false;
+    api.navigate('/html-mobile/onboarding.html', { replace: true });
+    return true;
+  }
+
   _askSettings({ fresh = false } = {}) {
     if (!this._settings || fresh) {
       /* Una rilettura che fallisce non butta quel che si sapeva: torna `null`
@@ -1930,6 +1953,13 @@ class HomeApp {
    *  schermo puo' essere rimasto indietro. */
   _onWireOpen() {
     this._setWire(true);
+    /* Al boot le impostazioni non si leggevano, quindi non si sa se questo e'
+       il primo avvio: il socket aperto dice che il gateway adesso c'e', e si
+       richiede. Una volta sola — un secondo «non lo so» resta nella casa. */
+    if (this._firstRunUnknown) {
+      this._firstRunUnknown = false;
+      this._goToOnboardingIfFirstRun({ fresh: true, retry: false });
+    }
     const first = !this._wireOpenedOnce;
     this._wireOpenedOnce = true;
     if (first && !this._threadFailed) return;

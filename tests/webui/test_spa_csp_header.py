@@ -133,6 +133,16 @@ def test_workshop_html_carries_the_same_csp(tmp_path):
     assert _csp(tmp_path, "workshop.html") == _csp(tmp_path, "index.html")
 
 
+def test_onboarding_html_carries_the_same_csp(tmp_path):
+    """Il primo avvio e' un terzo documento, e vale la stessa policy.
+
+    E' la pagina in cui l'utente incolla la sua prima chiave API: l'ultima a
+    cui togliere la CSP. Dimenticarla in `_SHELL_DOCUMENTS` non darebbe errori,
+    solo una pagina senza policy.
+    """
+    assert _csp(tmp_path, "onboarding.html") == _csp(tmp_path, "index.html")
+
+
 def test_only_shell_documents_get_the_csp(tmp_path):
     """E' una policy di pagina: gli asset non ne hanno bisogno.
 

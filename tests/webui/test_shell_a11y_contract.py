@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 UI = ROOT / "jenny" / "templates" / "ui"
 ASSETS = UI / "assets"
-SHELLS = ("index.html", "workshop.html")
+SHELLS = ("index.html", "workshop.html", "onboarding.html")
 
 _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
          "source", "track", "wbr"}
@@ -175,7 +175,6 @@ _WORKSHOP_NAMED = {
     "btn-new-chat": "chat.newChat",
     "btn-attach": "chat.attach",
     "btn-send": "chat.send",
-    "nav-onboarding": "nav.onboarding",
 }
 
 
@@ -218,7 +217,9 @@ def test_the_dock_items_are_buttons() -> None:
     root = _tree("workshop.html")
     dock = next(n for n in root.walk() if n.tag == "nav" and "dock" in n.classes())
     items = [n for n in dock.walk() if "dock-item" in n.classes()]
-    assert len(items) == 5
+    # Quattro: la quinta, «Setup», era l'onboarding, che dal 27/09/2026 ha un
+    # documento suo.
+    assert len(items) == 4
     for n in items:
         assert n.tag == "button" and n.attrs.get("type") == "button", n.attrs
         assert n.attrs.get("data-mode"), n.attrs

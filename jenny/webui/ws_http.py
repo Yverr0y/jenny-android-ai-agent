@@ -101,17 +101,18 @@ def _decode_api_key(raw_key: str) -> str | None:
 _ANDROID_PACKAGE_RE = re.compile(r"\A[A-Za-z0-9_.]{1,255}\Z")
 
 # I documenti-guscio della WebUI: le pagine che *ospitano* una SPA, non i suoi
-# asset. Sono due perche' le interfacce sono due — la casa (``index.html``, cioe'
-# l'ingresso: e' quel che il guscio nativo carica) e l'officina
-# (``workshop.html``) — e tutto cio' che vale a livello di pagina (oggi la CSP)
-# deve valere per entrambe.
+# asset. Le interfacce sono due — la casa (``index.html``, cioe' l'ingresso: e'
+# quel che il guscio nativo carica) e l'officina (``workshop.html``) — piu' il
+# primo avvio (``onboarding.html``), a cui rimandano entrambe finche' non c'e' un
+# provider. Tutto cio' che vale a livello di pagina (oggi la CSP) deve valere per
+# ciascuno.
 #
 # Il perche' di un insieme invece del confronto con un nome solo: la CSP era
 # legata alla stringa ``index.html``, quindi un secondo guscio sarebbe nato
 # senza policy e se la sarebbe presa addosso tutta insieme il giorno in cui i
 # due file si scambiano il nome — cioe' alla fine, cioe' nel momento in cui una
 # violazione costa di piu' e si spiega di meno.
-_SHELL_DOCUMENTS = frozenset({"index.html", "workshop.html"})
+_SHELL_DOCUMENTS = frozenset({"index.html", "workshop.html", "onboarding.html"})
 
 
 def _is_foreign_navigation(headers: Any) -> bool:

@@ -37,6 +37,16 @@ def test_a_renamed_shell_and_its_modules_leave_the_disk(tmp_path: Path) -> None:
     assert not any(p.exists() for p in stale)
 
 
+def test_the_wizard_that_left_the_workshop_leaves_the_disk(tmp_path: Path) -> None:
+    """Il wizard del primo avvio era ``mobile-onboarding.js``, un modulo
+    dell'officina; dal 27/09/2026 e' ``onboarding-wizard.js``, in un documento
+    suo. La copia vecchia nessuno la importa piu', ma il gateway la servirebbe."""
+    ui = tmp_path / "ui"
+    stale = _write(ui / "assets" / "mobile-onboarding.js")
+    assert retire_withdrawn_ui_files(ui) == ["assets/mobile-onboarding.js"]
+    assert not stale.exists()
+
+
 def test_what_the_package_ships_stays(tmp_path: Path) -> None:
     ui = tmp_path / "ui"
     kept = [_write(ui / rel) for rel in _UI_MANIFEST if rel.endswith((".html", ".js", ".css"))]

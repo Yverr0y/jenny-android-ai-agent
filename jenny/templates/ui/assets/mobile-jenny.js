@@ -146,9 +146,9 @@ export class JennyCompanion extends JennyMascot {
     this._streamTurnId = null;
     if (this._abortFlight) this._abortFlight();
     this._closeMini();
-    // Nascosta durante l'onboarding, oppure per preferenza utente
-    // (la stanza «Jenny» della casa → visibile, v. shared/mascot.js).
-    const hidden = mode === 'onboarding' || !mascotVisible();
+    // Nascosta per preferenza utente (la stanza «Jenny» della casa →
+    // visibile, v. shared/mascot.js).
+    const hidden = !mascotVisible();
     this.el.classList.toggle('hidden-mode', hidden);
     // Coerente col media-query landscape: nascondi anche gli overlay
     // (minichat e scrim), non solo il duo, per evitare residui interattivi.
@@ -169,8 +169,8 @@ export class JennyCompanion extends JennyMascot {
     this._updateGestureExclusion();
   }
 
-  /* Le preferenze passano da `setMode`, che sa anche dell'onboarding e degli
-     overlay della minichat. */
+  /* Le preferenze passano da `setMode`, che sa anche degli overlay della
+     minichat. */
   _applyVisibility() {
     this.setMode(this.mode);
   }

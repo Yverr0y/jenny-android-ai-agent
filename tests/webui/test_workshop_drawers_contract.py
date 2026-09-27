@@ -100,7 +100,7 @@ def test_every_drawer_in_the_table_is_a_dock_voice_and_the_other_way_round() -> 
     table = set(_drawers())
     html = WORKSHOP.read_text(encoding="utf-8")
     nav = html[html.index('<nav class="dock"'):html.index("</nav>")]
-    entries = [m for m in re.findall(r'data-mode="([a-z]+)"', nav) if m != "onboarding"]
+    entries = re.findall(r'data-mode="([a-z]+)"', nav)
 
     # `VIEW_OF` vive accanto a `DRAWERS` (mobile-settings.js): rispondono
     # alla stessa domanda, e tenerle in due file ha gia' prodotto una copia
@@ -155,11 +155,12 @@ def test_the_views_that_left_the_dock_are_still_reachable() -> None:
     for name in ("mobile-settings.js", "mobile-workspace.js", "mobile-chat.js"):
         swipes |= set(re.findall(r"switchMode\('([a-z]+)'", _src(name)))
     drawers = set(_drawers())
-    # `settings` e' il contenitore dei tre cassetti; `onboarding` si apre da
-    # dentro, al primo avvio. `wiki` era esente perche' «si apre dal grafo»:
-    # un anello di due viste che si aprivano a vicenda, e quando la porta e'
-    # sparita l'esenzione sarebbe diventata falsa. Sono uscite entrambe.
-    exempt = {"settings", "onboarding"} | drawers
+    # `settings` e' il contenitore dei tre cassetti. `onboarding` era esente
+    # perche' si apriva da dentro, al primo avvio: dal 27/09/2026 e' un
+    # documento suo e non una vista dell'officina. `wiki` era esente perche'
+    # «si apre dal grafo»: un anello di due viste che si aprivano a vicenda, e
+    # quando la porta e' sparita l'esenzione sarebbe diventata falsa.
+    exempt = {"settings"} | drawers
     orphans = sorted(modes - on_the_dock - doors - swipes - exempt)
     assert not orphans, (
         f"queste viste non hanno piu' nessun modo di aprirsi: {orphans}. "

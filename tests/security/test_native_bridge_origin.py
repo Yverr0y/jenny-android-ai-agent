@@ -178,7 +178,7 @@ def test_the_queries_are_the_methods_that_return_a_value() -> None:
 
 
 def test_the_shells_load_the_shim_before_any_module() -> None:
-    for shell in ("index.html", "workshop.html"):
+    for shell in ("index.html", "workshop.html", "onboarding.html"):
         html = (UI / shell).read_text(encoding="utf-8")
         tag = '<script src="/html-mobile/assets/shared/native-bridge.js"></script>'
         assert tag in html, shell

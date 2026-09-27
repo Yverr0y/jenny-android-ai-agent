@@ -70,7 +70,7 @@ A row of four icons pinned to the bottom of the screen switches between the work
 | hand | **Hands** | What she can do and with which permissions — web search, location, SSH, Telegram, skills — and the jobs that start by themselves. |
 | database | **Memory** | What she remembers: the three memory files and their caps, Dream that fills them, the gardener that fills the notebooks, the workspace files, the local snapshot history. |
 
-A fifth tab, **Setup**, exists in the same dock but stays hidden once onboarding is complete — it only appears during first run, when it also disables the other four tabs so you can't wander off mid-wizard. See [First run](../start/first-run.md).
+The first-run wizard is not part of the workshop: it is a page of its own that both the home and the workshop send you to while no provider is configured, and it has no dock to wander off through. See [First run](../start/first-run.md).
 
 Tapping a dock icon switches views immediately; the active tab is highlighted. Brain, Hands and Memory are three drawers of one screen — they share a controller, so moving between them does not reload anything. The app drawer opens from the grid button at the left of the Console's message box.
 
@@ -82,7 +82,6 @@ A few guards keep this from fighting with normal scrolling:
 
 - If the content under your finger can scroll horizontally (a wide code block, a horizontally scrollable list), that content gets the gesture instead of the tab swipe — even when it is already at its edge.
 - A mostly-vertical drag is treated as ordinary scrolling, not a tab change.
-- Swipe navigation is disabled during onboarding.
 - Swipe only moves between the four dock tabs in the table above, in dock order.
 
 ### The back button

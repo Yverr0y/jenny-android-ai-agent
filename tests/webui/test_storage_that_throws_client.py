@@ -6,7 +6,7 @@ gia' leggendo la proprieta'. ``shared/state.js`` lo leggeva nudo **al
 caricamento del modulo**, cioe' prima di tutto: l'errore si portava via l'intero
 grafo degli import. Lo stesso in ``bootstrap.js`` (tema e lingua del primo
 fotogramma), in ``shared/mascot.js``, ``shared/theme.js``, ``mobile-app.js`` e
-``mobile-onboarding.js``.
+nel wizard del primo avvio (oggi ``onboarding-wizard.js``).
 
 Qui i moduli veri girano in node con uno storage che solleva a ogni accesso.
 """
@@ -88,7 +88,7 @@ def _code(src: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "path", ["mobile-app.js", "mobile-onboarding.js", "shared/theme.js", "shared/state.js"]
+    "path", ["mobile-app.js", "onboarding-wizard.js", "shared/theme.js", "shared/state.js"]
 )
 def test_no_bare_storage_access_is_left(path: str) -> None:
     """Ogni accesso passa da una lettura protetta, o sta dentro un ``try``."""

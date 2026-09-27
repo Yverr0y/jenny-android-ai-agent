@@ -478,7 +478,7 @@ def test_sections_with_their_own_depth_expose_a_back_handler() -> None:
         "profondità una sola pressione porterebbe fuori dall'intera schermata"
     )
 
-    onboarding = (ASSETS / "mobile-onboarding.js").read_text(encoding="utf-8")
+    onboarding = (ASSETS / "onboarding-wizard.js").read_text(encoding="utf-8")
     onb_back = _method(onboarding, "handleBack")
     assert "_goToStep0()" in onb_back and "_goBackToStep1()" in onb_back
     assert "return true;" in onb_back, "dall'onboarding non si esce col back"

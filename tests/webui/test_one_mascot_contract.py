@@ -133,8 +133,8 @@ def test_she_is_on_top_of_everything_in_the_workshop() -> None:
         # di impilamento suo (controllato qui sotto), quindi nella pagina
         # contano quanto lui.
         ".compose-scope", ".scope-menu", ".commands-menu",
-        # L'attesa del primo avvio: lei e' nascosta durante l'onboarding
-        # (`JennyCompanion.setMode`), quindi non c'e' niente da coprire.
+        # L'attesa del primo avvio: vive in `onboarding.html`, dove lei non
+        # c'e', quindi non c'e' niente da coprire.
         ".onboarding-loading-overlay",
     }
     above = [(sel, z) for sel, z in levels if z >= she and sel != ".jenny-duo"]

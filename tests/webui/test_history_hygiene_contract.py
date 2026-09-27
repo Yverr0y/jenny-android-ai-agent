@@ -182,7 +182,7 @@ def test_the_workspace_editor_is_never_dropped_behind_home() -> None:
 
 
 def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
-    """I listener del dock sono attivi da subito: durante i due await del boot
+    """I listener del dock sono attivi da subito: durante gli await del boot
     un tap impilava la propria entry sopra una radice non ancora marcata, e la
     marcatura tardiva la riscriveva con pos 0 — vista riportata indietro da sé,
     pressione annullata in silenzio e una entry mai contata sotto.
@@ -194,6 +194,11 @@ def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
     variabili locali compresi (``initialWiki``, ``const settings = ...``):
     rinominare una locale — che non cambia niente per nessuno — le faceva
     fallire. Il contratto è un *ordine*, e si verifica confrontando posizioni.
+
+    **Aggiornato il 27/09/2026.** Gli await erano due: la lettura del primo
+    avvio e le sessioni. La prima si fa adesso in testa al boot, **prima** che
+    i listener del dock esistano — un tap non puo' arrivare — perche' il primo
+    avvio non si fa piu' qui ma in ``onboarding.html``. Resta il secondo.
     """
     source = _app()
     init = re.search(r"\n  async init\(\)\s*\{(.*?)\n  \}", source, re.S)
@@ -203,18 +208,21 @@ def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
     marks = [m.start() for m in re.finditer(r"this\.replaceNav\(this\._navStateFor\(", body)]
     assert marks, "il boot non marca più la radice"
     mark = marks[0]
-    # I due await che aprono la finestra: non sono variabili locali, sono i
-    # nomi delle chiamate — rinominarli *è* un cambio di contratto.
-    for await_call in (r"await api\.getSettings\(\)", r"await this\._initSessions\(\)"):
-        found = re.search(await_call, body)
-        assert found, f"await gone dal boot: {await_call}"
-        assert mark < found.start(), (
-            "la radice va marcata prima degli await, altrimenti un tap sul dock la scavalca"
-        )
+    # L'await che apre la finestra: non e' una variabile locale, e' il nome
+    # della chiamata — rinominarlo *è* un cambio di contratto.
+    found = re.search(r"await this\._initSessions\(\)", body)
+    assert found, "await gone dal boot: _initSessions"
+    assert mark < found.start(), (
+        "la radice va marcata prima dell'await, altrimenti un tap sul dock la scavalca"
+    )
+    # La domanda sul primo avvio si fa prima che il dock ascolti.
+    listeners = body.index("document.querySelectorAll('.dock-item[data-mode]')")
+    assert body.index("isFirstRun(") < listeners, (
+        "un tap durante la lettura del primo avvio scavalcherebbe una radice non marcata"
+    )
 
-    assert "if (!this.currentMode || this._firstRun) {" in body, (
-        "un tap durante il boot ha già scelto la vista: va onorato, non annullato "
-        "(il primo avvio è l'eccezione, lì la navigazione è bloccata)"
+    assert "if (!this.currentMode) {" in body, (
+        "un tap durante il boot ha già scelto la vista: va onorato, non annullato"
     )
 
 

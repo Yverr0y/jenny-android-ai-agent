@@ -5833,9 +5833,19 @@ body {
 
 /* ── Mini Jenny dell'onboarding: in piedi sul bordo inferiore.
    Il layer vive in #view-onboarding (fuori dal content ri-renderizzato);
-   le pose sono i webp condivisi della mascotte, swappati da JS. */
+   le pose sono i webp condivisi della mascotte, swappati da JS.
+
+   In `onboarding.html` la vista e' l'intero documento: nessun guscio intorno
+   le da' un'altezza, quindi la prende dal viewport visibile — `--vv-height`,
+   scritta da `onboarding-app.js`, perche' con la tastiera su il form si
+   restringa invece di finirci sotto. */
 #view-onboarding {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--vv-height, 100%);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-sizing: border-box;
 }
 
 .onboarding-jenny {

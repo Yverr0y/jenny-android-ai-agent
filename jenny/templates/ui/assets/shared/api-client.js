@@ -102,18 +102,21 @@ class ApiClient {
   // da lì in poi vive solo nella memoria di questa istanza, che la navigazione
   // distrugge.
   //
-  // `assign` e non `replace`: i due gusci sono documenti separati e il tasto
-  // Indietro deve poter tornare da dove si è arrivati.
-  navigate(path) {
+  // `assign` di norma: i due gusci sono documenti separati e il tasto Indietro
+  // deve poter tornare da dove si è arrivati. `replace` per i passaggi da e
+  // verso `onboarding.html`: la casa lasciata per il primo avvio e il wizard
+  // concluso non sono posti in cui Indietro debba riportare.
+  navigate(path, { replace = false } = {}) {
     if (typeof location === 'undefined') return;
+    const go = (url) => (replace ? location.replace(url) : location.assign(url));
     if (!this._bootstrapSecret) {
-      location.assign(path);
+      go(path);
       return;
     }
     const [base, rawHash = ''] = String(path).split('#');
     const params = new URLSearchParams(rawHash);
     params.set('bs', this._bootstrapSecret);
-    location.assign(`${base}#${params}`);
+    go(`${base}#${params}`);
   }
 
   // Riporta un errore client-side nel log del gateway (fire-and-forget).

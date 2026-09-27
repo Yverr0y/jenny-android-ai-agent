@@ -1079,8 +1079,10 @@ class MainActivity : AppCompatActivity() {
      * Il path è uno dei **documenti-guscio** della WebUI?
      *
      * Le interfacce sono due — la casa (`index.html`, cioè quel che
-     * [GATEWAY_PATH] serve) e l'officina (`workshop.html`) — e si passa
-     * dall'una all'altra con un caricamento di pagina. Senza questo elenco
+     * [GATEWAY_PATH] serve) e l'officina (`workshop.html`) — più il primo
+     * avvio (`onboarding.html`), a cui rimandano entrambe finché non c'è un
+     * provider. Fra l'uno e l'altro si passa con un caricamento di pagina.
+     * Senza questo elenco
      * quella navigazione veniva bloccata dalla rete di sicurezza qui sotto e
      * le due porte non si aprivano: misurato sul Titan 2 il 18/09/2026, con
      * "Blocked main-frame navigation to a non-SPA gateway path" in logcat come
@@ -1096,7 +1098,8 @@ class MainActivity : AppCompatActivity() {
         return path == GATEWAY_PATH ||
             path == base ||
             path == "$base/index.html" ||
-            path == "$base/workshop.html"
+            path == "$base/workshop.html" ||
+            path == "$base/onboarding.html"
     }
 
     /**
