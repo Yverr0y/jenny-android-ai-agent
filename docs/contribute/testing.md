@@ -64,13 +64,13 @@ Run this before committing or opening a PR. It's exactly the lint + blocking-typ
 |---|---|
 | `dco` | Verifies every commit carries a `Signed-off-by:` trailer matching its author (`scripts/check_dco.sh`, which reads git's own trailer block, not any line of the message). On a PR it checks the PR's commits; on a push to a branch other than `main`, the commits the branch adds on top of `main`. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the sign-off requirement — a PR with unsigned commits cannot merge. |
 | `lint` | `ruff check jenny/ tests/`, then the blocking pyright subset, then the non-blocking full-perimeter pyright pass (`\|\| true`). |
-| `test` | `pytest -q`, run twice as a matrix across Python 3.11 and 3.12. The `dev` extra (`pip install -e ".[dev]"`) brings pytest, pytest-asyncio and ruff at exact versions, plus the test-only backends `cryptography`, `asyncssh` and `pillow` (never installed on Android). It also installs node and `jsdom` (`npm install --no-save jsdom`, found through `NODE_PATH`): the WebUI suites that execute the real JS skip without them, and `tests/webui/test_node_is_available.py` fails instead of skipping when `CI` is set and node, jsdom or Pillow is missing. |
+| `test` | `pytest -q`, run twice as a matrix across Python 3.11 and 3.12. The `dev` extra (`pip install -e ".[dev]"`) brings pytest, pytest-asyncio and ruff at exact versions, plus the test-only backends `cryptography`, `asyncssh` and `pillow` (never installed on Android). It also installs node and `jsdom` (`npm install --no-save jsdom@30.1.1`, found through `NODE_PATH`): the WebUI suites that execute the real JS skip without them, and `tests/webui/test_node_is_available.py` fails instead of skipping when `CI` is set and node, jsdom or Pillow is missing. |
 
 To reproduce the `test` job locally, including the jsdom suites:
 
 ```bash
 pip install -e ".[dev]"
-npm install --no-save jsdom
+npm install --no-save jsdom@30.1.1
 NODE_PATH=$PWD/node_modules pytest -q
 ```
 

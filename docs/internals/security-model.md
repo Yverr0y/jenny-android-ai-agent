@@ -50,7 +50,10 @@ Outbound network tools (`web_fetch`, `download_file`, and the `http_get`/`http_p
 | `100.64.0.0/10` | carrier-grade NAT |
 | `127.0.0.0/8`, `::1/128` | loopback |
 | `169.254.0.0/16`, `fe80::/10` | link-local (includes cloud metadata endpoints) |
-| `fc00::/7` | IPv6 unique local |
+| `fc00::/7`, `fec0::/10` | IPv6 unique local, and the deprecated site-local range |
+| `::/96`, `::ffff:0:0:0/96`, `64:ff9b:1::/48`, `224.0.0.0/4`, `ff00::/8`, `255.255.255.255/32` | never a server: unspecified and IPv4-compatible, SIIT-translated, local-use NAT64, multicast, broadcast |
+
+An address that carries an IPv4 inside it — IPv4-mapped (`::ffff:a.b.c.d`), well-known NAT64 (`64:ff9b::/96`) and 6to4 (`2002::/16`) — is also checked as that IPv4, so `::ffff:127.0.0.1` is loopback.
 
 `security.ssrfWhitelist` (default `[]`) lists CIDR ranges that are exempted from this block — the documented use case is a Tailscale range like `100.64.0.0/10` so the agent's tools can reach a self-hosted service over your own VPN.
 
@@ -75,6 +78,8 @@ What actually contains `python_exec`, in order, is:
 If code inside `python_exec` calls `os` or `shutil` directly, it can do anything the app's own UID can do on disk — which in practice is still confined to the app's private storage, because that's all the UID has access to.
 
 Defaults: `tools.pythonExec.enable` = `true`, `timeout` = 60 seconds (`0` = no limit), `maxOutputChars` = 10,000.
+
+Sessions do not share variables: each session key gets its own globals. They do share the interpreter, though, and so the imported modules (`sys.modules`): a value that code in one session stores on a module — an attribute, a cache, a patched function — is visible to code in another session of the same process. The per-session namespace keeps conversations from stepping on each other by accident; it is not isolation between them.
 
 **If you don't trust the model to run arbitrary code responsibly, the only real mitigation is to turn the tool off:** set `tools.pythonExec.enable` to `false` in `workspace/config.json`. There is no "sandboxed mode" to fall back to.
 
@@ -168,7 +173,13 @@ refactor.
   client on the session's own profile. The verdict cache holds at most 256 hosts. On the
   page-side check a name that is not cached waits at most 2 seconds for DNS, and a timeout
   counts as blocked; an HTTP request waits for the system resolver on a WebView worker thread,
-  with no cap of its own, and a failed resolution counts as blocked. Not covered:
+  with no cap of its own, and a failed resolution counts as blocked. The address check
+  (`isBlockedAddress` in `JennyBrowserBridge.kt`) follows the Python blocklist
+  (`jenny/security/network.py`): besides the private, loopback and link-local ranges it refuses
+  multicast, broadcast and `::/96`, and it reads IPv4-mapped, NAT64 `64:ff9b::/96` and 6to4
+  `2002::/16` addresses as the IPv4 they carry. Two forms the Python side refuses are not in
+  the Kotlin list: SIIT-translated `::ffff:0:0:0/96` and local-use NAT64 `64:ff9b:1::/48`.
+  Not covered:
   `WebSocket` inside a worker, DNS rebinding between the check and the connection, and WebViews
   too old for document-start scripts or multiple profiles. It stops an ordinary page, not one
   written against it.

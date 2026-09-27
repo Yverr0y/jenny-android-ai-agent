@@ -37,7 +37,7 @@ The third is **Pillow**, for `tests/webui/test_mascot_layer_sources.py`, which s
 Two more things the suite can want, outside Python:
 
 - **node** — about twenty WebUI suites execute the real JS. They *skip* without it, so the suite still goes green while ~200 behaviour tests quietly do not run.
-- **jsdom** — the suites that mount the whole home in a DOM (`tests/support/home_dom.py`) and the graph contract need it, and skip without it. It is not a dependency of the repo: `npm install --no-save jsdom`, then run the suite with `NODE_PATH=$PWD/node_modules`, as CI does. `node_modules/` is not in `.gitignore`, so delete it afterwards.
+- **jsdom** — the suites that mount the whole home in a DOM (`tests/support/home_dom.py`) and the graph contract need it, and skip without it. It is not a dependency of the repo: `npm install --no-save jsdom@30.1.1`, then run the suite with `NODE_PATH=$PWD/node_modules`, as CI does. `node_modules/` is not in `.gitignore`, so delete it afterwards.
 
 In CI, `tests/webui/test_node_is_available.py` fails instead of letting node, jsdom or Pillow go missing in silence.
 
