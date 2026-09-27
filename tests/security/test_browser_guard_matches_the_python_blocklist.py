@@ -29,6 +29,13 @@ _V6_COVERAGE = {
     "::1/128": ("isLoopbackAddress",),
     "fe80::/10": ("isLinkLocalAddress",),
     "fc00::/7": ("(b[0].toInt() and 0xFE) == 0xFC",),
+    # Su un Inet6Address, isSiteLocalAddress e' proprio fec0::/10.
+    "fec0::/10": ("addr.isSiteLocalAddress",),
+    "::ffff:0:0:0/96": (
+        "(0..7).all { b[it] == 0.toByte() } && b[8] == 0xFF.toByte()",
+        "b[10] == 0.toByte() && b[11] == 0.toByte()) return true",
+    ),
+    "64:ff9b:1::/48": ("b[4] == 0x00.toByte() && b[5] == 0x01.toByte()) return true",),
     "::/96": ("(0..11).all { b[it] == 0.toByte() }",),
     "ff00::/8": ("isMulticastAddress",),
     "64:ff9b::/96": ("b[3] == 0x9B.toByte()", "embeddedIpv4(b)"),

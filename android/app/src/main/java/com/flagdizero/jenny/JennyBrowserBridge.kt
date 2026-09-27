@@ -261,6 +261,15 @@ class JennyBrowserBridge(context: Context) {
                 // (vale solo per `::1`); come in Python, l'intera /96 non e' mai
                 // un server.
                 if ((0..11).all { b[it] == 0.toByte() }) return true
+                // ::ffff:0:0:0/96, la forma «tradotta» di SIIT (::ffff:0:a.b.c.d):
+                // non e' una IPv4-mapped, e fuori da un traduttore non porta a
+                // nessun server. Come in Python, bloccata intera.
+                if ((0..7).all { b[it] == 0.toByte() } && b[8] == 0xFF.toByte() &&
+                    b[9] == 0xFF.toByte() && b[10] == 0.toByte() && b[11] == 0.toByte()) return true
+                // 64:ff9b:1::/48, il NAT64 di uso locale: il prefisso li' non ha
+                // lunghezza fissa, quindi l'IPv4 dentro non si sa estrarre.
+                if (b[0] == 0x00.toByte() && b[1] == 0x64.toByte() && b[2] == 0xFF.toByte() &&
+                    b[3] == 0x9B.toByte() && b[4] == 0x00.toByte() && b[5] == 0x01.toByte()) return true
                 embeddedIpv4(b)?.let { return isBlockedAddress(InetAddress.getByAddress(it)) }
             }
         }
