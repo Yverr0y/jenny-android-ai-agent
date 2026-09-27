@@ -101,8 +101,8 @@ class Consolidator:
     _MAX_CONSOLIDATION_ROUNDS = 5
 
     # Turni di fila con la consolidazione per lunghezza fallita, sulla stessa
-    # sessione, prima di ripiegare sul dump grezzo e avanzare (AC2 della terza
-    # revisione). Sotto la soglia un fallimento non avanza niente e il turno dopo
+    # sessione, prima di ripiegare sul dump grezzo e avanzare.
+    # Sotto la soglia un fallimento non avanza niente e il turno dopo
     # riprova; alla soglia si torna al comportamento di prima, perche' un chunk
     # che il modello rifiuta *per la sua forma* costerebbe altrimenti una
     # chiamata a ogni turno, per sempre, con la sessione che cresce.
@@ -157,8 +157,8 @@ class Consolidator:
         self._token_failure_turns: dict[str, str] = {}
         # Gli hook di misura del loop (oggi ``TokenUsageHook``): la chiamata di
         # consolidazione va al provider da sé, fuori da ogni ``AgentRunner``, e
-        # senza questi la sua spesa non arrivava in ``token-usage.json`` (AC6
-        # della terza revisione). Si registra sotto la chiave della sessione
+        # senza questi la sua spesa non arrivava in ``token-usage.json``.
+        # Si registra sotto la chiave della sessione
         # consolidata.
         self.usage_hooks: list[AgentHook] = list(usage_hooks)
 
@@ -372,7 +372,7 @@ class Consolidator:
     def reduced_window(self, tokens: int) -> Iterator[None]:
         """Consolida con *tokens* di finestra, solo dentro il blocco e solo in questo task.
 
-        Lo usa il recupero da un overflow di contesto (AC9 della terza revisione).
+        Lo usa il recupero da un overflow di contesto.
         Prima il callback scriveva la finestra ridotta in ``context_window_tokens``,
         e da li' valeva per ogni consolidazione successiva di ogni sessione fino
         al riavvio.
@@ -410,7 +410,7 @@ class Consolidator:
 
         :meth:`archive` tronca l'input al budget del modello, e il troncamento
         taglia la coda: chi segna dei messaggi come riassunti deve sapere quanti
-        ci sono entrati davvero (AC8 della terza revisione). Il conto e' quello di
+        ci sono entrati davvero. Il conto e' quello di
         ``archive``: il budget d'input meno il blocco "già registrato", in
         caratteri a ``CHARS_PER_TOKEN``. Almeno uno, se ce n'e': un messaggio che
         da solo sfora si tronca comunque, e zero vorrebbe dire non avanzare mai.
@@ -651,8 +651,8 @@ class Consolidator:
                     source,
                     len(chunk),
                 )
-                # Un riassunto fallito **non** avanza il cursore (AC2 della terza
-                # revisione). Avanzava sempre, col dump grezzo per briciola: ma il
+                # Un riassunto fallito **non** avanza il cursore.
+                # Avanzava sempre, col dump grezzo per briciola: ma il
                 # dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, e i messaggi oltre
                 # ``last_consolidated`` la compattazione per inattivita' li butta —
                 # quindi quel che il taglio lasciava fuori spariva da sessione e
@@ -722,8 +722,8 @@ class Consolidator:
         lock-protected path.  Returns the summary text on success, ``None``
         if the LLM failed, or ``""`` if there was nothing to archive.
 
-        **A LLM giu' la conversazione personale non si tronca** (AC2 della terza
-        revisione). Si troncava comunque, con il dump grezzo a fare da copia; ma il
+        **A LLM giu' la conversazione personale non si tronca**.
+        Si troncava comunque, con il dump grezzo a fare da copia; ma il
         dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, e in una conversazione
         lunga la maggior parte dei messaggi spariva da sessione e diario. Ora
         niente dump, niente troncatura e niente salvataggio: ``updated_at`` resta

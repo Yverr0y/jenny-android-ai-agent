@@ -712,7 +712,7 @@ async def run_dream_turn(
     review pass). Le eccezioni del turno risalgono: il chiamante le racconta a
     modo suo, e chiude con ``advanced=None``.
 
-    **Due batch quando la finestra ha due tipi** (AC12 della terza revisione).
+    **Due batch quando la finestra ha due tipi**.
     ``build_dream_prompt`` divide la finestra per tipo: il batch di testa porta
     le voci del suo tipo, e se ce ne sono dell'altro (``rest_scope``) un secondo
     batch sulla stessa finestra porta quelle. Il cursore va a fine finestra solo
@@ -894,7 +894,7 @@ def finish_dream_cycle(
     # fine run nel chiamante, fino al 26/09 teneva le ultime
     # ``max_history_entries`` voci senza guardare il cursore, e un livelock
     # abbastanza lungo perdeva storia mai consolidata. Ora le voci oltre il
-    # cursore restano (AC12 della terza revisione, ``agent/memory.py``), e il
+    # cursore restano (``MemoryStore.compact_history`` in ``agent/memory.py``), e il
     # prezzo di un livelock è un file che sfora il tetto finché non si sblocca.
     #
     # Fase 5 del piano: il contatore si è **spaccato in due**, perché contava due

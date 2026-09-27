@@ -1219,10 +1219,10 @@ class PythonNamespace:
         # `PythonExecTool.execute` e riletta da `_enter_guard`: l'istanza è
         # condivisa da tutte le sessioni, quindi una chiamata in coda sul pool
         # (o un thread di sessione partito un giro dopo) trovava la base messa
-        # nel frattempo da un'altra, e scriveva nella sua cartella (TL2).
+        # nel frattempo da un'altra, e scriveva nella sua cartella.
         # Nemmeno `self.working_dir` è una base: è un attributo di comodo che
         # di default vale la workspace globale del processo.
-        # Globali per sessione (TL8). Il tool è uno per processo, e con un solo
+        # Globali per sessione. Il tool è uno per processo, e con un solo
         # dizionario una variabile assegnata in un quaderno si leggeva dalla
         # chat personale, e un `def read_file(...)` sostituiva il builtin
         # registrato per tutte le sessioni fino al riavvio. `_template` tiene
@@ -3068,8 +3068,8 @@ class _ContextBoundNamespace:
         self._execute = _carry_turn_across_thread(namespace.execute)
         self._call_function = _carry_turn_across_thread(namespace.call_function)
         # La base della chiamata che ha aperto la sessione, fissata qui: il
-        # thread chiama senza argomenti e l'istanza condivisa non la conserva
-        # (TL2). `working_dir` è anche ciò che `list_exec_sessions` mostra.
+        # thread chiama senza argomenti e l'istanza condivisa non la conserva.
+        # `working_dir` è anche ciò che `list_exec_sessions` mostra.
         self._base = working_dir
         self.working_dir = working_dir or namespace.working_dir
 
@@ -3112,14 +3112,14 @@ async def run_python_async(
 ) -> str:
     """Execute Python code/function in a thread with timeout.
 
-    *session_key* sceglie i globali della sessione (TL8): come *working_dir*,
+    *session_key* sceglie i globali della sessione: come *working_dir*,
     arriva per argomento.
 
     *working_dir* è la base di risoluzione per questa esecuzione (vedi
     ``PythonNamespace._enter_guard``): passata esplicitamente e mai letta dal
     namespace, così due chiamate concorrenti sullo stesso tool non si
     sovrascrivono la base a vicenda. ``None`` vuol dire la radice del workspace,
-    non "la base dell'ultima chiamata" (TL2).
+    non "la base dell'ultima chiamata".
 
     IL CONTESTO DEL TURNO VIAGGIA CON L'ESECUZIONE, e non è un dettaglio: è la
     differenza fra un cancello che tiene e un cancello che sembra tenere.
@@ -3418,7 +3418,7 @@ class PythonExecTool(PythonExecGateMixin, Tool):
         """Il tetto di config (``tools.pythonExec.maxOutputChars``), nei limiti dello schema.
 
         Prima il default era la costante di classe ``_MAX_OUTPUT`` e il valore
-        di config, pur salvato, non si usava (TL14). Un valore che non è un
+        di config, pur salvato, non si usava. Un valore che non è un
         intero (config anomala) ripiega sul default: la descrizione del tool
         non deve poter sollevare, la legge anche l'assemblaggio del prompt.
         """
@@ -3449,12 +3449,12 @@ class PythonExecTool(PythonExecGateMixin, Tool):
         # `working_dir` è la base di risoluzione della SOLA chiamata corrente:
         # validata qui per restituire al modello un errore leggibile invece di
         # un traceback, e poi passata per argomento fino a `_enter_guard` —
-        # mai scritta sull'istanza, che è condivisa da tutte le sessioni (TL2).
+        # mai scritta sull'istanza, che è condivisa da tutte le sessioni.
         try:
             resolved_working_dir = self.namespace._resolve_exec_base(working_dir)
         except OSError as exc:
             return f"Error: {exc}"
-        # I globali sono della sessione del turno (TL8): letta qui, sul thread
+        # I globali sono della sessione del turno: letta qui, sul thread
         # del loop, e portata per argomento.
         session_key = current_request_session_key()
         try:

@@ -73,7 +73,7 @@ class AutoCompact:
     _DIARY_HARVEST_MAX_CHUNKS = 4
 
     # Quanto aspetta una compattazione per inattivita' fallita prima di
-    # riprovare (AC2 della terza revisione). A LLM giu' la sessione non si tronca
+    # riprovare. A LLM giu' la sessione non si tronca
     # e resta scaduta, e il giro TTL passa ogni 60 secondi: senza questa attesa
     # sarebbe una chiamata al minuto per tutta la durata del guasto.
     _RETRY_AFTER_FAILURE_S = 600.0
@@ -410,7 +410,7 @@ class AutoCompact:
         all'orologio del giardiniere sarebbe la corsa fra orologi che quel metodo
         esiste per evitare.
 
-        **L'indice dice "riassunto", e nient'altro** (AC8 della terza revisione).
+        **L'indice dice "riassunto", e nient'altro**.
         Tre cose lo tradivano. Era una posizione assoluta, e dopo ``/new`` restava
         al valore di prima: i messaggi nuovi, meno dei vecchi, non entravano mai —
         ora ``Session.clear`` lo toglie e ``retain_recent_legal_suffix`` lo fa

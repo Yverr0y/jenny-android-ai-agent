@@ -295,7 +295,7 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
         if real_injection:
             # Un messaggio dell'utente entrato a metà turno va nel checkpoint
             # adesso, non alla prossima risposta del modello: uno /stop durante
-            # quella chiamata lo perderebbe (AC3). Senza messaggio dell'assistente
+            # quella chiamata lo perderebbe. Senza messaggio dell'assistente
             # in volo, ``prior_messages`` è il turno intero.
             await self._emit_checkpoint(
                 spec,
@@ -1267,8 +1267,8 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
 
         ``prior_messages`` sono i messaggi del turno prima dell'iterazione in
         corso: le iterazioni già chiuse (assistente con le tool call, e i loro
-        risultati) e i messaggi dell'utente iniettati a metà turno (AC3 della
-        terza revisione). Senza, il checkpoint portava solo l'ultima iterazione, e
+        risultati) e i messaggi dell'utente iniettati a metà turno.
+        Senza, il checkpoint portava solo l'ultima iterazione, e
         dopo uno /stop o un kill la storia perdeva tool call che avevano girato —
         e magari scritto file. Il turno comincia dove finiscono
         ``spec.initial_messages``: ``messages`` ne è una copia a cui il runner

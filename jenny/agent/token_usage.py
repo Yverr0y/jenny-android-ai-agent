@@ -52,8 +52,8 @@ _SOURCE_KEYS = ("user", "api", "cron", "dream", "atlas", "gardener", "mascot", "
 # con una chiave ``subagent:``: il suo runner porta la chiave della sessione che
 # l'ha lanciato, e il bucket e' quello (``SubagentManager.usage_hooks``). Allo
 # stesso modo una consolidazione si conta sotto la sessione consolidata
-# (``Consolidator.usage_hooks``). Fino alla terza revisione (AC6) nessuna delle
-# due arrivava qui: l'hook stava solo sui turni di ``AgentLoop``.
+# (``Consolidator.usage_hooks``). Un tempo nessuna delle due arrivava qui:
+# l'hook stava solo sui turni di ``AgentLoop``, e quella spesa non si vedeva.
 _INTERNAL_KIND_TO_SOURCE = {
     "dream": "dream",
     "cron": "cron",

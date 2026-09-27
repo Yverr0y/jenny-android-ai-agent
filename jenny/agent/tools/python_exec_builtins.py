@@ -439,7 +439,7 @@ def _register_builtin_functions(
         Il sorgente viene da ``jenny/skills/llm-wiki/scripts`` (sul telefono
         l'asset dell'APK, via :func:`read_asset`): gli stessi byte che l'avvio
         estrae in ``<workspace>/skills``. **Mai dalla copia del workspace**, e
-        la ragione è il bypass qui sotto (TL10 della terza revisione): quella
+        la ragione è il bypass qui sotto: quella
         cartella il modello la scrive con ``write_file``, e caricarla dentro
         ``_path_guard_bypass()`` eseguiva il suo codice di primo livello senza
         confine di percorso. Il vecchio commento diceva che qui «non c'è niente

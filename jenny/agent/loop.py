@@ -1338,8 +1338,8 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             self._set_runtime_checkpoint(session, payload)
 
         # I subagent gia' vivi quando il turno comincia: sono di un turno
-        # precedente, e ``_drain_pending`` non li aspetta (AC4 della terza
-        # revisione). Prima l'attesa scattava per **qualunque** subagent vivo della
+        # precedente, e ``_drain_pending`` non li aspetta.
+        # Prima l'attesa scattava per **qualunque** subagent vivo della
         # sessione, e un «ciao» con un subagent di prima in giro teneva il turno
         # aperto fino a 300 secondi. Il loro risultato non si perde: rientra dalla
         # coda quando arriva, nel turno in corso se ne sta drenando, o come
@@ -1483,8 +1483,8 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             del runner, e la compattazione qui la vede con
             ``Consolidator.reduced_window``, legata al task del turno. Prima
             finiva in ``self.context_window_tokens`` e nel Consolidator, cioe' in
-            ogni turno successivo di ogni sessione fino al riavvio (AC9 della
-            terza revisione): un solo overflow — anche il falso allarme di un
+            ogni turno successivo di ogni sessione fino al riavvio:
+            un solo overflow — anche il falso allarme di un
             provider che non dice il limite — dimezzava per sempre la storia
             rimandata al modello. Un modello con una finestra davvero piu' piccola
             si configura (``contextWindowTokens``), non si indovina qui.
@@ -1864,7 +1864,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                     # Il contesto parziale del turno interrotto non va perso.
                     # Il checkpoint e' gia' nei metadata della sessione
                     # (``AgentRunner._emit_checkpoint``, a ogni fase del turno),
-                    # e dalla terza revisione (AC3) porta il turno *intero*: le
+                    # e porta il turno *intero*: le
                     # iterazioni chiuse in ``prior_messages``, i messaggi
                     # iniettati, e l'iterazione in volo con le sue tool call.
                     # Materializzarlo ora lo rende visibile al turno dopo; prima
@@ -2144,7 +2144,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         """Process a single inbound message and return its outcome."""
         # Un surrogato UTF-16 isolato (un frame tagliato dentro un'emoji) diventa
         # U+FFFD qui, al confine del turno: arrivato in sessione, faceva fallire
-        # ogni salvataggio fino al riavvio (AC5 della terza revisione).
+        # ogni salvataggio fino al riavvio.
         if isinstance(msg.content, str):
             clean = scrub_lone_surrogates(msg.content)
             if clean != msg.content:
@@ -2451,7 +2451,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         Sono quelli che dichiarano ``runs_when_ephemeral`` — misurare non è
         parlare, e oggi è solo ``TokenUsageHook``. Vanno ai subagent e al
         Consolidator, che chiamano il provider fuori da un turno di questo loop
-        e la cui spesa altrimenti non si contava (AC6 della terza revisione).
+        e la cui spesa altrimenti non si contava.
         """
         return [hook for hook in self._extra_hooks if hook.runs_when_ephemeral()]
 

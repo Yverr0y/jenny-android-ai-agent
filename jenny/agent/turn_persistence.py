@@ -353,8 +353,8 @@ class TurnPersistenceMixin:
         assistant_message = checkpoint.get("assistant_message")
         completed_tool_results = checkpoint.get("completed_tool_results") or []
         pending_tool_calls = checkpoint.get("pending_tool_calls") or []
-        # Le iterazioni già chiuse del turno e i messaggi iniettati (AC3 della
-        # terza revisione): assenti in un checkpoint scritto da una versione
+        # Le iterazioni già chiuse del turno e i messaggi iniettati:
+        # assenti in un checkpoint scritto da una versione
         # precedente, che si ripristina come prima.
         prior_messages = checkpoint.get("prior_messages") or self._read_turn_journal(
             session.key, checkpoint.get("prior_journal"),

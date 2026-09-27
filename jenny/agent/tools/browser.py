@@ -56,7 +56,7 @@ _INDEX_VERSION: str = ""
 # Per ref, il nome del bottone che invia il modulo dell'elemento ('' fuori da
 # un modulo), dal terzo campo dell'indice. E il ref che ha il cursore: l'ultimo
 # `click`/`type`/`select` riuscito. Insieme dicono **cosa** invierebbe un
-# `press Enter`, che deve passare dallo stesso lessico di un click (TL13). Si
+# `press Enter`, che deve passare dallo stesso lessico di un click. Si
 # svuotano col documento, come l'indice.
 _FORM_OF: dict[str, str] = {}
 _FOCUS_REF: str = ""
@@ -385,7 +385,7 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
     fermarsi a meta' lascerebbe la pagina in uno stato che nessuno ha descritto.
 
     ``press Enter`` in un campo invia il suo modulo come un click sul bottone, e
-    passa quindi dallo stesso lessico (TL13): il modulo lo si conosce dal campo
+    passa quindi dallo stesso lessico: il modulo lo si conosce dal campo
     che ha il cursore — l'ultimo ``click``/``type``/``select`` di questo blocco,
     o del precedente. Se il cursore non si sa, il passo parte con
     ``submit: false`` e la pagina non invia: l'invio passa allora dal click sul
@@ -518,7 +518,7 @@ class BrowserOpenTool(_BrowserToolBase):
         url = url.strip(" \t\r\n`\"'")
         from jenny.security.network import validate_url_target_async
 
-        # Fuori dal loop: la validazione risolve il nome (CF9/TL11).
+        # Fuori dal loop: la validazione risolve il nome.
         ok, err = await validate_url_target_async(url)
         if not ok:
             return f"Error: URL validation failed: {err}"

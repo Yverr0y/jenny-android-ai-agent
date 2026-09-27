@@ -108,7 +108,7 @@ class _SearchTool(_FsTool):
             # Fuori dalla base dei percorsi relativi (un progetto che cerca in
             # `skills/`): un percorso relativo alla radice della *ricerca*
             # sarebbe risolto da `read_file` dentro il progetto, cioè «File not
-            # found» per un percorso appena restituito (TL17). Assoluto, invece,
+            # found» per un percorso appena restituito. Assoluto, invece,
             # si apre con lo stesso controllo di lettura.
             return target.as_posix()
         return target.relative_to(root).as_posix()
@@ -132,7 +132,7 @@ class _SearchTool(_FsTool):
         return rel_path
 
     def _link_escapes(self, candidate: Path) -> bool:
-        """Un file-symlink il cui bersaglio ``read_file`` rifiuterebbe (TL12).
+        """Un file-symlink il cui bersaglio ``read_file`` rifiuterebbe.
 
         ``os.walk`` non scende nei link a cartelle, ma i link a file li elenca
         fra i file: senza questo controllo ``grep`` ne apriva il bersaglio fuori
@@ -594,7 +594,7 @@ class GrepTool(_SearchTool):
                 if not _matches_type(file_path.name, type):
                     continue
 
-                # Il tetto si controlla con `stat`, PRIMA di leggere (TL7): prima
+                # Il tetto si controlla con `stat`, PRIMA di leggere: prima
                 # il file si leggeva per intero e solo dopo si guardava la
                 # lunghezza, cioè 600 MB di RSS per saltare un video.
                 try:

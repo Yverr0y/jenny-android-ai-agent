@@ -202,7 +202,7 @@ class _SshToolMixin:
     async def _resolve_off_loop(self, alias: str) -> tuple[Any, Any, Any]:
         """:meth:`_resolve` in un thread: rilegge la config e risolve il nome
         dell'host (``validate_ssh_target`` → ``getaddrinfo``), entrambi
-        bloccanti. Sul loop un DNS lento fermava tutto il gateway (CF9/TL11)."""
+        bloccanti. Sul loop un DNS lento fermava tutto il gateway. """
         return await asyncio.to_thread(self._resolve, alias)
 
     def _resolve(self, alias: str) -> tuple[Any, Any, Any]:
@@ -570,7 +570,7 @@ class SshTransferTool(_SshToolMixin, Tool):
         if direction not in ("up", "down"):
             return "Error: direction must be 'up' or 'down'."
         # `down` scrive sul telefono, e la destinazione non passa dal cancello
-        # dei tool file: in sola lettura si rifiuta qui (TL3). `up` scrive sul
+        # dei tool file: in sola lettura si rifiuta qui. `up` scrive sul
         # remoto, come `ssh_exec`, e resta aperto.
         if direction == "down" and current_turn_is_readonly():
             return READONLY_TOOL_REFUSAL

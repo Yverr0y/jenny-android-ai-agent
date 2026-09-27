@@ -69,7 +69,7 @@ class _SubagentControlTool(Tool, ContextAware):
         self._turn_id.set(ctx.turn_id)
 
     def _belongs_here(self, task_id: str) -> bool:
-        """``task_id`` (o lineage) è un subagent partito da questa sessione? (TL16)
+        """``task_id`` (o lineage) è un subagent partito da questa sessione?
 
         ``subagent_status`` guarda solo i subagent della propria sessione, ma
         ``cancel``/``restart``/``send`` passavano l'id al manager così com'era:

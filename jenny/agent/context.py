@@ -860,8 +860,8 @@ class ContextBuilder:
     def _render_recent_history(cls, entries: Sequence[Mapping[str, Any]]) -> str:
         """Il blocco «Recent History», dentro ``_MAX_HISTORY_TOKENS`` e dal fondo.
 
-        Si riempie **dalle voci più nuove** e a voci intere (AC13 della terza
-        revisione). Il taglio stava sul testo intero, dalla fine: oltre il tetto il
+        Si riempie **dalle voci più nuove** e a voci intere.
+        Il taglio stava sul testo intero, dalla fine: oltre il tetto il
         blocco teneva le voci più vecchie e buttava quelle appena scritte, cioè
         proprio quel che esiste per portare — cosa è successo da quando Dream è
         passato l'ultima volta. Solo la più nuova, se da sola supera il tetto, si

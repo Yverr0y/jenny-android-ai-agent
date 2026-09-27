@@ -755,7 +755,7 @@ class SubagentManager:
         # Gli hook di **misura** del loop (oggi ``TokenUsageHook``), montati su
         # ogni run accanto a ``_SubagentHook``. Senza, un subagent girava nel suo
         # ``AgentRunner`` e i suoi token non arrivavano mai in
-        # ``token-usage.json`` (AC6 della terza revisione). La spesa si registra
+        # ``token-usage.json``. La spesa si registra
         # sotto la chiave della sessione che l'ha lanciato: il runner del
         # subagent porta quella, non una ``subagent:``.
         self.usage_hooks: list[AgentHook] = list(usage_hooks)
@@ -1330,8 +1330,8 @@ class SubagentManager:
                     origin, "error", origin_message_id,
                 )
             elif result.stop_reason == "max_iterations":
-                # Il budget di iterazioni finito **non** e' un successo (AC7 della
-                # terza revisione): cadeva nel ramo buono, e l'annuncio diceva
+                # Il budget di iterazioni finito **non** e' un successo:
+                # cadeva nel ramo buono, e l'annuncio diceva
                 # «completed successfully» con il testo di ripiego del runner come
                 # risultato. Si annuncia per quel che e', con i passi fatti. La
                 # storia Tier-2 si salva come sull'esito buono: la conversazione
@@ -2408,7 +2408,7 @@ class SubagentManager:
 
         Serve a chi deve distinguere i subagent nati **dopo** un certo momento da
         quelli che c'erano gia': ``AgentLoop`` se li fotografa all'inizio del
-        turno, e aspetta solo quelli nuovi (AC4 della terza revisione).
+        turno, e aspetta solo quelli nuovi.
         """
         tids = self._session_tasks.get(session_key, set())
         return frozenset(

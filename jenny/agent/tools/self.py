@@ -55,7 +55,7 @@ class MyTool(Tool, ContextAware):
         # Security boundaries (inspect + modify both blocked)
         "restrict_to_workspace", "channels_config",
         # La config dei tool porta i confini veri (restrict_to_workspace, i moduli
-        # di python_exec, gli host SSH): TL9 della terza revisione.
+        # di python_exec, gli host SSH): leggerla o cambiarla da qui li scavalca.
         "tools_config",
         "_concurrency_gate", "_extra_hooks",
     })
@@ -375,7 +375,7 @@ class MyTool(Tool, ContextAware):
                 self._audit("modify", f"BLOCKED sensitive leaf '{leaf}'")
                 return f"Error: '{leaf}' is not accessible"
             # Ogni segmento, non solo il primo: `x.restrict_to_workspace` è lo
-            # stesso confine di `restrict_to_workspace` (TL9).
+            # stesso confine di `restrict_to_workspace`.
             if any(part in self.BLOCKED for part in key.split(".")):
                 self._audit("modify", f"BLOCKED {key}")
                 return f"Error: '{key}' is protected and cannot be modified"

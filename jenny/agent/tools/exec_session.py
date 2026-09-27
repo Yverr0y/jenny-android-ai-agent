@@ -213,8 +213,8 @@ class _PythonSession:
 
         L'attesa è un ``asyncio.sleep`` a passi brevi, mai un ``time.sleep``:
         questo metodo gira sul thread dell'event loop, e un sonno bloccante qui
-        fermava tutto il gateway per la durata dell'attesa (TL1 della terza
-        revisione). A ogni passo si guarda ``_done``, così un codice che finisce
+        fermava tutto il gateway per la durata dell'attesa.
+        A ogni passo si guarda ``_done``, così un codice che finisce
         prima non paga l'attesa intera.
         """
         self.last_access = time.monotonic()

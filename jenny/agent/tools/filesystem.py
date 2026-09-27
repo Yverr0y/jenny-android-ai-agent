@@ -329,7 +329,7 @@ class _FsTool(Tool):
         # ``preview``: la risoluzione di un dry-run (``apply_patch``). Stessi
         # confini di una scrittura, ma niente rifiuto della sola lettura:
         # un'anteprima non cambia niente sul telefono, ed è proprio ciò che
-        # serve per descrivere «cosa avrei cambiato» (TL18).
+        # serve per descrivere «cosa avrei cambiato».
         # Punto di raccolta unico per l'intento di scrittura di tutti i tool
         # write-capable (write_file / edit_file / apply_patch): contarlo qui,
         # prima della risoluzione (che può sollevare ``PermissionError`` o
@@ -620,7 +620,7 @@ class ReadFileTool(_FsTool):
     _scopes = {"core", "orchestrator", "subagent"}
 
     _MAX_CHARS = 128_000
-    # Oltre questo il file non si carica in memoria (TL7): sul telefono un log
+    # Oltre questo il file non si carica in memoria: sul telefono un log
     # da centinaia di MB, decodificato e spezzato in righe, vale il gateway.
     _MAX_FILE_BYTES = 16 * 1024 * 1024
     _DEFAULT_LIMIT = 2000
@@ -679,7 +679,7 @@ class ReadFileTool(_FsTool):
                 return self._read_pdf(fp, pages)
 
             # La dimensione si chiede a `stat` PRIMA di leggere, e il contenuto
-            # si legge una volta sola, fuori dal loop (TL7): prima il file si
+            # si legge una volta sola, fuori dal loop: prima il file si
             # leggeva due volte (tre con l'hash della deduplica), per intero e
             # senza tetto, sul thread del gateway.
             st = fp.stat()
@@ -773,7 +773,7 @@ class ReadFileTool(_FsTool):
                 if not trimmed:
                     # La prima riga della finestra da sola sfonda il tetto (un JS
                     # minificato): senza questo ramo non restava nessuna riga e
-                    # l'invito era «Use offset=<la stessa>», all'infinito (TL6).
+                    # l'invito era «Use offset=<la stessa>», all'infinito.
                     # Se ne mostra la testa e l'offset successivo la scavalca.
                     end = start + 1
                     result = numbered[0][: self._MAX_CHARS]

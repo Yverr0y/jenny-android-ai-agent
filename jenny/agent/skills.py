@@ -75,8 +75,8 @@ class SkillsLoader:
         self.workspace_skills = workspace / "skills"
         self.disabled_skills = disabled_skills or set()
         # ``SKILL.md`` letti e frontmatter gia' parsato, per percorso, validi
-        # finche' ``(mtime_ns, size)`` del file restano quelli (AC16 della terza
-        # revisione). Senza, ogni costruzione del prompt rileggeva e riparsava in
+        # finche' ``(mtime_ns, size)`` del file restano quelli.
+        # Senza, ogni costruzione del prompt rileggeva e riparsava in
         # YAML ogni skill piu' volte — elenco, requisiti, descrizione, always —
         # e sul telefono erano 56 letture per prompt, tre prompt a turno. La
         # chiave include la dimensione perche' su alcuni filesystem ``mtime`` ha

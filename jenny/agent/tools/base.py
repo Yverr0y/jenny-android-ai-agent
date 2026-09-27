@@ -231,7 +231,7 @@ class Tool(ABC):
         if t == "string":
             # Un dict o una lista per un parametro stringa (``write_file(content={...})``)
             # diventano il JSON che il modello intendeva, non il ``repr`` Python
-            # (``{'a': True, 'b': None}``), che nessun lettore JSON apre (TL5).
+            # (``{'a': True, 'b': None}``), che nessun lettore JSON apre.
             if isinstance(val, (dict, list)):
                 try:
                     return json.dumps(val, ensure_ascii=False)

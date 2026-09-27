@@ -514,7 +514,7 @@ class AndroidWebFetchTool(AndroidWebGateMixin, Tool):
 
         from jenny.security.network import validate_url_target_async
 
-        # Fuori dal loop: la validazione risolve il nome (CF9/TL11).
+        # Fuori dal loop: la validazione risolve il nome.
         is_valid, error_msg = await validate_url_target_async(url)
         if not is_valid:
             return json.dumps(

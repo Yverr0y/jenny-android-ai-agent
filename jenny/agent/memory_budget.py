@@ -104,8 +104,7 @@ def measure_text(text: str, *, skip_user_rules: bool = False) -> int:
     # Anche gli a capo con cui la proiezione separa il blocco dal testo prima
     # (``soul_rules._project``, ``tail + "\n\n" + block``) sono suoi: contati,
     # un salvataggio delle regole faceva crescere SOUL.md di due caratteri, e
-    # ``dream_cycle.consolidation_landed`` lo leggeva come un fatto atterrato
-    # (TD19 della terza revisione).
+    # ``dream_cycle.consolidation_landed`` lo leggeva come un fatto atterrato.
     return len(text[:start].rstrip() + text[end:])
 
 

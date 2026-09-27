@@ -180,7 +180,7 @@ class FileStates:
 
         *content_hash*: lo sha256 dei byte appena letti, se il chiamante li ha
         già — ``read_file`` sì, e senza questo il file si rileggeva solo per
-        farne l'hash (TL7).
+        farne l'hash.
         """
         p = str(Path(path).resolve())
         try:

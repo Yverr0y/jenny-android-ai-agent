@@ -68,7 +68,7 @@ class DreamBatch(NamedTuple):
     cursor: int
     scope: str
     # L'altro tipo presente nella stessa finestra, ``None`` se la finestra ne ha
-    # uno solo: e' il segnale per il secondo batch del run (AC12). E
+    # uno solo: e' il segnale per il secondo batch del run. E
     # ``window_cursor`` e' la fine della finestra, dove il cursore puo' andare
     # quando atterrano entrambi. ``cursor`` resta quel che il batch **da solo**
     # puo' dichiarare digerito. Default per i doppi dei test che costruiscono
@@ -873,8 +873,8 @@ class MemoryStore:
         (``_read_entries`` / ``_write_entries`` are pure file I/O). No caller
         holds the lock when invoking this method.
 
-        **Non taglia quel che Dream deve ancora leggere** (AC12 della terza
-        revisione). Il tetto teneva le ultime *max_history_entries* voci senza
+        **Non taglia quel che Dream deve ancora leggere**.
+        Il tetto teneva le ultime *max_history_entries* voci senza
         guardare il cursore di Dream: un Dream indietro — un livelock, o gli ambiti
         alternati che gli davano batch da una voce — perdeva storia mai
         consolidata. Ora una voce personale o di progetto oltre il cursore resta
@@ -938,7 +938,7 @@ class MemoryStore:
         16.000 — arrivava tagliata, il JSON non si decodificava e
         :meth:`_next_cursor` restava col solo ``.cursor``: che dopo un kill fra
         l'append e la sua riscrittura è indietro di uno, cioè un cursore
-        duplicato (AC11 della terza revisione). Lo split sui byte ``\\n`` è
+        duplicato. Lo split sui byte ``\\n`` è
         sicuro in UTF-8: quel byte non compare mai dentro un carattere multibyte.
         """
         block = 4096
@@ -1200,8 +1200,8 @@ class MemoryStore:
         if not pending:
             return None
 
-        # **Voci intere, e un tetto in caratteri sulla finestra** (AC1 della terza
-        # revisione). Fino al 26/09 ogni voce passava da un taglio a 500
+        # **Voci intere, e un tetto in caratteri sulla finestra**.
+        # Fino al 26/09 ogni voce passava da un taglio a 500
         # caratteri e il cursore avanzava oltre: quel che un riassunto diceva dopo
         # non arrivava mai in memoria. Ora una voce lunga costa voci in meno nello
         # stesso run, non fatti in meno: il cursore si ferma all'ultima voce
@@ -1227,8 +1227,8 @@ class MemoryStore:
         # vorrebbe dire scegliere quale delle due regole applicare a materiale
         # dell'altra.
         #
-        # Ma la finestra si divide per tipo invece di fermarsi al primo cambio
-        # (AC12 della terza revisione): con la chat personale e un quaderno
+        # Ma la finestra si divide per tipo invece di fermarsi al primo cambio:
+        # con la chat personale e un quaderno
         # usati a turno, fermarsi lì dava batch da una voce, e il diario cresceva
         # piu' in fretta di quanto Dream lo digerisse. Il batch di testa porta
         # tutte le voci del suo tipo nella finestra; quelle dell'altro tipo le
