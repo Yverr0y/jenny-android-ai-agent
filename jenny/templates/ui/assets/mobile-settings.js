@@ -520,7 +520,7 @@ export class SettingsController {
           aria-label="${escapeHtml(i18n.t('settings.battery.keepAwakeTitle'))}">${options}</div>
         <p class="settings-choice-cost" id="keep-awake-cost">${escapeHtml(this._keepAwakeCost(current))}</p>
         <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.battery.keepAwakeHint')}</p>
-        <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)"><i class="ti ti-refresh"></i> ${i18n.t('settings.battery.keepAwakeRestart')}</p>
+        <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)"><i class="ti ti-refresh" aria-hidden="true"></i> ${i18n.t('settings.battery.keepAwakeRestart')}</p>
       </div>`;
   }
 
@@ -581,7 +581,7 @@ export class SettingsController {
     ].map(([key, ok]) => `
       <div class="settings-field-row">
         <span class="settings-field-label">${i18n.t(`settings.battery.${key}`)}</span>
-        <span class="settings-field-value"><i class="ti ti-${ok ? 'check' : 'x'}"></i> ${i18n.t(ok ? 'settings.battery.diagYes' : 'settings.battery.diagNo')}</span>
+        <span class="settings-field-value"><i class="ti ti-${ok ? 'check' : 'x'}" aria-hidden="true"></i> ${i18n.t(ok ? 'settings.battery.diagYes' : 'settings.battery.diagNo')}</span>
       </div>`).join('');
     const gaps = Array.isArray(diag.gaps) ? diag.gaps : [];
     const gapRows = gaps.length
@@ -625,7 +625,7 @@ export class SettingsController {
         <i class="ti ti-alarm"></i>
         <div>
           <div>${i18n.t('settings.battery.exactAlarmsHint')}</div>
-          <div style="margin-top:6px"><i class="ti ti-refresh"></i> ${i18n.t('settings.battery.exactAlarmsRestart')}</div>
+          <div style="margin-top:6px"><i class="ti ti-refresh" aria-hidden="true"></i> ${i18n.t('settings.battery.exactAlarmsRestart')}</div>
         </div>
       </div>
       <div class="onboarding-nav">
@@ -931,10 +931,10 @@ export class SettingsController {
       </div>
       <div class="provider-card-actions" style="margin-top:12px">
         <button class="settings-btn-add provider-edit" data-provider="${escapeHtml(p.name)}">
-          <i class="ti ti-edit"></i> ${i18n.t('settings.edit')}
+          <i class="ti ti-edit" aria-hidden="true"></i> ${i18n.t('settings.edit')}
         </button>
         <button class="settings-btn-add btn-danger provider-delete" data-provider="${escapeHtml(p.name)}">
-          <i class="ti ti-trash"></i> ${i18n.t('settings.delete')}
+          <i class="ti ti-trash" aria-hidden="true"></i> ${i18n.t('settings.delete')}
         </button>
       </div>`;
     document.querySelectorAll('#drawer-brand-body .provider-edit').forEach(b =>
@@ -1046,7 +1046,7 @@ export class SettingsController {
       ${this._measureCap(m, 'USER.md', 'user_budget_chars')}
       ${this._measureCap(m, 'SOUL.md', 'soul_budget_chars')}
       <button class="settings-btn-add" data-summary="caps" type="button">
-        <i class="ti ti-adjustments"></i> ${i18n.t('settings.memory.changeBudgets')}
+        <i class="ti ti-adjustments" aria-hidden="true"></i> ${i18n.t('settings.memory.changeBudgets')}
       </button>`;
   }
 
@@ -1517,7 +1517,7 @@ export class SettingsController {
       <code style="display:block;margin:4px 0;padding:6px 8px;font-size:11px;word-break:break-all;
         background:var(--bg-elevated,rgba(128,128,128,.12));border-radius:6px">${escapeHtml(h.public_key)}</code>
       <button class="settings-btn-add ssh-copy" data-ssh-alias="${escapeHtml(h.alias)}">
-        <i class="ti ti-copy"></i> ${i18n.t('settings.ssh.copy')}
+        <i class="ti ti-copy" aria-hidden="true"></i> ${i18n.t('settings.ssh.copy')}
       </button>
     </div>`;
   }
@@ -1966,7 +1966,7 @@ export class SettingsController {
           <option value="0">${i18n.t('backup.retentionForever')}</option>
         </select>
       </div>
-      <button class="settings-btn-add" id="btn-snapshot-create"><i class="ti ti-camera"></i> ${i18n.t('backup.snapshotCreate')}</button>
+      <button class="settings-btn-add" id="btn-snapshot-create"><i class="ti ti-camera" aria-hidden="true"></i> ${i18n.t('backup.snapshotCreate')}</button>
       <div id="snapshot-list" style="margin-top:8px">
         <div class="settings-empty-state">${i18n.t('settings.loading')}</div>
       </div>`;
@@ -2420,7 +2420,7 @@ export class SettingsController {
       <div class="cron-asof">
         <span>${escapeHtml(i18n.t('cron.asOf', { time: stamp }))}</span>
         <button class="cron-refresh" id="btn-cron-refresh">
-          <i class="ti ti-refresh"></i> ${i18n.t('cron.refresh')}
+          <i class="ti ti-refresh" aria-hidden="true"></i> ${i18n.t('cron.refresh')}
         </button>
       </div>`;
   }

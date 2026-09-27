@@ -129,6 +129,23 @@ def test_markup_icons_are_hidden_from_screen_readers(name: str) -> None:
     assert not loud, f"{name}: icone lette dal lettore di schermo: {loud}"
 
 
+# Un'icona seguita dalla sua etichetta tradotta: il nome e' la parola, e il
+# glifo letto dal lettore di schermo sarebbe solo rumore davanti a lei.
+_ICON_BEFORE_LABEL = re.compile(
+    r"(<i class=\"ti[^\"]*\"[^>]*>)</i>[ \t]*"
+    r"(?:\$\{i18n\.t\(|\$\{t\(|<span>\$\{i18n\.t\(|<span class=\"chat-thinking-label\">)"
+)
+
+
+@pytest.mark.parametrize("name", ["mobile-settings.js", "mobile-chat.js"])
+def test_an_icon_beside_its_label_is_hidden_from_screen_readers(name: str) -> None:
+    source = (ASSETS / name).read_text(encoding="utf-8")
+    tags = _ICON_BEFORE_LABEL.findall(source)
+    assert tags, f"{name}: nessuna icona accanto a un'etichetta, il banco non misura niente"
+    loud = [tag for tag in tags if 'aria-hidden="true"' not in tag]
+    assert not loud, f"{name}: icone lette prima della loro etichetta: {loud}"
+
+
 def test_the_add_buttons_of_the_workshop_hide_their_plus() -> None:
     """«Aggiungi provider» e «Aggiungi host»: il nome è la parola, non il «+»."""
     for button_id in ("btn-add-provider", "btn-ssh-add"):

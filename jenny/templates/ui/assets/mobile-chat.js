@@ -1243,7 +1243,7 @@ export class ChatController {
     badge.className = 'chat-origin-badge';
     const icon = origin === 'telegram' ? 'ti-brand-telegram' : 'ti-arrows-exchange';
     const label = origin.charAt(0).toUpperCase() + origin.slice(1);
-    badge.innerHTML = `<i class="ti ${icon}"></i>${escapeHtml(label)}`;
+    badge.innerHTML = `<i class="ti ${icon}" aria-hidden="true"></i>${escapeHtml(label)}`;
     msg.insertBefore(badge, msg.firstChild);
   }
 
@@ -1620,7 +1620,7 @@ export class ChatController {
 
     const header = document.createElement('div');
     header.className = 'chat-thinking-header';
-    header.innerHTML = '<i class="ti ti-brain"></i><span class="chat-thinking-label">' + i18n.t('chat.showThinking') + '</span><i class="ti ti-chevron-down chat-thinking-chevron"></i>';
+    header.innerHTML = '<i class="ti ti-brain" aria-hidden="true"></i><span class="chat-thinking-label">' + i18n.t('chat.showThinking') + '</span><i class="ti ti-chevron-down chat-thinking-chevron"></i>';
     thinking.appendChild(header);
 
     const body = document.createElement('div');
@@ -2196,7 +2196,7 @@ export class ChatController {
       if (!this._goalBanner) {
         this._goalBanner = document.createElement('div');
         this._goalBanner.className = 'chat-goal-banner';
-        this._goalBanner.innerHTML = `<i class="ti ti-loader-2"></i><span>${i18n.t('chat.agentRunning')}</span><span class="chat-goal-timer"></span>`;
+        this._goalBanner.innerHTML = `<i class="ti ti-loader-2" aria-hidden="true"></i><span>${i18n.t('chat.agentRunning')}</span><span class="chat-goal-timer"></span>`;
         this.chatArea.appendChild(this._goalBanner);
       }
       if (this._goalTimer) clearInterval(this._goalTimer);
@@ -2827,7 +2827,7 @@ export class ChatController {
       `</div>` +
       `<div class="sa-stream-list" id="sa-stream-list" aria-live="polite"></div>` +
       `<button class="sa-stream-jump" id="sa-stream-jump" type="button" hidden>` +
-        `<i class="ti ti-arrow-down"></i>${t('jump')}</button>` +
+        `<i class="ti ti-arrow-down" aria-hidden="true"></i>${t('jump')}</button>` +
     `</div>`;
   }
 
@@ -3653,7 +3653,7 @@ export class ChatController {
 
     previewEl = document.createElement('div');
     previewEl.className = 'file-preview';
-    previewEl.innerHTML = `<div class="file-preview-header"><i class="ti ti-loader-2 spin"></i> ${i18n.t('common.loading')}</div>`;
+    previewEl.innerHTML = `<div class="file-preview-header"><i class="ti ti-loader-2 spin" aria-hidden="true"></i> ${i18n.t('common.loading')}</div>`;
     container.appendChild(previewEl);
 
     try {
@@ -3690,7 +3690,7 @@ export class ChatController {
         </div>
         <div class="file-preview-content"><div class="file-preview-code">${numberedLines}</div></div>
         <div class="file-preview-actions">
-          <a class="file-preview-action" href="#workspace" data-path="${escapeHtml(filePath)}"><i class="ti ti-external-link"></i> ${i18n.t('chat.openInEditor')}</a>
+          <a class="file-preview-action" href="#workspace" data-path="${escapeHtml(filePath)}"><i class="ti ti-external-link" aria-hidden="true"></i> ${i18n.t('chat.openInEditor')}</a>
         </div>
       `;
 
@@ -3797,7 +3797,7 @@ export class ChatController {
 
     popover.innerHTML = `
       <div class="session-info-header">
-        <span><i class="ti ti-info-circle"></i> ${i18n.t('session.info')}</span>
+        <span><i class="ti ti-info-circle" aria-hidden="true"></i> ${i18n.t('session.info')}</span>
         <button class="session-info-close"><i class="ti ti-x"></i></button>
       </div>
       <div class="session-info-section">
@@ -3835,7 +3835,7 @@ export class ChatController {
           <span class="session-info-label">${i18n.t('session.status')}</span>
           <span class="session-info-value" id="si-status-value">
             ${isRunning
-              ? `<span style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-loader-2 spin"></i> ${i18n.t('session.running')} <span class="session-info-timer" id="si-timer"></span></span>`
+              ? `<span style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-loader-2 spin" aria-hidden="true"></i> ${i18n.t('session.running')} <span class="session-info-timer" id="si-timer"></span></span>`
               : `<span style="color:var(--text-faint)">${i18n.t('session.idle')}</span>`}
           </span>
         </div>
