@@ -17,13 +17,22 @@ The gateway is started by the Android runtime via `jenny.android_entry.run_gatew
 
 ## Android Build & Deploy
 
-The Android project lives in the `android/` directory. Build and install the debug APK on the attached device with:
+The Android project lives in the `android/` directory.
+
+**Every on-device test runs on the Android emulator `jenny_square`** (AVD: 1440×1440 @ 480 dpi,
+arm64, android-37), and only there. Do not install on, uninstall from or test against any
+other device, even when one shows up in `adb devices`: pin the emulator with
+`ANDROID_SERIAL=emulator-5554` on every `adb`/Gradle command.
 
 ```bash
-cd android && ./gradlew app:installDebug
+~/Library/Android/sdk/emulator/emulator -avd jenny_square -no-snapshot-save &
+adb devices -l   # emulator-5554 must be listed
+cd android && ANDROID_SERIAL=emulator-5554 ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew app:installDebug
 ```
 
-This builds `app-debug.apk` and installs it via `adb` on the connected device (e.g. Unihertz Titan 2). Verify the device is detected first with `adb devices`.
+Debug and release APKs are signed differently: switching between them on the emulator needs
+`adb uninstall com.flagdizero.jenny` first, which wipes the emulator's workspace — and brings
+back the first-run onboarding, which is often exactly what a test wants.
 
 ## High-Level Architecture
 
