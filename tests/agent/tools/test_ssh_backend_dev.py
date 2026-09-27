@@ -416,6 +416,30 @@ async def test_get_caps_the_bytes_that_arrive_not_the_declared_size(tmp_path):
         assert list(destination.parent.iterdir()) == []
 
 
+async def test_get_never_touches_a_file_already_named_like_the_partial(tmp_path):
+    """Il temporaneo ha un nome che prima non c'era: un ``<nome>.part`` dell'utente
+    (o di un altro download) accanto alla destinazione resta com'era, sia a copia
+    riuscita sia a copia interrotta."""
+    async with ssh_env(tmp_path, sftp_factory=_UnderstatingSFTPServer) as env:
+        downloads = tmp_path / "downloads"
+        downloads.mkdir()
+        destination = downloads / "report.bin"
+        bystander = downloads / "report.bin.part"
+        bystander.write_bytes(b"un file che c'era gia'")
+
+        remote = tmp_path / "report.bin"
+        remote.write_bytes(b"r" * 300)
+        await env.backend.get(env.target, str(remote), destination, max_bytes=1000)
+        assert destination.read_bytes() == b"r" * 300
+        assert bystander.read_bytes() == b"un file che c'era gia'"
+
+        remote.write_bytes(b"r" * 5000)
+        with pytest.raises(SshTransportError, match="grew past"):
+            await env.backend.get(env.target, str(remote), destination, max_bytes=1000)
+        assert bystander.read_bytes() == b"un file che c'era gia'"
+        assert sorted(p.name for p in downloads.iterdir()) == ["report.bin", "report.bin.part"]
+
+
 async def test_get_returns_the_bytes_written(tmp_path):
     """Il conto che torna è quello dei byte scritti, non la ``stat``."""
     async with ssh_env(tmp_path, sftp_factory=_UnderstatingSFTPServer) as env:
