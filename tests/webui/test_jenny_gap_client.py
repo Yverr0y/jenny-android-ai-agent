@@ -180,15 +180,16 @@ function node(classes, rect) {
   };
 }
 globalThis.getComputedStyle = () => ({ paddingRight: '18px' });
+globalThis.window = { innerWidth: 574.4 };
 const mascot = {
   hidden: false,
   getBoundingClientRect: () => (
     { left: 484.4, right: 604.4, top: 100, bottom: 220, width: 120 }),
 };
-function threadWith(nodi) {
+function threadWith(nodi, shift = 0) {
   return {
     style: { setProperty: (k, v) => { threadWith.written = [k, v]; } },
-    getBoundingClientRect: () => ({ right: 574.4 }),
+    getBoundingClientRect: () => ({ left: shift, right: 574.4 + shift }),
     querySelectorAll: (sel) => nodi.filter((n) => sel
       .split(',').map((s) => s.trim())
       .some((s) => n.classes.has(s.slice(1)))),
@@ -254,3 +255,44 @@ def test_our_bubble_moves_aside_it_does_not_hollow_out() -> None:
     assert "padding-right" not in block, (
         "con padding la bolla si svuota a destra invece di spostarsi"
     )
+
+
+# ── A pista in movimento ────────────────────────────────────────────────────
+
+
+def test_a_thread_off_its_page_is_not_measured() -> None:
+    """Il difetto del 27/09/2026 sul Titan 2: una lettera per riga.
+
+    Tornando alla chat dalla pagina App, il filo parte una pagina **a destra**
+    mentre lei resta ferma sullo schermo. Misurato li', il margine veniva la
+    larghezza di una pagina piu' 39, gli ultimi messaggi prendevano la classe,
+    e il `padding-right` li stringeva a una colonna larga una lettera. Fuori
+    posto non si tocca niente: ne' la classe, ne' `--jenny-gap`.
+    """
+    out = _con_dom("""
+for (const shift of [574.4, 300, -574.4, -2]) {
+  threadWith.written = null;
+  const reply = node('home-msg home-msg-jenny', { right: 540 + shift, bottom: 200 });
+  const kept = node('home-msg home-msg-user is-under-jenny', { right: 556.4 + shift, bottom: 300 });
+  new JennyGap(threadWith([reply, kept], shift), mascot).refresh();
+  assert.equal(threadWith.written, null, `shift ${shift}: gap written off-page`);
+  assert.ok(!reply.classes.has(CLASS), `shift ${shift}: marked off-page`);
+  assert.ok(kept.classes.has(CLASS), `shift ${shift}: last good mark dropped`);
+}
+// Tollerato l'arrotondamento: un pixel non e' «fuori posto».
+assert.ok(atRest({ left: -0.5, right: 575 }, 574.4));
+assert.ok(!atRest({ left: 0, right: 576 }, 574.4));
+console.log('ok');
+""")
+    assert "ok" in out
+
+
+def test_the_gap_is_measured_again_once_the_track_stops() -> None:
+    """L'altra meta': se a meta' scorrimento non si misura, qualcuno deve
+    misurare a scorrimento finito, o un messaggio arrivato mentre eri altrove
+    resta dietro di lei fino al primo scorrimento del dito."""
+    app = (ASSETS / "home-app.js").read_text(encoding="utf-8")
+    block = app.split("  onPageChanged(index, entry) {")[1].split("\n  }\n")[0]
+    assert "gap?.settleAfter(SLIDE_MS" in block, block
+    pages = (ASSETS / "home-pages.js").read_text(encoding="utf-8")
+    assert "transform ${SLIDE_MS}ms" in pages, "la durata della pista non e' piu' SLIDE_MS"

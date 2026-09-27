@@ -38,6 +38,10 @@ import { projectNameOf } from './shared/conversation-list.js';
  *  secco, che sembra un difetto. */
 const PULL_PAST_END = 0.06;
 
+/** Quanto dura lo scorrimento della pista da una pagina all'altra. Esportato
+ *  per chi deve misurare a pista ferma (v. `JennyGap.settleAfter`). */
+export const SLIDE_MS = 220;
+
 /** Le pagine che ci sono sempre, nell'ordine di chi non ha mai spostato
  *  niente. E' la copia di `FIXED_PAGES` dello schema, e serve solo finche' il
  *  server non ha risposto: la risposta porta le sue, e vincono quelle. */
@@ -245,7 +249,7 @@ export class HomePages {
     const target = Math.max(0, Math.min(i, this.howMany - 1));
     this.index = target;
     this.track.style.transition = animated
-      ? 'transform .22s cubic-bezier(.22,.61,.36,1)'
+      ? `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`
       : 'none';
     this.track.style.transform = `translateX(${-target * 100}%)`;
     this._activateOnly(target);

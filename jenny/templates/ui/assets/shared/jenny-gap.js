@@ -76,6 +76,21 @@ export function marginFrom(figure, rightOfThread) {
   return Math.max(0, Math.round(rightOfThread - figure.left));
 }
 
+/** Il filo sta fermo al suo posto, dentro lo schermo?
+ *
+ *  Lei e' `fixed` e il filo no: sta in una pagina della pista, che scorre di
+ *  lato. A meta' scorrimento — o con la chat in una pagina che non guardi — il
+ *  filo e' spostato di una pagina, e i suoi rettangoli contro quello di lei
+ *  non dicono niente. Tornando alla chat dalla pagina App il filo parte una
+ *  pagina a destra: il margine usciva ~600 px invece di 39, gli ultimi
+ *  messaggi andavano «sotto Jenny», e quel `padding-right` li stringeva a una
+ *  lettera per riga con il filo che scorreva di lato (Titan 2, 27/09/2026).
+ *  Un pixel di tolleranza per gli arrotondamenti.
+ */
+export function atRest(threadRect, viewportWidth) {
+  return threadRect.left >= -1 && threadRect.right <= viewportWidth + 1;
+}
+
 /* ── L'aggancio al DOM ───────────────────────────────────────────────────── */
 
 export const CLASS = 'is-under-jenny';
@@ -105,8 +120,11 @@ export class JennyGap {
       this._clean();
       return;
     }
-    const figure = figureOf(square, square.width);
     const thread = this.thread.getBoundingClientRect();
+    /* Filo fuori posto: non si tocca niente. Restano i segni dell'ultima misura
+       buona, e il conto si rifa' quando la pista si ferma (`settleAfter`). */
+    if (!atRest(thread, window.innerWidth)) return;
+    const figure = figureOf(square, square.width);
     /* Il bordo destro del **contenuto**, non della scatola: il padding del filo
        non e' spazio in cui il testo possa finire. */
     const style = getComputedStyle(this.thread);
@@ -140,11 +158,18 @@ export class JennyGap {
 
   /** Lo scorrimento e' in corso: si aspetta che si fermi. */
   scrolling() {
+    this.settleAfter(QUIET_MS);
+  }
+
+  /** Ricalcola fra `ms`: la pista ha cambiato pagina, e a scorrimento finito
+   *  il filo e' di nuovo dove lei lo misura. Lo stesso timer dello
+   *  scorrimento: vince l'ultimo che l'ha chiesto. */
+  settleAfter(ms) {
     clearTimeout(this._timer);
     this._timer = setTimeout(() => {
       this._timer = null;
       this.refresh();
-    }, QUIET_MS);
+    }, ms);
   }
 
   _clean() {

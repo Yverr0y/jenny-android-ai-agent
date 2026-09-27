@@ -42,7 +42,7 @@ import { WhoPanel, dotColor } from './home-who.js';
 import { JennyGap } from './shared/jenny-gap.js';
 import { JennyMascot } from './shared/jenny-mascot.js';
 import { LauncherController } from './mobile-launcher.js';
-import { HomePages } from './home-pages.js';
+import { HomePages, SLIDE_MS } from './home-pages.js';
 import { HomeStrip } from './home-strip.js';
 import { HomeUiQuery } from './home-ui-query.js';
 import { ComposerFocus } from './home-focus.js';
@@ -1056,6 +1056,10 @@ class HomeApp {
     // La chat torna a schermo: un filo che non era arrivato si riprova.
     if (this._hasComposer(entry)) this._retryThread();
     this._placeJenny();
+    /* Il margine attorno a Jenny si misura a pista ferma: durante lo
+       scorrimento il filo e' spostato di lato e `refresh()` non tocca niente,
+       quindi il conto giusto va chiesto a scorrimento finito. */
+    if (this._hasComposer(entry)) this.chat?.gap?.settleAfter(SLIDE_MS + 40);
     this.strip?.draw();
     this._applyHead();
     this._reportChatOnScreen();
