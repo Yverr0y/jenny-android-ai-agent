@@ -358,8 +358,8 @@ def test_it_is_registered_in_the_loader() -> None:
 
 # ── L'attribuzione: di chi è il fatto che la riga registra ───────────────────
 #
-# Il difetto (D1): il 24/08 Jenny ha chiesto «l'ogoh-ogoh te lo porti, *o quello
-# resta a casa*?», l'utente ha risposto «l ogoh ogoh che cenrtra?» — una domanda,
+# Il difetto (D1): il 24/08 Jenny ha chiesto «il telescopio te lo porti, *o quello
+# resta a casa*?», l'utente ha risposto «il telescopio che cenrtra?» — una domanda,
 # nessuna scelta — e la cattura ha registrato «resta a casa» come decisione
 # dell'utente. Poi il giardiniere l'ha promossa a `state: decided`.
 #

@@ -132,7 +132,7 @@ _PROJECT_MD_RULES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "una subordinata che nomina una cosa è una cosa",
-        "il caso del 25/08 su ``viaggio-lento``: «Pavia come tappa perché ci vive "
+        "il caso del 25/08 su ``viaggio-lento``: «Ferrara come tappa perché ci vive "
         "l'amico X» è finita in **una** riga, quindi in una pagina intitolata alla "
         "tappa, con la persona sepolta dentro come subordinata. Non era una regola "
         "mancante: la regola c'era e puntava **dall'altra parte** («a fact that needs "
@@ -325,7 +325,7 @@ def test_the_two_halves_of_the_split_rule_are_both_there(tmp_path) -> None:
     Il 25/08 ce n'era una sola. Il blocco diceva «a fact that needs a subordinate
     clause is still one fact» — l'anticorpo al rumore, giusto e da tenere — e non
     diceva che una subordinata *che nomina una cosa* è una cosa. Con quella metà
-    sola, «Pavia come tappa perché ci vive l'amico X» è una riga, quindi una
+    sola, «Ferrara come tappa perché ci vive l'amico X» è una riga, quindi una
     pagina intitolata alla tappa, con la persona sepolta dentro; e il giardiniere
     che la riceve non può fare altro, perché il diario è append-only.
 

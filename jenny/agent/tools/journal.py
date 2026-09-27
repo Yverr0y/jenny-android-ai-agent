@@ -65,9 +65,9 @@ _MAX_TEXT_CHARS = 500
 # ── Attribuzione: di chi e' il fatto che la riga registra ────────────────────
 #
 # Il difetto che questi due token chiudono (**D1**): il 24/08 Jenny ha chiesto
-# «l'ogoh-ogoh te lo porti, *o quello resta a casa*?», l'utente ha risposto «l
-# ogoh ogoh che cenrtra?» — una domanda, nessuna scelta — e la cattura ha
-# registrato «L'ogoh-ogoh non c'entra col viaggio — **resta a casa**». Cioe'
+# «il telescopio te lo porti, *o quello resta a casa*?», l'utente ha risposto «il
+# telescopio che cenrtra?» — una domanda, nessuna scelta — e la cattura ha
+# registrato «Il telescopio non c'entra col viaggio — **resta a casa**». Cioe'
 # l'opzione B della domanda di Jenny, scritta come decisione dell'utente. Poi il
 # giardiniere l'ha promossa a ``state: decided`` e la mappa l'ha messa sotto
 # «Decided», dove entra a ogni turno. Nessuno dei due messaggi dell'utente
