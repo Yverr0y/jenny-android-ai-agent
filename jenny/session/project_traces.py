@@ -1,16 +1,17 @@
 """Le tracce che una conversazione di progetto lascia su disco.
 
-**Il padrone dell'elenco.** Quattro percorsi nascono dal nome di un progetto, e
-tre sottosistemi diversi li scrivono senza sapere l'uno dell'altro: la sessione
-(quel che Jenny rilegge), la trascrizione della WebUI (quel che vedi, piu' i suoi
-segmenti), i record dei subagent. Il quinto — ``.jenny/tool-results/`` — vive
-*dentro* la cartella della wiki, quindi segue la cartella e non e' qui.
+**Il padrone dell'elenco.** Piu' percorsi nascono dal nome di un progetto, e
+sottosistemi diversi li scrivono senza sapere l'uno dell'altro: la sessione
+(quel che Jenny rilegge) col diario del turno in corso, la trascrizione della
+WebUI (quel che vedi, piu' i suoi segmenti), i record dei subagent. Un'altra
+traccia — ``.jenny/tool-results/`` — vive *dentro* la cartella della wiki,
+quindi segue la cartella e non e' qui.
 
 Enumerarli in un posto solo e' l'unica difesa che c'e': un'operazione che ne
 dimentichi uno lascia una traccia sotto un nome che qualcun altro puo' prendere,
 ed e' esattamente il difetto riprodotto sul telefono il 24/08/2026 — cartella
 cancellata dal file manager, conversazione rimasta, progetto nuovo con lo stesso
-nome che se la riprende. Quando nascera' una quinta traccia, **questo e' il posto
+nome che se la riprende. Quando nascera' una traccia nuova, **questo e' il posto
 in cui aggiungerla**, e ``tests/session/test_project_session_files.py`` e' quello
 che se ne accorge.
 
@@ -49,7 +50,7 @@ def project_trace_paths(workspace: Path, session_key: str) -> list[Path]:
     """I percorsi che portano il nome di *session_key*, esistenti o no.
 
     Sono le tracce che un rinomino deve portarsi dietro. L'elenco sta qui e non
-    sparso fra i tre sottosistemi che le scrivono: quando ne nascera' una quarta,
+    sparso fra i sottosistemi che le scrivono: quando ne nascera' una nuova,
     questo e' il posto in cui aggiungerla — e
     ``tests/session/test_project_session_files.py`` e' quello che se ne accorge.
     """
@@ -70,6 +71,11 @@ def project_trace_paths(workspace: Path, session_key: str) -> list[Path]:
         webui / f"{webui_stem}.segments",
         webui / f"{webui_stem}.json",  # thread legacy, se questa installazione ne ha uno
         workspace / SUBAGENTS_DIRNAME / _RECORDS_DIRNAME / f"{stem}.jsonl",
+        # Il diario del turno in corso (``SessionManager.turn_journal_path``):
+        # un turno interrotto lo lascia accanto alla sessione, e il checkpoint
+        # lo rilegge al riavvio. Se non seguisse la sessione, il quaderno che
+        # riprende quel nome ereditarebbe il turno a meta' di un altro.
+        workspace / "sessions" / f"{stem}.turn-journal",
     ]
 
 

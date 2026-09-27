@@ -408,3 +408,18 @@ def test_an_unopenable_wiki_is_not_protected_by_the_refusal(workspace: Path) -> 
     odd = workspace / "wikis" / "Ricerca ETNA"
     (odd / "wiki").mkdir(parents=True)
     assert _project_delete_refusal(workspace, odd) is None
+
+
+def test_deleting_a_project_takes_its_interrupted_turn_journal(workspace: Path) -> None:
+    """Il diario di un turno interrotto sta accanto alla sessione: se restasse,
+    il prossimo quaderno con lo stesso nome riprenderebbe il turno di un altro."""
+    from jenny.session.manager import SessionManager
+
+    _make(workspace)
+    _live_chat(workspace)
+    journal = SessionManager(workspace).turn_journal_path(KEY)
+    journal.write_text('{"_type": "turn_journal", "stamp": "x"}\n', encoding="utf-8")
+
+    _remove(workspace)
+
+    assert not journal.exists(), "il diario del turno e' rimasto orfano"

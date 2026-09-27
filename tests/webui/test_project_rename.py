@@ -399,3 +399,20 @@ def test_the_command_is_registered() -> None:
     from jenny.webui.commands import COMMANDS, project_rename
 
     assert COMMANDS["project.rename"] is project_rename
+
+
+def test_the_interrupted_turn_journal_follows_the_rename(workspace) -> None:
+    """Il diario del turno in corso segue la sessione come le altre tracce."""
+    from jenny.session.manager import SessionManager
+
+    _notebook(workspace, OLD)
+    sessions = SessionManager(workspace)
+    old_journal = sessions.turn_journal_path(f"project:{OLD}")
+    old_journal.write_text('{"_type": "turn_journal", "stamp": "x"}\n', encoding="utf-8")
+
+    outcome, _ = _rename(workspace)
+
+    assert outcome["chat_moved"] is True
+    assert not old_journal.exists(), "il diario e' rimasto sotto il nome vecchio"
+    new_journal = sessions.turn_journal_path(f"project:{NEW}")
+    assert new_journal.read_text(encoding="utf-8").startswith('{"_type": "turn_journal"')

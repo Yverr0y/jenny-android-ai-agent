@@ -226,7 +226,7 @@ async def test_the_destination_check_covers_every_trace_not_just_the_first(
 
 
 def _all_traces(loop: AgentLoop, key: str) -> list[Path]:
-    """Tutte e cinque, ``.segments`` compresa: è una directory, non un file."""
+    """Tutte, ``.segments`` compresa: è una directory, non un file."""
     made = []
     for path in project_trace_paths(loop.workspace, key):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -309,7 +309,8 @@ async def test_a_move_stopped_halfway_is_written_down_and_finished(
 
     assert completed == [("project:src", "project:dst")]
     assert [p for p in project_trace_paths(loop.workspace, "project:src") if p.exists()] == []
-    assert len([p for p in project_trace_paths(loop.workspace, "project:dst") if p.exists()]) == 5
+    dst = project_trace_paths(loop.workspace, "project:dst")
+    assert len([p for p in dst if p.exists()]) == len(dst)
     assert pending_project_renames(loop.workspace) == []
 
 
@@ -340,7 +341,7 @@ async def test_a_process_killed_between_two_renames_is_repaired_at_the_next_boot
 
     assert completed == [("project:src", "project:dst")]
     assert [p for p in old if p.exists()] == []
-    assert len([p for p in new if p.exists()]) == 5
+    assert len([p for p in new if p.exists()]) == len(new)
     assert pending_project_renames(loop.workspace) == []
 
 
@@ -361,7 +362,8 @@ async def test_a_completed_move_leaves_nothing_to_repair(
 
     assert moved is True and why is None
     assert [p for p in made if p.exists()] == []
-    assert len([p for p in project_trace_paths(loop.workspace, "project:dst") if p.exists()]) == 5
+    dst = project_trace_paths(loop.workspace, "project:dst")
+    assert len([p for p in dst if p.exists()]) == len(dst)
     assert pending_project_renames(loop.workspace) == []
     assert not (tmp_path / "sessions" / ".project-rename-pending.json").exists()
 
