@@ -134,7 +134,9 @@ async def test_delete_refuses_a_project(
     ("method", "params", "fn"),
     [
         ("workspace.delete", {"path": "cartella"}, "rmtree"),
-        ("workspace.copy", {"path": "cartella", "dest": "copia"}, "copytree"),
+        # La copia di una cartella non passa da ``copytree`` (v. ``copy_path``):
+        # si spia la copia di ogni file, che ne e' il lavoro vero.
+        ("workspace.copy", {"path": "cartella", "dest": "copia"}, "copyfile"),
     ],
 )
 async def test_the_tree_work_runs_off_the_event_loop(
@@ -146,8 +148,7 @@ async def test_the_tree_work_runs_off_the_event_loop(
     params: dict,
     fn: str,
 ) -> None:
-    """``rmtree``/``copytree`` di una cartella grande sul loop fermavano il
-    gateway."""
+    """Cancellare o copiare una cartella grande sul loop fermava il gateway."""
     import shutil
     import threading
 

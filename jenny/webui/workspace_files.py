@@ -288,12 +288,48 @@ def free_copy_name(src: Path) -> Path:
 
 
 def copy_path(src: Path, dest: Path) -> None:
-    """Copy a file or directory, never over an existing one."""
+    """Copy a file or directory, never over an existing one.
+
+    Niente ``copy2``/``copytree``: finiscono entrambi con ``copystat``, che copia
+    anche gli attributi estesi, e su Android ``security.selinux`` non si
+    riscrive da un'app (EACCES). La copia era gia' sul disco, ma l'errore
+    risaliva al file manager come «permission denied». Si copiano contenuto,
+    permessi e ora di modifica; gli xattr no.
+    """
     _refuse_taken(src, dest)
     if src.is_dir():
-        # ``symlinks=True``: i link dentro la cartella si copiano come link.
-        # Seguirli portava dentro il workspace una copia di quel che c'era
-        # fuori, dove il file manager poi la mostrava.
-        shutil.copytree(src, dest, symlinks=True)
+        _copy_tree(src, dest)
     else:
-        shutil.copy2(src, dest)
+        _copy_file(src, dest)
+
+
+def _copy_file(src: Path, dest: Path) -> None:
+    shutil.copyfile(src, dest)
+    shutil.copymode(src, dest)
+    _copy_times(src, dest)
+
+
+def _copy_tree(src: Path, dest: Path) -> None:
+    os.mkdir(dest)
+    for entry in os.scandir(src):
+        child_src, child_dest = Path(entry.path), dest / entry.name
+        if entry.is_symlink():
+            # I link dentro la cartella si copiano come link. Seguirli portava
+            # dentro il workspace una copia di quel che c'era fuori, dove il
+            # file manager poi la mostrava.
+            os.symlink(os.readlink(child_src), child_dest)
+        elif entry.is_dir():
+            _copy_tree(child_src, child_dest)
+        else:
+            _copy_file(child_src, child_dest)
+    shutil.copymode(src, dest)
+    _copy_times(src, dest)
+
+
+def _copy_times(src: Path, dest: Path) -> None:
+    """L'ora di modifica dell'originale sulla copia, se il filesystem la accetta."""
+    try:
+        st = os.stat(src)
+        os.utime(dest, ns=(st.st_atime_ns, st.st_mtime_ns))
+    except OSError:
+        pass
