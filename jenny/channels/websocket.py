@@ -64,7 +64,7 @@ from jenny.channels.ws_parsing import (
 from jenny.channels.ws_sender import OutboundSenderMixin
 from jenny.session.keys import (
     PROJECT_SESSION_PREFIX,
-    is_project_session_key,
+    is_project_chat_id,
     is_valid_project_name,
 )
 from jenny.utils.media_decode import (
@@ -612,7 +612,7 @@ class WebSocketChannel(OutboundSenderMixin):
         silenzio e' peggio di dire no.
         """
         raw = envelope.get("chat_id")
-        if not isinstance(raw, str) or not is_project_session_key(raw):
+        if not isinstance(raw, str) or not is_project_chat_id(raw):
             return WEBUI_DEFAULT_CHAT_ID
         if not is_valid_project_name(raw[len(PROJECT_SESSION_PREFIX):]):
             return None
@@ -669,7 +669,7 @@ class WebSocketChannel(OutboundSenderMixin):
             # da staccare: nessuna risposta, e nessun ``error`` che il client
             # mostrerebbe all'utente per una cosa che non ha chiesto.
             cid = self._envelope_chat_id(envelope)
-            if cid is None or not is_project_session_key(cid):
+            if cid is None or not is_project_chat_id(cid):
                 return
             self._detach(connection, cid)
             await self._send_event(connection, "detached", chat_id=cid)
