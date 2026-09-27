@@ -176,9 +176,9 @@ refactor.
   with no cap of its own, and a failed resolution counts as blocked. The address check
   (`isBlockedAddress` in `JennyBrowserBridge.kt`) follows the Python blocklist
   (`jenny/security/network.py`): besides the private, loopback and link-local ranges it refuses
-  multicast, broadcast and `::/96`, and it reads IPv4-mapped, NAT64 `64:ff9b::/96` and 6to4
-  `2002::/16` addresses as the IPv4 they carry. Two forms the Python side refuses are not in
-  the Kotlin list: SIIT-translated `::ffff:0:0:0/96` and local-use NAT64 `64:ff9b:1::/48`.
+  multicast, broadcast, `::/96`, the site-local `fec0::/10`, SIIT-translated `::ffff:0:0:0/96`
+  and local-use NAT64 `64:ff9b:1::/48`, and it reads IPv4-mapped, NAT64 `64:ff9b::/96` and
+  6to4 `2002::/16` addresses as the IPv4 they carry.
   Not covered:
   `WebSocket` inside a worker, DNS rebinding between the check and the connection, and WebViews
   too old for document-start scripts or multiple profiles. It stops an ordinary page, not one

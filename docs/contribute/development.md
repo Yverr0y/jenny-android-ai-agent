@@ -15,7 +15,6 @@ Android is the only runtime target for the finished product, but nearly all of t
 | `android/` | The native Android project: Kotlin `MainActivity`/`GatewayService`, the Gradle build, the Chaquopy configuration that embeds the `jenny` package and its pinned dependencies. |
 | `tests/` | The pytest suite. Mirrors the `jenny/` package structure directory-for-directory (`tests/agent/` for `jenny/agent/`, `tests/webui/` for `jenny/webui/`, and so on) — a new module usually gets a matching test directory in the same relative location. |
 | `docs/` | This documentation. |
-| `.agent/` | A local, untracked working-notes folder some maintainers keep. It is not part of the repository, so a fresh clone does not have it — nothing you need to read lives there. |
 | `scripts/` | Standalone helper scripts (`check_dco.sh`, `vendorize_ui.py`, `capture_screenshots.sh`), kept outside CI YAML so they're runnable and testable on a developer machine too. |
 | `AGENTS.md` | The canonical architecture reference for AI coding agents (and a good orientation doc for humans too) — this page summarizes it, but `AGENTS.md` is the source of truth if the two ever disagree. |
 
