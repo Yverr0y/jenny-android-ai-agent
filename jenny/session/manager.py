@@ -28,8 +28,7 @@ FILE_MAX_MESSAGES = 2000
 # la raccolta del diario ha gia' riassunto (``AutoCompact._harvest_project_diary``).
 # Sta qui e non nell'autocompact perche' e' un indice nei messaggi, e chi li
 # accorcia o li azzera — :meth:`Session.clear`, :meth:`Session.retain_recent_legal_suffix`
-# — deve spostarlo insieme a loro, come fa con ``last_consolidated`` (AC8 della
-# terza revisione).
+# — deve spostarlo insieme a loro, come fa con ``last_consolidated``.
 DIARY_HARVEST_METADATA_KEY = "_diary_harvested"
 _MESSAGE_TIME_PREFIX_RE = re.compile(r"^\[Message Time: [^\]]+\]\n?")
 _LOCAL_IMAGE_BREADCRUMB_RE = re.compile(r"^\[image: (?:/|~)[^\]]+\]\s*$")
@@ -41,7 +40,7 @@ _LONE_SURROGATE_RE = re.compile("[\ud800-\udfff]")
 
 
 def scrub_lone_surrogates(text: str) -> str:
-    """*text* con ogni surrogato isolato sostituito da U+FFFD (AC5 della terza revisione).
+    """*text* con ogni surrogato isolato sostituito da U+FFFD.
 
     Un surrogato in un messaggio faceva fallire **ogni** salvataggio della
     sessione da li' in poi — ``encode("utf-8")`` lo rifiuta — e anche i turni
@@ -594,8 +593,8 @@ class SessionManager:
         try:
             atomic_write(path, self._serialize(session), fsync_file=fsync, fsync_dir=fsync)
         except UnicodeEncodeError:
-            # Un surrogato isolato arrivato da una porta che non ripulisce
-            # (AC5 della terza revisione): si ripulisce la sessione **in
+            # Un surrogato isolato arrivato da una porta che non ripulisce:
+            # si ripulisce la sessione **in
             # memoria**, cosi' cache e disco restano uguali, e si riscrive.
             # Senza, ogni salvataggio successivo falliva allo stesso modo.
             logger.warning(

@@ -68,7 +68,7 @@ async def open_validated_stream(
         if https_only and not current.lower().startswith("https://"):
             raise ValueError("the URL must be https")
         # In un thread: il validatore risolve il nome, e ``getaddrinfo`` sul
-        # loop fermava il gateway per tutta la durata del DNS (CF9).
+        # loop fermava il gateway per tutta la durata del DNS.
         ok, error = await asyncio.to_thread(check, current)
         if not ok:
             raise ValueError(f"URL blocked: {error}")

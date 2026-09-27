@@ -87,7 +87,7 @@ def validate_entry_path(workspace_root: Path, requested_path: str) -> Path:
     restituisce il bersaglio. Per leggere e' quel che serve; per cancellare o
     rinominare no — ``delete`` di un link faceva la ``rmtree`` della cartella
     vera, e un link verso fuori non si poteva toccare affatto, perche' il gate
-    rifiutava il bersaglio (terza revisione, WA5).
+    rifiutava il bersaglio.
 
     Qui passa dal gate il **genitore**, risolto; il nome resta com'e'. Il confine
     tiene: il genitore e' dentro, e un solo componente che non sia ``.``/``..``
@@ -143,7 +143,7 @@ def list_directory(path: Path, *, workspace_root: Path | None = None) -> list[di
         except OSError:
             # Un symlink pendente (o un loop): ``stat`` segue il link e non
             # trova niente. E' una voce della cartella come le altre — prima
-            # faceva rispondere 404 all'intera cartella (terza revisione, WA9).
+            # faceva rispondere 404 all'intera cartella.
             # I metadati sono quelli del link; ``is_file``/``is_dir`` qui sotto
             # dicono entrambi di no, quindi figura come file senza dimensione.
             stat = item.lstat()
@@ -167,7 +167,7 @@ def os_error_text(exc: OSError) -> str:
 
     ``str(exc)`` e' ``[Errno 21] Is a directory: '/data/user/0/…/workspace/x'``:
     il percorso assoluto della cartella privata dell'app finiva nel corpo dei
-    400 e nei toast (terza revisione, WA16). Resta ``strerror`` («Is a
+    400 e nei toast. Resta ``strerror`` («Is a
     directory»); un ``OSError`` alzato con un messaggio solo, senza file, e'
     gia' scritto per chi legge e passa com'e'.
     """
@@ -207,7 +207,7 @@ def read_download(path: Path) -> bytes:
 
     ``FileNotFoundError`` se non c'e' (anche un link pendente o un loop:
     ``exists`` dice di no), ``IsADirectoryError`` se e' una cartella. Una sola
-    funzione perche' la rotta la chiama in un thread (terza revisione, WA10).
+    funzione perche' la rotta la chiama in un thread.
     """
     if not path.exists():
         raise FileNotFoundError(errno.ENOENT, "path not found")
@@ -234,7 +234,7 @@ def _refuse_taken(src: Path, dest: Path) -> None:
 
     ``Path.rename`` su POSIX sostituisce in silenzio un file (e una cartella
     vuota), ``shutil.copy2`` pure: dal file manager un nome gia' preso cancellava
-    quel che c'era sotto senza chiedere (terza revisione, WA4). Il controllo e la
+    quel che c'era sotto senza chiedere. Il controllo e la
     mossa restano due passi, con la finestra di un ``lstat``. «E' lo stesso file»
     serve al rinomino che cambia solo le maiuscole su un disco che non le
     distingue: li' la destinazione «esiste», ed e' l'origine.
@@ -259,8 +259,8 @@ def rename_path(old_path: Path, new_path: Path) -> None:
 
 def delete_path(path: Path) -> None:
     """Delete a file or directory; a symlink is removed itself, never followed."""
-    # ``is_dir`` segue il link: la ``rmtree`` finiva sulla cartella vera
-    # (terza revisione, WA5). ``rmtree`` dentro l'albero i link non li segue.
+    # ``is_dir`` segue il link: la ``rmtree`` finiva sulla cartella vera.
+    # ``rmtree`` dentro l'albero i link non li segue.
     if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path)
     else:
@@ -293,7 +293,7 @@ def copy_path(src: Path, dest: Path) -> None:
     if src.is_dir():
         # ``symlinks=True``: i link dentro la cartella si copiano come link.
         # Seguirli portava dentro il workspace una copia di quel che c'era
-        # fuori, dove il file manager poi la mostrava (terza revisione, WA5).
+        # fuori, dove il file manager poi la mostrava.
         shutil.copytree(src, dest, symlinks=True)
     else:
         shutil.copy2(src, dest)

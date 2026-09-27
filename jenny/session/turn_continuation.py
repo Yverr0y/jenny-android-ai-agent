@@ -128,7 +128,7 @@ async def maybe_continue_turn(ctx: Any) -> bool:
         metadata=metadata,
         session_key_override=ctx.session_key,
     )
-    # ``put_nowait`` e **prima** di toccare il turno (AC10 della terza revisione).
+    # ``put_nowait`` e **prima** di toccare il turno.
     # Questa coda la drena il turno stesso, che qui e' fermo: un ``await put()``
     # su una coda piena — i messaggi arrivati durante un goal lungo — restava
     # sospeso per sempre, e con lui la sessione. Con la coda piena la

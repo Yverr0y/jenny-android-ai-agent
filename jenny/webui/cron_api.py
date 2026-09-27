@@ -8,7 +8,7 @@ disco e ``HEARTBEAT.md``. Lo store del cron invece **no**: lo legge il chiamante
 sul loop, con :func:`snapshot_cron`, e qui arriva una copia. ``list_jobs`` in un
 thread ricaricava lo store e riassegnava ``CronService._store`` sotto al loop:
 un giro del timer in corso salvava poi la copia vecchia, e il job appena eseguito
-tornava dovuto e ripartiva (RC3 della terza revisione).
+tornava dovuto e ripartiva.
 
 Il pannello non rende lo store: lo **riconcilia**. Un job di sistema sopravvive
 alla configurazione che lo ha creato — ``register_system_job`` non ha una

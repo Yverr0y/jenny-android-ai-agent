@@ -91,8 +91,8 @@ def _resolve_path(path: str | Path, workspace: str | Path | None = None, *, stri
         # Loop di symlink su Python 3.11 (il telefono): ``pathlib`` trasforma
         # l'``ELOOP`` in ``RuntimeError``, che nessun chiamante del gate si
         # aspetta — le rotte del file manager rispondevano 500, il codice di
-        # ``python_exec`` riceveva un ``RuntimeError`` da un ``open`` (terza
-        # revisione, WA8 e TL15). Dal 3.13 ``resolve`` e' ``os.path.realpath``,
+        # ``python_exec`` riceveva un ``RuntimeError`` da un ``open``.
+        # Dal 3.13 ``resolve`` e' ``os.path.realpath``,
         # che in modo non stretto lascia il loop irrisolto nel percorso: qui si
         # fa lo stesso, cosi' 3.11 e 3.14 danno la stessa risposta. Il confine
         # non si allarga: il percorso restituito passa comunque dal controllo di

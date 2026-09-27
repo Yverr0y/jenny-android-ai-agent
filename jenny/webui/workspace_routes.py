@@ -12,8 +12,8 @@ comando dell'RPC WebSocket — v. ``webui.commands`` e ``channels.ws_rpc``.
 
 Non ci sono nemmeno cancellazione, rinomina e copia: fino al 26/09/2026 erano
 GET di questo router, cioe' scritture sul disco su una superficie di sola
-lettura. Sono i comandi ``workspace.delete``/``rename``/``copy`` (decisione D3
-della terza revisione). Resta ``mkdir``, un parametro corto e idempotente.
+lettura. Sono i comandi ``workspace.delete``/``rename``/``copy``, autenticati
+all'handshake. Resta ``mkdir``, un parametro corto e idempotente.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class WorkspaceRoutes:
             return http_error(403, "permission denied")
         except OSError as e:
             # Il perche', non il dove: ``str(e)`` porta il percorso assoluto
-            # della cartella privata dell'app (terza revisione, WA16).
+            # della cartella privata dell'app.
             return http_error(400, os_error_text(e))
 
     async def _list(self, request: WsRequest) -> Response:
@@ -126,7 +126,7 @@ class WorkspaceRoutes:
         rel_path = query_first(query, "path") or ""
         workspace_root = self._get_workspace_root()
         full_path = validate_path(workspace_root, rel_path)
-        # Il disco fuori dal loop (terza revisione, WA10): una cartella grande
+        # Il disco fuori dal loop: una cartella grande
         # sono centinaia di ``stat``, e un file da aprire fino a ``max_size`` di
         # ``read_bytes`` — in cui il gateway non risponderebbe a nessuno.
         items = await asyncio.to_thread(
@@ -196,7 +196,7 @@ class WorkspaceRoutes:
 def content_disposition(name: str) -> str:
     """``attachment`` con il nome del file, per qualunque nome (RFC 6266).
 
-    Il nome finiva crudo fra virgolette (terza revisione, WA11): un'emoji o un
+    Il nome finiva crudo fra virgolette: un'emoji o un
     accento facevano rifiutare l'header a ``websockets`` — 500 invece del file —,
     un ``"`` chiudeva il valore prima del tempo, e su POSIX un nome puo'
     contenere un a-capo, cioe' un header in piu'. Due parametri: ``filename*``

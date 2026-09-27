@@ -352,8 +352,7 @@ def session_key_for_channel(channel: str, chat_id: str) -> str:
     """
     # Il prefisso e non ``is_project_session_key``: un ``chat_id`` non e' una
     # session key, e classificarlo come tale faceva avvisare ``session_kind`` che
-    # ``"default"`` non sta in nessun vocabolario — un WARNING falso a ogni avvio
-    # (AC14 della terza revisione).
+    # ``"default"`` non sta in nessun vocabolario — un WARNING falso a ogni avvio.
     if channel == WEBUI_CHANNEL and chat_id.startswith(PROJECT_SESSION_PREFIX):
         if is_valid_project_name(chat_id[len(PROJECT_SESSION_PREFIX):]):
             return chat_id

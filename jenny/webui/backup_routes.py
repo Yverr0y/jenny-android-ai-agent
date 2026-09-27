@@ -9,7 +9,7 @@ nella query string, e questo la tiene fuori dalla riga di richiesta — che
 finisce nei log di accesso.
 
 Non la tiene fuori da **ogni** log, e la frase di prima («mai nella query,
-finirebbe nei log») lo lasciava credere (terza revisione, WA2): decodificata,
+finirebbe nei log») lo lasciava credere: decodificata,
 la passphrase e' una variabile locale di ``_export``/``_import``, e un
 ``logger.exception`` con ``diagnose`` acceso stampa le variabili locali dei
 frame. Cio' che la protegge li' e' ``diagnose=False`` nella configurazione di

@@ -7,8 +7,8 @@ request mapping and response shaping.
 Le quattro scritture che portano un **segreto** non sono piu' qui: la chiave del
 provider (``provider/update``, ``provider-models``), il token Telegram
 (``telegram/save``) e la password SSH (``ssh/host/save``) viaggiavano nella
-query, cioe' nella riga di richiesta che log e traceback vedono (terza
-revisione, WA2). Sono comandi dell'RPC WebSocket in ``webui/commands.py``
+query, cioe' nella riga di richiesta che log e traceback vedono.
+Sono comandi dell'RPC WebSocket in ``webui/commands.py``
 (``settings.provider.models``/``update``, ``telegram.save``, ``ssh.host.save``).
 """
 

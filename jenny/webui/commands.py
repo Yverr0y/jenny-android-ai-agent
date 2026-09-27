@@ -96,8 +96,8 @@ class CommandContext:
     # ragione di ``invalidate_session``.
     busy_session_keys: Callable[[], Collection[str]]
     # I due ganci che le rotte dei settings chiamano dopo un salvataggio
-    # riuscito, per i comandi che ne hanno preso il posto (terza revisione,
-    # WA2): ``settings.provider.update`` ricostruisce provider e modello,
+    # riuscito, per i comandi che ne hanno preso il posto:
+    # ``settings.provider.update`` ricostruisce provider e modello,
     # ``telegram.save`` riavvia il canale. Facoltativi e non obbligatori come i
     # due qui sopra perche' i siti di costruzione dei test sono decine e nessuno
     # di loro salva un provider; il composition root li passa
@@ -192,8 +192,8 @@ def _is_live_config(path: Path) -> bool:
 async def _write_live_config(content: str, base: str) -> str:
     """Il salvataggio di ``config.json`` dall'editor, attraverso ``store.mutate``.
 
-    ``workspace.write`` lo riscriveva a mano come un file qualunque (terza
-    revisione, WA6): ``chmod 600`` perso — le chiavi API leggibili da chiunque
+    ``workspace.write`` lo riscriveva a mano come un file qualunque:
+    ``chmod 600`` perso — le chiavi API leggibili da chiunque
     abbia il permesso di leggere lo storage dell'app —, niente ``.bak``, niente
     lock, e la copia che l'editor aveva aperto minuti prima cancellava in
     silenzio quel che le Impostazioni avevano scritto nel frattempo. La regola
@@ -320,7 +320,7 @@ async def workspace_write(ctx: CommandContext, params: Mapping[str, Any]) -> dic
 # Fino al 26/09/2026 erano tre GET (``/api/workspace/delete``, ``rename``,
 # ``copy``): scritture sul disco su una superficie che il gateway
 # vuole di sola lettura, e che una qualunque ``<img src>`` con il token
-# nell'indirizzo poteva far partire. Decisione D3 della terza revisione: stanno
+# nell'indirizzo poteva far partire. Per questo stanno
 # qui, accanto a ``project.delete`` e ``page.write``, sulla superficie
 # autenticata all'handshake che la WebView usa per cio' che cambia il disco.
 
@@ -369,7 +369,7 @@ def _notebooks_dir(workspace_root: Path) -> Path:
 def _delete_refusal(workspace_root: Path, target: Path) -> str | None:
     """Il motivo per cui *target* non si cancella dal file manager, o ``None``.
 
-    Tre rifiuti, dal piu' largo (terza revisione, WA3). La radice del workspace:
+    Tre rifiuti, dal piu' largo. La radice del workspace:
     ``path=.`` — o qualunque percorso che ci si risolva — faceva la ``rmtree``
     di tutto, config e sessioni comprese. Una cartella che **contiene** dei
     quaderni — ``wikis/`` stessa o un suo antenato: il rifiuto dei progetti qui
@@ -392,8 +392,8 @@ def _delete_refusal(workspace_root: Path, target: Path) -> str | None:
 def _rename_refusal(workspace_root: Path, source: Path) -> str | None:
     """Il motivo per cui *source* non si rinomina dal file manager, o ``None``.
 
-    Stessa geografia della cancellazione, per la stessa ragione (terza
-    revisione, WA4): la chat di un quaderno sta fuori dal suo albero ed e'
+    Stessa geografia della cancellazione, per la stessa ragione:
+    la chat di un quaderno sta fuori dal suo albero ed e'
     legata al **nome** della cartella. Spostare la cartella — o una che la
     contiene — lascia la chat sotto il nome vecchio: orfana, e pronta per il
     primo quaderno che lo riprende. Il rinomino di un quaderno e'
@@ -516,7 +516,7 @@ async def workspace_delete(ctx: CommandContext, params: Mapping[str, Any]) -> di
 
     root = ctx.get_workspace_root()
     with _fs_errors():
-        # La voce, non il suo bersaglio: un link si cancella come link (WA5).
+        # La voce, non il suo bersaglio: un link si cancella come link.
         full_path = validate_entry_path(root, rel_path)
         refusal = _delete_refusal(root, full_path)
         if refusal:
@@ -537,12 +537,12 @@ async def workspace_rename(ctx: CommandContext, params: Mapping[str, Any]) -> di
     new_rel = _require_str(params, "new_path")
     _require_workspace_flag("enabled", "unavailable", "workspace is disabled")
     # Rinominare cambia il disco quanto scrivere: la rotta di prima non lo
-    # chiedeva (terza revisione, WA4).
+    # chiedeva.
     _require_workspace_flag("allow_write", "forbidden", "workspace writes are disabled")
 
     root = ctx.get_workspace_root()
     with _fs_errors():
-        # Le voci, non i bersagli: un link si rinomina come link (WA5).
+        # Le voci, non i bersagli: un link si rinomina come link.
         old_path = validate_entry_path(root, old_rel)
         new_path = validate_entry_path(root, new_rel)
         refusal = _rename_refusal(root, old_path)
@@ -1144,8 +1144,8 @@ async def home_pages_set(ctx: CommandContext, params: Mapping[str, Any]) -> dict
 # ``provider-models``, ``/api/telegram/save?token=``,
 # ``/api/settings/ssh/host/save?password=``): una query string sta nella riga
 # di richiesta, e la riga di richiesta la vedono il log di accesso, i
-# traceback con le variabili locali e chiunque logghi un URL (terza revisione,
-# WA2). Il gateway non legge body HTTP, quindi la strada
+# traceback con le variabili locali e chiunque logghi un URL.
+# Il gateway non legge body HTTP, quindi la strada
 # e' questa: un frame WebSocket, autenticato all'handshake. La logica resta
 # dov'era (``settings_api``, ``telegram_api``, ``ssh_api``): qui si traduce solo
 # il trasporto.

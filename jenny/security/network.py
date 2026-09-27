@@ -8,8 +8,8 @@ import socket
 from contextlib import suppress
 from urllib.parse import urlparse
 
-# Indirizzi che non sono mai un server, per nessuna delle tre policy (CF5 della
-# terza revisione): ``::`` non specificato (su Linux una connessione verso
+# Indirizzi che non sono mai un server, per nessuna delle tre policy:
+# ``::`` non specificato (su Linux una connessione verso
 # ``::`` arriva all'host stesso, come ``0.0.0.0``), ``::/96`` IPv4-compatibile
 # (deprecato: ``::127.0.0.1`` è il loopback in una forma che ``_normalize_addr``
 # non riconosce, perché non è una IPv4-mapped), multicast e broadcast.
@@ -283,7 +283,7 @@ def validate_ssh_target(host: str) -> tuple[bool, str]:
         # gateway dall'interno. Il loopback e la sola cosa che questa policy
         # promette senza condizioni: qui non si negozia.
         # Il non specificato (`0.0.0.0`, `::`) è il telefono tanto quanto il
-        # loopback: una connessione verso di lui arriva all'host stesso (CF5).
+        # loopback: una connessione verso di lui arriva all'host stesso.
         if any(form.is_loopback or form.is_unspecified for form in _address_forms(addr)):
             return False, f"Blocked: {hostname} resolves to the phone itself ({addr})"
         if _is_blocked(addr, _SSH_BLOCKED_NETWORKS):
@@ -292,7 +292,7 @@ def validate_ssh_target(host: str) -> tuple[bool, str]:
     return True, ""
 
 
-# ── Varianti asincrone (CF9/TL11 della terza revisione) ──────────────────────
+# ── Varianti asincrone: il DNS non deve bloccare il loop ───────────────────
 #
 # Le tre policy risolvono il nome con ``socket.getaddrinfo``, che è bloccante:
 # chiamate dal thread del loop, un DNS lento fermava tutto il gateway. Da un
