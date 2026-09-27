@@ -296,3 +296,82 @@ def test_the_gap_is_measured_again_once_the_track_stops() -> None:
     assert "gap?.settleAfter(SLIDE_MS" in block, block
     pages = (ASSETS / "home-pages.js").read_text(encoding="utf-8")
     assert "transform ${SLIDE_MS}ms" in pages, "la durata della pista non e' piu' SLIDE_MS"
+
+
+# ── Lo scorrimento che il ricalcolo non deve rubare ─────────────────────────
+
+
+def _scrolling_thread(script: str) -> str:
+    """Un filo che si comporta come quello vero dove conta: l'ultima risposta
+    va a capo di una riga in piu' quando ha il margine, e leggere un
+    rettangolo (cioe' forzare il layout) riporta `scrollTop` dentro il massimo
+    del momento — che e' quel che fa il browser."""
+    return _con_dom(
+        """
+const LINE = 22;
+const last = node('home-msg home-msg-jenny is-under-jenny', { right: 540, bottom: 300 });
+const clamp = (t) => { t._top = Math.min(t._top, t.scrollHeight - t.clientHeight); };
+const thread = {
+  ...threadWith([last]),
+  clientHeight: 496,
+  _top: 0,
+  get scrollHeight() { return 7289 + (last.classes.has(CLASS) ? LINE : 0); },
+  get scrollTop() { return this._top; },
+  set scrollTop(v) { this._top = Math.max(0, Math.min(v, this.scrollHeight - this.clientHeight)); },
+};
+const measure = last.getBoundingClientRect;
+last.getBoundingClientRect = () => { clamp(thread); return measure(); };
+"""
+        + script
+    )
+
+
+def test_a_refresh_at_the_bottom_leaves_the_thread_at_the_bottom() -> None:
+    """Il difetto del 27/09/2026 sul Titan 2, in un quaderno: la coda
+    dell'ultima risposta sotto il composer, e il dito che non ci arrivava.
+
+    Per misurare senza il proprio margine `refresh()` toglie la classe: la
+    risposta perde la riga in piu', il contenuto si accorcia, e il browser
+    tira `scrollTop` dentro il massimo nuovo. Rimessa la classe il filo
+    ricresce, ma lo scorrimento resta una riga sopra il fondo — e siccome il
+    ricalcolo parte a ogni scorrimento fermo, ci torna ogni volta.
+    """
+    out = _scrolling_thread("""
+thread.scrollTop = thread.scrollHeight;          // in fondo: 7311 - 496
+assert.equal(thread.scrollTop, 6815);
+const gap = new JennyGap(thread, mascot);
+gap.refresh();
+assert.ok(last.classes.has(CLASS), 'la risposta nel suo angolo deve restare scansata');
+assert.equal(thread.scrollTop, 6815, 'il ricalcolo ha tirato su il filo di una riga');
+console.log('ok');
+""")
+    assert "ok" in out
+
+
+def test_a_refresh_mid_thread_does_not_move_what_you_are_reading() -> None:
+    out = _scrolling_thread("""
+thread.scrollTop = 3000;
+new JennyGap(thread, mascot).refresh();
+assert.equal(thread.scrollTop, 3000);
+console.log('ok');
+""")
+    assert "ok" in out
+
+
+def test_the_scroll_a_refresh_makes_does_not_start_another_refresh() -> None:
+    """Il ritocco di `refresh()` produce il suo evento di scorrimento. Se
+    ripartisse il timer, in fondo al filo si ricalcolerebbe ogni `QUIET_MS`
+    per sempre, due layout del filo intero a giro."""
+    out = _scrolling_thread("""
+thread.scrollTop = thread.scrollHeight;
+const gap = new JennyGap(thread, mascot);
+gap.refresh();
+gap.scrolling();                     // l'evento del ritocco
+assert.equal(gap._timer, null, 'il proprio ritocco ha rimesso in moto il ricalcolo');
+thread.scrollTop = 6000;             // il dito, invece, si'
+gap.scrolling();
+assert.notEqual(gap._timer, null, 'uno scorrimento vero deve ricalcolare');
+clearTimeout(gap._timer);
+console.log('ok');
+""")
+    assert "ok" in out

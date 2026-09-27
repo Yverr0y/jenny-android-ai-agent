@@ -107,6 +107,8 @@ export class JennyGap {
     this.mascot = mascot;
     this._timer = null;
     this._marked = new Set();
+    /** Lo `scrollTop` in cui `refresh()` ha lasciato il filo, o `null`. */
+    this._restTop = null;
   }
 
   /** Ricalcola adesso. Da chiamare all'arrivo di un messaggio. */
@@ -133,6 +135,19 @@ export class JennyGap {
 
     this.thread.style.setProperty('--jenny-gap', `${margin}px`);
 
+    /* Dove sta il filo **prima** di togliere le classi qui sotto. Tolta la
+       classe, l'ultimo messaggio puo' perdere la riga che il margine gli
+       aveva fatto andare a capo: per un istante il contenuto e' piu' corto,
+       e il browser riporta `scrollTop` dentro il nuovo massimo. Rimessa la
+       classe il messaggio ricresce, lo scorrimento no — e siccome questo
+       giro parte a ogni scorrimento fermo, chi arrivava in fondo veniva
+       ritirato su di quella riga, sempre: la coda dell'ultima risposta sotto
+       il composer, e il dito che non ci arrivava (Titan 2, 27/09/2026:
+       `scrollTop` 6792,9 su un massimo di 6815). */
+    const before = this.thread.scrollTop;
+    const atBottom =
+      this.thread.scrollHeight - before - this.thread.clientHeight <= 1;
+
     const live = new Set();
     /* **Tutti** i messaggi, non solo le risposte. Qui c'era `.home-msg-jenny`,
        e le bolle di chi scrive restavano fuori: peccato che quelle siano
@@ -154,10 +169,23 @@ export class JennyGap {
       }
     }
     this._marked = live;
+
+    /* Chi era in fondo resta in fondo — anche se un messaggio ha appena preso
+       il margine ed e' cresciuto — e chi era a meta' resta dov'era. */
+    const want = atBottom
+      ? this.thread.scrollHeight - this.thread.clientHeight
+      : before;
+    if (Math.abs(this.thread.scrollTop - want) >= 1) this.thread.scrollTop = want;
+    this._restTop = this.thread.scrollTop;
   }
 
-  /** Lo scorrimento e' in corso: si aspetta che si fermi. */
+  /** Lo scorrimento e' in corso: si aspetta che si fermi.
+   *
+   *  Tranne quando a scorrere e' stato `refresh()`: il ritocco qui sopra
+   *  produce il suo evento di scorrimento, e ripartire da li' vorrebbe dire
+   *  ricalcolare ogni `QUIET_MS` per sempre, fermi in fondo al filo. */
   scrolling() {
+    if (this._restTop !== null && this.thread?.scrollTop === this._restTop) return;
     this.settleAfter(QUIET_MS);
   }
 
