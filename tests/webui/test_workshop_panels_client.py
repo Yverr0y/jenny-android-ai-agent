@@ -30,6 +30,7 @@ _REAL = (
     "_sshGenerateKey",
     "_sshDelete",
     "_openBrand",
+    "_formatLabel",
     "_deleteProvider",
 )
 
@@ -210,13 +211,17 @@ settings.providers[1].api_key_hint = 'sk-…abcd';
 await s.loadSettings();
 s._openBrand('b');
 assert.deepEqual({_labels('drawer-brand-body')}, [
+  ['settings.brandFormat', 'provider.unknown'],
   ['settings.brandAddress', 'https://b'],
   ['settings.brandKey', 'sk-…abcd'],
+  ['settings.brandCaBundle', 'settings.brandCaBundleNone'],
 ]);
 s._openBrand('a');
 assert.deepEqual({_labels('drawer-brand-body')}, [
+  ['settings.brandFormat', 'provider.unknown'],
   ['settings.brandAddress', 'settings.defaultUrl'],
   ['settings.brandKey', 'settings.noKey'],
+  ['settings.brandCaBundle', 'settings.brandCaBundleNone'],
 ]);
 s._openSshHost('nas');
 assert.deepEqual({_labels('drawer-ssh-host-body')}, [['settings.ssh.where', 'u@h:22']]);
@@ -230,3 +235,5 @@ def test_the_new_labels_exist_in_both_languages() -> None:
     for language in ("it", "en"):
         s = locale(language)["settings"]
         assert s["brandAddress"] and s["brandKey"] and s["ssh"]["where"]
+        assert s["brandFormat"] and s["brandCaBundle"] and s["brandCaBundleNone"]
+

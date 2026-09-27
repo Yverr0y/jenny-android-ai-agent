@@ -74,13 +74,13 @@ She always docks on the right edge. That is not a setting.
 
 ### Who thinks
 
-A read-only card with the active model name and `via <provider> · <format>`. Which model answers is chosen on the home's **Who answers** page, and the card says so.
+The configured providers, one group each, with their models inside. One tap on a model makes it answer: it saves `model` and `default_provider` in a single request, the same write the home's **Who answers** page makes, so a model can never end up active under another provider's name.
 
-### Brands
+Each group's header shows a coloured dot, the name, and a second line with the format, the base URL (or "(default)" if unset) and the masked key. The key hint is the first 4 and last 4 characters of the stored key, joined with `...` (e.g. `sk-a...j8f9`); the full key is never sent back to the browser. The provider that answers now carries an **answers** tag, and when its group is closed the second line says **answers with** and the model instead. A closed group also shows how many models its list has.
 
-The configured providers, one row each: a coloured dot, the name, the format and base URL (or "(default)" if unset), and the masked key. The key hint is the first 4 and last 4 characters of the stored key, joined with `...` (e.g. `sk-a...j8f9`); the full key is never sent back to the browser. The provider that answers now carries an **answers** tag.
+Tapping the header opens or closes the group; on entering the page only the provider that answers is open. The models are fetched live from the provider's model-list endpoint and kept until the key or base URL changes (which fetches them again) or the app is reopened. A list that didn't arrive is tried again the next time you enter the page. The one in use sits at the top with a check mark, and the order is fixed when you enter the page, so picking a model moves the mark, not the rows. Six models show at first, with **Show all** below them and a filter field once a list is longer than that. **A model the list doesn't have** takes a model id typed by hand, for one the provider serves but doesn't list; since a wrong name would leave her unable to answer, it asks before using an id the list doesn't have. While a choice is being saved the rows are disabled, and tapping the model already in use does nothing. If the list can't be fetched, the group says why, including the server's message when there is one (a CA certificate problem shows up here).
 
-Tapping a row opens its panel, with its address, its key, and **Edit** and **Delete**.
+The settings button beside each header opens the provider's panel: its format, address, key and CA certificate, with **Edit** and **Delete**.
 
 **Add provider** opens a dialog with Name, Format (OpenAI Compatible / Anthropic Compatible), API Key, Base URL, CA certificate, **First model** and a **Use it now** switch (on by default). The base URL placeholder follows the format (`https://api.openai.com/v1` for OpenAI-compatible, `https://api.anthropic.com` for Anthropic). With **Use it now** on, saving also makes that provider and its first model the ones that answer. If that second step fails, the provider stays saved and a toast says it was not activated.
 

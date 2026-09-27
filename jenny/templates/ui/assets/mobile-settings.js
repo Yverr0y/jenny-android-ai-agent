@@ -84,7 +84,7 @@ export const HANDS_JOBS = (job) => job.kind !== 'system' || job.id === 'heartbea
  */
 export const DRAWERS = {
   brain: {
-    sections: ['whoThinks', 'brands', 'parameters', 'battery', 'system'],
+    sections: ['whoThinks', 'parameters', 'battery', 'system'],
   },
   hands: {
     sections: ['webSearch', 'position', 'ssh', 'telegram', 'skill', 'scheduling'],
@@ -110,6 +110,11 @@ export const DRAWERS = {
  * **senza titolo**, su uno schermo che comincia con una riga vuota (visto sul
  * telefono il 20/09/2026). */
 export const VIEW_OF = { brain: 'settings', hands: 'settings', memory: 'settings' };
+
+/* Quanti modelli di una marca si vedono prima di «mostra tutti». Sei righe da
+   44 px stanno nel primo schermo del quadrato da 480 insieme all'intestazione;
+   il filtro compare dalla settima in su, dove serve. */
+const BRAND_MODELS_SHOWN = 6;
 
 /* E siccome averla in due copie e' costato un'intestazione, averla **senza una
  * funzione** e' costato lo scorrimento.
@@ -143,6 +148,18 @@ export class SettingsController {
     this.loadingEl = document.getElementById('settings-loading');
     this.data = null;
     this._debounceTimers = {};
+    /* I modelli di ogni marca, letti una volta e tenuti. La chiave e' fatta
+       di cio' da cui l'elenco dipende (v. `_brandCatalogKey`): una Modifica
+       che cambia chiave o indirizzo lo fa rileggere da se'. */
+    this._brandCatalogs = new Map();
+    /* Lo stato dei gruppi di «Chi pensa» per la visita in corso: quali sono
+       aperti, l'ordine dei modelli fissato all'ingresso, i filtri, chi mostra
+       tutto. Sopravvive ai ridisegni; si azzera uscendo (`deactivate`) e
+       cambiando cassetto (`setDrawer`), **prima** del disegno: `activate()`
+       arriva dopo, e se i dati non sono cambiati non ridisegna. */
+    this._resetBrandVisit();
+    // Vero mentre una scelta di modello e' in volo (v. `_pickBrandModel`).
+    this._picking = false;
     // Contatore di generazione: incrementato in deactivate(). Ogni
     // continuazione lo cattura prima del primo await ed esce se è cambiato —
     // altrimenti scrive nel DOM (o apre modali) di una sezione già lasciata.
@@ -258,6 +275,7 @@ export class SettingsController {
   setDrawer(name) {
     if (this._drawer === name) return;
     this._drawer = name;
+    this._resetBrandVisit();
     if (this.data) {
       this.render();
       this._paintedFromCache = true;
@@ -265,10 +283,21 @@ export class SettingsController {
   }
 
   activate() { this.loadSettings(); }
+
+  _resetBrandVisit() {
+    this._brandsOpen = null;
+    this._brandsOpenFor = null;
+    this._modelOrder = new Map();
+    this._brandFilters = new Map();
+    this._brandShowAll = new Set();
+    this._brandTried = new Set();
+  }
   deactivate() {
     // Da qui in poi nessuna continuazione in volo tocca più niente: né il DOM
     // di questa sezione, né — soprattutto — una modale sopra un'altra.
     this._gen++;
+    // La prossima entrata e' una visita nuova: gruppi e ordine ripartono.
+    this._resetBrandVisit();
     this.hideLoading();
     if (this._tgWidget) {
       this._tgWidget.destroy();
@@ -322,7 +351,6 @@ export class SettingsController {
     const sections = {
       // Cervello
       whoThinks: () => this._group('whoThinks', i18n.t('workshop.groups.whoThinks'), this._renderWhoThinks(d)),
-      brands: () => this._group('brands', i18n.t('settings.brands'), this._renderBrands(d)),
       parameters: () => this._group('parameters', i18n.t('workshop.groups.parameters'), this._renderParameters(d)),
       battery: () => this._renderBatterySection(d),
       system: () => this._group('system', i18n.t('settings.system'), this._renderSystem(d)),
@@ -798,44 +826,33 @@ export class SettingsController {
     }[fmt] || fmt || i18n.t('provider.unknown');
   }
 
-  /* L'anagrafica delle marche e i parametri. **Non** la scelta del modello.
+  /* «Chi pensa»: le marche, ciascuna coi suoi modelli, e un tocco su un
+   * modello lo fa rispondere.
    *
-   * Il catalogo — «Cambia modello», l'elenco per provider, il filtro — e' in
-   * casa, da «Chi risponde»: li' un tocco su un modello salva `model` e
-   * `default_provider` insieme, che e' il punto dell'intero redesign. Qui
-   * resta cio' che ha bisogno di un paragrafo per spiegarsi: formato,
-   * endpoint, CA bundle, e i tre parametri di generazione.
+   * Erano due gruppi, e il 27/09/2026 sono diventati uno. Il primo era una
+   * scheda con il modello in uso, che si leggeva e basta; il secondo l'elenco
+   * delle marche, e per cambiare modello si passava da li'. Il comando stava
+   * dove non lo si cercava, e la stessa informazione compariva due volte.
    *
-   * In una riga: **in casa scegli fra quel che c'e', qui decidi cosa c'e'.**
-   * Sono due verbi diversi sullo stesso oggetto, e nessuno dei due e' la
-   * copia dell'altro.
+   * La forma e' quella dei dati: un modello esiste **dentro** una marca (e' il
+   * suo elenco, letto con la sua chiave), e chi risponde e' la coppia. Toccare
+   * un modello dentro la sua marca sceglie la coppia intera, quindi la coppia
+   * sbagliata — il modello di una marca con un'altra come provider — qui non
+   * si puo' nemmeno esprimere. In casa, da «Chi risponde», la stessa scelta
+   * fa la stessa scrittura: `model` e `default_provider` in una chiamata sola.
+   *
+   * Tre regole, ciascuna contro un modo preciso di sbagliare:
+   * - **L'ordine si fissa all'ingresso** (`_modelOrder`, v.
+   *   `_resetBrandVisit`): scegliere non riordina niente sotto il dito.
+   * - **Un gruppo chiuso dice con cosa risponde**, sulla seconda riga: e'
+   *   l'unica parte della vecchia scheda che valeva la pena tenere.
+   * - **L'intestazione apre e chiude, il cursore gestisce**: due bersagli, e
+   *   aprire una marca non porta mai in Modifica per errore.
    */
-  /* «Modello» era una sezione sola con dentro tre cose che non si somigliano:
-     chi risponde adesso, l'elenco delle marche, e le manopole del motore. La
-     tavola le tiene separate, con tre soprascritte — ed e' giusto: la prima si
-     legge, la seconda si amministra, la terza quasi mai. */
-
-  /** Chi risponde adesso. Si legge, non si tocca: la scelta e' in casa. */
   _renderWhoThinks(d) {
-    const a = d.agent || {};
-    const providers = d.providers || [];
-    const active = providers.find(p => p.name === d.default_provider);
-    const via = active
-      ? `${i18n.t('settings.via')} ${escapeHtml(active.name)} · ${escapeHtml(this._formatLabel(active.format))}`
-      : i18n.t('settings.noProviderConfigured');
-
     return `
-      <div class="model-inuse">
-        <span class="model-inuse-name">${escapeHtml(a.model || '—')}</span>
-        <span class="model-inuse-via">${via}</span>
-      </div>
-      <p class="settings-hint" style="margin:8px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.modelLivesInHome')}</p>`;
-  }
-
-  /** Quali marche esistono. Qui si amministra. */
-  _renderBrands(d) {
-    return `
-      <div id="provider-list">
+      <p class="brand-groups-hint">${i18n.t('settings.whoThinksHint')}</p>
+      <div id="provider-list" class="brand-groups">
         ${this._renderProviderListHtml(d.providers || [], d.default_provider)}
       </div>
       <button class="settings-btn-add settings-btn-full" id="btn-add-provider"><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.addProvider')}</button>
@@ -872,35 +889,86 @@ export class SettingsController {
         ['', 'low', 'medium', 'high'])}`;
   }
 
-  /** Una marca, in una riga da 52 px.
-   *
-   *  Era una scheda: nome, targhetta del formato, indirizzo, chiave e due
-   *  bottoni-icona, per un'altezza tripla. La tavola ne fa una riga —
-   *  pallino, nome, indirizzo, chiave mascherata, freccina — e ci aggiunge
-   *  **la pastiglia «risponde»** su quella che risponde adesso, che la scheda
-   *  non aveva: da qui si amministrano le marche, e sapere quale sta
-   *  rispondendo e' il contesto di ogni decisione che si prende.
-   *
-   *  Modifica ed elimina passano nel pannello: sono cose che si fanno **a**
-   *  una marca.
+  /** Le marche, un gruppo ciascuna: un'intestazione da 52 px (pallino, nome,
+   *  la pastiglia «risponde», la seconda riga, il conto, la freccina) piu' il
+   *  cursore che apre la gestione, e sotto i modelli, che si riempiono dopo
+   *  (`_paintBrandGroup`). Il corpo c'e' anche chiuso, `hidden`: aprirlo e'
+   *  un attributo, non un ridisegno.
    */
   _renderProviderListHtml(providers, active) {
     if (!providers.length) return `<div class="settings-empty-state">${i18n.t('settings.noProviders')}</div>`;
-    return providers.map(p => {
+    const model = this.data?.agent?.model || '';
+    return providers.map((p, i) => {
       const name = escapeHtml(p.name);
-      const answers = p.name === active
+      const isActive = p.name === active;
+      const open = this._isBrandOpen(p.name, active);
+      const answers = isActive
         ? `<span class="brand-answers">${i18n.t('settings.answersNow')}</span>`
         : '';
-      return `<button class="brand-row" type="button" data-brand-open="${name}">
-        <span class="brand-dot" style="background:${this._brandColor(p.name)}" aria-hidden="true"></span>
-        <span class="brand-text">
-          <span class="brand-name">${name}${answers}</span>
-          <span class="brand-where">${escapeHtml(this._formatLabel(p.format))} · ${escapeHtml(p.api_base || i18n.t('settings.defaultUrl'))}</span>
-        </span>
-        <span class="brand-key">${escapeHtml(p.api_key_hint || i18n.t('settings.noKey'))}</span>
-        <i class="ti ti-chevron-right" aria-hidden="true"></i>
-      </button>`;
+      return `<div class="brand-group${isActive ? ' is-active' : ''}" data-brand="${name}">
+        <div class="brand-group-head">
+          <button class="brand-row" type="button" data-brand-toggle aria-expanded="${open}" aria-controls="brand-body-${i}">
+            <span class="brand-dot" style="background:${this._brandColor(p.name)}" aria-hidden="true"></span>
+            <span class="brand-text">
+              <span class="brand-name">${name}${answers}</span>
+              <span class="brand-where">${this._brandSubline(p, isActive, open, model)}</span>
+            </span>
+            <span class="brand-count" data-brand-count></span>
+            <i class="ti ti-chevron-down brand-chevron" aria-hidden="true"></i>
+          </button>
+          <button class="brand-manage" type="button" data-brand-open="${name}"
+                  aria-label="${escapeHtml(i18n.t('settings.manageBrand', { name: p.name }))}">
+            <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="brand-body" id="brand-body-${i}"${open ? '' : ' hidden'}>
+          <label class="brand-filter" hidden>
+            <i class="ti ti-search" aria-hidden="true"></i>
+            <input type="search" data-brand-filter autocomplete="off"
+                   aria-label="${escapeHtml(i18n.t('settings.brandFilterLabel', { name: p.name }))}">
+          </label>
+          <div class="brand-models" role="radiogroup" data-brand-models
+               aria-label="${escapeHtml(i18n.t('settings.brandModelsOf', { name: p.name }))}"></div>
+          <p class="brand-models-note" data-brand-note hidden></p>
+          <button class="brand-more" type="button" data-brand-more hidden></button>
+          <button class="brand-custom-open" type="button" data-brand-custom><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.customModel')}</button>
+          <form class="brand-custom" data-brand-custom-form hidden>
+            <input class="settings-input" type="text" data-brand-custom-input autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="${escapeHtml(i18n.t('settings.customModelPlaceholder'))}"
+                   aria-label="${escapeHtml(i18n.t('settings.customModelLabel', { name: p.name }))}">
+            <button class="settings-btn-add" type="submit">${i18n.t('settings.customModelUse')}</button>
+          </form>
+        </div>
+      </div>`;
     }).join('');
+  }
+
+  /** La seconda riga di un'intestazione. Chiuso, il gruppo che risponde dice
+   *  con cosa; negli altri casi dove sta la marca: formato, indirizzo, chiave. */
+  _brandSubline(p, isActive, open, model) {
+    if (isActive && !open && model) {
+      return `<span class="brand-says">${escapeHtml(i18n.t('settings.answersWith', { model }))}</span>`;
+    }
+    return [
+      this._formatLabel(p.format),
+      p.api_base || i18n.t('settings.defaultUrl'),
+      p.api_key_hint || i18n.t('settings.noKey'),
+    ].map(escapeHtml).join(' · ');
+  }
+
+  /** Aperto o chiuso. All'ingresso e' aperto solo il gruppo che risponde;
+   *  poi decide chi tocca, fino alla prossima entrata (`_resetBrandVisit`).
+   *
+   *  Se chi risponde cambia a meta' visita — una marca aggiunta con «Usala
+   *  adesso» — il suo gruppo si apre. Gli altri restano come li hai lasciati:
+   *  chiuderne uno di tua iniziativa sarebbe spostare la pagina sotto il dito. */
+  _isBrandOpen(name, active) {
+    if (!this._brandsOpen) this._brandsOpen = new Set();
+    if (active && active !== this._brandsOpenFor) {
+      this._brandsOpen.add(active);
+      this._brandsOpenFor = active;
+    }
+    return this._brandsOpen.has(name);
   }
 
   /** Il colore del pallino di una marca: quello della casa, da
@@ -912,7 +980,9 @@ export class SettingsController {
     return getProviderBrand(name).color;
   }
 
-  /** Il pannello di una marca: modifica ed elimina. */
+  /** Il pannello di una marca: quel che si fa **a** una marca. Formato,
+   *  indirizzo, chiave e CA bundle si leggono; Modifica ed Elimina agiscono.
+   *  I modelli qui non ci sono: stanno nel gruppo, dove si sceglie. */
   _openBrand(name) {
     const body = document.getElementById('drawer-brand-body');
     const title = document.getElementById('drawer-brand-title');
@@ -920,16 +990,18 @@ export class SettingsController {
     if (!body || !p) return;
     this._brandOpen = name;
     if (title) title.textContent = p.name;
+    const rows = [
+      [i18n.t('settings.brandFormat'), this._formatLabel(p.format)],
+      [i18n.t('settings.brandAddress'), p.api_base || i18n.t('settings.defaultUrl')],
+      [i18n.t('settings.brandKey'), p.api_key_hint || i18n.t('settings.noKey')],
+      [i18n.t('settings.brandCaBundle'), p.ca_bundle || i18n.t('settings.brandCaBundleNone')],
+    ];
     body.innerHTML = `
-      <div class="settings-row">
-        <span class="settings-label">${i18n.t('settings.brandAddress')}</span>
-        <span class="settings-summary-value">${escapeHtml(p.api_base || i18n.t('settings.defaultUrl'))}</span>
-      </div>
-      <div class="settings-row">
-        <span class="settings-label">${i18n.t('settings.brandKey')}</span>
-        <span class="settings-summary-value">${escapeHtml(p.api_key_hint || i18n.t('settings.noKey'))}</span>
-      </div>
-      <div class="provider-card-actions" style="margin-top:12px">
+      ${rows.map(([label, value]) => `<div class="settings-row">
+        <span class="settings-label">${label}</span>
+        <span class="settings-summary-value">${escapeHtml(value)}</span>
+      </div>`).join('')}
+      <div class="provider-card-actions">
         <button class="settings-btn-add provider-edit" data-provider="${escapeHtml(p.name)}">
           <i class="ti ti-edit" aria-hidden="true"></i> ${i18n.t('settings.edit')}
         </button>
@@ -941,6 +1013,285 @@ export class SettingsController {
       b.addEventListener('click', () => this._editProvider(b.dataset.provider)));
     document.querySelectorAll('#drawer-brand-body .provider-delete').forEach(b =>
       b.addEventListener('click', () => this._deleteProvider(b.dataset.provider)));
+  }
+
+  /** Cio' da cui dipende l'elenco dei modelli di una marca. `api_key_hint`
+   *  sta per la chiave, che al client non arriva: una chiave nuova ha un
+   *  suggerimento nuovo, e l'elenco si rilegge. */
+  _brandCatalogKey(p) {
+    return [p.name, p.format, p.api_base, p.api_key_hint].join('\n');
+  }
+
+  /** Il provider di un gruppo, dal nome che il gruppo porta. */
+  _groupProvider(group) {
+    return (this.data?.providers || []).find(x => x.name === group?.dataset.brand) || null;
+  }
+
+  /** Collega i gruppi e chiede i loro elenchi. Tutti, non solo quello aperto:
+   *  le marche sono poche, l'elenco arrivato resta in cache, e un gruppo
+   *  chiuso ha comunque il conto da dire — o l'errore. */
+  _wireBrands() {
+    const groups = this.contentEl?.querySelectorAll('.brand-group') || [];
+    groups.forEach((group) => {
+      group.querySelector('[data-brand-toggle]')?.addEventListener('click', () => this._toggleBrand(group));
+      group.querySelector('[data-brand-open]')?.addEventListener('click', (e) => {
+        window.mobileApp?.drawer?.open('brand');
+        this._openBrand(e.currentTarget.dataset.brandOpen);
+      });
+      const filter = group.querySelector('[data-brand-filter]');
+      filter?.addEventListener('input', () => {
+        this._brandFilters.set(group.dataset.brand, filter.value);
+        this._paintBrandGroup(group);
+      });
+      group.querySelector('[data-brand-more]')?.addEventListener('click', () => {
+        this._brandShowAll.add(group.dataset.brand);
+        this._paintBrandGroup(group);
+      });
+      const form = group.querySelector('[data-brand-custom-form]');
+      const input = group.querySelector('[data-brand-custom-input]');
+      group.querySelector('[data-brand-custom]')?.addEventListener('click', (e) => {
+        e.currentTarget.hidden = true;
+        form.hidden = false;
+        input?.focus();
+      });
+      form?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this._pickTypedModel(group, (input?.value || '').trim());
+      });
+      const p = this._groupProvider(group);
+      if (p) this._loadBrandModels(p, group);
+    });
+  }
+
+  /** Apre o chiude un gruppo: un attributo e la seconda riga, niente altro.
+   *  Un ridisegno riporterebbe in cima il filtro e chiuderebbe il campo
+   *  dell'id a mano. */
+  _toggleBrand(group) {
+    const p = this._groupProvider(group);
+    if (!p) return;
+    const open = !this._brandsOpen?.has(p.name);
+    if (!this._brandsOpen) this._brandsOpen = new Set();
+    if (open) this._brandsOpen.add(p.name); else this._brandsOpen.delete(p.name);
+    group.querySelector('[data-brand-toggle]')?.setAttribute('aria-expanded', String(open));
+    const body = group.querySelector('.brand-body');
+    if (body) body.hidden = !open;
+    const where = group.querySelector('.brand-where');
+    if (where) {
+      where.innerHTML = this._brandSubline(
+        p, p.name === this.data?.default_provider, open, this.data?.agent?.model || '');
+    }
+    this._paintBrandGroup(group);
+  }
+
+  /** Legge i modelli di una marca. Un elenco arrivato si tiene finche' non
+   *  cambiano chiave o indirizzo (`_brandCatalogKey`). Un elenco che non e'
+   *  arrivato si riprova **alla visita dopo** (`_brandTried`), non a ogni
+   *  ridisegno: altrimenti ogni scelta in un'altra marca rifaceva la richiesta
+   *  a quella rotta, magari lenta fino al suo timeout. Una lettura in volo non
+   *  se ne fa partire una seconda. */
+  async _loadBrandModels(p, group) {
+    const key = this._brandCatalogKey(p);
+    const known = this._brandCatalogs.get(key);
+    if (known && (known.status === 'available' || known.status === 'loading'
+        || this._brandTried.has(key))) {
+      this._paintBrandGroup(group);
+      return;
+    }
+    const gen = this._gen;
+    this._brandTried.add(key);
+    this._brandCatalogs.set(key, { status: 'loading', models: [] });
+    this._paintBrandGroup(group);
+    let outcome;
+    try {
+      const res = await api.getProviderModels(p.name);
+      outcome = {
+        status: res?.status || 'available',
+        models: (res?.models || []).map((m) => m.id || m),
+        message: res?.message || '',
+      };
+    } catch (err) {
+      console.warn('settings: brand model list not read', err);
+      outcome = { status: 'error', models: [], message: '' };
+    }
+    this._brandCatalogs.set(key, outcome);
+    if (this._stale(gen)) return;
+    /* Il gruppo che c'e' adesso, non quello che ha chiesto: un ridisegno nel
+       frattempo lo ha sostituito, e quello vecchio non e' piu' nel DOM. */
+    const now = [...(this.contentEl?.querySelectorAll('.brand-group') || [])]
+      .find((g) => g.dataset.brand === p.name);
+    if (now) this._paintBrandGroup(now);
+    this._restoreScrollTop();
+  }
+
+  /** Le righe di una marca, nell'ordine fissato all'ingresso.
+   *
+   *  La prima volta che l'elenco c'e', quello che risponde va in cima — una
+   *  marca ha decine di modelli (36 per OpenCode Go, misurato il 27/09/2026) —
+   *  e da li' l'ordine non cambia piu' fino alla prossima entrata: se il segno
+   *  si sposta, si sposta il segno, non le righe. Un id che l'ordine non ha
+   *  (scritto a mano, o in uso ma non elencato) entra in cima, e ci resta. */
+  _brandRows(p, catalog) {
+    const current = this.data?.agent?.model || '';
+    const active = p.name === this.data?.default_provider;
+    const key = this._brandCatalogKey(p);
+    let order = this._modelOrder.get(key);
+    if (!order && catalog.status === 'available') {
+      order = catalog.models.filter((id) => !(active && id === current));
+      if (active && current) order.unshift(current);
+      this._modelOrder.set(key, order);
+    }
+    if (order) {
+      if (active && current && !order.includes(current)) order.unshift(current);
+      return order;
+    }
+    return active && current ? [current] : [];
+  }
+
+  /** Dipinge i modelli di un gruppo: il segno, il filtro, «mostra tutti»,
+   *  lo stato dell'elenco. */
+  _paintBrandGroup(group) {
+    const p = this._groupProvider(group);
+    const list = group?.querySelector('[data-brand-models]');
+    if (!p || !list) return;
+    const catalog = this._brandCatalogs.get(this._brandCatalogKey(p))
+      || { status: 'loading', models: [] };
+    const current = this.data?.agent?.model || '';
+    const active = p.name === this.data?.default_provider;
+    const all = this._brandRows(p, catalog);
+    const open = !!this._brandsOpen?.has(p.name);
+
+    const count = group.querySelector('[data-brand-count]');
+    if (count) {
+      /* Lo stesso numero del filtro e di «mostra tutti»: le righe fra cui si
+         sceglie, compreso un id in uso che l'elenco non ha. */
+      count.textContent = !open && catalog.status === 'available'
+        ? i18n.t('settings.modelsCount', { n: all.length }) : '';
+    }
+
+    const needle = (this._brandFilters.get(p.name) || '').trim().toLowerCase();
+    const filterBox = group.querySelector('.brand-filter');
+    const filter = group.querySelector('[data-brand-filter]');
+    if (filterBox) filterBox.hidden = all.length <= BRAND_MODELS_SHOWN;
+    if (filter) {
+      filter.placeholder = i18n.t('settings.brandFilter', { n: all.length });
+      if (filter.value !== (this._brandFilters.get(p.name) || '')) {
+        filter.value = this._brandFilters.get(p.name) || '';
+      }
+    }
+    const matching = needle ? all.filter((id) => id.toLowerCase().includes(needle)) : all;
+    const everything = needle || this._brandShowAll.has(p.name);
+    const rows = everything ? matching : matching.slice(0, BRAND_MODELS_SHOWN);
+
+    list.innerHTML = rows.map((id) => {
+      const on = active && id === current;
+      return `<button class="brand-model${on ? ' is-on' : ''}" type="button" role="radio"
+        aria-checked="${on}" data-brand-model="${escapeHtml(id)}"${this._picking ? ' disabled' : ''}>
+        <span class="brand-model-id">${escapeHtml(id)}</span>
+        <i class="ti${on ? ' ti-check' : ''}" aria-hidden="true"></i>
+      </button>`;
+    }).join('');
+    list.querySelectorAll('[data-brand-model]').forEach(b =>
+      b.addEventListener('click', () => this._pickBrandModel(p.name, b.dataset.brandModel)));
+
+    const more = group.querySelector('[data-brand-more]');
+    if (more) {
+      more.hidden = everything || matching.length <= BRAND_MODELS_SHOWN;
+      more.textContent = i18n.t('settings.brandShowAll', { n: matching.length });
+    }
+
+    const note = group.querySelector('[data-brand-note]');
+    if (note) {
+      const keys = {
+        loading: 'settings.brandModelsLoading',
+        not_configured: 'settings.brandModelsNeedKey',
+        missing_api_base: 'settings.brandModelsNeedBase',
+        error: 'settings.brandModelsFailed',
+      };
+      const key = keys[catalog.status];
+      /* Per un errore anche il messaggio del server, quando c'e': qui a un
+         tocco c'e' il pannello dove si ripara (un CA bundle, un indirizzo), e
+         «non e' arrivato» da solo non dice cosa. */
+      let text = key
+        ? i18n.t(key) + (catalog.status === 'error' && catalog.message ? ` ${catalog.message}` : '')
+        : '';
+      if (!text && needle && !matching.length) text = i18n.t('settings.brandFilterEmpty');
+      note.textContent = text;
+      note.hidden = !text;
+    }
+  }
+
+  /** Sceglie chi risponde: modello **e** marca, in una chiamata sola.
+   *
+   *  - **Una scelta alla volta.** Finche' il salvataggio e' in volo le righe
+   *    sono spente: due tocchi di fila facevano due scritture, e le risposte
+   *    potevano lasciare il segno su un modello e far rispondere l'altro.
+   *  - **I dati sono quelli del server.** La rotta restituisce le impostazioni
+   *    intere (`settings_payload`), come per la casa (`_apply` in
+   *    home-model.js): ricostruirle qui a memoria le lasciava indietro su
+   *    tutto cio' che il server cambia insieme.
+   *  - **La conferma arriva anche se sei uscito.** Il toast non appartiene a
+   *    questa pagina; il ridisegno si', e quello si salta.
+   *
+   *  Dopo non si ridisegna la pagina: si ridipinge l'elenco delle marche. Un
+   *  ridisegno intero rifarebbe partire SSH, cron, batteria e skill per
+   *  spostare un segno. */
+  async _pickBrandModel(provider, model) {
+    if (!provider || !model || this._picking) return;
+    if (provider === this.data?.default_provider && model === this.data?.agent?.model) return;
+    const gen = this._gen;
+    this._setBrandsBusy(true);
+    let payload;
+    try {
+      payload = await api.updateSettings({ model, default_provider: provider });
+    } catch (err) {
+      console.warn('settings: model not changed', err);
+      showToast(i18n.t('settings.brandModelFailed'), 'error');
+      return;
+    } finally {
+      this._setBrandsBusy(false);
+    }
+    this.data = payload?.agent ? payload : {
+      ...this.data,
+      default_provider: provider,
+      agent: { ...(this.data?.agent || {}), model },
+    };
+    showToast(i18n.t(payload?.requires_restart
+      ? 'settings.brandModelSavedRestart' : 'settings.brandModelSaved'), 'success');
+    if (!this._stale(gen)) this._repaintBrands();
+  }
+
+  /** Spegne o riaccende le righe dei modelli e il campo dell'id a mano. */
+  _setBrandsBusy(busy) {
+    this._picking = busy;
+    const list = this.contentEl?.querySelector('#provider-list');
+    if (!list) return;
+    list.toggleAttribute('aria-busy', busy);
+    list.querySelectorAll('[data-brand-model], [data-brand-custom-form] button').forEach((b) => {
+      b.disabled = busy;
+    });
+  }
+
+  /** L'id scritto a mano. Se l'elenco della marca non lo ha si chiede prima:
+   *  un errore di battitura diventerebbe il modello attivo, e te ne
+   *  accorgeresti solo dalla risposta successiva che non arriva. */
+  async _pickTypedModel(group, id) {
+    const p = this._groupProvider(group);
+    if (!p || !id) return;
+    const catalog = this._brandCatalogs.get(this._brandCatalogKey(p));
+    const listed = catalog?.status === 'available' && catalog.models.includes(id);
+    if (!listed) {
+      const ok = await confirmDialog(i18n.t('settings.customModelConfirm', { model: id, name: p.name }));
+      if (!ok) return;
+    }
+    await this._pickBrandModel(p.name, id);
+  }
+
+  /** Ridisegna solo l'elenco delle marche, coi loro stati di adesso. */
+  _repaintBrands() {
+    const list = this.contentEl?.querySelector('#provider-list');
+    if (!list) return;
+    list.innerHTML = this._renderProviderListHtml(this.data?.providers || [], this.data?.default_provider);
+    this._wireBrands();
   }
 
   // ── Strumenti ──────────────────────────────────────────────────────
@@ -2708,14 +3059,9 @@ export class SettingsController {
     document.addEventListener('visibilitychange', this._onPowerVisible);
     this._loadPowerDiagnostics();
 
-    /* Ogni marca e' una riga: il tocco apre il suo pannello, dove vivono
-       modifica ed elimina. Nel cassetto quei due bottoni non esistono piu'. */
-    this.contentEl.querySelectorAll('[data-brand-open]').forEach(row => {
-      row.addEventListener('click', () => {
-        window.mobileApp?.drawer?.open('brand');
-        this._openBrand(row.dataset.brandOpen);
-      });
-    });
+    /* Ogni marca e' un gruppo: l'intestazione apre i suoi modelli, il
+       cursore il pannello dove vivono modifica ed elimina. */
+    this._wireBrands();
 
     // Ricerca web → auto-save con debounce (payload completo, come il
     // bottone Salva che sostituisce)

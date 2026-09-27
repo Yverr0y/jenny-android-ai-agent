@@ -30,13 +30,13 @@ there's usually nothing to actively fix: the WebUI retries forever, with a backo
 
 ## Chat looks fine but nothing happens after onboarding
 
-If the app loads, the input works, but sending a message never produces a reply (or immediately errors), the most common cause is a provider problem: go to **Settings → Who answers** and confirm a provider is actually configured with a valid key. Providers are added and removed in the workshop, under **Brain → Brands**.
+If the app loads, the input works, but sending a message never produces a reply (or immediately errors), the most common cause is a provider problem: go to **Settings → Who answers** and confirm a provider is actually configured with a valid key. Providers are added and removed in the workshop, under **Brain → Who thinks**.
 
 Exact errors you might see appended after "Error: " in the chat, and what they mean:
 
 | Error | Meaning |
 |---|---|
-| `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` | Onboarding was interrupted before "Start", or the provider list was later emptied. Add one in the workshop under **Brain → Brands**. |
+| `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` | Onboarding was interrupted before "Start", or the provider list was later emptied. Add one in the workshop under **Brain → Who thinks**. |
 | `Provider '<name>': api_key is required.` | A provider entry exists but its API key field is empty. Edit it in Settings → Who answers and paste the key again. |
 | `401` / Unauthorized | The API key is wrong, expired, or was pasted with extra whitespace. Regenerate it on the provider's dashboard and update it in Settings → Who answers. |
 | `429` / rate limit | You've hit the provider's rate limit. Wait and retry, or switch to a different model in Settings → Who answers. |

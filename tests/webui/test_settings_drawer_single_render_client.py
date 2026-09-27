@@ -38,6 +38,7 @@ class Settings {
   render() { this.renders.push(this._drawer); }
 """
     + member(SRC, "setDrawer")
+    + member(SRC, "_resetBrandVisit")
     + "\n"
     + member(SRC, "loadSettings")
     + """

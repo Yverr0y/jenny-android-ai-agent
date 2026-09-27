@@ -262,26 +262,36 @@ def test_the_encrypted_backup_lives_in_one_place() -> None:
     )
 
 
-def test_choosing_the_model_lives_in_the_home() -> None:
-    """Il catalogo — «Cambia modello», l'elenco per provider, il filtro — e' in
-    casa, da «Chi risponde», dove un tocco salva `model` e `default_provider`
-    insieme. In officina resta l'anagrafica: formato, endpoint, CA bundle.
+def test_choosing_the_model_saves_model_and_brand_together() -> None:
+    """Il modello si sceglie in due posti: in casa, da «Chi risponde», e dal
+    27/09/2026 in officina, da «Chi pensa», dove ogni marca tiene i suoi
+    modelli. Il 20/09 il catalogo era andato tutto in casa; l'officina era
+    rimasta con indirizzo e chiave, e dopo una Modifica non c'era modo di
+    sapere, da li', se la marca rispondeva.
 
-    In una riga: in casa scegli fra quel che c'e', in officina decidi cosa
-    c'e'. Sono due verbi diversi sullo stesso oggetto — ma un catalogo di qua
-    sarebbe la copia, non il secondo verbo.
+    Due posti vanno bene finche' fanno la stessa scrittura: un tocco salva
+    `model` e `default_provider` **in una chiamata sola**. Due chiamate
+    lascerebbero per un attimo un modello di una marca attivo con un'altra
+    come provider — una config che non risponde. L'anagrafica invece resta
+    **solo** in officina: la casa sostituisce una chiave, non compila un
+    endpoint.
     """
     workshop = _src("mobile-settings.js")
-    for piece in ("model-catalog", "btn-change-model", "_loadModelCatalog", "_selectModel"):
-        assert piece not in workshop, f"«{piece}» e' tornato in officina"
+    pick = re.search(r"(?s)\n  async _pickBrandModel\(.*?\n  \}\n", workshop)
+    assert pick, "l'officina non sceglie piu' il modello da «Chi pensa»"
+    assert "api.updateSettings({ model, default_provider: provider })" in pick.group(0), (
+        "l'officina non salva piu' modello e marca insieme"
+    )
+    assert pick.group(0).count("api.updateSettings(") == 1, (
+        "modello e marca in due chiamate: fra l'una e l'altra la config non risponde"
+    )
+    assert "getProviderModels" in workshop, "i gruppi di «Chi pensa» non chiedono l'elenco"
 
     home = _home("home-model.js")
     assert "getProviderModels" in home, "la casa non chiede piu' l'elenco dei modelli"
     assert "default_provider: provider" in home, (
         "la casa non salva piu' modello e marca insieme: e' il punto del redesign"
     )
-    # E l'anagrafica resta **solo** di qua: la casa sostituisce una chiave, non
-    # compila un endpoint.
     for field in ("dlg-api-base", "dlg-ca-bundle", "dlg-provider-format"):
         assert field in workshop, f"l'anagrafica ha perso {field}"
         assert field not in home, f"la casa ha preso {field}: quello ha bisogno di un paragrafo"

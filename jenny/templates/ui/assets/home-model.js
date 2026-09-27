@@ -13,7 +13,7 @@
  *  **Toccare una mattonella non cambia chi risponde**, mostra i suoi modelli.
  *  Il cambio e' il tocco su un modello, e salva le due cose **insieme** —
  *  `model` e `default_provider` in una chiamata sola. E' il punto del
- *  redesign dell'officina (v. `_selectModel` in `mobile-settings.js`) e vale
+ *  redesign dell'officina (v. `_pickBrandModel` in `mobile-settings.js`) e vale
  *  anche qui: un modello di OpenAI attivato con Anthropic come provider e'
  *  una config che non risponde, e per un attimo esisterebbe davvero.
  *

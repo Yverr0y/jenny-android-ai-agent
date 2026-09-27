@@ -94,7 +94,7 @@ If you've used Jenny before and have an encrypted `.jbk` backup file, tap **Rest
 
 ## Things to know that aren't obvious
 
-- **Onboarding replaces the entire provider list.** If you ever run through the Setup wizard again on a device that already had providers configured (this shouldn't normally happen after first run, but can matter if you're scripting or debugging), it discards the old provider list and keeps only the one you just entered. Add further providers afterward from the workshop's **Brain → Brands → Add provider**.
+- **Onboarding replaces the entire provider list.** If you ever run through the Setup wizard again on a device that already had providers configured (this shouldn't normally happen after first run, but can matter if you're scripting or debugging), it discards the old provider list and keeps only the one you just entered. Add further providers afterward from the workshop's **Brain → Who thinks → Add provider**.
 - **Model-fetch error messages come from the backend in English**, regardless of which UI language you're using — for example "The provider rejected the configured credential." or "Configure an API base URL to load models." They aren't translated.
 - **An empty model list is not an error.** If the provider's `/models` endpoint returns zero models (wrong key, wrong base URL, or the provider just doesn't have any), the backend still responds with HTTP 200 and an explanatory message; the wizard shows that message instead of an error banner, and reveals the manual model-ID field.
 

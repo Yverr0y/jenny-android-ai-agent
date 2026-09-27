@@ -50,6 +50,7 @@ class Fake {{
   }}
 {_accessors()}
 {member(_SOURCE, "setDrawer")}
+{member(_SOURCE, "_resetBrandVisit")}
 {member(_SOURCE, "_restoreScrollTop")}
 }}
 
@@ -118,6 +119,7 @@ class Fake {{
   }}
 {_accessors()}
 {member(_SOURCE, "setDrawer")}
+{member(_SOURCE, "_resetBrandVisit")}
 {member(_SOURCE, "_restoreScrollTop")}
 }}
 

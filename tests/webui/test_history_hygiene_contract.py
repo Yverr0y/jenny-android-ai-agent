@@ -343,28 +343,37 @@ def test_the_settings_scroll_restore_does_not_destroy_what_it_restores() -> None
         )
 
 
-def test_the_model_catalog_moved_to_the_home_with_its_promise() -> None:
-    """Il catalogo modelli non e' piu' in officina: e' in casa, da «Chi
-    risponde», dal 20/09/2026.
+def test_the_model_catalog_lives_in_the_controller_on_both_sides() -> None:
+    """Il catalogo modelli e' in casa, da «Chi risponde», e dal 27/09/2026 anche
+    in officina, nei gruppi di «Chi pensa».
 
     Questo banco difendeva lo stato «aperto + filtro» attraverso il
     ridisegno, perche' scegliere un modello *e'* un salvataggio e il
-    salvataggio ridisegna. In casa quel problema non si pone nella stessa
-    forma — i cataloghi gia' chiesti vivono nel controller e non nel DOM — ma
-    la promessa va tenuta da qualche parte, ed e' qui che si dice dov'e'
-    andata: `test_home_model_client.py`, «il catalogo si chiede una volta per
-    provider» e «un catalogo in ritardo non dipinge sopra quello che stai
-    leggendo».
+    salvataggio ridisegna. Il catalogo di allora teneva quello stato nel DOM
+    che `render()` riscrive. Adesso vive nel controller — `_catalogs` in casa;
+    in officina `_brandCatalogs` per gli elenchi, `_brandsOpen`,
+    `_modelOrder`, `_brandFilters` e `_brandShowAll` per la visita — e una
+    scelta in officina non ridisegna la pagina: ridipinge solo le marche
+    (`_repaintBrands`). Le promesse di casa sono in `test_home_model_client.py`;
+    quelle dell'officina in `test_workshop_who_thinks_client.py`.
 
-    Quel che si misura adesso e' il confine: l'officina non deve riprenderselo.
+    Quel che si misura qui: la vecchia sotto-schermata non torna, e lo stato
+    resta in memoria.
     """
     settings = SETTINGS_JS.read_text(encoding="utf-8")
     for piece in ("model-catalog", "btn-change-model", "_loadModelCatalog", "_selectModel"):
         assert piece not in settings, (
-            f"«{piece}» e' tornato in officina: la scelta del modello e' in casa"
+            f"«{piece}» e' tornato in officina: era la sotto-schermata che il "
+            "ridisegno buttava via"
         )
+    assert "this._brandCatalogs = new Map()" in settings, (
+        "l'officina non tiene piu' gli elenchi nel controller: ogni salvataggio "
+        "li richiederebbe"
+    )
+    for field in ("this._modelOrder = new Map()", "this._brandFilters = new Map()",
+                  "this._brandShowAll = new Set()"):
+        assert field in settings, f"lo stato della visita non e' piu' nel controller: {field}"
     home = (SETTINGS_JS.parent / "home-model.js").read_text(encoding="utf-8")
     assert "getProviderModels" in home and "default_provider" in home, (
-        "la casa non ha piu' il catalogo: toglierlo dall'officina lo toglierebbe "
-        "dall'app"
+        "la casa non ha piu' il catalogo"
     )

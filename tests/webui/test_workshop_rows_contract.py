@@ -119,7 +119,7 @@ def test_the_shared_flow_still_uses_the_stack() -> None:
 
 @pytest.mark.parametrize(
     "selector",
-    (".model-inuse-name", ".provider-name"),
+    (".brand-model-id", ".provider-name"),
 )
 def test_machine_values_are_in_monospace(selector: str) -> None:
     """Un nome di modello, un endpoint e una chiave sono identificatori.
