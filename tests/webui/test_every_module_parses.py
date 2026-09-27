@@ -25,6 +25,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from support.js_harness import NODE, requires_node
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -112,9 +113,13 @@ def test_node_check_would_not_have_caught_it() -> None:
 
     `node --check` era il controllo che usavo, ed e' quello che mi ha lasciato
     spedire. Qui si misura la sua bugia invece di ricordarsela: sullo stesso
-    file rotto esce **zero**. Se un giorno node cambiasse e cominciasse a
-    vederlo, questo banco fallisce — ed e' il momento giusto per semplificare
-    il controllo qui sopra.
+    file rotto esce **zero**.
+
+    Dipende dalla versione di node, ed e' misurato: la 26.0 lo lascia passare,
+    la 24.21 della CI lo vede. Quindi `node --check` non puo' sostituire il
+    parser qui sopra finche' una versione che si usa lo lascia passare. Dove
+    lo vede il banco si salta dicendolo, invece di fallire: il controllo che
+    conta e' ``test_the_check_catches_the_one_that_shipped``, e resta obbligatorio.
     """
     fake = Path("/tmp/jenny-parse-rotto2.js")
     fake.write_text(
@@ -126,9 +131,13 @@ def test_node_check_would_not_have_caught_it() -> None:
         proc = subprocess.run(
             [str(NODE), "--check", str(fake)], capture_output=True, text=True, timeout=60,
         )
-        assert proc.returncode == 0, (
-            "node --check adesso lo vede: il parser di questo banco si puo' "
-            "sostituire con `node --check`, che e' piu' semplice"
-        )
+        if proc.returncode != 0:
+            version = subprocess.run(
+                [str(NODE), "--version"], capture_output=True, text=True, timeout=60,
+            ).stdout.strip()
+            pytest.skip(
+                f"node {version} --check vede il file rotto; altre versioni no "
+                "(la 26.0 esce zero): il parser del banco resta"
+            )
     finally:
         fake.unlink(missing_ok=True)
