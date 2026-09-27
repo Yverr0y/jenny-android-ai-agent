@@ -15,7 +15,7 @@
         android:id="@+id/loading_view"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="#12121a"
+        android:background="#111013"
         android:visibility="visible"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -34,15 +34,16 @@
                 style="@android:style/Widget.DeviceDefault.ProgressBar.Large"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:indeterminateTint="#6c63ff" />
+                android:indeterminateTint="#f92aad" />
 
             <TextView
+                android:id="@+id/loading_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="28dp"
                 android:fontFamily="sans-serif-medium"
                 android:text="Jenny"
-                android:textColor="#e8e8ed"
+                android:textColor="#f2ecff"
                 android:textSize="20sp" />
 
             <TextView
@@ -51,7 +52,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="Loading..."
-                android:textColor="#8e8ea0"
+                android:textColor="#8af2ecff"
                 android:textSize="14sp" />
 
         </LinearLayout>
@@ -62,7 +63,7 @@
         android:id="@+id/error_view"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="#12121a"
+        android:background="#111013"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -77,28 +78,31 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/error_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="⚠"
-                android:textColor="#e8e8ed"
+                android:textColor="#f2ecff"
                 android:textSize="40sp" />
 
             <TextView
+                android:id="@+id/error_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
                 android:fontFamily="sans-serif-medium"
                 android:text="Connection failed"
-                android:textColor="#e8e8ed"
+                android:textColor="#f2ecff"
                 android:textSize="18sp" />
 
             <TextView
+                android:id="@+id/error_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:gravity="center"
                 android:text="Could not connect to the\ngateway server."
-                android:textColor="#8e8ea0"
+                android:textColor="#8af2ecff"
                 android:textSize="14sp" />
 
             <Button
@@ -106,11 +110,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="48dp"
                 android:layout_marginTop="28dp"
-                android:backgroundTint="#6c63ff"
+                android:backgroundTint="#f92aad"
                 android:paddingHorizontal="32dp"
                 android:text="Retry"
                 android:textAllCaps="false"
-                android:textColor="#ffffff"
+                android:textColor="#0a090b"
                 android:textSize="15sp" />
 
         </LinearLayout>

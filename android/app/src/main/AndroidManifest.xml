@@ -143,8 +143,9 @@
              assorbita qui sopra ricreava comunque.
 
              Assorbirli senza ricreare è sicuro **perché nulla di nativo dipende
-             da quelle risorse**: `Theme.Jenny` è `Theme.AppCompat.Light.NoActionBar`, non
-             DayNight, quindi `uiMode` non cambia nessun colore; i temi della
+             da quelle risorse**: `Theme.Jenny` discende da `Theme.AppCompat.Light.NoActionBar`, non
+             DayNight, quindi `uiMode` non cambia nessun colore (nemmeno gli
+             splash per tema di values-v31, che dipendono dal tema della WebUI); i temi della
              WebUI sono CSS puro (`data-theme` + `setThemeBars`) e non usano
              `prefers-color-scheme`; `activity_main.xml` scrive le sue sei
              stringhe in chiaro e non referenzia nessun `@string`, quindi

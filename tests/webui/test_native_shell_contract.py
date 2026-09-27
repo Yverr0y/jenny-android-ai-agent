@@ -29,7 +29,6 @@ MANIFEST = ANDROID / "AndroidManifest.xml"
 MAIN_ACTIVITY = JAVA / "MainActivity.kt"
 NOTIFIER = JAVA / "NotifierBridge.kt"
 LAYOUT = ANDROID / "res" / "layout" / "activity_main.xml"
-THEMES = ANDROID / "res" / "values" / "themes.xml"
 UI_ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 
 
@@ -159,8 +158,9 @@ def test_absorbing_uimode_is_safe_because_nothing_native_follows_it() -> None:
     l'app resterebbe coi colori vecchi fino al riavvio — e nessuno collegherebbe
     la cosa a questa riga di manifest.
     """
-    themes = THEMES.read_text(encoding="utf-8")
-    assert "DayNight" not in themes
+    # Anche values-v31/, dove stanno gli splash per tema.
+    for themes in sorted((ANDROID / "res").glob("values*/themes.xml")):
+        assert "DayNight" not in themes.read_text(encoding="utf-8"), themes
     non_vendor_css = [
         path
         for path in UI_ASSETS.rglob("*.css")

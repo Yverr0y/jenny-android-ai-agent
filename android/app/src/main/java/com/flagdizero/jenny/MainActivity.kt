@@ -12,8 +12,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -35,12 +38,16 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -78,6 +85,36 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_RETRIES = 30
         private const val PREFS_NAME = "jenny"
         private const val PREF_BOOT_TO_CHAT = "boot_to_chat"
+        // L'ultimo tema scelto nella WebUI, come colori già risolti: v.
+        // applyBootPalette. Li scrivono setThemeBars e setFloatingPalette.
+        private const val PREF_BOOT_BG = "boot_bg"
+        private const val PREF_BOOT_LIGHT = "boot_light"
+        private const val PREF_BOOT_TEXT = "boot_text"
+        private const val PREF_BOOT_ACCENT = "boot_accent"
+        private const val PREF_BOOT_ON_ACCENT = "boot_on_accent"
+        // Il ripiego quando nessun tema è ancora arrivato (primo avvio, o
+        // workspace appena ripristinato): i token di `synthwave`, il tema di
+        // default, gli stessi di themes.xml e di activity_main.xml.
+        private const val DEFAULT_BG = 0xFF111013.toInt()        // --bg
+        private const val DEFAULT_TEXT = 0xFFF2ECFF.toInt()      // --text
+        private const val DEFAULT_ACCENT = 0xFFF92AAD.toInt()    // --accent
+        private const val DEFAULT_ON_ACCENT = 0xFF0A090B.toInt() // --on-accent
+        // Alfa dei testi secondari, sul colore del testo: 0.54. I temi hanno
+        // ciascuno il suo --text-muted, ma il nativo riceve solo il testo, e
+        // per due righe sotto lo spinner un'alfa basta.
+        private const val BOOT_MUTED_ALPHA = 0x8A
+        // Gli splash dei sette temi (values-v31/themes.xml). Il colore di
+        // ciascuno si legge dallo stile stesso, quindi qui non se ne ripete
+        // nessuno: v. syncSplashTheme.
+        private val SPLASH_THEMES = intArrayOf(
+            R.style.Theme_Jenny_Splash_Chanel,
+            R.style.Theme_Jenny_Splash_Synthwave,
+            R.style.Theme_Jenny_Splash_Kyoto,
+            R.style.Theme_Jenny_Splash_Sticker,
+            R.style.Theme_Jenny_Splash_Comic,
+            R.style.Theme_Jenny_Splash_Y2k,
+            R.style.Theme_Jenny_Splash_Stone,
+        )
         // Ultima Build.FINGERPRINT vista: cambia solo con un aggiornamento di
         // sistema, che su Samsung e Xiaomi rimette l'app fra quelle ottimizzate.
         private const val PREF_LAST_FINGERPRINT = "last_build_fingerprint"
@@ -236,6 +273,9 @@ class MainActivity : AppCompatActivity() {
     // Il callback del tasto Indietro. Abilitato solo mentre la SPA è a schermo:
     // v. onCreate, onPageFinished, showLoading e showError.
     private var backCallback: OnBackPressedCallback? = null
+    // L'ultimo splash chiesto al sistema da questa activity (v. syncSplashTheme),
+    // per non ripetere la chiamata a ogni setThemeBars. 0 = nessuno ancora.
+    private var requestedSplashTheme = 0
     // Il tap su una notifica proattiva chiede la chat. Se l'activity era morta
     // la richiesta non passa da onNewIntent ma da onCreate, e allora deve
     // arrivare fino all'URL iniziale: la legge buildGatewayUrl(), che gira sul
@@ -513,7 +553,7 @@ class MainActivity : AppCompatActivity() {
         errorView = findViewById(R.id.error_view)
         webView = findViewById(R.id.webview)
 
-        setupSystemBars()
+        applyBootPalette()
 
         findViewById<Button>(R.id.retry_button).setOnClickListener {
             retryCount = 0
@@ -600,14 +640,89 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Barre di sistema. Il contenuto rientra già da sé (il decor di AppCompat
-     * consuma l'inset della status bar: la WebView parte sotto), quindi qui non
-     * si tocca il layout — si allinea solo il *colore*. All'avvio valgono i
-     * colori del tema Android (themes.xml); appena la SPA è pronta li riallinea
-     * al tema attivo della WebUI via NativeCommands.setThemeBars.
+     * Veste finestra, barre di sistema, loading view ed error view con
+     * l'ultimo tema scelto nella WebUI.
+     *
+     * Il guscio nativo i temi non li conosce: i colori glieli spinge la SPA
+     * (setThemeBars, setFloatingPalette), che li calcola dal CSS, e qui si
+     * ricordano per il lancio successivo. Senza, la schermata di caricamento
+     * aveva una palette sua — un nero bluastro con lo spinner violetto — che
+     * non era nessuno dei sette temi. Con un tema chiaro il caricamento è
+     * chiaro anch'esso.
+     *
+     * Il contenuto rientra già da sé (il decor di AppCompat consuma l'inset
+     * della status bar: la WebView parte sotto), quindi qui non si tocca il
+     * layout — solo il *colore*. Resta fuori la starting window, i pochi
+     * istanti prima di onCreate: quella legge themes.xml e basta.
+     *
+     * **Solo dal thread UI.**
      */
-    private fun setupSystemBars() {
-        applyBarAppearance(light = false)
+    private fun applyBootPalette() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val bg = prefs.getInt(PREF_BOOT_BG, DEFAULT_BG)
+        val text = prefs.getInt(PREF_BOOT_TEXT, DEFAULT_TEXT)
+        val accent = prefs.getInt(PREF_BOOT_ACCENT, DEFAULT_ACCENT)
+        val onAccent = prefs.getInt(PREF_BOOT_ON_ACCENT, DEFAULT_ON_ACCENT)
+        val muted = ColorUtils.setAlphaComponent(text, BOOT_MUTED_ALPHA)
+
+        window.setBackgroundDrawable(ColorDrawable(bg))
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        applyBarAppearance(prefs.getBoolean(PREF_BOOT_LIGHT, false))
+
+        loadingView?.setBackgroundColor(bg)
+        errorView?.setBackgroundColor(bg)
+        findViewById<ProgressBar>(R.id.loading_spinner)?.indeterminateTintList =
+            ColorStateList.valueOf(accent)
+        for (id in intArrayOf(R.id.loading_title, R.id.error_icon, R.id.error_title)) {
+            findViewById<TextView>(id)?.setTextColor(text)
+        }
+        for (id in intArrayOf(R.id.loading_text, R.id.error_text)) {
+            findViewById<TextView>(id)?.setTextColor(muted)
+        }
+        findViewById<Button>(R.id.retry_button)?.apply {
+            backgroundTintList = ColorStateList.valueOf(accent)
+            setTextColor(onAccent)
+        }
+    }
+
+    /**
+     * Sceglie lo splash di sistema del **prossimo** lancio: quello dei sette
+     * (SPLASH_THEMES) il cui sfondo è [bg], il `--bg` del tema attivo.
+     *
+     * Lo splash parte prima di qualunque codice dell'app, quindi non può
+     * leggere i colori salvati come fa applyBootPalette: legge solo uno stile.
+     * Da Android 13 `setSplashScreenTheme` permette di cambiarlo, e il sistema
+     * lo ricorda fra un lancio e l'altro. Su Android 12 resta lo sfondo fisso
+     * di `Theme.Jenny`, cioè il tema di default; sotto il 12 lo splash non c'è.
+     *
+     * Si confronta il colore e non l'id del tema perché il nativo l'id non lo
+     * riceve. Nessuna corrispondenza — un `--bg` cambiato nel CSS senza
+     * toccare l'XML, che un test impedisce — torna allo splash di default.
+     */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun syncSplashTheme(bg: Int) {
+        val match = SPLASH_THEMES.firstOrNull { splashBackground(it) == bg }
+        if (match == null) {
+            Log.w(TAG, "No splash theme matches the WebUI background, using the default one")
+        }
+        val wanted = match ?: Resources.ID_NULL
+        if (wanted == requestedSplashTheme) return
+        splashScreen.setSplashScreenTheme(wanted)
+        requestedSplashTheme = wanted
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun splashBackground(style: Int): Int {
+        val attrs = theme.obtainStyledAttributes(
+            style,
+            intArrayOf(android.R.attr.windowSplashScreenBackground),
+        )
+        return try {
+            attrs.getColor(0, 0)
+        } finally {
+            attrs.recycle()
+        }
     }
 
     private fun applyBarAppearance(light: Boolean) {
@@ -1534,6 +1649,22 @@ class MainActivity : AppCompatActivity() {
             onAccent: String,
         ) {
             FloatingOverlayController.setPalette(surface, border, text, hint, accent, onAccent)
+            // Testo e accento servono anche alla schermata d'avvio (v.
+            // applyBootPalette). Un valore illeggibile lascia quello di prima.
+            val edit = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            for ((key, value) in listOf(
+                PREF_BOOT_TEXT to text,
+                PREF_BOOT_ACCENT to accent,
+                PREF_BOOT_ON_ACCENT to onAccent,
+            )) {
+                try {
+                    edit.putInt(key, Color.parseColor(value.trim()))
+                } catch (e: IllegalArgumentException) {
+                    Log.w(TAG, "setFloatingPalette: unparseable boot color for $key")
+                }
+            }
+            edit.apply()
+            runOnUiThread { applyBootPalette() }
         }
 
         /**
@@ -1558,6 +1689,10 @@ class MainActivity : AppCompatActivity() {
          * decide il colore delle icone — su un tema chiaro quelle bianche di
          * default sparirebbero. Senza questo la status bar resta del colore
          * fisso di themes.xml, che stona con 6 temi su 7.
+         *
+         * I due valori si ricordano: al prossimo lancio vestono la schermata
+         * d'avvio (v. applyBootPalette), che è anche chi li applica qui, e lo
+         * sfondo sceglie lo splash di sistema (v. syncSplashTheme).
          */
         fun setThemeBars(background: String, scheme: String) {
             val color = try {
@@ -1566,11 +1701,15 @@ class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "setThemeBars: unparseable color, bars left as they are")
                 return
             }
-            val light = scheme == "light"
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .putInt(PREF_BOOT_BG, color)
+                .putBoolean(PREF_BOOT_LIGHT, scheme == "light")
+                .apply()
             runOnUiThread {
-                window.statusBarColor = color
-                window.navigationBarColor = color
-                applyBarAppearance(light)
+                applyBootPalette()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    syncSplashTheme(color)
+                }
             }
         }
 
