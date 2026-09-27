@@ -18,7 +18,7 @@ export const AppState = {
   currentMode: 'chat',
 
   // Theme (the boot script in index.html migrates legacy values first)
-  theme: savedTheme() || 'chanel',
+  theme: savedTheme() || 'synthwave',
 
   // Se il prossimo messaggio parte in sola lettura. Lo scrive soltanto
   // `write-switch.js`; lo leggono il placeholder del composer e `ws-manager`,

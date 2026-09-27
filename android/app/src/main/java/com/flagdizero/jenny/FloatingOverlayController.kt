@@ -418,20 +418,21 @@ object FloatingOverlayController {
     )
 
     /**
-     * Il ripiego: `chanel`, cioè il tema di default della WebUI.
+     * Il ripiego: `synthwave`, cioè il tema di default della WebUI
+     * (`DEFAULT_THEME` in `shared/theme.js`).
      *
      * Non sono i colori «di prima» ritoccati a mano — sono esattamente i token
      * che la SPA spingerebbe con quel tema (`mobile-style.css`, blocco
-     * `:root`), quindi non esiste un montaggio in cui la finestra si veda
-     * diversa da come si vedrà un istante dopo.
+     * `[data-theme="synthwave"]`), quindi non esiste un montaggio in cui la
+     * finestra si veda diversa da come si vedrà un istante dopo.
      */
-    private val CHANEL = Palette(
-        surface = 0xFF1E1E1E.toInt(),   // --surface
-        border = 0x47F4F1EA,            // --border-strong: rgba(244,241,234,.28)
-        text = 0xFFF4F1EA.toInt(),      // --text
-        hint = 0x52F4F1EA,              // --text-faint: rgba(244,241,234,.32)
-        accent = 0xFFF4F1EA.toInt(),    // --accent
-        onAccent = 0xFF141414.toInt(),  // --on-accent
+    private val DEFAULT_PALETTE = Palette(
+        surface = 0xFF1A181D.toInt(),   // --surface
+        border = 0xFF3A3641.toInt(),    // --border-strong
+        text = 0xFFF2ECFF.toInt(),      // --text
+        hint = 0xFF6E6875.toInt(),      // --text-faint
+        accent = 0xFFF92AAD.toInt(),    // --accent
+        onAccent = 0xFF0A090B.toInt(),  // --on-accent
     )
 
     private val main = Handler(Looper.getMainLooper())
@@ -535,7 +536,7 @@ object FloatingOverlayController {
      *  ragione: la finestra vive nel processo del service e può comparire
      *  prima che la SPA abbia caricato. */
     @Volatile
-    private var palette = CHANEL
+    private var palette = DEFAULT_PALETTE
     /** Il riquadro della mascotte (corpo + faccia). Si chiama così da quando
      *  il fumetto ha smesso di stargli sopra in colonna. */
     private var column: FrameLayout? = null
@@ -738,7 +739,7 @@ object FloatingOverlayController {
      * `Color.parseColor` quella forma non la legge — solleva e basta.
      *
      * Un valore illeggibile non porta giù gli altri cinque: al suo posto resta
-     * quello di [CHANEL], che è anche il ripiego dell'intera palette.
+     * quello di [DEFAULT_PALETTE], che è anche il ripiego dell'intera palette.
      *
      * Si può chiamare da qualunque thread e a finestra non montata: il valore
      * si ricorda e vale al prossimo montaggio.
@@ -752,12 +753,12 @@ object FloatingOverlayController {
         onAccent: String,
     ) {
         val wanted = Palette(
-            surface = color(surface, CHANEL.surface),
-            border = color(border, CHANEL.border),
-            text = color(text, CHANEL.text),
-            hint = color(hint, CHANEL.hint),
-            accent = color(accent, CHANEL.accent),
-            onAccent = color(onAccent, CHANEL.onAccent),
+            surface = color(surface, DEFAULT_PALETTE.surface),
+            border = color(border, DEFAULT_PALETTE.border),
+            text = color(text, DEFAULT_PALETTE.text),
+            hint = color(hint, DEFAULT_PALETTE.hint),
+            accent = color(accent, DEFAULT_PALETTE.accent),
+            onAccent = color(onAccent, DEFAULT_PALETTE.onAccent),
         )
         main.post {
             if (wanted == palette) return@post

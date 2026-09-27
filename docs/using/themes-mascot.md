@@ -10,22 +10,22 @@ There are seven named themes:
 
 | Theme | Scheme | Feel |
 |---|---|---|
-| Chanel | Dark (default) | Black and white couture, a thread of gold only where it counts |
-| Synthwave '84 | Dark | Neon pink on violet night |
+| Chanel | Dark | Black and white couture, a thread of gold only where it counts |
+| Synthwave '84 | Dark (default) | Neon pink on near-black |
 | Jenny Kyoto | Dark | Earth, rust, hand-rounded edges |
 | Jenny Sticker | Dark | Cut-out sticker look, white borders, hard shadows |
 | Jenny Fumetto | Light | Ink on paper, comic-panel replies |
 | Jenny Y2K | Light | Glossy gradients, bubblegum gloss |
 | Jenny Pietra | Light | Travertine, bronze, Roman serifs |
 
-Chanel is what a fresh install starts with. Whichever theme you pick, the app applies it before the very first paint on later launches, so there's no flash of the wrong colors.
+Synthwave '84 is what a fresh install starts with. Whichever theme you pick, the app applies it before the very first paint on later launches, so there's no flash of the wrong colors.
 
 On Android, the status bar and navigation bar follow your theme automatically — their background color and icon color (light or dark) are kept in sync with whichever theme is active, so a light theme like Jenny Pietra gets dark system-bar icons and a dark theme like Synthwave '84 gets light ones. This only happens inside the Jenny app itself; if you ever open the WebUI in a regular desktop or mobile browser instead of the Android app, the system bars obviously stay whatever your browser or OS already uses.
 
 Your theme choice lives in the WebView's local storage on this specific device, not in `config.json`. That has two consequences worth knowing up front:
 
 - It does **not** travel with an [encrypted backup](backup.md) — a `.jbk` file restores your conversations, memory, and settings, but not which theme card you last tapped.
-- Reinstalling the app, or clearing the app's storage, resets the theme back to Chanel. This is expected, not a bug.
+- Reinstalling the app, or clearing the app's storage, resets the theme back to Synthwave '84. This is expected, not a bug.
 
 ## Mascot
 

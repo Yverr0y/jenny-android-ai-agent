@@ -15,7 +15,8 @@ tenere allineati. Qui si prova il giro intero, che nessun compilatore vede:
   e tre temi su sette scrivono così i bordi;
 * i tre anelli del ponte: la chiamata in ``shared/theme.js``, il metodo
   ``@JavascriptInterface`` che la riceve, il metodo del controller che la applica;
-* il ripiego del Kotlin, che dev'essere `chanel` e non una palette inventata.
+* il ripiego del Kotlin, che dev'essere il tema di default e non una palette
+  inventata.
 """
 
 from __future__ import annotations
@@ -155,23 +156,32 @@ class TestTheBridge:
 
     def test_the_kotlin_fallback_is_the_default_theme(self):
         """Il ripiego serve al primo montaggio, prima che la SPA abbia caricato.
-        Dev'essere `chanel` **preso dal CSS**, non una palette scelta lì: se
-        diverge, la finestra si vede in un modo e un istante dopo in un altro.
+        Dev'essere il tema di default (``DEFAULT_THEME``) **preso dal CSS**, non
+        una palette scelta lì: se diverge, la finestra si vede in un modo e un
+        istante dopo in un altro. Il blocco del tema vince su ``:root``, come nel
+        CSS.
         """
         controller = read_source(ANDROID / "FloatingOverlayController.kt")
-        block = re.search(r"private val CHANEL = Palette\((.*?)\n    \)", controller, re.S)
+        block = re.search(r"private val DEFAULT_PALETTE = Palette\((.*?)\n    \)", controller, re.S)
         assert block, "la palette di riserva non è più leggibile"
         kotlin = dict(re.findall(r"(\w+) = 0x([0-9A-Fa-f]{8})", block.group(1)))
 
-        root = re.search(r":root \{(.*?)\n\}", SPA_CSS.read_text(encoding="utf-8"), re.S)
-        assert root
-        css = dict(re.findall(r"^\s*(--[\w-]+):\s*([^;]+);", root.group(1), re.M))
+        spa_css = SPA_CSS.read_text(encoding="utf-8")
+        default = re.search(
+            r"DEFAULT_THEME = '([a-z0-9]+)'", (ASSETS / "shared" / "theme.js").read_text()
+        )
+        assert default
+        css = {}
+        for selector in (":root", f'[data-theme="{default.group(1)}"]'):
+            block_css = re.search(re.escape(selector) + r" \{(.*?)\n\}", spa_css, re.S)
+            assert block_css, selector
+            css.update(re.findall(r"^\s*(--[\w-]+):\s*([^;]+);", block_css.group(1), re.M))
 
         for field, token in zip(
             ["surface", "border", "text", "hint", "accent", "onAccent"], TOKENS
         ):
             assert kotlin[field].lower() == _argb(css[token].strip()), (
-                f"{field} del ripiego non è più {token} di :root ({css[token].strip()})"
+                f"{field} del ripiego non è più {token} del tema di default ({css[token].strip()})"
             )
 
 

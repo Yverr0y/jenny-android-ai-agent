@@ -2,7 +2,11 @@
 
 /* ── Theme Variables ── */
 :root {
-  /* ── Chanel (default theme) ── */
+  /* ── Chanel ──
+     I valori di `:root` sono quelli di Chanel, e fanno da base che ogni tema
+     eredita. Il tema di default non e' questo ma `DEFAULT_THEME` in
+     shared/theme.js (`synthwave`), che bootstrap.js mette su <html> prima del
+     primo paint. */
   color-scheme: dark;
   --bg:            #141414;
   --surface:       #1e1e1e;
@@ -103,22 +107,22 @@
 [data-theme="synthwave"] {
   color-scheme: dark;
   --font-display:  'Orbitron', var(--font-sans);
-  --bg:            #241b2f;
-  --surface:       #2a2139;
-  --surface-2:     #1d1526;
+  --bg:            #111013;
+  --surface:       #1a181d;
+  --surface-2:     #0a090b;
   --overlay:       rgba(255, 255, 255, 0.04);
   --overlay-strong: rgba(255, 255, 255, 0.07);
-  --border:        #3b2e52;
-  --border-strong: #4d3d6b;
+  --border:        #2a2730;
+  --border-strong: #3a3641;
   --text:          #f2ecff;
-  --text-muted:    #9097c8;
-  --text-faint:    #6a6798;
+  --text-muted:    #a39daa;
+  --text-faint:    #6e6875;
   --heading:       #ffffff;
   --accent:        #f92aad;
   --accent-rgb:    249, 42, 173;
   --accent-hover:  #ff5ec4;
   --text-accent:   #fa3eb5;
-  --on-accent:     #1d1526;
+  --on-accent:     #0a090b;
   --ok:            #72f1b8;
   --ok-rgb:        114, 241, 184;
   --error:         #fe4c57;

@@ -18,8 +18,8 @@ export const THEMES = [
     reply: 'Il lusso non alza mai la voce.' },
   { id: 'synthwave', label: "Synthwave '84", scheme: 'dark',
     accent: '#f92aad', onAccent: '#ffffff',
-    swatch: ['#241b2f', '#f92aad', '#03edf9'],
-    desc: 'Neon rosa su notte viola, ogni luce lascia la scia.',
+    swatch: ['#111013', '#f92aad', '#03edf9'],
+    desc: 'Neon rosa sul nero, ogni luce lascia la scia.',
     reply: 'Massimo carattere — per chi non ha paura.' },
   { id: 'kyoto',     label: 'Jenny Kyoto',   scheme: 'dark',
     accent: '#b2543f', onAccent: '#f5efe4',
@@ -48,7 +48,7 @@ export const THEMES = [
     reply: "Solida come un'idea scolpita bene." },
 ];
 
-export const DEFAULT_THEME = 'chanel';
+export const DEFAULT_THEME = 'synthwave';
 
 /** Ponte dei token verso le mini-app (iframe a origine opaca).
  *

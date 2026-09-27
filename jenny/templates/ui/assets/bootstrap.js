@@ -18,9 +18,12 @@
   // Come MIGRATION in shared/theme.js: i modi di una volta e gli id italiani
   // dei temi fino al 25/09/2026.
   var MIGRATION = { dark: 'chanel', light: 'stone', match: 'chanel', fumetto: 'comic', pietra: 'stone' };
-  var t = read('tc-theme') || 'chanel';
+  // Il default e' DEFAULT_THEME di shared/theme.js (qui non si importa: lo
+  // script e' classico e deve girare prima di tutto il resto). Dal 27/09/2026
+  // e' `synthwave`; chi aveva gia' un `tc-theme` salvato lo tiene.
+  var t = read('tc-theme') || 'synthwave';
   t = MIGRATION[t] || t;
-  if (THEMES.indexOf(t) === -1) t = 'chanel';
+  if (THEMES.indexOf(t) === -1) t = 'synthwave';
   write('tc-theme', t);
   document.documentElement.setAttribute('data-theme', t);
 

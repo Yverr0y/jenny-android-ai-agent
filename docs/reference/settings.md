@@ -33,7 +33,7 @@ Most controls take effect the moment you use them. These ask you to confirm firs
 
 | Control | Effect | Default |
 |---|---|---|
-| **Theme** | A row of theme pills, each a three-colour swatch with the theme's short name. Tap one to switch instantly, with no confirmation. The full name and a one-line description sit under the row. See [Themes and mascot](../using/themes-mascot.md). | Chanel |
+| **Theme** | A row of theme pills, each a three-colour swatch with the theme's short name. Tap one to switch instantly, with no confirmation. The full name and a one-line description sit under the row. See [Themes and mascot](../using/themes-mascot.md). | Synthwave '84 |
 | **Who answers** | Opens the page where you choose the model. The row shows the provider that answers now. | — |
 | **Jenny** | Opens her page: name, mascot and rules (below). The row shows how she is now, for example "small · floating". | — |
 | **Updates** | Opens the update check and install page. The row shows the installed version, and the new one when an update is waiting. | — |

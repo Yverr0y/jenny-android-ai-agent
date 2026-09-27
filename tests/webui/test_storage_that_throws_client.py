@@ -33,7 +33,7 @@ def test_the_state_module_loads_without_storage() -> None:
     run_js(
         _THROWING
         + f"const {{ AppState }} = await import('{(ASSETS / 'shared' / 'state.js').as_uri()}');\n"
-        "assert.equal(AppState.theme, 'chanel');\n"
+        "assert.equal(AppState.theme, 'synthwave');\n"
     )
 
 
@@ -78,7 +78,7 @@ def test_the_first_paint_still_gets_its_theme() -> None:
       } };
       """
         + boot
-        + "\nassert.equal(attrs['data-theme'], 'chanel');\n"
+        + "\nassert.equal(attrs['data-theme'], 'synthwave');\n"
     )
 
 
