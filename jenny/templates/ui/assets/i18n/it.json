@@ -901,54 +901,61 @@
     "stop": "Ferma",
     "verbs": {
       "think": [
-        "Elucubro…",
-        "Rimugino…",
-        "Ci penso su…",
-        "Arzigogolo…",
-        "Medito…"
+        "mmh aspetta…",
+        "shh, che penso…",
+        "sto tramando 😏…",
+        "cervello acceso…",
+        "sto cucinando qualcosa…",
+        "ci sono quasi, giuro…"
       ],
       "read": [
-        "Sfoglio…",
-        "Spulcio…",
-        "Scartabello…",
-        "Ripasso…",
-        "Mi rileggo…"
+        "mi faccio i fatti tuoi…",
+        "leggo, non disturbare…",
+        "sbircio un attimo…",
+        "leggo tra le righe…",
+        "spulcio tutto…"
       ],
       "search": [
-        "Rovisto…",
-        "Setaccio…",
-        "Frugo…",
-        "Fiuto…",
-        "Scandaglio…"
+        "dov'è finito…",
+        "lo trovo, fidati…",
+        "frugo ovunque…",
+        "sniff sniff…",
+        "rovisto nei cassetti…"
       ],
       "write": [
-        "Scrivo…",
-        "Limo…",
-        "Ricopio…",
-        "Appunto…",
-        "Metto giù…"
+        "scrivo, non guardare…",
+        "butto giù due righe…",
+        "nero su bianco…",
+        "shh, sto scrivendo…",
+        "sistemo, un attimo…"
       ],
       "out": [
-        "Sbircio fuori…",
-        "Esco un attimo…",
-        "Busso a una porta…",
-        "Vado a vedere…"
+        "faccio un giro fuori…",
+        "esco, torno subito…",
+        "busso, aspetta…",
+        "vado a vedere io…",
+        "sono in giro, un attimo…"
       ],
       "run": [
-        "Faccio due conti…",
-        "Smanetto…",
-        "Armeggio…",
-        "Metto alla prova…"
+        "reggimi il caffè…",
+        "premo il bottone…",
+        "vediamo se funziona…",
+        "provo una cosa…",
+        "lo faccio girare…"
       ],
       "delegate": [
-        "Chiamo rinforzi…",
-        "Metto qualcuno al lavoro…",
-        "Sveglio un aiutante…"
+        "chiamo rinforzi…",
+        "mica faccio tutto io 🙄…",
+        "sveglio qualcuno…",
+        "delego, che sono brava…",
+        "metto qualcuno al lavoro…"
       ],
       "busy": [
-        "Mi do da fare…",
-        "Sto lavorando…",
-        "Ci sto…"
+        "sto facendo cose…",
+        "un attimo, sono presa…",
+        "ci sto lavorando, eh…",
+        "dammi un secondo…",
+        "sto sul pezzo…"
       ]
     },
     "attach": "Allega",

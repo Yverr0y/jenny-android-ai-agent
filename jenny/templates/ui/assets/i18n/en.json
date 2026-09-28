@@ -901,51 +901,61 @@
     "stop": "Stop",
     "verbs": {
       "think": [
-        "Pondering…",
-        "Ruminating…",
-        "Mulling it over…",
-        "Cogitating…",
-        "Musing…"
+        "hmm hold on…",
+        "shh, thinking…",
+        "plotting 😏…",
+        "brain's on…",
+        "cooking something up…",
+        "almost there, promise…"
       ],
       "read": [
-        "Leafing through…",
-        "Poring over…",
-        "Skimming…",
-        "Reading up…"
+        "snooping through your stuff…",
+        "reading, don't rush me…",
+        "having a peek…",
+        "reading between the lines…",
+        "going through it all…"
       ],
       "search": [
-        "Rummaging…",
-        "Sifting…",
-        "Digging around…",
-        "Sniffing about…"
+        "where did it go…",
+        "i'll find it, trust me…",
+        "digging everywhere…",
+        "sniff sniff…",
+        "rummaging in the drawers…"
       ],
       "write": [
-        "Writing…",
-        "Polishing…",
-        "Copying out…",
-        "Jotting down…"
+        "writing, no peeking…",
+        "jotting a couple lines…",
+        "putting it in writing…",
+        "shh, writing…",
+        "fixing it up, one sec…"
       ],
       "out": [
-        "Peeking outside…",
-        "Stepping out…",
-        "Knocking on a door…",
-        "Going to look…"
+        "popping out…",
+        "brb, stepping out…",
+        "knocking, hang on…",
+        "going to check myself…",
+        "out and about, one sec…"
       ],
       "run": [
-        "Crunching numbers…",
-        "Tinkering…",
-        "Fiddling about…",
-        "Putting it to the test…"
+        "hold my coffee…",
+        "pressing the button…",
+        "let's see if it works…",
+        "trying something…",
+        "running it…"
       ],
       "delegate": [
-        "Calling for backup…",
-        "Putting someone on it…",
-        "Waking a helper…"
+        "calling backup…",
+        "not doing all this myself 🙄…",
+        "waking someone up…",
+        "delegating, i'm good at it…",
+        "putting someone on it…"
       ],
       "busy": [
-        "Getting on with it…",
-        "Working away…",
-        "On it…"
+        "doing stuff…",
+        "one sec, i'm busy…",
+        "working on it, ok…",
+        "gimme a second…",
+        "on it, relax…"
       ]
     },
     "attach": "Attach",
