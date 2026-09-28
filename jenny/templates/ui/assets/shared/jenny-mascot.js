@@ -112,6 +112,10 @@ export class JennyMascot {
     // Id del turno che sta animando (v. `_trackedTurnMatches`): la mascotte ne
     // segue uno alla volta, e un turno estraneo non glielo deve togliere.
     this._streamTurnId = null;
+    // Dall'ultimo invio a riposo e' arrivato `goal_status: running`, cioe' e'
+    // partito un turno vero? Senza, un messaggio e' la risposta di un comando
+    // (v. `_isCommandReply`).
+    this._runSeen = false;
     this._talk = {
       timer: null, animIdx: 0, open: false,
       lastTextAt: 0, switchAt: 0,
@@ -146,6 +150,9 @@ export class JennyMascot {
     // Cambio di conversazione: v. `_releaseTrackedTurn`.
     this._onChatSwitch = () => this._releaseTrackedTurn();
     sessionManager.addEventListener('chat:switch', this._onChatSwitch);
+    // Filo caduto: v. `_onWireClose`.
+    this._onChatClose = () => this._onWireClose();
+    wsManager.addEventListener('chat:close', this._onChatClose);
 
     // Preferenze mascotte (la stanza «Jenny» della casa): visibilità e
     // taglia, v. shared/mascot.js.
@@ -405,10 +412,15 @@ export class JennyMascot {
 
   _talkTick() {
     const now = performance.now();
-    // Silenzio nel flusso: torna allo stato 'pensa' invece di tenere la bocca
-    // congelata in posa di parlato.
+    // Silenzio nel flusso: torna a pensare invece di tenere la bocca congelata
+    // in posa di parlato — **se un turno e' ancora aperto**. Altrimenti a
+    // riposo. Prima tornava a pensare sempre: un messaggio arrivato a turno
+    // chiuso (la risposta di `/stop` dopo il suo `turn_end`, quella di
+    // `/status`, un risultato di `/dream`) la lasciava a pensare per sempre,
+    // perche' nessun frame dopo l'avrebbe chiusa. Misurato sull'emulatore il
+    // 28/09/2026.
     if (now - this._talk.lastTextAt > TALK_QUIET_TO_THINK_MS) {
-      this._setAgentState('thinking');
+      this._setAgentState(this._turnActive ? 'thinking' : 'idle');
       return;
     }
     this._talk.open = !this._talk.open;
@@ -529,6 +541,14 @@ export class JennyMascot {
     if (this.mode !== 'chat') return;
     const current = sessionManager.currentChatId;
     if (detail?.chat_id && current && detail.chat_id !== current) return;
+    // Un invio a riposo apre un'attesa nuova: di un turno vecchio non si tiene
+    // niente, nemmeno l'id — uno rimasto appeso le farebbe ignorare ogni
+    // `turn_end` da qui in poi. Un invio a turno aperto invece entra in quel
+    // turno (il gateway lo inietta), e l'attesa resta quella.
+    if (!this._turnActive) {
+      this._runSeen = false;
+      this._streamTurnId = null;
+    }
     this._turnActive = true;
     this._clearMood(); // sta ascoltando, non sta ancora reagendo
     if (!this.el.classList.contains('out')) return; // docked: niente pensa visibile
@@ -548,11 +568,37 @@ export class JennyMascot {
      cronologia da invalidare — quella la ricarica la chat, che il thread lo
      ridisegna da sé. */
   _releaseTrackedTurn() {
+    this._forgetTurnState();
+    this._clearMood();
+  }
+
+  /* Il filo e' caduto (un riavvio del gateway, una rete che se ne va). La
+     chiusura del turno in volo, se arriva, arriva a nessuno: al rientro il
+     gateway rimanda solo `goal_status: running`, e solo se il turno gira
+     ancora. Quindi lei torna a riposo, e un turno ancora vivo la rimette a
+     pensare da se' col suo `running`. */
+  _onWireClose() {
+    this._forgetTurnState();
+  }
+
+  _forgetTurnState() {
     this._turnActive = false;
     this._pendingTurn = false;
     this._streamTurnId = null;
-    this._clearMood();
+    this._runSeen = false;
     this._setAgentState('idle');
+  }
+
+  /* Un messaggio con del testo che risponde a un invio **senza** che sia
+     partito un turno: la risposta di un comando (`/status`, `/stop` a riposo)
+     o di un rifiuto. Un turno vero comincia sempre con `goal_status: running`;
+     questo no, e dopo potrebbe non arrivare niente — il gateway, dal
+     28/09/2026, lo chiude con un `turn_end`, ma un gateway di prima no, e una
+     chiusura persa per strada nemmeno. Quindi l'attesa finisce qui. */
+  _isCommandReply(msg) {
+    return msg.event === 'message' && !!msg.text
+      && msg.kind !== 'tool_hint' && msg.kind !== 'progress'
+      && this._turnActive && !this._runSeen;
   }
 
   /* Il turno che la mascotte sta seguendo.
@@ -577,7 +623,13 @@ export class JennyMascot {
       // minichat il cui tracciamento e' stato lasciato a meta' (un cambio di
       // vista a turno in corso) si chiude lo stesso, e ignorarne il `turn_end`
       // lascerebbe `_pendingTurn` alzato per sempre.
-      if (msg.event !== 'turn_end' && msg.event !== 'error') this._streamTurnId = turnId;
+      //
+      // E si adotta solo **dentro** un turno. Fuori — la risposta di `/stop`
+      // arrivata dopo il suo `idle`, un avviso proattivo — un id adottato non
+      // si chiuderebbe mai, e da li' in poi ogni `turn_end` sarebbe «di un
+      // altro». La chiusura di quel frame passa lo stesso, per la regola sopra.
+      const closing = msg.event === 'turn_end' || msg.event === 'error';
+      if (!closing && (this._turnActive || this._pendingTurn)) this._streamTurnId = turnId;
       return true;
     }
     return this._streamTurnId === turnId;
@@ -599,25 +651,42 @@ export class JennyMascot {
         break;
       case 'message':
         if (msg.text && msg.kind !== 'tool_hint' && msg.kind !== 'progress') {
+          if (this._isCommandReply(msg)) {
+            // Parla, e poi il silenzio la porta a riposo (v. `_talkTick`).
+            this._turnActive = false;
+            this._pendingTurn = false;
+            this._streamTurnId = null;
+          }
           this._setAgentState('talking');
-        } else {
+        } else if (this._turnActive) {
           this._setAgentState('thinking');
         }
         break;
+      /* Ragionamento e file toccati sono lavoro di un turno: fuori da un turno
+         (un frame arrivato dopo la sua chiusura) non la rimettono a pensare,
+         o ci resterebbe. */
       case 'reasoning_delta':
-        this._setAgentState('thinking');
+        if (this._turnActive) this._setAgentState('thinking');
         break;
       case 'reasoning_end':
         break;
       case 'file_edit':
-        this._setAgentState('thinking');
+        if (this._turnActive) this._setAgentState('thinking');
         break;
       case 'goal_status':
         if (msg.status === 'running') {
           this._turnActive = true;
+          this._runSeen = true;
           this._setAgentState('thinking');
         } else if (msg.status === 'idle') {
+          /* `idle` chiude il turno anche quando il suo `turn_end` non si e'
+             riconosciuto — quello di `/stop` porta l'id di `/stop`, non del
+             turno fermato — e con lui l'id che lei seguiva: tenerlo le avrebbe
+             fatto ignorare ogni `turn_end` dopo, avvisi proattivi compresi,
+             che un `idle` non lo mandano. */
           this._turnActive = false;
+          this._pendingTurn = false;
+          this._streamTurnId = null;
           this._setAgentState('idle');
         }
         break;

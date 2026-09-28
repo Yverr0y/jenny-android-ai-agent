@@ -297,9 +297,13 @@ def test_the_mascot_releases_its_turn_on_a_switch() -> None:
     assert "_releaseTrackedTurn()" in jenny
     body = re.search(r"\n  _releaseTrackedTurn\(\) \{(.*?)\n  \}", jenny, re.S)
     assert body, "_releaseTrackedTurn non trovato"
-    head = body.group(1)
+    assert "this._forgetTurnState();" in body.group(1)
+    # Lo stesso oblio lo usa il filo caduto (`_onWireClose`): sta in un punto solo.
+    forget = re.search(r"\n  _forgetTurnState\(\) \{(.*?)\n  \}", jenny, re.S)
+    assert forget, "_forgetTurnState non trovato"
+    head = forget.group(1)
     for field in ("_turnActive = false", "_pendingTurn = false", "_streamTurnId = null"):
-        assert field in head, f"_releaseTrackedTurn non azzera {field}"
+        assert field in head, f"_forgetTurnState non azzera {field}"
 
     companion = _read(MINICHAT_JS)
     body = re.search(r"\n  _releaseTrackedTurn\(\) \{(.*?)\n  \}", companion, re.S)

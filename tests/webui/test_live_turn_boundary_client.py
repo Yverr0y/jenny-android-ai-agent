@@ -65,9 +65,13 @@ function makeChat() {{
   }};
 }}
 
-function makeMascot() {{
+/* Di serie la mascotte aspetta un turno dell'utente (`_turnActive`): e' li'
+   che adotta un id. A riposo non ne adotta (v. `test_a_standalone_alert...`). */
+function makeMascot({{ inTurn = true }} = {{}}) {{
   return {{
     _streamTurnId: null,
+    _turnActive: inTurn,
+    _pendingTurn: false,
     {_method(jenny, "_trackedTurnMatches")},
   }};
 }}
@@ -204,12 +208,18 @@ def test_the_mascot_keeps_following_the_turn_it_started_following() -> None:
 
 
 def test_a_standalone_alert_is_tracked_and_closed() -> None:
-    """A turno fermo l'avviso è il turno: deve poter chiudere il proprio."""
+    """A turno fermo l'avviso deve poter chiudere il proprio — e non adotta il
+    suo id: dal 28/09/2026 un id si adotta solo dentro un turno. Adottato a
+    riposo, un id che non si chiude (la risposta di `/stop` arrivata dopo il suo
+    ``idle``) restava appeso, e da li' ogni ``turn_end`` era «di un altro»."""
     _run_js("""
-      const m = makeMascot();
+      const m = makeMascot({ inTurn: false });
       assert.equal(m._trackedTurnMatches(frame('message', 'proactive:1')), true);
-      assert.equal(m._streamTurnId, 'proactive:1');
+      assert.equal(m._streamTurnId, null);
       assert.equal(m._trackedTurnMatches(frame('turn_end', 'proactive:1')), true);
+      m._trackedTurnMatches(frame('message', 'b1'));
+      assert.equal(m._trackedTurnMatches(frame('turn_end', 'proactive:2')), true,
+                   'dopo un messaggio fuori turno, il turn_end di un altro avviso passa');
     """)
 
 

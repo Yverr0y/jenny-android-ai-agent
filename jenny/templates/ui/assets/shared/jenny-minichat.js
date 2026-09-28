@@ -47,10 +47,9 @@ export class JennyWithMinichat extends JennyMascot {
     super(host, { mode });
     this._adapter = minichat;
     this._replyTimer = null;
-    /* Il turno della conversazione in volo, visto da tutti i frame e non solo
-       da quelli che la minichat segue (v. `_noteLiveTurn`): e' lui a spegnere
-       l'invio mentre Jenny risponde. */
-    this._liveTurnId = null;
+    /* Un turno della conversazione e' in volo, da qualunque parte sia partito
+       (v. `_noteLiveTurn`): e' lui a spegnere l'invio mentre Jenny risponde. */
+    this._chatRunning = false;
     this._resetReply();
 
     this.askForm.addEventListener('submit', (e) => {
@@ -61,9 +60,6 @@ export class JennyWithMinichat extends JennyMascot {
       this.input.blur();
       this._send(text);
     });
-    // Il filo caduto a meta' attesa: v. `_onWireClose`.
-    this._onChatClose = () => this._onWireClose();
-    wsManager.addEventListener('chat:close', this._onChatClose);
   }
 
   _buildDom() {
@@ -219,7 +215,7 @@ export class JennyWithMinichat extends JennyMascot {
      28/09/2026 — **anche** se la risposta e' partita dalla chat: una domanda
      mandata adesso finirebbe dentro quel turno. Si puo' scrivere lo stesso. */
   _busy() {
-    return this._pendingTurn || !!this._liveTurnId;
+    return this._pendingTurn || this._chatRunning;
   }
 
   _syncSend() {
@@ -246,6 +242,8 @@ export class JennyWithMinichat extends JennyMascot {
     this._resetReply();
     this._turnActive = true;
     this._pendingTurn = true;
+    // Un'attesa nuova: il turno, se parte, lo dira' il suo `running`.
+    this._runSeen = false;
     // A turno fermo si adotta il primo frame che lo apre (v. `_trackedTurnMatches`).
     this._streamTurnId = null;
     this._setAgentState('thinking'); // ferma un eventuale parlato precedente; _syncArt -> think
@@ -297,26 +295,27 @@ export class JennyWithMinichat extends JennyMascot {
      andare e il fumetto dice perche'. Al rientro la chat rilegge il filo da se'. */
   _onWireClose() {
     const asked = this._pendingTurn;
-    this._liveTurnId = null;
-    if (asked) {
-      this._clearReplyTimer();
-      this._note = null;
-      super._releaseTrackedTurn();
-      this._addPlainBlock(i18n.t('jenny.connectionError'), 'error');
-    }
+    this._chatRunning = false;
+    this._clearReplyTimer();
+    this._note = null;
+    super._onWireClose();
+    if (asked) this._addPlainBlock(i18n.t('jenny.connectionError'), 'error');
+    this._paintState();
     this._syncSend();
   }
 
   /* ── I frame ── */
 
-  /* Il turno in volo nella conversazione, da ogni frame. Solo i frame con un
-     id: `goal_status` non ne porta, e un turno si apre e si chiude con quelli
-     che ce l'hanno. */
+  /* Un turno in volo nella conversazione, da ogni frame. Lo apre
+     `goal_status: running`, che ogni turno vero manda per primo; lo chiudono
+     `idle`, `turn_end` ed `error`. Prima si guardava l'id dei frame, e la
+     risposta di un comando — un id, e nessuna chiusura dopo — teneva il tasto
+     spento fino al turno seguente. */
   _noteLiveTurn(msg) {
-    const was = this._liveTurnId;
-    if (msg.event === 'turn_end' || msg.event === 'error') this._liveTurnId = null;
-    else if (msg.turn_id || msg.turnId) this._liveTurnId = msg.turn_id || msg.turnId;
-    if (was !== this._liveTurnId) this._syncSend();
+    const was = this._chatRunning;
+    if (msg.event === 'goal_status') this._chatRunning = msg.status === 'running';
+    else if (msg.event === 'turn_end' || msg.event === 'error') this._chatRunning = false;
+    if (was !== this._chatRunning) this._syncSend();
   }
 
   _handleFrame(msg) {
@@ -351,6 +350,19 @@ export class JennyWithMinichat extends JennyMascot {
       case 'message':
         if (msg.text && msg.kind !== 'tool_hint' && msg.kind !== 'progress') {
           this._addBlock(msg.text);
+          // La risposta di un comando chiude la domanda: dopo, non arriva altro.
+          if (this._isCommandReply(msg)) {
+            this._endTurn();
+            this._adapter.onTurnClosed?.();
+          }
+        }
+        break;
+      case 'goal_status':
+        // `idle` senza che il `turn_end` sia stato riconosciuto: chiude lo stesso.
+        if (msg.status === 'idle') {
+          this._endTurn();
+          if (!this._blocks.length) this._addPlainBlock('✿');
+          this._adapter.onTurnClosed?.();
         }
         break;
       case 'turn_end':
@@ -381,7 +393,7 @@ export class JennyWithMinichat extends JennyMascot {
      volo, il suo timer e la risposta (v. il cappello di `_releaseTrackedTurn`
      in shared/jenny-mascot.js). */
   _releaseTrackedTurn() {
-    this._liveTurnId = null;
+    this._chatRunning = false;
     this._resetReply();
     if (this.minichatOpen) this._setOut(false);
     super._releaseTrackedTurn();

@@ -163,6 +163,31 @@ class LoopTasksMixin:
         events.clear_turn(key)
         await self._cron_turns.publish_next_deferred(key)
 
+    async def _close_if_idle(self, msg, key: str) -> None:
+        """Chiude il turno di un messaggio a cui si e' risposto senza farlo girare.
+
+        Un comando prioritario (`/status`, `/stop` a riposo), un comando in linea
+        e un rifiuto (cartella del progetto sparita o cambiata, `/init` e `/tidy`
+        fuori scope) rispondevano con un solo ``message``: nessun ``turn_end``,
+        nessun ``goal_status: idle``. Il client che aveva mandato restava in
+        attesa — la mascotte a pensare per sempre, misurato sull'emulatore il
+        28/09/2026. Qui si chiude, dopo la risposta.
+
+        **Solo a sessione ferma.** Se un turno gira (c'e' la sua coda), la
+        chiusura e' sua, e un ``turn_end`` in piu' qui troncherebbe la risposta
+        che sta ancora arrivando.
+        """
+        if key in self._pending_queues:
+            return
+        events = self._runtime_events()
+        await events.turn_completed(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            session_key=key,
+            metadata=msg.metadata,
+        )
+        await events.run_status_changed(msg, key, "idle")
+
     def evict_pruned_sessions(self, keys: list[str]) -> None:
         """Drop cache/task/lock bookkeeping for session keys pruned from disk.
 

@@ -96,12 +96,14 @@ function classes(...initial) {
 }
 
 /* Una minichat fuori dalla chat; `asked` = una domanda sua in volo, alzata come
-   la alza `_send`. */
+   la alza `_send`, e col suo turno gia' partito (`goal_status: running` visto):
+   la risposta di un comando, che quel `running` non lo manda, ha i suoi test. */
 function minichat({ open = true, asked = true, sends = true } = {}) {
   const j = Object.create(JennyWithMinichat.prototype);
   Object.assign(j, {
     mode: 'away', _turnActive: asked, _pendingTurn: asked,
-    _streamTurnId: null, _lastClosedTurnId: null, _liveTurnId: null, _replyTimer: null,
+    _streamTurnId: null, _lastClosedTurnId: null, _chatRunning: false, _replyTimer: null,
+    _runSeen: asked,
     _talk: { timer: null },
     el: { classList: classes() },
     mc: { classList: open ? classes('open') : classes(), dataset: {} },
@@ -425,6 +427,7 @@ def test_the_send_is_off_while_any_turn_is_in_flight() -> None:
         assert.equal(j.sendBtn.disabled, false);
         assert.equal(j.input.placeholder, 'Scrivi a Jenny', 'dove va il messaggio');
         // In chat il turno c1 sta scorrendo; la minichat non lo disegna.
+        j._handleFrame({ event: 'goal_status', status: 'running' });
         j._handleFrame({ event: 'delta', text: 'Ecco il riassunto', turn_id: 'c1' });
         assert.deepEqual(blocks(j), []);
         assert.equal(j.sendBtn.disabled, true, 'col turno in volo il tasto si spegne');
@@ -432,6 +435,9 @@ def test_the_send_is_off_while_any_turn_is_in_flight() -> None:
         j._handleFrame({ event: 'turn_end', turn_id: 'c1' });
         assert.equal(j.sendBtn.disabled, false, 'finito il turno si riaccende');
         assert.equal(j.input.placeholder, 'Scrivi a Jenny');
+        j._handleFrame({ event: 'goal_status', status: 'running' });
+        j._handleFrame({ event: 'goal_status', status: 'idle' });
+        assert.equal(j.sendBtn.disabled, false, 'anche idle lo riaccende');
         """
     )
 
@@ -459,10 +465,10 @@ def test_a_dropped_wire_lets_the_question_go_and_says_why() -> None:
     _run(
         """
         const j = minichat();
-        j._liveTurnId = 't1';
+        j._chatRunning = true;
         j._onWireClose();
         assert.equal(j._pendingTurn, false);
-        assert.equal(j._liveTurnId, null);
+        assert.equal(j._chatRunning, false);
         assert.deepEqual(blocks(j), ['jenny.connectionError']);
         j.input.value = 'riprovo';
         j._syncSend();
@@ -497,7 +503,7 @@ def test_goal_status_and_reasoning_move_the_state() -> None:
         j._handleFrame({ event: 'goal_status', status: 'running' });
         assert.equal(j._turnActive, true);
         assert.equal(last(j), 'thinking');
-        assert.equal(j._liveTurnId, null, 'goal_status non porta un id, e non spegne il tasto');
+        assert.equal(j._chatRunning, true, 'col turno partito il tasto si spegne');
         j._handleFrame({ event: 'reasoning_delta', text: 'uhm' });
         j._handleFrame({ event: 'file_edit' });
         assert.equal(last(j), 'thinking');
@@ -544,7 +550,7 @@ def test_a_conversation_switch_forgets_the_minichat() -> None:
         j._releaseTrackedTurn();
         assert.deepEqual(blocks(j), []);
         assert.equal(j._pendingTurn, false);
-        assert.equal(j._liveTurnId, null);
+        assert.equal(j._chatRunning, false);
         assert.deepEqual(j.outs, [false], 'aperta, si chiude');
         """
     )
@@ -557,5 +563,47 @@ def test_the_placeholder_falls_back_when_the_shell_has_none() -> None:
         j._adapter.placeholder = () => '';
         j._syncPlaceholder();
         assert.equal(j.input.placeholder, 'jenny.askHere');
+        """
+    )
+
+
+# ── Mai piu' a pensare per sempre ────────────────────────────────────────────
+
+
+def test_a_command_reply_closes_the_question() -> None:
+    """`/status` dal fumetto: risponde un solo ``message``, senza `running` prima
+    e (da un gateway di prima del 28/09/2026) senza niente dopo. Prima la domanda
+    restava in volo per sempre, e con lei il tasto spento."""
+    _run(
+        """
+        const j = minichat({ asked: false });
+        await j._send('/status');
+        j._handleFrame({ event: 'message', text: 'jenny v0.11.0', turn_id: 's1' });
+        assert.deepEqual(blocks(j), ['md:jenny v0.11.0']);
+        assert.equal(j._pendingTurn, false, 'la risposta di un comando chiude la domanda');
+        assert.equal(j._turnActive, false);
+        assert.equal(j._streamTurnId, null, 'e non lascia un id appeso');
+        assert.equal(j.closed, 1);
+        j.input.value = 'altro';
+        j._syncSend();
+        assert.equal(j.sendBtn.disabled, false);
+        """
+    )
+
+
+def test_an_idle_closes_the_question_even_without_its_turn_end() -> None:
+    """Il `turn_end` di `/stop` porta l'id di `/stop`, non del turno fermato:
+    non si riconosce, e a chiudere resta `goal_status: idle`."""
+    _run(
+        """
+        const j = minichat();
+        j._handleFrame({ event: 'delta', text: 'Sto', turn_id: 'a1' });
+        j._handleFrame({ event: 'turn_end', turn_id: 'stop1' });
+        assert.equal(j._pendingTurn, true, 'il turn_end di un altro non chiude');
+        j._handleFrame({ event: 'goal_status', status: 'idle' });
+        assert.equal(j._pendingTurn, false);
+        assert.equal(j._streamTurnId, null, 'nessun id seguito resta appeso');
+        assert.equal(j.closed, 1);
+        assert.equal(last(j), 'idle');
         """
     )

@@ -718,13 +718,24 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         raw: str,
         dispatch_fn: Callable[[CommandContext], Awaitable[OutboundMessage | None]],
     ) -> None:
-        """Dispatch a command directly from the run() loop and publish the result."""
+        """Dispatch a command directly from the run() loop and publish the result.
+
+        Poi il turno si chiude, sempre e dopo la risposta: con cio' che il
+        comando ha lasciato da fare (``after_reply``, la chiusura del turno che
+        `/stop` e `/new` hanno fermato), o, a sessione ferma, con un
+        ``turn_end`` suo (v. :meth:`_close_if_idle`).
+        """
         ctx = CommandContext(msg=msg, session=None, key=key, raw=raw, loop=self)
         result = await dispatch_fn(ctx)
         if result:
             await self.bus.publish_outbound(result)
         else:
             logger.warning("Command '{}' matched but dispatch returned None", raw)
+        if ctx.after_reply:
+            for step in ctx.after_reply:
+                await step()
+        else:
+            await self._close_if_idle(msg, key)
 
     async def _refuse_reincarnated_project(self, msg: InboundMessage, key: str) -> bool:
         """Rifiuta il turno se la cartella al nome di *key* non e' la sua cartella.
@@ -1639,10 +1650,14 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             effective_key = self._effective_session_key(msg)
             # Prima di tutto il resto, ``/init`` compreso: se la cartella legata
             # non c'e' piu', il turno non parte.
+            # Un rifiuto e' una risposta: il turno si chiude dopo, come quello
+            # di un comando (v. `_close_if_idle`).
             if await self._refuse_missing_project(msg, effective_key):
+                await self._close_if_idle(msg, effective_key)
                 continue
             # La cartella c'e' — ma e' **quella**? Il nome non basta a dirlo.
             if await self._refuse_reincarnated_project(msg, effective_key):
+                await self._close_if_idle(msg, effective_key)
                 continue
             # La cartella c'e': la sessione si annota di chi e', cosi' il giorno
             # che la cartella cambia nome c'e' da dove ripartire (passo 7).
@@ -1650,12 +1665,14 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             if raw == PROJECT_INIT_COMMAND or raw.startswith(f"{PROJECT_INIT_COMMAND} "):
                 expanded = await self._expand_project_init(msg, effective_key)
                 if expanded is None:
+                    await self._close_if_idle(msg, effective_key)
                     continue
                 msg = expanded
                 raw = msg.content.strip()
             if raw == PROJECT_TIDY_COMMAND or raw.startswith(f"{PROJECT_TIDY_COMMAND} "):
                 expanded = await self._expand_project_tidy(msg, effective_key)
                 if expanded is None:
+                    await self._close_if_idle(msg, effective_key)
                     continue
                 msg = expanded
                 raw = msg.content.strip()

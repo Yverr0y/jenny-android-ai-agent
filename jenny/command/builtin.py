@@ -47,9 +47,10 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
     total = await loop._cancel_active_tasks(ctx.key)
     if total:
         # Il turno ripudiato salta il proprio restore/turn_end: li emette /stop,
-        # in modo sincrono e deterministico (la UI riceve sempre turn_end).
+        # in modo deterministico (la UI riceve sempre turn_end) — ma **dopo** la
+        # propria risposta (v. `CommandContext.after_reply`).
         loop._restore_cancelled_turn(ctx.key)
-        await loop._emit_stop_turn_end(msg, ctx.key)
+        ctx.after_reply.append(lambda: loop._emit_stop_turn_end(msg, ctx.key))
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content=content,
@@ -102,7 +103,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
         # Materializza il lavoro parziale del turno fermato PRIMA dello
         # snapshot, così finisce nell'archivio invece di andare perso.
         loop._restore_cancelled_turn(ctx.key)
-        await loop._emit_stop_turn_end(ctx.msg, ctx.key)
+        ctx.after_reply.append(lambda: loop._emit_stop_turn_end(ctx.msg, ctx.key))
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
     snapshot = session.messages[session.last_consolidated:]
     session.clear()

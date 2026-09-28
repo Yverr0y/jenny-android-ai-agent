@@ -325,12 +325,23 @@ def test_the_talking_gesture_changes_on_its_own_clock() -> None:
 
 @node
 def test_silence_in_the_stream_goes_back_to_waiting() -> None:
+    """Dentro un turno il silenzio e' il pensa; a turno chiuso e' il riposo. Prima
+    era il pensa sempre, e un messaggio arrivato a turno chiuso (la risposta di
+    `/stop`, di `/status`) la lasciava a pensare per sempre."""
     _run_js("""
       const m = traceStates(makeMascot('out'));
+      m._turnActive = true;
       m._talk.lastTextAt = performance.now() - TALK_QUIET_TO_THINK_MS - 1;
       m._talkTick();
       assert.deepEqual(m.states, ['thinking']);
       m._stopTalk();
+
+      const r = traceStates(makeMascot('out'));
+      r._agentState = 'talking';
+      r._talk.lastTextAt = performance.now() - TALK_QUIET_TO_THINK_MS - 1;
+      r._talkTick();
+      assert.deepEqual(r.states, ['idle'], 'a turno chiuso il silenzio e\\' il riposo');
+      r._stopTalk();
     """)
 
 

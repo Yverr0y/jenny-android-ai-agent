@@ -858,16 +858,25 @@ class TestStopAbandonsStuckTasks:
         ctx = CommandContext(msg=msg, session=None, key=msg.session_key, raw="/stop", loop=loop)
         out = await cmd_stop(ctx)
 
-        assert "1 task" in out.content
-        roles = [m.get("role") for m in session.messages]
-        assert roles == ["user", "assistant", "tool"]
-        assert "runtime_checkpoint" not in session.metadata
-        loop.runtime_event_publisher.turn_completed.assert_awaited_once()
-        loop.runtime_event_publisher.run_status_changed.assert_awaited_once_with(
-            msg, UNIFIED_SESSION_KEY, "idle"
-        )
-        release.set()
-        task.cancel()
+        try:
+            assert "1 task" in out.content
+            roles = [m.get("role") for m in session.messages]
+            assert roles == ["user", "assistant", "tool"]
+            assert "runtime_checkpoint" not in session.metadata
+            # La chiusura e' **dopo** la risposta: l'handler la lascia a chi
+            # pubblica (v. `CommandContext.after_reply`). Emessa qui dentro,
+            # il client riceveva «Stopped» a turno gia' chiuso.
+            loop.runtime_event_publisher.turn_completed.assert_not_awaited()
+            assert len(ctx.after_reply) == 1
+            for step in ctx.after_reply:
+                await step()
+            loop.runtime_event_publisher.turn_completed.assert_awaited_once()
+            loop.runtime_event_publisher.run_status_changed.assert_awaited_once_with(
+                msg, UNIFIED_SESSION_KEY, "idle"
+            )
+        finally:
+            release.set()
+            task.cancel()
 
     @pytest.mark.asyncio
     async def test_cancel_by_session_abandons_stuck_subagent_and_suppresses_announce(self):
