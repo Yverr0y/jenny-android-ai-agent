@@ -1146,15 +1146,11 @@ body.home {
    legge nell'altro foglio: la leggono anche il fumetto e il pensa della
    minichat, che cosi' stanno sopra la sua testa in tutti e due i gusci. */
 .home-shell {
-  --jenny-floor: calc(max(var(--home-composer-h, 64px), var(--jenny-mc-floor, 0px)) - var(--jenny-size) * 0.1224);
+  --jenny-floor: calc(var(--home-composer-h, 64px) - var(--jenny-size) * 0.1224);
 }
 
-/* La minichat si apre dove il composer non c'e', e il pavimento li' e' a 20 px
-   (`FLOOR_NO_COMPOSER`): il suo campo le finirebbe sui piedi. Finche' e'
-   aperta lei sale sopra il campo, che sta in basso a 12 px ed e' alto una
-   riga del composer. Nell'officina non serve: li' lei sta sempre sopra la
-   barra di input. */
-.home-shell:has(> .jenny-mc.open) { --jenny-mc-floor: 66px; }
+/* Il campo della minichat, dove il composer non c'e': in basso a 12 px, sotto
+   i piedi di lei (`--jenny-away-floor`). */
 .home-shell .jenny-mc-ask { bottom: 12px; }
 
 /* Una cosa che non è andata, detta nel filo. Sobria come il separatore: in casa
@@ -1201,7 +1197,7 @@ body.home {
   flex-direction: column;
   /* In fondo il posto per il + tondo (16 + 56 + un respiro), o per Jenny se
      e' piu' alta: l'ultimo quaderno non deve finire sotto nessuno dei due. */
-  padding: 2px 18px max(88px, calc(20px + var(--jenny-size) * var(--jenny-art-h)));
+  padding: 2px 18px max(88px, calc(var(--jenny-away-floor) + var(--jenny-size) * var(--jenny-art-h)));
 }
 
 /* Il + tondo della pagina Quaderni: la sola cosa accesa della pagina, come il
@@ -2052,7 +2048,7 @@ body.home {
 }
 
 .home-drawer .launcher-list {
-  padding-bottom: calc(20px + var(--jenny-size) * var(--jenny-art-h));
+  padding-bottom: calc(var(--jenny-away-floor) + var(--jenny-size) * var(--jenny-art-h));
 }
 
 .home-you-scroll {
@@ -2069,10 +2065,10 @@ body.home {
      19/09/2026, la seconda riga della nota finiva dietro la sua testa.
 
      Il fondo e' la sua altezza — `--jenny-art-h`, il 73% del quadrato, che e'
-     il numero misurato sull'arte e non la sua larghezza — piu' i venti pixel
-     a cui appoggia i piedi fuori dalla chat. Scritto cosi' vale a ogni
+     il numero misurato sull'arte e non la sua larghezza — piu' il pavimento
+     a cui appoggia i piedi fuori dalla chat (`--jenny-away-floor`). Scritto cosi' vale a ogni
      taglia, anche a quella che nessuno ha ancora aggiunto. */
-  padding: 2px 18px calc(20px + var(--jenny-size) * var(--jenny-art-h));
+  padding: 2px 18px calc(var(--jenny-away-floor) + var(--jenny-size) * var(--jenny-art-h));
 }
 
 /* La scheda dell'officina. E' l'unica cosa scura della pagina, ed e' il punto:

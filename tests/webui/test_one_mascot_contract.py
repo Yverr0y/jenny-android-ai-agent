@@ -105,6 +105,45 @@ def test_the_house_sheet_only_moves_the_floor() -> None:
     )
 
 
+def test_she_stands_where_the_minichat_wants_her() -> None:
+    """Il pavimento e' uno: appena sopra il campo della minichat, **aperta o
+    chiusa** che sia, in ogni vista dell'officina — console compresa — e in
+    ogni pagina della casa senza composer.
+
+    Dall'utente, il 28/09/2026, in tre passi. Nell'officina lei stava
+    all'altezza della barra di input anche dove la barra non c'e' (sospesa sopra
+    Cervello, Mani e Memoria); poi e' scesa a 20 px e all'apertura della
+    minichat saltava su di 46 («il pavimento e' dove appare nella minichat,
+    sempre, in ogni schermata»); e in console restava sopra tutta la barra di
+    input, alta sopra la riga dei chip («deve essere uguale agli altri»). In casa
+    la chat ha il suo composer, e lei ci sta sopra."""
+    home = HOME_CSS.read_text(encoding="utf-8")
+    workshop = WORKSHOP_CSS.read_text(encoding="utf-8")
+    app_js = (ASSETS / "home-app.js").read_text(encoding="utf-8")
+
+    token = re.search(r"--jenny-away-floor:\s*(\d+)px;", workshop)
+    assert token, "il pavimento non e' piu' un token"
+    const = re.search(r"const FLOOR_NO_COMPOSER = (\d+);", app_js)
+    assert const and const.group(1) == token.group(1), (
+        "la casa appoggia i piedi a un'altezza diversa dall'officina"
+    )
+
+    floors = re.findall(r"--jenny-floor:\s*([^;]+);", workshop)
+    assert floors == [
+        "calc(var(--dock-height) + var(--jenny-away-floor) - var(--jenny-size) * 0.1224)"
+    ], f"l'officina ha di nuovo piu' di un pavimento, o un altro: {floors}"
+    house = re.findall(r"--jenny-floor:\s*([^;]+);", home)
+    assert len(house) == 1 and "var(--jenny-size) * 0.1224" in house[0], (
+        "i due pavimenti non tolgono lo stesso margine sotto i piedi"
+    )
+    for css in (home, workshop):
+        assert "jenny-mc.open)" not in css, (
+            "la minichat aperta la sposta di nuovo: il pavimento deve essere sempre quello"
+        )
+    # I fondi delle stanze le lasciano posto a quell'altezza, non a quella di prima.
+    assert "calc(20px + var(--jenny-size)" not in home
+
+
 def test_she_does_not_sway_against_the_edge() -> None:
     """Il dondolio del pensa e' della Jenny venuta fuori. Il tocco la manda al
     bordo senza cambiare stato, quindi la classe `thinking` puo' restarle

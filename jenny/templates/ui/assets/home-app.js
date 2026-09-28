@@ -74,9 +74,12 @@ const WIRE_GRACE_MS = 2_500;
 
 /* Dove appoggia i piedi Jenny fuori dalla chat, in px dal fondo. Nella chat il
    suo pavimento e' il composer e si misura (v. `_bindComposer`); nelle pagine
-   il composer non c'e', e la tavola `Quaderno.dc.html` la disegna a venti pixel
-   dal fondo — sopra la maniglia del cassetto, che e' la tavola dopo. */
-const FLOOR_NO_COMPOSER = 20;
+   il composer non c'e', e lei sta dove la vuole la minichat, appena sopra il
+   suo campo — sempre, aperta o chiusa (dall'utente, 28/09/2026). La tavola la
+   disegnava a venti pixel, e con la minichat saltava su. E' lo stesso numero
+   di `--jenny-away-floor` in mobile-style.css, che i fondi delle stanze
+   leggono per lasciarle posto. */
+const FLOOR_NO_COMPOSER = 66;
 
 /* Il nome di lei finche' le impostazioni non hanno detto il suo: lo stesso
    ripiego del server (`settings_api`, `bot_name or "Jenny"`). E' un nome
