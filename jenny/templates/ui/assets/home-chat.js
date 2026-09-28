@@ -40,13 +40,7 @@ import { HistoryPager } from './shared/history-pager.js';
 import { renderRich } from './shared/rich-content.js';
 import { renderMarkdown } from './shared/markdown.js';
 import { describeWireError } from './shared/wire-error.js';
-import {
-  contentLinkHref,
-  contentLinkOf,
-  contentLinkTarget,
-  findContentAnchor,
-  openOutsideWebView,
-} from './shared/content-link.js';
+import { contentLinkOf, openContentLink } from './shared/content-link.js';
 
 /* Da dove e' entrato un messaggio che non hai scritto qui dentro. La chat e' il
    registro completo di tutte le superfici — l'app, Telegram, la tendina delle
@@ -229,23 +223,10 @@ export class HomeChat {
   }
 
   /* Tre esiti, e in nessuno la pagina naviga: l'ancora scorre il filo, un'altra
-     origine si apre fuori dalla WebView, il resto lo dice. */
+     origine si apre fuori dalla WebView, il resto lo dice. La regola e' in
+     `shared/content-link.js`, perche' la usa anche il fumetto della minichat. */
   _openLink(e, a) {
-    e.preventDefault();
-    const target = contentLinkTarget(contentLinkHref(a), window.location);
-    if (target?.kind === 'hash') {
-      /* L'id del titolo e' quello sanificato (`user-content-…`), e si
-         cerca solo dentro il filo: un id del guscio non e' un bersaglio. */
-      const anchor = findContentAnchor(this.el, target.id);
-      if (anchor) anchor.scrollIntoView({ block: 'start' });
-      else showToast(i18n.t('common.linkNotOpenable'), 'info');
-      return;
-    }
-    if (target?.kind === 'external') {
-      if (!openOutsideWebView(target.href)) showToast(i18n.t('common.linkNotOpenable'), 'error');
-      return;
-    }
-    showToast(i18n.t('common.linkNotOpenable'), 'info');
+    openContentLink(e, a, this.el, (type) => showToast(i18n.t('common.linkNotOpenable'), type));
   }
 
   /* La guardia contro la pagina che arriva dopo un cambio di conversazione.

@@ -40,7 +40,7 @@ import { WhoPanel, dotColor } from './home-who.js';
    qualunque schermata — ci sono usciti il 21/09/2026, quando la scheda «App»
    che li ospitava e' stata cancellata. */
 import { JennyGap } from './shared/jenny-gap.js';
-import { JennyMascot } from './shared/jenny-mascot.js';
+import { JennyWithMinichat } from './shared/jenny-minichat.js';
 import { LauncherController } from './mobile-launcher.js';
 import { HomePages, SLIDE_MS } from './home-pages.js';
 import { HomeStrip } from './home-strip.js';
@@ -146,7 +146,16 @@ class HomeApp {
   constructor() {
     this.thread = document.getElementById('home-thread');
     this.chat = new HomeChat(this.thread);
-    this.jenny = new JennyMascot(document.querySelector('.home-shell'));
+    /* Jenny con la sua minichat, che si apre dove la chat non e' a schermo:
+       le pagine senza composer e le stanze. La domanda passa dal composer
+       della casa (`_sendText`), quindi la bolla compare anche nel filo, e il
+       filo rende la risposta da se' anche fuori vista: niente da invalidare. */
+    this.jenny = new JennyWithMinichat(document.querySelector('.home-shell'), {
+      minichat: {
+        send: (text) => this._sendText(text),
+        placeholder: () => this.input?.placeholder || '',
+      },
+    });
     /* Il margine che i messaggi lasciano a Jenny, **solo dove lei c'e'**. Si
        consegna alla chat dopo la mascotte perche' le serve il suo nodo vero:
        la banda da scansare si misura su di lei, non su dei numeri copiati —
@@ -256,6 +265,8 @@ class HomeApp {
        della chat sta a `-30px` — ma se l'avevi messa via tu, tornando non deve
        ricomparire: quella era una tua decisione, non lo stato della stanza. */
     this._jennyWasOut = true;
+    // La chat e' a schermo per lei? v. `_syncJennyPlace`.
+    this._jennyInChat = true;
 
     /* Il nome della conversazione personale e' il nome di lei: `bot_name`
        delle impostazioni, che arriva dopo (v. `_readName`). Non si legge
@@ -1056,6 +1067,7 @@ class HomeApp {
     // La chat torna a schermo: un filo che non era arrivato si riprova.
     if (this._hasComposer(entry)) this._retryThread();
     this._placeJenny();
+    this._syncJennyPlace();
     /* Il margine attorno a Jenny si misura a pista ferma: durante lo
        scorrimento il filo e' spostato di lato e `refresh()` non tocca niente,
        quindi il conto giusto va chiesto a scorrimento finito. */
@@ -1117,6 +1129,32 @@ class HomeApp {
     document.documentElement.style.setProperty('--home-composer-h', `${FLOOR_NO_COMPOSER}px`);
   }
 
+  /* Dove sta Jenny, e se ha la minichat: la chat e' a schermo solo nella
+     stanza chat **e** su una pagina col composer. Fuori sta al bordo — lo dice
+     la tavola, che la disegna a `right:-56px` contro i `-30px` della chat — e un
+     tocco la fa uscire con la minichat. Tornando si rimette com'era quando hai
+     lasciato la chat, e non «fuori» d'ufficio: metterla via era una tua
+     decisione. Fino al 28/09/2026 questo valeva per le stanze e non per le
+     pagine App e Impostazioni, dove lei restava fuori senza niente da fare.
+     Al boot la pagina non c'e' ancora, ed e' la chat. */
+  _syncJennyPlace() {
+    const inChat = this.view === 'chat' && (!this._entry || this._hasComposer(this._entry));
+    if (inChat === this._jennyInChat) {
+      // Fra due posti che non sono la chat la minichat si chiude comunque.
+      if (!inChat) this.jenny.setChatOnScreen(false);
+      return;
+    }
+    this._jennyInChat = inChat;
+    if (inChat) {
+      this.jenny.setChatOnScreen(true);
+      this.jenny.setOut(this._jennyWasOut);
+      return;
+    }
+    this._jennyWasOut = this.jenny.el.classList.contains('out');
+    this.jenny.setChatOnScreen(false);
+    this.jenny.setOut(false);
+  }
+
   /** Il nome della pagina chat nella fila: il nome di lei, e basta.
    *
    *  Fino al 26/09/2026 era anche il quaderno che la chat mostrava, col suo
@@ -1154,7 +1192,10 @@ class HomeApp {
     for (const id of [...SHARED_DIALOGS, ...LONG_PRESS_SHEETS, REPORT_SHEET]) {
       if (document.getElementById(id)?.open) return true;
     }
-    return Boolean(this._appActions?.isAppOpen()) || Boolean(this.strip?.sorting);
+    /* La minichat anche: il cassetto non deve prendersi i tasti scritti nel
+       suo campo. */
+    return Boolean(this._appActions?.isAppOpen()) || Boolean(this.strip?.sorting)
+      || Boolean(this.jenny?.minichatOpen);
   }
 
   /* La stanza a schermo la dice un attributo su `.home-shell`, e il resto lo
@@ -1182,11 +1223,6 @@ class HomeApp {
        vorrebbe dire ritrovarlo all'ingresso successivo, sopra una pagina che
        nel frattempo puo' essere un'altra. */
     if (this.view === 'reader') this.reader?.cancelEdit();
-    if (this.view === 'chat') {
-      /* Com'era quando hai lasciato la chat: al ritorno si rimette com'era, e
-         non «fuori» d'ufficio. Metterla via era una tua decisione. */
-      this._jennyWasOut = this.jenny.el.classList.contains('out');
-    }
     this.view = view;
     this.shell?.setAttribute('data-view', view);
     /* Il polling dell'installazione non tiene sveglia una stanza che non c'e'
@@ -1197,7 +1233,6 @@ class HomeApp {
     if (view === 'chat') {
       this.map?.stop();
       this._measureFloor?.();
-      this.jenny.setOut(this._jennyWasOut);
       /* **Non** `_applyConversation`: la conversazione non e' cambiata, e
          quello rifaceva le traduzioni di tutta la casa e ridisegnava fila e
          Quaderni due volte a ogni ritorno. Chi cambia
@@ -1211,11 +1246,9 @@ class HomeApp {
       document.documentElement.style.setProperty(
         '--home-composer-h', `${FLOOR_NO_COMPOSER}px`,
       );
-      /* Fuori dalla chat Jenny sta al bordo: lo dice la tavola, che qui la
-         disegna a `right:-56px` contro i `-30px` delle due della chat. */
-      this.jenny.setOut(false);
       this.input?.blur();
     }
+    this._syncJennyPlace();
     this._applyHead();
     if (view === 'chat') this._reportChatOnScreen();
     return true;
@@ -1583,7 +1616,12 @@ class HomeApp {
        casa non la chiudeva mai: Indietro agiva su quel che c'era **sotto**, e
        l'app restava li'. Con la pagina App diventata la strada principale per
        aprirle, e' il livello che si incontra piu' spesso. `handleBack` e' dell'
-       app: una sua schermata interna torna indietro dentro di lei, prima. */
+       app: una sua schermata interna torna indietro dentro di lei, prima.
+       **Prima dell'app, la minichat**: Jenny sta sopra le mini-app, e la sua
+       minichat si apre anche li'. Nell'ordine opposto Indietro chiudeva l'app
+       sotto e lasciava a schermo la minichat (lo stesso ordine dell'officina,
+       v. `mobile-app.js`). */
+    if (this.jenny?.handleBack()) return true;
     if (this._appActions?.handleBack()) return true;
     /* La modalita' ordina: Indietro esce **senza salvare**. Salvare e' «Fatto». */
     if (this.strip?.sorting) {
@@ -1837,10 +1875,20 @@ class HomeApp {
       this._autosize();
       return true;
     }
-    const chatId = sessionManager.currentChatId;
-    const media = this.files.getImages();
-    const entries = this.files.getAttachmentEntries();
-    if (!wsManager.sendToChat(chatId, text, media)) {
+    if (!this._sendText(text, this.files.getImages(), this.files.getAttachmentEntries())) {
+      return false;
+    }
+    this.files.clear();
+    this.input.value = '';
+    this._autosize();
+    return true;
+  }
+
+  /* Manda e disegna la bolla. Il composer ci passa con i suoi allegati, la
+     minichat col solo testo: la domanda fatta a Jenny fuori dalla chat e' un
+     messaggio della conversazione come un altro, e nel filo deve esserci. */
+  _sendText(text, media = [], entries = []) {
+    if (!wsManager.sendToChat(sessionManager.currentChatId, text, media)) {
       /* Socket chiuso: il messaggio non e' partito e non va disegnato. Una
          bolla che compare e un messaggio che non arriva sono la stessa cosa
          vista da due parti, e la prima fa credere alla seconda. */
@@ -1851,9 +1899,6 @@ class HomeApp {
        entrati da *altri* canali (v. webui_turns._handle_session_turn_started,
        che per il canale websocket esce subito). */
     this.chat.appendOwn(text, entries);
-    this.files.clear();
-    this.input.value = '';
-    this._autosize();
     return true;
   }
 

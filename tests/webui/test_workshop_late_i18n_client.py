@@ -22,7 +22,8 @@ from support.js_harness import ASSETS, function, member, requires_node, run_js
 pytestmark = requires_node
 
 HEADER = (ASSETS / "mobile-header.js").read_text(encoding="utf-8")
-JENNY = (ASSETS / "mobile-jenny.js").read_text(encoding="utf-8")
+# La minichat e' dei due gusci dal 28/09/2026: le sue etichette stanno li'.
+JENNY = (ASSETS / "shared" / "jenny-minichat.js").read_text(encoding="utf-8")
 
 _I18N = """
 import assert from 'node:assert/strict';
@@ -85,7 +86,8 @@ function node() {
 globalThis.document = { createElement: () => node(), getElementById: () => null };
 class JennyMascot { _buildDom() {} }
 class J extends JennyMascot {
-  constructor() { super(); this.host = node(); }
+  constructor() { super(); this.host = node(); this._adapter = { placeholder: () => '' }; }
+  _busy() { return false; }
 """
         + member(JENNY, "_buildDom")
         + member(JENNY, "_syncPlaceholder")
@@ -98,7 +100,7 @@ await new Promise((r) => setTimeout(r, 0));
 assert.equal(j.scrim.attrs['aria-label'], 'T:jenny.closeMinichat');
 assert.equal(j.input.attrs['aria-label'], 'T:jenny.askJenny');
 assert.equal(j.sendBtn.attrs['aria-label'], 'T:jenny.send');
-assert.equal(j.input.placeholder, 'T:chat.placeholder');
+assert.equal(j.input.placeholder, 'T:jenny.askHere');
 console.log('ok');
 """
     )

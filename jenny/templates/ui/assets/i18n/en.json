@@ -628,9 +628,9 @@
     "askHere": "Ask here...",
     "askJenny": "Ask Jenny",
     "send": "Send",
-    "workingReply": "I'm still working on it… you'll find the rest in chat ✿",
+    "workingReply": "I'm still working on it… the answer will show up here ✿",
     "connectionError": "Cannot send: check your connection.",
-    "codeTag": "[code]"
+    "busy": "Jenny is answering…"
   },
   "themes": {
     "chanel": {

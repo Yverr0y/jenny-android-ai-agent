@@ -165,15 +165,19 @@ def test_both_shells_answer_the_tap() -> None:
     condiviso ha un default che non fa niente: si perde in silenzio.
 
     La risposta al tocco sta nella mascotte condivisa, e i due gusci l'hanno
-    perche' usano quella: l'officina la estende, la casa la crea."""
+    perche' usano quella, con sopra la stessa minichat: l'officina la estende,
+    la casa la crea."""
     src = (ASSETS / "shared" / "jenny-mascot.js").read_text(encoding="utf-8")
     assert re.search(r"onTap:.*'out'", src), "la mascotte non gira piu' lo stato al tocco"
     assert "isOut:" in src and "setOut:" in src, "la mascotte non dichiara piu' lo stato"
+    minichat = (ASSETS / "shared" / "jenny-minichat.js").read_text(encoding="utf-8")
+    assert "class JennyWithMinichat extends JennyMascot" in minichat
     workshop = (ASSETS / "mobile-jenny.js").read_text(encoding="utf-8")
-    assert "class JennyCompanion extends JennyMascot" in workshop
-    assert "bindMascotDrag" not in workshop, "l'officina lega di nuovo la fisica per conto suo"
+    assert "class JennyCompanion extends JennyWithMinichat" in workshop
+    for name, text in (("l'officina", workshop), ("la minichat", minichat)):
+        assert "bindMascotDrag" not in text, f"{name} lega di nuovo la fisica per conto suo"
     home = (ASSETS / "home-app.js").read_text(encoding="utf-8")
-    assert "new JennyMascot(" in home
+    assert "new JennyWithMinichat(" in home
     assert not (ASSETS / "casa-mascot.js").exists(), "e' tornata la seconda mascotte"
 
 

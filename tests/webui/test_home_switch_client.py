@@ -253,6 +253,7 @@ class App {
     };
     this.view = 'chat';
     this._jennyWasOut = true;
+    this._jennyInChat = true;
     this.map = null;
     this._measureFloor = () => this.actions.push('pavimento rimisurato');
     this.pages = {
@@ -281,6 +282,9 @@ class App {
     this.jenny = {
       el: { classList: { contains: () => this._jennyOut } },
       setOut: (v) => { this._jennyOut = v; this.actions.push('fuori:' + v); },
+      setChatOnScreen: (v) => { this.jennyChat = v; },
+      handleBack: () => false,
+      minichatOpen: false,
     };
     this._jennyOut = true;
     this.who = {
@@ -357,6 +361,7 @@ class App {
   __CHAT_NAME__
   __HAS_COMPOSER__
   __PLACE_JENNY__
+  __SYNC_JENNY_PLACE__
   __ASK_APP_NAMES__
   __OPEN_JENNY__
   __OPEN_UPDATES__
@@ -379,6 +384,7 @@ class App {
   __ON_GONE__
   __ACTIVE_COMPOSER__
   __SEND__
+  __SEND_TEXT__
   __RENAME_NOTEBOOK__
   __RENAME_DRAFT__
   __DELETE_NOTEBOOK__
@@ -443,6 +449,7 @@ def _harness() -> str:
         .replace("__CHAT_NAME__", member(src, "_chatName"))
         .replace("__HAS_COMPOSER__", member(src, "_hasComposer"))
         .replace("__PLACE_JENNY__", member(src, "_placeJenny"))
+        .replace("__SYNC_JENNY_PLACE__", member(src, "_syncJennyPlace"))
         .replace("__ASK_APP_NAMES__", member(src, "_askAppNames"))
         .replace("__OPEN_JENNY__", member(src, "openJenny"))
         .replace("__OPEN_UPDATES__", member(src, "openUpdates"))
@@ -465,6 +472,7 @@ def _harness() -> str:
         .replace("__ON_GONE__", member(src, "onGoneChanged"))
         .replace("__ACTIVE_COMPOSER__", member(src, "_composerActive"))
         .replace("__SEND__", member(src, "_send"))
+        .replace("__SEND_TEXT__", member(src, "_sendText"))
         .replace("__RENAME_NOTEBOOK__", member(src, "renameNotebook"))
         .replace("__RENAME_DRAFT__", member(src, "_renameDraft"))
         .replace("__DELETE_NOTEBOOK__", member(src, "deleteNotebook"))
@@ -1891,4 +1899,67 @@ def test_every_sheet_that_back_closes_counts_as_something_above() -> None:
         assert.equal(sheet.open, false);
         assert.equal(app.hasOverlayAbove(), false);
       }
+    """)
+
+
+# ── Jenny e la sua minichat, fra pagine e stanze ────────────────────────────
+
+
+def test_a_page_without_composer_sends_her_to_the_edge_with_the_minichat() -> None:
+    """Fino al 28/09/2026 nelle pagine App e Impostazioni lei restava fuori, e
+    il tocco non apriva niente. Adesso la chat e' a schermo solo in una pagina
+    col composer: fuori sta al bordo, e ha la minichat."""
+    _run_js("""
+      const app = home();
+      app._entry = { id: 'app', kind: 'app' };
+      app._syncJennyPlace();
+      assert.equal(app.jennyChat, false, 'fuori dalla chat la minichat non si accende');
+      assert.deepEqual(app.actions, ['fuori:false']);
+      app._entry = { id: 'settings', kind: 'settings' };
+      app.actions.length = 0;
+      app._syncJennyPlace();
+      assert.deepEqual(app.actions, [], 'fra due pagine senza chat resta dov\\'e\\'');
+      app._entry = { id: 'chat', kind: 'chat' };
+      app._syncJennyPlace();
+      assert.equal(app.jennyChat, true);
+      assert.deepEqual(app.actions, ['fuori:true'], 'tornando si rimette com\\'era');
+    """)
+
+
+def test_put_away_in_the_chat_she_stays_away_on_the_way_back() -> None:
+    _run_js("""
+      const app = home();
+      app._entry = { id: 'chat', kind: 'chat' };
+      app._jennyOut = false;
+      app._entry = { id: 'app', kind: 'app' };
+      app._syncJennyPlace();
+      app._entry = { id: 'chat', kind: 'chat' };
+      app.actions.length = 0;
+      app._syncJennyPlace();
+      assert.deepEqual(app.actions, ['fuori:false'], 'metterla via era una tua decisione');
+    """)
+
+
+def test_a_room_counts_as_away_even_on_the_chat_page() -> None:
+    _run_js("""
+      const app = home();
+      app._entry = { id: 'chat', kind: 'chat' };
+      app._setView('jenny');
+      assert.equal(app.jennyChat, false);
+      app._setView('chat');
+      assert.equal(app.jennyChat, true);
+    """)
+
+
+def test_back_closes_the_minichat_before_an_app_under_it() -> None:
+    _run_js("""
+      const app = home();
+      let closedApp = false;
+      app._appActions = { handleBack: () => { closedApp = true; return true; }, isAppOpen: () => true };
+      let open = true;
+      app.jenny.handleBack = () => { const was = open; open = false; return was; };
+      assert.equal(app._closeOverlays(), true);
+      assert.equal(closedApp, false, 'Indietro ha chiuso l\\'app sotto la minichat');
+      assert.equal(app._closeOverlays(), true);
+      assert.equal(closedApp, true, 'alla pressione dopo, l\\'app');
     """)

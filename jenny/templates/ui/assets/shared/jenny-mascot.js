@@ -10,11 +10,12 @@
  *
  *  Adesso il cervello e' qui, ed e' quello dell'officina: il ramo che aveva gia'
  *  preso le correzioni misurate sul telefono. **Fra i due gusci cambia solo il
- *  pavimento** — dove appoggia i piedi, che e' una regola del foglio di stile
- *  di ciascuno (`.jenny-duo` in mobile-style.css, `.home-shell .jenny-duo` in
- *  home-style.css). L'officina ci aggiunge sopra la minichat
- *  (`mobile-jenny.js`, sottoclasse), perche' la' la chat puo' non essere a
- *  schermo; in casa la chat *e'* lo schermo.
+ *  pavimento** — dove appoggia i piedi, cioe' `--jenny-floor`, che ciascun
+ *  foglio di stile dichiara per se' (`:root` in mobile-style.css,
+ *  `.home-shell` in home-style.css). Sopra ci sta la minichat
+ *  (`shared/jenny-minichat.js`, sottoclasse), per i posti dove la chat non e' a
+ *  schermo: le viste dell'officina e, dal 28/09/2026, le pagine e le stanze
+ *  della casa, che prima non l'avevano perche' «in casa la chat e' lo schermo».
  *
  *  Questa classe e' Jenny nella chat vera: presente all'angolo, segue la
  *  conversazione aperta, si prende e si lancia, e un tocco la manda al bordo o
@@ -90,9 +91,9 @@ export class JennyMascot {
     this.mode = mode;
     this._agentState = 'idle';
     this._turnActive = false;
-    // Turno chiesto dalla minichat e non ancora concluso (v. mobile-jenny.js).
-    // Sta qui e non nella sottoclasse perche' lo legge la guardia dell'umore:
-    // in casa non si alza mai, e la guardia resta la stessa.
+    // Turno chiesto dalla minichat e non ancora concluso (v. jenny-minichat.js).
+    // Sta qui e non nella sottoclasse perche' lo legge la guardia dell'umore,
+    // che resta la stessa con e senza minichat.
     this._pendingTurn = false;
     // Id del turno che sta animando (v. `_trackedTurnMatches`): la mascotte ne
     // segue uno alla volta, e un turno estraneo non glielo deve togliere.
@@ -452,8 +453,8 @@ export class JennyMascot {
     });
   }
 
-  /* Il trascinamento e' partito davvero. Qui non c'e' niente da chiudere; in
-     officina la minichat. */
+  /* Il trascinamento e' partito davvero. Qui non c'e' niente da chiudere; con
+     la minichat, la minichat. */
   _onDragCommit() {}
 
   /** Al bordo (`false`) o venuta fuori (`true`).
@@ -492,7 +493,7 @@ export class JennyMascot {
   }
 
   /* Dove va un frame della conversazione aperta. Qui sempre alla chat vera;
-     l'officina, fuori dalla chat, lo manda alla minichat. */
+     la minichat, fuori dalla chat, lo tiene per il suo fumetto. */
   _handleFrame(msg) {
     this._handleChatStream(msg);
   }
@@ -549,10 +550,10 @@ export class JennyMascot {
     if (!turnId) return true;
     if (this._streamTurnId === null) {
       // Una chiusura non apre mai un tracciamento — chiuderebbe un turno che
-      // non abbiamo mai visto aprirsi — ma resta permissiva: è il caso della
-      // minichat chiusa a metà turno, dove i frame intermedi sono stati
-      // scartati perché non c'era niente a schermo, e ignorare anche il
-      // `turn_end` lascerebbe `_pendingTurn` alzato per sempre.
+      // non abbiamo mai visto aprirsi — ma resta permissiva: una domanda della
+      // minichat il cui tracciamento e' stato lasciato a meta' (un cambio di
+      // vista a turno in corso) si chiude lo stesso, e ignorarne il `turn_end`
+      // lascerebbe `_pendingTurn` alzato per sempre.
       if (msg.event !== 'turn_end' && msg.event !== 'error') this._streamTurnId = turnId;
       return true;
     }

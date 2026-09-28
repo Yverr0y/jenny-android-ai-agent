@@ -95,6 +95,13 @@
      altre taglie la riscrivono su <html> (v. shared/mascot.js). Tutta la
      geometria di .jenny-duo e delle bolle minichat ne deriva. */
   --jenny-size:    120px;
+  /* Il pavimento di Jenny: dove poggia il bordo basso del suo quadrato. Qui e'
+     quello dell'officina, appena sopra la barra di input (dock + #input-bar,
+     riga dello scope inclusa); la casa lo riscrive su `.home-shell`. Lo
+     leggono lo sprite e il fumetto e il pensa della minichat, che prima
+     rifacevano il conto dell'officina a mano — sbagliato in casa, dove il dock
+     non c'e'. */
+  --jenny-floor:   calc(var(--dock-height) + 58px + var(--scope-row));
   --font-sans:     'Inter', system-ui, sans-serif;
   --font-display:  'Tenor Sans', var(--font-sans);
   --font-mono:     'Fira Code', monospace;
@@ -6001,8 +6008,9 @@ body {
      per far arrivare la camminata di rientro sul punto giusto. Scriverli qui a
      mano li farebbe diventare due.
      **Questa e' anche la Jenny della casa** (shared/jenny-mascot.js, lo stesso
-     sprite), che carica questo foglio: la' si cambia solo il pavimento — il
-     `bottom` qui sotto — in `.home-shell .jenny-duo` di home-style.css.
+     sprite), che carica questo foglio: la' si cambia solo il pavimento —
+     `--jenny-floor`, che il `bottom` qui sotto legge — su `.home-shell` in
+     home-style.css.
      **Il livello e' uno per le due interfacce** (D3, 25/09/2026: «Jenny sempre
      sopra»): 120 sta sopra la mini-app (110) e la lightbox (115), e sopra di
      lei ci sono solo la sua minichat (121) e il top layer (`<dialog>`, toast),
@@ -6010,9 +6018,9 @@ body {
      `test_she_is_on_top_of_everything_in_the_house` e
      `test_she_is_on_top_of_everything_in_the_workshop`. */
   right: calc(var(--jenny-size) * var(--jenny-dock) * -1);
-  /* Fissa per tutti gli stati: appena sopra la barra di input (dock +
-     altezza #input-bar, riga dello scope inclusa). Non deve mai cambiare in Y. */
-  bottom: calc(var(--dock-height) + 58px + var(--scope-row));
+  /* Fissa per tutti gli stati: il pavimento del guscio (v. `--jenny-floor`).
+     Non deve mai cambiare in Y. */
+  bottom: var(--jenny-floor);
   width: var(--jenny-size);
   z-index: 120;
   background: none;
@@ -6155,37 +6163,117 @@ body {
 /* Stessa specificita' di `.open` e scritta dopo: vince per ordine, senza
    `!important`. Tenerla sotto. */
 .jenny-mc.hidden-mode { display: none; }
+/* Il fumetto e' scuro: la superficie delle schede, col testo della chat e un
+   bordo che lo stacca dallo scrim. Prima era `--accent` / `--on-accent`, nero
+   su rosa in Synthwave; il 28/09/2026 l'utente l'aveva chiesto «bianco su rosa
+   come gli altri messaggi», e visto a schermo, con una risposta intera dentro,
+   ha cambiato idea: «fallo scuro, che cosi' ti acceca». Raggio e corpo del
+   testo restano quelli dei messaggi. Il contrasto di ogni parola su
+   `--surface` lo misura gia' `test_home_you_contract.py`, in ogni tema.
+   Contiene tutta la risposta e scorre dentro di se': l'altezza va dalla sua
+   testa al margine alto. Il testo scorre in `.jenny-mc-text`, e non qui,
+   perche' un `overflow` sul fumetto taglierebbe la coda. */
 .jenny-mc-bubble {
   display: none;
+  flex-direction: column;
   position: absolute;
-  /* right tale che la coda (right 12 + mezza base 6) cada sull'asse di Jenny */
+  /* right tale che la coda (right 12 + mezza diagonale 6) cada sull'asse di Jenny */
   right: 14px;
   /* la coda deve galleggiare sopra l'ahoge, non poggiare sulla testa */
-  bottom: calc(var(--dock-height) + 58px + var(--scope-row) + var(--jenny-size) - 4px);
-  max-width: 74%;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 13px;
-  line-height: 1.45;
-  padding: 9px 12px;
-  border-radius: var(--radius-bubble);
-  border: var(--bubble-user-border);
+  bottom: calc(var(--jenny-floor) + var(--jenny-size) - 4px);
+  max-width: calc(100% - 28px);
+  max-height: calc(100% - var(--jenny-floor) - var(--jenny-size) - 12px);
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   box-shadow: var(--shadow);
+  border-radius: var(--radius-bubble);
+  font-size: 14.5px;
+  line-height: 1.45;
+  pointer-events: auto;
 }
+/* La coda: un quadratino ruotato col fondo e il bordo della bolla, e non un
+   triangolo di bordi, che non sa portare un contorno. Sta dietro la bolla
+   (`z-index: -1`, dentro il contesto di `.jenny-mc`), quindi se ne vede solo
+   la meta' che sporge, e il bordo sui due lati esterni la chiude. */
 .jenny-mc-bubble::after {
   content: "";
   position: absolute;
+  z-index: -1;
   bottom: -6px;
   right: 12px;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 7px solid var(--accent);
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  transform: rotate(45deg);
 }
+.jenny-mc-text {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 9px 13px;
+  overflow-wrap: anywhere;
+  /* Lo scorrimento resta suo: la pista della casa non deve prenderlo per uno
+     swipe di pagina. */
+  touch-action: pan-y;
+}
+.jenny-mc-block + .jenny-mc-block { margin-top: 8px; }
+.jenny-mc-block[data-kind="note"] { font-style: italic; opacity: .85; }
+/* Il markdown del fumetto: le regole dei messaggi della casa (`.home-block`),
+   sulla stessa superficie scura. */
+.jenny-mc-text > * > :first-child { margin-top: 0; }
+.jenny-mc-text > * > :last-child { margin-bottom: 0; }
+.jenny-mc-text p { margin: 0 0 8px; }
+.jenny-mc-text ul, .jenny-mc-text ol { margin: 0 0 8px; padding-left: 20px; }
+.jenny-mc-text li { margin: 2px 0; }
+.jenny-mc-text h1, .jenny-mc-text h2, .jenny-mc-text h3 {
+  margin: 10px 0 6px;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+.jenny-mc-text a { color: var(--text-accent); }
+.jenny-mc-text code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--overlay);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.jenny-mc-text pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow-x: auto;
+}
+.jenny-mc-text pre code { padding: 0; background: none; }
+.jenny-mc-text blockquote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+}
+.jenny-mc-text table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 8px;
+}
+.jenny-mc-text th, .jenny-mc-text td {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+}
+.jenny-mc-text img { max-width: 100%; height: auto; }
 .jenny-mc-think {
   display: none;
   position: absolute;
   right: 30px;
-  bottom: calc(var(--dock-height) + 58px + var(--scope-row) + var(--jenny-size) - 4px);
+  bottom: calc(var(--jenny-floor) + var(--jenny-size) - 4px);
   font-family: var(--font-mono);
   font-size: 14px;
   color: var(--text);
@@ -6229,7 +6317,7 @@ body {
 .jenny-mc.open[data-state="ask"] .jenny-mc-ask,
 .jenny-mc.open[data-state="reply"] .jenny-mc-ask { display: flex; animation: jenny-pop 0.2s ease-out; }
 .jenny-mc.open[data-state="think"] .jenny-mc-think { display: block; }
-.jenny-mc.open[data-state="reply"] .jenny-mc-bubble { display: block; animation: jenny-pop 0.22s ease-out; }
+.jenny-mc.open[data-state="reply"] .jenny-mc-bubble { display: flex; animation: jenny-pop 0.22s ease-out; }
 
 @keyframes jenny-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes jenny-wobble { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }

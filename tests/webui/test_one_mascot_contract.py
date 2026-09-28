@@ -63,7 +63,7 @@ def test_the_house_does_not_drive_her_by_hand() -> None:
     chiamata a mano da `home-app.js` sarebbe una seconda macchina a stati
     sopra la prima — ed e' esattamente come le due erano divergite."""
     home = (ASSETS / "home-app.js").read_text(encoding="utf-8")
-    assert "new JennyMascot(" in home
+    assert "new JennyWithMinichat(" in home
     drives = re.findall(
         r"this\.jenny\.(thinking|talking|idle|setMood|noteTurn\w*|_set\w+)\(", home
     )
@@ -74,18 +74,30 @@ def test_the_house_sheet_only_moves_the_floor() -> None:
     """Il foglio della casa dice dove appoggia i piedi. Nient'altro: ancoraggi,
     specchio, volo, respiro **e livello** sono di `.jenny-duo`, in un foglio
     solo. Il livello era qui (`z-index: 5`) fino a D3, e bastava contro la casa
-    ma non contro mini-app e lightbox, che arrivano dall'altro foglio."""
+    ma non contro mini-app e lightbox, che arrivano dall'altro foglio.
+
+    Dal 28/09/2026 il pavimento si dichiara come variabile, `--jenny-floor`, e
+    non come `bottom` dello sprite: la leggono anche il fumetto e il pensa della
+    minichat, che in casa rifacevano il conto dell'officina (col dock che qui
+    non c'e'). Resta una dichiarazione sola, e resta il composer."""
     css = HOME_CSS.read_text(encoding="utf-8")
-    rules = _rules(css, r"\.jenny-duo")
-    own = [c for c in rules if "bottom:" in c]
-    assert len(own) == 1, f"il pavimento della casa non e' una regola sola: {own}"
+    sprite = _rules(css, r"\.jenny-duo")
+    assert not [c for c in sprite if "bottom:" in c], (
+        "la casa riscrive di nuovo il `bottom` dello sprite invece del pavimento"
+    )
+    floors = [c for c in _rules(css, r"^\.home-shell$") if "--jenny-floor" in c]
+    assert len(floors) == 1, f"il pavimento della casa non e' una dichiarazione sola: {floors}"
     declared = {
         d.split(":", 1)[0].strip()
-        for d in re.sub(r"/\*.*?\*/", "", own[0], flags=re.S).split(";")
+        for d in re.sub(r"/\*.*?\*/", "", floors[0], flags=re.S).split(";")
         if d.strip()
     }
-    assert declared == {"bottom"}, declared
-    assert "--home-composer-h" in own[0], "i piedi non appoggiano piu' sul composer"
+    assert declared == {"--jenny-floor"}, declared
+    assert "--home-composer-h" in floors[0], "i piedi non appoggiano piu' sul composer"
+    workshop = WORKSHOP_CSS.read_text(encoding="utf-8")
+    assert [c for c in _rules(workshop, r"^\.jenny-duo$") if "bottom: var(--jenny-floor)" in c], (
+        "lo sprite non legge piu' il pavimento del guscio"
+    )
     # Le altre regole che la nominano, in casa, sono di chi le lascia spazio
     # (la riga di lavoro) e non toccano lei.
     assert ".home-jenny {" not in css and ".home-jenny." not in css, (

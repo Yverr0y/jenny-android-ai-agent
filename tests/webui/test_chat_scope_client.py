@@ -34,7 +34,7 @@ from support.js_harness import requires_node, run_js
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
 JENNY_JS = ASSETS / "shared" / "jenny-mascot.js"
-COMPANION_JS = ASSETS / "mobile-jenny.js"
+MINICHAT_JS = ASSETS / "shared" / "jenny-minichat.js"
 SESSION_JS = ASSETS / "shared" / "session-manager.js"
 WS_JS = ASSETS / "shared" / "ws-manager.js"
 
@@ -301,11 +301,11 @@ def test_the_mascot_releases_its_turn_on_a_switch() -> None:
     for field in ("_turnActive = false", "_pendingTurn = false", "_streamTurnId = null"):
         assert field in head, f"_releaseTrackedTurn non azzera {field}"
 
-    companion = _read(COMPANION_JS)
+    companion = _read(MINICHAT_JS)
     body = re.search(r"\n  _releaseTrackedTurn\(\) \{(.*?)\n  \}", companion, re.S)
-    assert body, "l'officina non dimentica piu' la minichat al cambio di chat"
-    assert "awaiting = false" in body.group(1)
+    assert body, "la minichat non si dimentica piu' al cambio di chat"
+    assert "this._resetReply();" in body.group(1)
     assert "super._releaseTrackedTurn()" in body.group(1), (
-        "l'officina ha riscritto il rilascio invece di aggiungerci la minichat"
+        "la minichat ha riscritto il rilascio invece di aggiungerci il suo"
     )
     assert "chat:switch" in _read(SESSION_JS), "switchTo non annuncia il cambio"

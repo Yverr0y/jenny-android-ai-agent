@@ -119,3 +119,26 @@ export function openOutsideWebView(href) {
     return false;
   }
 }
+
+/** Il tocco su un link di un contenuto, per intero: tre esiti, e in nessuno la
+ *  pagina naviga. L'ancora scorre *root* (e si cerca solo li' dentro), un'altra
+ *  origine si apre fuori dalla WebView, il resto e' inerte e chi chiama lo
+ *  dice con *say* (`'info'` o `'error'`), che e' qui per restare senza import.
+ *
+ *  Stava in `home-chat.js` (`_openLink`); dal 28/09/2026 lo usa anche il
+ *  fumetto della minichat, e una terza copia della regola no. */
+export function openContentLink(e, link, root, say) {
+  e.preventDefault();
+  const target = contentLinkTarget(contentLinkHref(link), window.location);
+  if (target?.kind === 'hash') {
+    const anchor = findContentAnchor(root, target.id);
+    if (anchor) anchor.scrollIntoView({ block: 'start' });
+    else say('info');
+    return;
+  }
+  if (target?.kind === 'external') {
+    if (!openOutsideWebView(target.href)) say('error');
+    return;
+  }
+  say('info');
+}

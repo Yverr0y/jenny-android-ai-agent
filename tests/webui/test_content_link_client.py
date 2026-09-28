@@ -101,6 +101,7 @@ _CLICK_HARNESS = """
 import assert from 'node:assert/strict';
 const {
   contentLinkHref, contentLinkOf, contentLinkTarget, findContentAnchor, openOutsideWebView,
+  openContentLink,
 } = await import('__MODULE__');
 globalThis.window = {
   location: __HERE__,

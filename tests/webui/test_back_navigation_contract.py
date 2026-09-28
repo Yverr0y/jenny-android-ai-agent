@@ -273,7 +273,9 @@ def test_the_two_dangerous_collaborators_of_the_chain_still_exist() -> None:
     # Il livello mini-app ha anche un `close` per Home: smonta e basta.
     assert "closeApp() {" in apps, "closeApp è il congedo che Home usa sul livello mini-app"
 
-    jenny = (ASSETS / "mobile-jenny.js").read_text(encoding="utf-8")
+    # La minichat e' dei due gusci dal 28/09/2026: il suo Indietro sta nel
+    # modulo condiviso, e l'officina lo eredita.
+    jenny = (ASSETS / "shared" / "jenny-minichat.js").read_text(encoding="utf-8")
     jenny_back = _method(jenny, "handleBack")
     assert "return false;" in jenny_back, (
         "a minichat chiusa il livello deve lasciar proseguire la catena"
@@ -564,3 +566,18 @@ def test_the_drawers_only_sub_screen_is_the_folder_you_are_in() -> None:
     assert "return true" not in back, (
         "handleBack si tiene una pressione per un livello che non esiste piu'"
     )
+
+
+def test_the_house_closes_the_minichat_before_the_app_under_it() -> None:
+    """La minichat si apre anche sopra una mini-app aperta dal cassetto (lei e'
+    a 120, l'app a 110). Indietro deve chiudere prima lei: nell'ordine opposto
+    chiudeva l'app sotto e lasciava la minichat a schermo, cioe' una pressione
+    che non cambia quel che guardi. E' l'ordine che l'officina ha gia' nel suo
+    `_overlayLayers`."""
+    home = (ASSETS / "home-app.js").read_text(encoding="utf-8")
+    overlays = _method(home, "_closeOverlays")
+    mini = overlays.find("this.jenny?.handleBack()")
+    app = overlays.find("this._appActions?.handleBack()")
+    assert mini != -1, "Indietro in casa non chiude piu' la minichat"
+    assert app != -1
+    assert mini < app, "in casa Indietro chiuderebbe l'app sotto la minichat"

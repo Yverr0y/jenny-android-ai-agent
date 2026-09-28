@@ -1,7 +1,8 @@
-"""Tre superfici, un patto solo: chi disegna contenuto scritto lo disegna intero.
+"""Quattro superfici, un patto solo: chi disegna contenuto scritto lo disegna intero.
 
-La chat dell'officina, la chat di casa e il lettore delle pagine mostrano tutte
-testo che Jenny ha scritto, e in tutte e tre quel testo puo' contenere una
+La chat dell'officina, la chat di casa, il lettore delle pagine e il fumetto
+della minichat mostrano tutti testo che Jenny ha scritto, e in tutti quel testo
+puo' contenere una
 formula o un diagramma — la skill `llm-wiki` glieli **impone**: «ogni flusso,
 gerarchia o stato deve essere mermaid», «ogni formula deve essere KaTeX».
 
@@ -32,6 +33,9 @@ SURFACES = {
     "mobile-chat.js": r"\.innerHTML = renderMarkdown\(",
     "home-chat.js": r"\.innerHTML = renderMarkdown\(",
     "home-reader.js": r"\.innerHTML = this\._safeHtml\(",
+    # Il fumetto della minichat, dal 28/09/2026: contiene tutta la risposta,
+    # formattata come in chat, e quindi anche le sue formule e i suoi diagrammi.
+    "shared/jenny-minichat.js": r"\.innerHTML = renderMarkdown\(",
 }
 
 # La chiamata che disegna il resto, comunque si chiami localmente.

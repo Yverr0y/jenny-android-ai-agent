@@ -849,6 +849,7 @@ def test_the_shell_says_which_page_is_on_from_the_first_frame() -> None:
         "  }\n"
         "  _hasComposer() { return false; }\n"
         "  _placeJenny() {}\n"
+        "  _syncJennyPlace() {}\n"
         "  _applyHead() {}\n"
         "  _reportChatOnScreen() {}\n  "
         + member(app_js, "onPageChanged")

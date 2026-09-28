@@ -321,10 +321,15 @@ def test_she_is_on_top_of_everything_in_the_house() -> None:
     assert not tweaks, f"qualcuno cambia il suo livello in un caso: {tweaks}"
 
     words = css_levels.home_vocabulary()
+    # L'unica eccezione, la stessa del gemello dell'officina: la sua minichat,
+    # col fumetto sopra la sua testa. E' di lei, e dal 28/09/2026 anche la casa
+    # la apre.
+    allowed = {".jenny-mc"}
     above = [
         (sel, z) for sel, z in css_levels.levels(themes)
         if z >= she
         and sel != ".jenny-duo"
+        and sel not in allowed
         and all(name in words for name in css_levels.key_names(sel))
     ]
     assert not above, (

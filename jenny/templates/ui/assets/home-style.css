@@ -247,7 +247,7 @@ body.home {
 }
 
 /* Sollevata. Sta sopra le altre **senza** `z-index` — questo foglio non ne
-   dichiara nessuno (v. `.home-shell .jenny-duo`): un elemento trasformato si
+   dichiara nessuno (v. il commento su `--jenny-floor`): un elemento trasformato si
    dipinge dopo i fratelli che non lo sono. */
 .home-sort-pill.is-lifted {
   border-color: var(--accent);
@@ -1140,10 +1140,22 @@ body.home {
    che arrivano da mobile-style.css — le passavano davanti. Questo foglio non
    dichiara nessuno `z-index`, e il banco
    `test_she_is_on_top_of_everything_in_the_house` guarda anche le regole
-   dell'altro foglio che toccano il DOM della casa. */
-.home-shell .jenny-duo {
-  bottom: calc(var(--home-composer-h, 64px) - var(--jenny-size) * 0.1224);
+   dell'altro foglio che toccano il DOM della casa.
+
+   Il pavimento si dichiara come `--jenny-floor`, la variabile che lo sprite
+   legge nell'altro foglio: la leggono anche il fumetto e il pensa della
+   minichat, che cosi' stanno sopra la sua testa in tutti e due i gusci. */
+.home-shell {
+  --jenny-floor: calc(max(var(--home-composer-h, 64px), var(--jenny-mc-floor, 0px)) - var(--jenny-size) * 0.1224);
 }
+
+/* La minichat si apre dove il composer non c'e', e il pavimento li' e' a 20 px
+   (`FLOOR_NO_COMPOSER`): il suo campo le finirebbe sui piedi. Finche' e'
+   aperta lei sale sopra il campo, che sta in basso a 12 px ed e' alto una
+   riga del composer. Nell'officina non serve: li' lei sta sempre sopra la
+   barra di input. */
+.home-shell:has(> .jenny-mc.open) { --jenny-mc-floor: 66px; }
+.home-shell .jenny-mc-ask { bottom: 12px; }
 
 /* Una cosa che non è andata, detta nel filo. Sobria come il separatore: in casa
    un guasto si dice come si direbbe a voce, non con un pannello rosso. Sta nel

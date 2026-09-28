@@ -628,9 +628,9 @@
     "askHere": "Chiedi qui...",
     "askJenny": "Chiedi a Jenny",
     "send": "Invia",
-    "workingReply": "Ci sto ancora lavorando... il resto lo trovi in chat ✿",
+    "workingReply": "Ci sto ancora lavorando... la risposta arriva qui ✿",
     "connectionError": "Non riesco a inviare: controlla la connessione.",
-    "codeTag": "[codice]"
+    "busy": "Jenny sta rispondendo..."
   },
   "themes": {
     "chanel": {
