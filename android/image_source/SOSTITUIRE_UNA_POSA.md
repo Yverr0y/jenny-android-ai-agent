@@ -57,8 +57,8 @@ Dalla cartella `android/image_source/`:
 python3 gen_pose_webp.py
 ```
 
-Rigenera **tutti e 24** i webp in `jenny/templates/ui/assets/` (15 pose cotte +
-9 livelli), non solo quello che hai toccato — è normale e voluto, è
+Rigenera **tutti e 23** i webp in `jenny/templates/ui/assets/` (10 pose cotte +
+13 livelli), non solo quello che hai toccato — è normale e voluto, è
 idempotente.
 
 Se vedi `AssertionError: ... atteso canvas 3000x3000, trovato (...)` il

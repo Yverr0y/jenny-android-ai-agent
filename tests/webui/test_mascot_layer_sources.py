@@ -108,14 +108,16 @@ def test_the_exported_layers_are_exactly_the_ones_in_the_manifest() -> None:
 
 
 def test_the_reserve_is_kept_as_a_source_and_never_shipped() -> None:
-    """14 sorgenti aspettano il loro turno: nessuno di loro è un asset.
+    """10 sorgenti aspettano il loro turno: nessuno di loro è un asset.
 
-    Le bocche alternative degli umori (parlato espressivo), l'orientamento
-    ``side`` e i corpi del saluto. Un webp che nessun ramo del client può
-    mostrare marcirebbe, quindi non si esporta.
+    Le bocche alternative degli umori (parlato espressivo), davanti e di lato,
+    la faccia di lato che pensa, il corpo di lato col gesto e i corpi del
+    saluto. Un webp che nessun ramo del client può mostrare marcirebbe, quindi
+    non si esporta. Il corpo di lato e le tre facce di lato degli umori sono
+    usciti dalla riserva il 28/09/2026: al bordo l'umore adesso si vede.
     """
     reserve = {p.stem for p in _sources()} - set(_layers())
-    assert len(reserve) == 14, sorted(reserve)
+    assert len(reserve) == 10, sorted(reserve)
     for stem in sorted(reserve):
         asset = f"jenny-{stem.replace('_', '-')}.webp"
         assert not (ASSETS / asset).exists(), f"{stem}: esportato ma non usato"

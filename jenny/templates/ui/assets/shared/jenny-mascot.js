@@ -59,6 +59,20 @@ const FACE = {
   sad: '/html-mobile/assets/jenny-face-front-sad.webp',
   angry: '/html-mobile/assets/jenny-face-front-angry.webp',
 };
+/* Di lato, al bordo, con un umore vivo: il corpo della posa cotta senza la
+   faccia, e la faccia dell'umore sopra — la stessa composizione a due livelli
+   di quando e' fuori, sull'orientamento `side`. Senza umore resta la posa
+   cotta (`ART.side`): la faccia neutra di lato non c'e', e non serve.
+   Fino al 28/09/2026 al bordo l'umore non si vedeva: «da docked una faccia non
+   si legge», si era detto, e i sorgenti di lato erano rimasti in riserva in
+   android/image_source/. Dall'utente: le espressioni devono agganciarsi anche
+   li'. */
+const SIDE_BODY = '/html-mobile/assets/jenny-body-side-idle.webp';
+const SIDE_FACE = {
+  happy: '/html-mobile/assets/jenny-face-side-happy.webp',
+  sad: '/html-mobile/assets/jenny-face-side-sad.webp',
+  angry: '/html-mobile/assets/jenny-face-side-angry.webp',
+};
 /* Il gesto del parlato alterna questi due ogni TALK_ANIM_SWITCH_MS. */
 const TALK_BODIES = [BODY.idle, BODY.hand];
 const MOUTH_FRAME_MS = 260; // apri/chiudi bocca
@@ -69,8 +83,8 @@ const TALK_QUIET_TO_THINK_MS = 1000; // silenzio testo -> torna a pensa
    Dopo il turn_end il backend può mandare un frame `mascot_mood` con la
    reazione di Jenny alla risposta appena data (jenny/session/mascot_mood.py:
    letta dagli emoji che lei stessa ha scritto). Qui è la FACCIA, non un
-   quarto stato: si mostra solo a mascotte intera (dove c'è il livello), perde
-   contro il pensa, e decade da sé dopo MOOD_HOLD_MS.
+   quarto stato: fuori da FACE, al bordo da SIDE_FACE; perde contro il pensa,
+   e decade da sé dopo MOOD_HOLD_MS.
 
    Sono le etichette del backend (`MOODS` meno `neutral`, che non manda frame) e
    un sottoinsieme di FACE: le altre chiavi di FACE sono facce di stato, non
@@ -117,7 +131,10 @@ export class JennyMascot {
 
     // Preload di tutto ciò che può comparire: un corpo senza la sua faccia è
     // una Jenny senza volto, peggio di una bocca in ritardo.
-    for (const src of [ART.sideTalk, ...Object.values(BODY), ...Object.values(FACE)]) {
+    for (const src of [
+      ART.sideTalk, ...Object.values(BODY), ...Object.values(FACE),
+      SIDE_BODY, ...Object.values(SIDE_FACE),
+    ]) {
       const im = new Image();
       im.src = src;
     }
@@ -272,6 +289,13 @@ export class JennyMascot {
   _syncArt() {
     if (this._talk.timer) return; // il frame lo gestisce l'animatore del parlato
     if (!this._layered()) {
+      // L'umore c'e' solo a riposo: pensa e parla lo cancellano (`_setAgentState`).
+      const mood = this._moodFace();
+      if (mood) {
+        this._setBody(SIDE_BODY);
+        this._setFace(SIDE_FACE[mood]);
+        return;
+      }
       this._setBody(ART.side);
       this._setFace(null);
       return;
@@ -357,9 +381,8 @@ export class JennyMascot {
     this._syncArt();
   }
 
-  /* L'umore vivo, o null. Che dal bordo non si veda non è una regola scritta
-     qui: là l'arte è cotta e la faccia è spenta, e se la si richiama entro il
-     tempo la trova ancora. */
+  /* L'umore vivo, o null. Vale fuori e al bordo, ognuno con le sue facce, e
+     passando dall'uno all'altro entro il tempo lei lo tiene. */
   _moodFace(now = performance.now()) {
     if (!this._mood || now >= this._moodUntil) return null;
     return this._mood;

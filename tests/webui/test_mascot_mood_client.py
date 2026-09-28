@@ -65,6 +65,8 @@ _CONSTS = (
     "SIDE_TALK_ANIM",
     "BODY",
     "FACE",
+    "SIDE_BODY",
+    "SIDE_FACE",
     "TALK_BODIES",
     "MOOD_FACES",
     "MOOD_HOLD_MS",
@@ -170,7 +172,8 @@ def _run_js(script: str) -> None:
 
 @node
 def test_from_the_edge_the_art_is_baked_and_the_face_is_off() -> None:
-    """Da docked la faccia non si legge: si spegne, e sotto resta la posa cotta."""
+    """Al bordo senza umore: la posa cotta, e la faccia spenta (quella neutra di
+    lato non c'e')."""
     _run_js("""
       const m = makeMascot();
       m._syncArt();
@@ -396,16 +399,27 @@ def test_a_frame_while_another_turn_is_in_flight_is_dropped() -> None:
 
 
 @node
-def test_a_mood_arriving_at_the_edge_waits_to_be_called_out() -> None:
+def test_a_mood_shows_at_the_edge_too_with_the_side_faces() -> None:
+    """Fino al 28/09/2026 al bordo l'umore non si vedeva, e l'utente lo cercava:
+    «quando Jenny e' nascosta non si agganciano le espressioni?». Adesso al
+    bordo e' il corpo di lato senza faccia con la faccia dell'umore sopra, e
+    fuori la faccia davanti; decaduto l'umore torna la posa cotta."""
     _run_js("""
-      const m = makeMascot();
-      m._applyMood('happy');
-      m._syncArt();
-      assert.equal(m.face.off, true, 'al bordo non si mostra');
-      m.el.classList.add('out');
-      m._syncArt();
-      assert.equal(m.face.src, FACE.happy, 'richiamata entro il tempo, la faccia c\\'è');
-      m._clearMood();
+      for (const mood of ['happy', 'sad', 'angry']) {
+        const m = makeMascot();
+        m._applyMood(mood);
+        m._syncArt();
+        assert.equal(m.img.src, SIDE_BODY, mood + ': al bordo il corpo di lato');
+        assert.equal(m.face.src, SIDE_FACE[mood], mood + ': la faccia di lato');
+        assert.equal(m.face.off, false);
+        m.el.classList.add('out');
+        m._syncArt();
+        assert.equal(m.face.src, FACE[mood], 'richiamata entro il tempo, la faccia c\\'è');
+        m.el.classList.remove('out');
+        m._clearMood();
+        assert.equal(m.img.src, ART.side, 'decaduto, al bordo torna la posa cotta');
+        assert.equal(m.face.off, true);
+      }
     """)
 
 
@@ -450,13 +464,19 @@ def test_every_mood_has_a_drawn_face() -> None:
     source = JENNY_JS.read_text(encoding="utf-8")
     faces = set(re.findall(r"'(\w+)'", _const(source, "MOOD_FACES")))
     assert faces <= set(_dict_const(source, "FACE")), "un umore senza faccia in FACE"
+    assert faces == set(_dict_const(source, "SIDE_FACE")), "un umore senza faccia di lato"
 
 
 def test_every_layer_the_client_names_exists_and_ships() -> None:
     """Corpo senza faccia è una Jenny senza volto: qui si controlla file per file."""
     source = JENNY_JS.read_text(encoding="utf-8")
-    urls = {**_dict_const(source, "BODY"), **_dict_const(source, "FACE")}
-    assert len(urls) == 9, sorted(urls)
+    urls = {
+        **_dict_const(source, "BODY"),
+        **_dict_const(source, "FACE"),
+        **{f"side-{k}": v for k, v in _dict_const(source, "SIDE_FACE").items()},
+        "side-body": _const(source, "SIDE_BODY").strip("'"),
+    }
+    assert len(urls) == 13, sorted(urls)
     manifest = set(_UI_MANIFEST)
     for key, url in sorted(urls.items()):
         rel = url.removeprefix("/html-mobile/")

@@ -67,10 +67,13 @@ FILES = [
 # ``_talk`` e' l'altra bocca. All'animatore del parlato serve la coppia, e
 # l'ordine non si vede.
 #
-# In cartella ci sono altri 14 sorgenti a livelli che qui NON si esportano:
-# le bocche alternative degli umori (il parlato espressivo non c'e' ancora,
-# v. F12), l'orientamento ``side`` (da docked una faccia non si legge, F2) e
-# i corpi del saluto. Un webp che nessuno puo' mostrare non va nel manifest
+# Dal 28/09/2026 anche l'orientamento ``side`` per gli umori: al bordo, con
+# un umore vivo, il corpo di lato senza faccia e la faccia dell'umore sopra.
+#
+# In cartella ci sono altri 10 sorgenti a livelli che qui NON si esportano:
+# le bocche alternative degli umori, davanti e di lato (il parlato espressivo
+# non c'e' ancora), la faccia di lato che pensa, il corpo di lato col gesto
+# e i corpi del saluto. Un webp che nessuno puo' mostrare non va nel manifest
 # e marcirebbe: quando servira', si aggiunge la riga qui.
 LAYERS = [
     "body_front_idle",
@@ -82,6 +85,10 @@ LAYERS = [
     "face_front_happy",
     "face_front_sad",
     "face_front_angry",
+    "body_side_idle",
+    "face_side_happy",
+    "face_side_sad",
+    "face_side_angry",
 ]
 
 

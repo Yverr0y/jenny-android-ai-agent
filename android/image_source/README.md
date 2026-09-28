@@ -56,10 +56,12 @@ si vede.
 | facce | `face_front_normal`, `face_front_normal_talk` | la coppia del parlato |
 | | `face_front_thinking` | mentre aspetta la risposta |
 | | `face_front_happy`, `face_front_sad`, `face_front_angry` | le tre reazioni |
+| di lato | `body_side_idle` | il corpo di `jenny-side` senza faccia |
+| | `face_side_happy`, `face_side_sad`, `face_side_angry` | le tre reazioni al bordo (dal 28/09/2026) |
 
-In riserva, **importati e non esportati** (14): `face_front_{happy,sad,angry}_talk`
+In riserva, **importati e non esportati** (10): `face_{front,side}_{happy,sad,angry}_talk`
 (le bocche alternative degli umori: servono al parlato espressivo, che non c'è
-ancora), i sette `face_side_*` e i corpi `body_side_idle`, `body_side_hand`,
+ancora), `face_side_thinking` e i corpi `body_side_hand`,
 `body_front_wave1`, `body_front_wave2`. Non sono webp e non sono nel manifest:
 un asset che nessun ramo del client può mostrare marcisce. Quando serviranno,
 si aggiunge la riga in `LAYERS` e in `_UI_MANIFEST`.
@@ -69,7 +71,9 @@ Attenzione ai nomi del saluto: `body_front_wave1` è il corpo di `hello1` e
 incrociati, e all'import si sono raddrizzati.
 
 **Manca la coppia neutra `side`** (`face_side_normal` e il suo `_talk`): non
-serve, perché da docked la faccia non si legge e l'umore lì non si mostra. Se
+serve, perché al bordo senza umore resta la posa cotta `jenny-side`, e con un
+umore la faccia è quella dell'umore (`SIDE_FACE`, dal 28/09/2026: prima al bordo
+l'umore non si mostrava, e l'utente lo cercava). Se
 un giorno servisse, **si deriva dall'arte cotta** invece di disegnarla:
 `body_side_idle` è `jenny-side` senza faccia, quindi basta tenere di
 `jenny-side.PNG` i pixel che si discostano dal corpo e azzerare l'alfa
@@ -159,6 +163,8 @@ faccia (v. *Due livelli* sopra):
 
 L'**umore** (frame `mascot_mood`, v. `MOOD_FACES`) cambia solo la faccia:
 `face_front_happy`, `face_front_sad`, `face_front_angry`, per `MOOD_HOLD_MS`.
+Al bordo è `body_side_idle` con `face_side_<umore>` sopra (`SIDE_BODY`,
+`SIDE_FACE`); decaduto l'umore torna la posa cotta.
 Le loro bocche alternative (`*_talk`) sono in riserva: il parlato espressivo
 non c'è ancora.
 
@@ -184,7 +190,7 @@ la mascotte viene trascinata:
 `FILES` mappa nome-posa → PNG sorgente e scrive **10 webp** cotti in
 `jenny/templates/ui/assets/`, uno per posa:
 `jenny-{side,side-talk,hang,fall,ground,walk1,walk2,hello1,hello2,idle}.webp`.
-`LAYERS` ne aggiunge **9 a due livelli**,
+`LAYERS` ne aggiunge **13 a due livelli**,
 `jenny-<stem coi trattini>.webp` (per esempio `body_front_idle.PNG` →
 `jenny-body-front-idle.webp`). Ogni sorgente deve essere esattamente 3000×3000
 (assert esplicito) o lo script si ferma.
@@ -218,8 +224,8 @@ riavvio dell'app non basta.
 
 ## Stato attuale
 
-In cartella ci sono tre famiglie: le 10 pose cotte in `FILES`, i 9 livelli
-in `LAYERS`, e ciò che **non** si esporta di proposito — i 14 livelli in
+In cartella ci sono tre famiglie: le 10 pose cotte in `FILES`, i 13 livelli
+in `LAYERS`, e ciò che **non** si esporta di proposito — i 10 livelli in
 riserva (v. *Due livelli*) e le tre pose cotte che fanno da riferimento al
 test dei livelli (`think`, `talk_1a`, `talk_1b`). `idle.PNG` oggi serve solo
 alla mini Jenny dell'onboarding (`JENNY_POSES`): la mascotte intera è a due
