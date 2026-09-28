@@ -53,25 +53,32 @@ NEUTRAL_MOOD = "neutral"
 # ``happy``. Scritti con il loro ``U+FE0F`` dove ce l'hanno, per leggibilita':
 # la normalizzazione lo toglie sia qui sia nel testo.
 #
-# Fuori di proposito: gli ambigui (😅 🙃 😬 🤔 😐 😑 😶 👀 🤷 😳 😱 🫠) e tutto
-# cio' che non e' un'emozione (☀️ 🌧️ 🍝 📅 🚗, bandiere, oggetti, frecce).
+# Fuori di proposito: gli ambigui (😅 🙃 😬 🤔 😐 😑 😶 👀 🤷 😳 😱 🫠 🥱 🤫 🧐
+# 🤌) e tutto cio' che non e' un'emozione (☀️ 🌧️ 🍝 📅 🚗, bandiere, oggetti,
+# frecce). Due sono usciti il 28/09/2026, quando la sua tavolozza e' stata
+# riscritta sul carattere (SOUL.md): 🙄, che per lei e' la presa in giro e
+# non la rabbia — ogni volta che faceva la brat la faccia si arrabbiava — e
+# 😭, che a vent'anni e' «sto morendo dal ridere» quanto il pianto.
 MOOD_EMOJI: Mapping[str, tuple[str, ...]] = {
     "happy": (
         # sorrisi e risate
         "😀", "😃", "😄", "😁", "😆", "😊", "🙂", "😉", "😌", "😏", "😎", "🤗",
         "🥰", "😍", "😘", "🤩", "🥳", "😂", "🤣", "😋", "😜", "😝", "😛",
+        # la sua firma: il ghigno, la complice, la spocchia, la risatina; e il
+        # «sono morta» dal ridere, il finto-obbediente, l'affetto
+        "😈", "💅", "🤭", "💀", "🫡", "🫶", "🥹",
         # cuori
         "❤️", "🧡", "💛", "💚", "💙", "💜", "🤍", "🖤", "💕", "💖", "💗", "💓",
         "💞", "😻",
         # festa e approvazione
-        "🎉", "🎊", "✨", "🌟", "💪", "👍", "👏", "🙌", "🥂",
+        "🎉", "🎊", "✨", "🌟", "💪", "👍", "👏", "🙌", "🥂", "🔥",
     ),
     "sad": (
-        "😢", "😭", "😞", "😔", "😟", "😕", "🙁", "☹️", "😥", "😰", "😓", "😩",
+        "😢", "😞", "😔", "😟", "😕", "🙁", "☹️", "😥", "😰", "😓", "😩",
         "😫", "🥺", "🥲", "😿", "💔", "😪", "😮‍💨",
     ),
     "angry": (
-        "😠", "😡", "🤬", "😤", "👿", "💢", "🙄", "😒", "😾",
+        "😠", "😡", "🤬", "😤", "👿", "💢", "😒", "😾",
     ),
 }
 

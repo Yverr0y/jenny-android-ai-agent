@@ -97,6 +97,9 @@ def test_tool_rows_blank_content_and_think_blocks_are_skipped():
     ("text", "mood"),
     [
         ("Ecco la lista 😏", "happy"),
+        ("sto tramando 😈", "happy"),
+        ("fatto, e con stile 💅", "happy"),
+        ("sono morta 💀", "happy"),
         ("Tutto sistemato, finalmente 😌", "happy"),
         ("Complimenti! 🎉", "happy"),
         ("ci tengo ❤️", "happy"),
@@ -104,7 +107,7 @@ def test_tool_rows_blank_content_and_think_blocks_are_skipped():
         ("il server non risponde 😰", "sad"),
         ("è saltato tutto 💔", "sad"),
         ("di nuovo lo stesso errore 😤", "angry"),
-        ("ancora spam 🙄", "angry"),
+        ("ancora spam 😒", "angry"),
     ],
 )
 def test_each_face(text, mood):
@@ -119,6 +122,12 @@ def test_each_face(text, mood):
         "Ho trovato tre ristoranti 🍝📅",
         "Boh 🤔",
         "Ops 😅",
+        # Suoi, ma tono e non umore: la presa in giro, il «sto morendo» che e'
+        # riso quanto pianto, la ficcanaso, la noia (dal 28/09/2026).
+        "mica faccio tutto io 🙄",
+        "no vabbè 😭",
+        "mi faccio i fatti tuoi 👀",
+        "che palle 🥱",
         "",
     ],
 )
@@ -150,9 +159,9 @@ def test_a_tie_goes_to_the_last_one():
 
 
 def test_emoji_inside_code_do_not_count():
-    assert _mood('```python\nprint("😭")\n```\nfatto 👍') == "happy"
+    assert _mood('```python\nprint("😢")\n```\nfatto 👍') == "happy"
     assert _mood("usa `echo 😡` e basta") == mm.NEUTRAL_MOOD
-    assert _mood("```\n😭 non chiuso") == mm.NEUTRAL_MOOD
+    assert _mood("```\n😢 non chiuso") == mm.NEUTRAL_MOOD
 
 
 def test_quoted_lines_do_not_count():
