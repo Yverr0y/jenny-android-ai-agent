@@ -149,10 +149,15 @@
   --glint:         #eaffff;
   --glow:          rgba(3, 237, 249, 0.7);
   --meta:          #03edf9;
-  --bubble-user-bg: rgba(3, 237, 249, 0.12);
-  --bubble-user-text: #f2ecff;
+  /* La bolla dell'utente a colore pieno, e non il velo ciano al 12% di prima:
+     sul fondo quasi nero quel velo diventava un verde petrolio (#0f2b2f). Il
+     rosa e' un filo piu' scuro dell'accento perche' il bianco sopra #f92aad
+     sta a 3,5:1; su #d61a8f arriva a 4,8:1 (il banco e' in
+     `test_home_you_contract.py`). Scelto il 28/09/2026. */
+  --bubble-user-bg: #d61a8f;
+  --bubble-user-text: #ffffff;
   --bubble-user-border: none;
-  --bubble-user-shadow: none;
+  --bubble-user-shadow: 0 0 16px rgba(214, 26, 143, 0.5);
 }
 
 [data-theme="kyoto"] {
