@@ -25,6 +25,7 @@
 import { wsManager } from './ws-manager.js';
 import { sessionManager } from './session-manager.js';
 import { bindMascotDrag, buildFlyLayer } from './mascot-drag.js';
+import { botName } from './bot-name.js';
 import {
   mascotVisible, applyMascotSize,
 } from './mascot.js';
@@ -227,7 +228,9 @@ export class JennyMascot {
     this.el = document.createElement('button');
     this.el.type = 'button';
     this.el.className = 'jenny-duo';
-    this.el.setAttribute('aria-label', 'Jenny');
+    // Il nome di lei, e resta giusto se la si rinomina a pagina aperta.
+    this.el.setAttribute('aria-label', botName.get());
+    this._offName = botName.onChange((name) => this.el?.setAttribute('aria-label', name));
     this.el.setAttribute('tabindex', '-1');
     // I due livelli (corpo e faccia) in un contenitore solo; il respiro resta
     // sulle img.

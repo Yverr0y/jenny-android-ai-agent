@@ -23,7 +23,6 @@
     "copyFailed": "Copia non riuscita",
     "close": "Chiudi",
     "filesModified": "{count} file modificati",
-    "jenny": "Jenny",
     "online": "online",
     "offline": "offline",
     "showThinking": "Mostra ragionamento",
@@ -837,7 +836,6 @@
     }
   },
   "scope": {
-    "personal": "jenny",
     "change": "Cambia conversazione",
     "personalSection": "Conversazione personale",
     "projectsSection": "Quaderni",
@@ -890,8 +888,8 @@
   "home": {
     "empty": "Non c'è ancora niente qui.\nComincia tu.",
     "emptyNotebook": "Questo quaderno c’è, la conversazione no.\nQuello che scrivi qui resta qui.",
-    "placeholder": "Scrivi a Jenny",
-    "placeholderNotebook": "Scrivi a Jenny, nel quaderno",
+    "placeholder": "Scrivi a {name}",
+    "placeholderNotebook": "Scrivi a {name}, nel quaderno",
     "send": "Manda",
     "wire": {
       "offline": "Filo interrotto, sto riprovando"

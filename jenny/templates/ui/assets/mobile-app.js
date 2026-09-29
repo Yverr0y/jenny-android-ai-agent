@@ -3,6 +3,7 @@
 import { AppState, closeComposeMenus, composeMenuOpen } from './shared/state.js';
 import { sessionManager } from './shared/session-manager.js';
 import { scopeChip } from './shared/scope-chip.js';
+import { botName } from './shared/bot-name.js';
 import { writeSwitch } from './shared/write-switch.js';
 import {
   isNetworkFailure, readStorage, removeStorage, showToast, writeStorage,
@@ -116,7 +117,11 @@ class MobileApp {
        l'officina ci rimanda come la casa. Un «non lo so» (impostazioni non
        lette: gateway a meta' avvio, token non ancora valido) non manda da
        nessuna parte — v. `shared/first-run.js`. */
-    const firstRun = await isFirstRun(() => api.getSettings());
+    let bootSettings = null;
+    const firstRun = await isFirstRun(async () => (bootSettings = await api.getSettings()));
+    // Il nome di lei per la riga d'identita', il selettore e la mascotte: la
+    // lettura e' gia' questa, non ne serve un'altra.
+    botName.set(bootSettings?.agent?.bot_name);
     if (firstRun === true) {
       api.navigate('/html-mobile/onboarding.html', { replace: true });
       return;
@@ -131,7 +136,7 @@ class MobileApp {
       this.header._refreshTitles();
       // Il chip dello scope scrive il proprio testo da JS, quindi
       // _applyStaticTranslations non lo raggiunge: senza questo resterebbe con
-      // le chiavi grezze ("scope.personal").
+      // le chiavi grezze ("scope.change").
       scopeChip.render();
       writeSwitch.render();
     });

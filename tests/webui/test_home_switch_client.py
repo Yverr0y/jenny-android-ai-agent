@@ -49,6 +49,8 @@ import assert from 'node:assert/strict';
 const { projectKey, projectNameOf, isOpenableProjectName } = await import('__LIST_URL__');
 
 const TRANSLATIONS = __TRANSLATIONS__;
+/* Il nome di lei (`shared/bot-name.js`): qui quello di partenza. */
+const botName = { get: () => 'Jenny', set() {}, onChange() { return () => {}; } };
 const i18n = {
   locale: 'it',
   translations: TRANSLATIONS,

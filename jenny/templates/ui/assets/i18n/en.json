@@ -23,7 +23,6 @@
     "copyFailed": "Copy failed",
     "close": "Close",
     "filesModified": "{count} files modified",
-    "jenny": "Jenny",
     "online": "online",
     "offline": "offline",
     "showThinking": "Show thinking",
@@ -837,7 +836,6 @@
     }
   },
   "scope": {
-    "personal": "jenny",
     "change": "Change conversation",
     "personalSection": "Personal conversation",
     "projectsSection": "Notebooks",
@@ -890,8 +888,8 @@
   "home": {
     "empty": "Nothing here yet.\nGo ahead.",
     "emptyNotebook": "The notebook is here, the conversation isn’t.\nWhat you write here stays here.",
-    "placeholder": "Write to Jenny",
-    "placeholderNotebook": "Write to Jenny, in the notebook",
+    "placeholder": "Write to {name}",
+    "placeholderNotebook": "Write to {name}, in the notebook",
     "send": "Send",
     "wire": {
       "offline": "Connection lost, retrying"

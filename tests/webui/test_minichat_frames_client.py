@@ -139,7 +139,7 @@ def _run(body: str) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "shared").mkdir()
-        for name in ("jenny-minichat.js", "jenny-mascot.js", "wire-error.js"):
+        for name in ("jenny-minichat.js", "jenny-mascot.js", "wire-error.js", "bot-name.js"):
             shutil.copy(ASSETS / "shared" / name, root / "shared" / name)
         for name, text in _NEIGHBORS.items():
             (root / "shared" / name).write_text(text, encoding="utf-8")

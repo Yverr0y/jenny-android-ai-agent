@@ -63,6 +63,8 @@ __SHORT__
 const { ConversationList } = await import('__LIST_URL__');
 const api = { listProjects: () => Promise.resolve({}) };
 
+/* Il nome di lei (`shared/bot-name.js`): qui quello di partenza. */
+const botName = { get: () => 'Jenny', set() {}, onChange() { return () => {}; } };
 const i18n = {
   t: (key, vars) => 'i18n:' + key + (vars ? ':' + Object.values(vars).join(',') : ''),
 };
@@ -269,5 +271,7 @@ def test_the_drawing_is_unchanged_when_the_spans_are_there() -> None:
       chip.render();
       assert.equal(chipEl.mark.textContent, '✿');
       assert.equal(chipEl.mark.className, 'scope-chip-mark');
-      assert.deepEqual(chipEl.path.children.map((n) => n.textContent), ['i18n:scope.personal']);
+      // Il nome di lei, non una parola fissa: rinominata, il chip la segue
+      // (collaudo del 27/09/2026).
+      assert.deepEqual(chipEl.path.children.map((n) => n.textContent), ['Jenny']);
     """)

@@ -6,6 +6,7 @@ import { i18n } from './shared/i18n.js';
 import { confirmDialog, detailDialog } from './shared/dialog.js';
 import { TelegramPairingWidget, telegramSummary } from './shared/telegram-pairing.js';
 import { getProviderBrand } from './shared/provider-brand.js';
+import { botName } from './shared/bot-name.js';
 import {
   BatteryExemptionCard,
   batteryExemptionSupported,
@@ -234,6 +235,7 @@ export class SettingsController {
     this.showLoading();
     try {
       const settings = await api.getSettings();
+      botName.set(settings?.agent?.bot_name);
       if (this._stale(gen)) return;
       /* Un render solo per ingresso. Passando da
          un cassetto all'altro `setDrawer` ha gia' disegnato coi dati in cache,

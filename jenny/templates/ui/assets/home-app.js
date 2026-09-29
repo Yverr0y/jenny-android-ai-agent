@@ -59,6 +59,7 @@ import { api } from './shared/api-client.js';
 import { isFirstRun } from './shared/first-run.js';
 import { ImageHandler } from './shared/image-handler.js';
 import { confirmDialog, promptDialog } from './shared/dialog.js';
+import { botName } from './shared/bot-name.js';
 import { rpc } from './shared/rpc-client.js';
 import { clearSelection, releaseSelectionOnBlur } from './shared/selection.js';
 import { i18n } from './shared/i18n.js';
@@ -70,6 +71,8 @@ import './shared/theme.js';
    da se' e la maggior parte delle cadute dura meno di un battito: annunciarle
    tutte vorrebbe dire far lampeggiare una riga d'allarme mentre non e' successo
    niente. Si parla solo se il silenzio dura. */
+/* Lo stesso ripiego del server e di `shared/bot-name.js`. */
+const DEFAULT_BOT_NAME = 'Jenny';
 const WIRE_GRACE_MS = 2_500;
 
 /* Dove appoggia i piedi Jenny fuori dalla chat, in px dal fondo. Nella chat il
@@ -84,7 +87,6 @@ const FLOOR_NO_COMPOSER = 66;
 /* Il nome di lei finche' le impostazioni non hanno detto il suo: lo stesso
    ripiego del server (`settings_api`, `bot_name or "Jenny"`). E' un nome
    proprio, non una frase da tradurre. */
-const DEFAULT_BOT_NAME = 'Jenny';
 
 /* Le stanze oltre la conversazione, e dove si atterra premendo Indietro una
    volta. La catena e' lineare e sta **in un posto solo**: `_setView` la usa per
@@ -897,8 +899,10 @@ class HomeApp {
     const newName = (typeof name === 'string' && name.trim()) || DEFAULT_BOT_NAME;
     if (newName === this._personalName) return;
     this._personalName = newName;
+    botName.set(newName);
     this.strip?.draw();
     this.who?.render();
+    this._applyConversationTexts();
   }
 
   /* Il payload fresco che torna da un salvataggio: ha la stessa forma di
@@ -2056,7 +2060,11 @@ class HomeApp {
       this.emptyText.textContent = i18n.t(this._threadFailed ? 'home.threadError' : empty);
     }
     if (this.input) {
-      this.input.placeholder = i18n.t(inNotebook ? 'home.placeholderNotebook' : 'home.placeholder');
+      /* Il nome di lei, non «Jenny»: rinominata, il campo diceva ancora di
+         scrivere a qualcun altro (collaudo del 27/09/2026). */
+      this.input.placeholder = i18n.t(inNotebook ? 'home.placeholderNotebook' : 'home.placeholder', {
+        name: this._personalName || DEFAULT_BOT_NAME,
+      });
     }
   }
 

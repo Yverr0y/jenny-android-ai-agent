@@ -7,6 +7,7 @@ import { api } from './shared/api-client.js';
 import { copyToClipboard, escapeHtml, showToast } from './shared/utils.js';
 import { sessionManager } from './shared/session-manager.js';
 import { scopeChip } from './shared/scope-chip.js';
+import { botName } from './shared/bot-name.js';
 import { writeSwitch } from './shared/write-switch.js';
 import { ImageHandler } from './shared/image-handler.js';
 import { openImageLightbox } from './shared/image-lightbox.js';
@@ -311,9 +312,15 @@ export class ChatController {
     const el = document.createElement('div');
     el.className = 'chat-identity';
     el.innerHTML = '<span class="chat-identity-flower">✿</span>' +
-      '<span class="chat-identity-name">' + i18n.t('chat.jenny') + '</span>' +
+      '<span class="chat-identity-name"></span>' +
       '<span class="chat-identity-status"></span>' +
       '<span class="chat-identity-label"></span>';
+    // Il nome di lei come testo, non nell'HTML: e' scelto da chi la usa.
+    el.querySelector('.chat-identity-name').textContent = botName.get();
+    this._offBotName ||= botName.onChange((name) => {
+      const nameEl = this.identityEl?.querySelector('.chat-identity-name');
+      if (nameEl) nameEl.textContent = name;
+    });
     this.chatArea.insertBefore(el, this.chatArea.firstChild);
     this.identityEl = el;
     this.identityStatus = el.querySelector('.chat-identity-status');

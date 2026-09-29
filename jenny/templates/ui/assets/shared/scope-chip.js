@@ -17,6 +17,7 @@
  */
 
 import { i18n } from './i18n.js';
+import { botName } from './bot-name.js';
 import { AppState, armComposeMenu, claimComposeMenu } from './state.js';
 import { api } from './api-client.js';
 import { showToast } from './utils.js';
@@ -90,6 +91,9 @@ export class ScopeChip {
     // farsi chiamare rende l'ordine dei due `syncFromSession` irrilevante —
     // altrimenti chi sincronizza per secondo lascia il testo del primo.
     AppState.on('readonlyTurn', () => this.syncPlaceholder());
+    // Il nome della conversazione personale e' quello di lei: rinominata, il
+    // chip lo ridice subito (la tendina lo rilegge a ogni apertura).
+    botName.onChange(() => this.render());
     this.render();
   }
 
@@ -143,9 +147,10 @@ export class ScopeChip {
     this.render();
   }
 
-  /** Nome mostrato per la sessione personale (non è un nome di cartella). */
+  /** Nome mostrato per la sessione personale (non è un nome di cartella):
+   *  quello di lei, che può essere stata rinominata (v. `shared/bot-name.js`). */
   get personalLabel() {
-    return i18n.t('scope.personal');
+    return botName.get();
   }
 
   /** Segmenti del percorso mostrati nel chip. */

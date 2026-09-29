@@ -276,6 +276,7 @@ _UI_MANIFEST = [
     "assets/shared/apps-source.js",
     "assets/shared/backup-flow.js",
     "assets/shared/battery-exemption.js",
+    "assets/shared/bot-name.js",
     "assets/shared/commands-chip.js",
     "assets/shared/content-link.js",
     "assets/shared/conversation-list.js",
