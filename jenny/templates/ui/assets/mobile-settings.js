@@ -1326,7 +1326,47 @@ export class SettingsController {
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.location.hint')}</p>`;
+      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.location.hint')}</p>
+      <div class="settings-notice settings-notice-strong" id="location-permission" style="margin-top:10px" hidden>
+        <i class="ti ti-map-pin-off" aria-hidden="true"></i>
+        <div>${i18n.t('settings.location.denied')}</div>
+      </div>
+      <div class="onboarding-nav" id="location-permission-nav" style="margin-top:10px" hidden>
+        <button class="onboarding-btn onboarding-btn-secondary" id="btn-location-allow">
+          ${i18n.t('settings.location.allow')}
+        </button>
+      </div>`;
+  }
+
+  /* L'interruttore dice la preferenza, non se Android la concede: acceso con
+     il permesso negato, la posizione non arrivava e niente lo diceva
+     (collaudo del 27/09/2026). L'avviso compare in quel caso, e solo nel
+     guscio Android: fuori non c'e' un permesso da chiedere. */
+  _syncLocationPermission() {
+    const root = this.contentEl;
+    const toggle = root?.querySelector('#location-enabled-toggle');
+    const notice = root?.querySelector('#location-permission');
+    const nav = root?.querySelector('#location-permission-nav');
+    if (!toggle || !notice) return;
+    const native = window.JennyNative;
+    let missing = false;
+    if (native && typeof native.hasLocationPermission === 'function') {
+      try { missing = !native.hasLocationPermission(); } catch (_) { missing = false; }
+    }
+    const show = toggle.checked && missing;
+    notice.hidden = !show;
+    if (nav) nav.hidden = !show || typeof native?.requestLocationPermission !== 'function';
+  }
+
+  /* Chiede il permesso ad Android; se non puo' piu' chiederlo, il guscio apre
+     la scheda di Jenny nelle impostazioni. L'esito torna come evento
+     `jenny-location-permission` (v. `MainActivity`). */
+  _askLocationPermission() {
+    const native = window.JennyNative;
+    if (!native || typeof native.requestLocationPermission !== 'function') return;
+    let has = false;
+    try { has = !!native.hasLocationPermission?.(); } catch (_) { has = false; }
+    if (!has) native.requestLocationPermission();
   }
 
   // ── Memoria e lavoratori periodici ─────────────────────────────────
@@ -3080,8 +3120,22 @@ export class SettingsController {
     // Posizione: toggle auto-applicato al cambio (nessun bottone salva).
     const locToggle = this.contentEl.querySelector('#location-enabled-toggle');
     if (locToggle) {
+      /* Il permesso si concede fuori dalla WebView: al ritorno (o all'esito
+         della richiesta) l'avviso si ridisegna. Un listener per documento. */
+      if (!this._onLocationPermission) {
+        this._onLocationPermission = () => this._syncLocationPermission();
+        window.addEventListener('jenny-location-permission', this._onLocationPermission);
+        document.addEventListener('visibilitychange', this._onLocationPermission);
+      }
+      this._syncLocationPermission();
+      this.contentEl.querySelector('#btn-location-allow')
+        ?.addEventListener('click', () => this._askLocationPermission());
       locToggle.addEventListener('change', () => {
         const enabled = locToggle.checked;
+        this._syncLocationPermission();
+        // Accenderla senza il permesso vuol dire chiederlo: e' nello stesso
+        // tocco, che e' quel che Android vuole per mostrare il dialog.
+        if (enabled) this._askLocationPermission();
         api.updateLocation({ enabled: enabled ? '1' : '0' })
           .then(() => {
             if (this.data && this.data.location) this.data.location.enabled = enabled;
@@ -3089,6 +3143,7 @@ export class SettingsController {
           })
           .catch(() => {
             locToggle.checked = !enabled;  // rollback sull'errore
+            this._syncLocationPermission();
             showToast(i18n.t('settings.saveError'));
           });
       });

@@ -240,7 +240,9 @@
       "enable": "Condividi la mia posizione",
       "hint": "Jenny usa il GPS del telefono per sapere dove sei: la posizione recente entra nel contesto a ogni messaggio, un fix preciso solo su richiesta. Serve il permesso di localizzazione Android. Le posizioni condivise via Telegram valgono solo lì e scadono dopo un'ora.",
       "on": "Posizione attivata",
-      "off": "Posizione disattivata"
+      "off": "Posizione disattivata",
+      "denied": "Android non ha ancora concesso a Jenny la posizione: finché non lo fa, lei non sa dove sei.",
+      "allow": "Consenti la posizione"
     },
     "ssh": {
       "title": "SSH",

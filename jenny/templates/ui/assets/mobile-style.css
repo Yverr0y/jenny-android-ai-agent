@@ -4412,6 +4412,9 @@ body {
    non era leggibile, quindi deve farsi notare senza urlare. La variante
    -strong è per il caso peggiore (ripartiti dai default, chiave API da
    rimettere). */
+/* Il `display` di qui sotto vincerebbe su `hidden` (l'avviso della posizione). */
+.settings-notice[hidden],
+.onboarding-nav[hidden] { display: none; }
 .settings-notice {
   display: flex;
   gap: 10px;

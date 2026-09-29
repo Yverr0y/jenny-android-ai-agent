@@ -35,6 +35,7 @@
     'getBottomGestureInset',
     'hasHardwareKeyboard',
     'isBatteryExempt',
+    'hasLocationPermission',
     'systemUpdatedSinceLastRun',
     'deviceManufacturer',
   ];
@@ -53,6 +54,7 @@
     'importBackup',
     'restartApp',
     'requestBatteryExemption',
+    'requestLocationPermission',
   ];
 
   /* Domande: tornano una Promise col valore che il metodo nativo restituiva.

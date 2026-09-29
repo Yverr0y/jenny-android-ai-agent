@@ -34,6 +34,9 @@ HARMLESS_READS = {
     "getBottomGestureInset",
     "hasHardwareKeyboard",
     "isBatteryExempt",
+    # Dice solo se il permesso della posizione c'e', come `isBatteryExempt`
+    # dice dell'esenzione: nessun dato dell'utente, nessuna scrittura.
+    "hasLocationPermission",
     "systemUpdatedSinceLastRun",
     "deviceManufacturer",
 }

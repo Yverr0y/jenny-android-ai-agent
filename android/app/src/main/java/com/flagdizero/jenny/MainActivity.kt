@@ -255,6 +255,10 @@ class MainActivity : AppCompatActivity() {
         // da capo ogni volta, senza mai arrivare in fondo.
         private const val SPA_RECOVERY_MIN_INTERVAL_MS = 3_000L
 
+        // Sotto questa soglia la risposta alla richiesta della posizione è
+        // arrivata senza che Android mostrasse un dialog (negata per sempre).
+        private const val LOCATION_NO_DIALOG_MS = 400L
+
         // Letto da NotifierBridge (thread Python via Chaquopy) per sopprimere
         // gli alert quando l'utente sta già guardando la chat. @Volatile:
         // scritto dal main thread (onResume/onPause), letto da altri thread.
@@ -322,11 +326,21 @@ class MainActivity : AppCompatActivity() {
         }
 
     // Posizione: richiesta all'avvio perché il toggle è ON di default. Se
-    // negato, LocationBridge ritorna null e non viene iniettato nulla — nessuna
-    // azione di recupero necessaria (l'utente può concederlo dalle impostazioni
-    // Android in un secondo momento).
+    // negato, LocationBridge ritorna null e non viene iniettato nulla. Da
+    // Mani → Posizione la si può richiedere (`requestLocationPermission`).
+    //
+    // Precisa **e** approssimativa insieme: il bridge accetta l'una o l'altra
+    // (LocationBridge), e da Android 12 chi chiede solo la precisa non offre
+    // all'utente la scelta «approssimativa» — che è quella che molti danno.
     private val locationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val granted = result.values.any { it }
+            // Una risposta arrivata subito vuol dire che Android non ha
+            // mostrato niente: il permesso è negato per sempre, e dall'app si
+            // può solo mandare alla scheda di Jenny nelle impostazioni. Solo se
+            // la richiesta veniva da un tocco, non da quella d'avvio.
+            val askedAt = locationAskedFromUiAt
+            locationAskedFromUiAt = 0L
             if (granted) {
                 // Il FGS è già partito come specialUse (permesso non ancora
                 // concesso all'avvio): ri-avviarlo lo fa ripartire con anche il
@@ -335,8 +349,47 @@ class MainActivity : AppCompatActivity() {
                 startGatewayService()
             } else {
                 Log.w(TAG, "Location permission denied; device location stays unavailable")
+                if (askedAt > 0L && SystemClock.elapsedRealtime() - askedAt < LOCATION_NO_DIALOG_MS) {
+                    openAppDetailsSettings()
+                }
             }
+            // La WebUI ridisegna l'avviso di Mani: il dialog di sistema non
+            // produce un `visibilitychange` affidabile nella WebView.
+            webView?.evaluateJavascript(
+                "window.dispatchEvent(new Event('jenny-location-permission'))", null
+            )
         }
+
+    /** Quando è partita l'ultima richiesta della posizione nata da un tocco
+     *  (`elapsedRealtime`), 0 se nessuna è in volo. */
+    private var locationAskedFromUiAt = 0L
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun launchLocationRequest() {
+        locationPermissionLauncher.launch(
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        )
+    }
+
+    /** La scheda di Jenny nelle impostazioni di Android: dove si concede un
+     *  permesso che l'app non può più chiedere. */
+    private fun openAppDetailsSettings() {
+        try {
+            startActivity(
+                Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "App details settings could not be opened", e)
+        }
+    }
 
     // ── Launcher: la griglia app deve seguire i cambi di pacchetto ──
     // Prima la SPA si affidava solo a `visibilitychange`, ma l'uninstaller di
@@ -821,12 +874,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Basta l'una o l'altra: con la sola approssimativa concessa, chiedere di
+    // nuovo la precisa a ogni avvio riproponeva il dialog all'infinito.
     private fun ensureLocationPermission() {
-        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
+        if (!hasLocationPermission()) launchLocationRequest()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -1423,6 +1474,12 @@ class MainActivity : AppCompatActivity() {
                 config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
         }
 
+        /** True se Android concede la posizione, precisa o approssimativa: il
+         *  bridge le accetta tutte e due. È quel che Mani mette accanto
+         *  all'interruttore, che da solo dice solo la preferenza. */
+        @JavascriptInterface
+        fun hasLocationPermission(): Boolean = this@MainActivity.hasLocationPermission()
+
         /** True se l'app è già esente dall'ottimizzazione batteria (doze). */
         @JavascriptInterface
         fun isBatteryExempt(): Boolean {
@@ -1515,6 +1572,7 @@ class MainActivity : AppCompatActivity() {
             "saveToDownloads" -> saveToDownloads(a.getString(0))
             "restartApp" -> restartApp().let { null }
             "requestBatteryExemption" -> requestBatteryExemption().let { null }
+            "requestLocationPermission" -> requestLocationPermission().let { null }
             "requestExactAlarmPermission" -> requestExactAlarmPermission()
             "openBatterySettings" -> openBatterySettings()
             else -> throw IllegalArgumentException("unknown native command")
@@ -1954,6 +2012,17 @@ class MainActivity : AppCompatActivity() {
                 Handler(Looper.getMainLooper()).postDelayed({
                     Process.killProcess(Process.myPid())
                 }, 150)
+            }
+        }
+
+        /** Chiede la posizione da un tocco (Mani → Posizione). Se Android non
+         *  può più chiederla — negata per sempre — il callback del launcher se
+         *  ne accorge dalla risposta immediata e apre la scheda dell'app. */
+        fun requestLocationPermission() {
+            runOnUiThread {
+                if (hasLocationPermission()) return@runOnUiThread
+                locationAskedFromUiAt = SystemClock.elapsedRealtime()
+                launchLocationRequest()
             }
         }
 
