@@ -206,3 +206,13 @@ def test_a_notebook_is_never_called_a_project_on_screen() -> None:
             if key.startswith("workspace.fileHelp."):
                 continue
             assert not word.search(str(text)), f"{locale}: {key} dice ancora «progetto»/«scope»"
+
+
+def test_no_text_sends_to_a_screen_that_no_longer_exists() -> None:
+    """«Tu e Jenny» / «You and Jenny» era la pagina delle impostazioni della
+    casa; oggi il backup sta in Impostazioni › Backup, e il testo di «Local
+    history» mandava ancora là (collaudo del 27/09/2026)."""
+    gone = re.compile(r"Tu e Jenny|You and Jenny")
+    for locale in ("it", "en"):
+        for key, text in _leaves(_load(locale)):
+            assert not gone.search(str(text)), f"{locale}: {key} manda a «Tu e Jenny»"
