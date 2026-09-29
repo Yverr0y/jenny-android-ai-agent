@@ -1326,7 +1326,7 @@ export class SettingsController {
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.location.hint')}</p>
+      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.location.hint', { name: botName.get() })}</p>
       <div class="settings-notice settings-notice-strong" id="location-permission" style="margin-top:10px" hidden>
         <i class="ti ti-map-pin-off" aria-hidden="true"></i>
         <div>${i18n.t('settings.location.denied')}</div>

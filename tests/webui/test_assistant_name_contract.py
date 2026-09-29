@@ -82,3 +82,21 @@ def test_the_app_keeps_its_own_name() -> None:
     for locale in ("en", "it"):
         data = json.loads((ASSETS / "i18n" / f"{locale}.json").read_text(encoding="utf-8"))
         assert "Jenny" in data["workshop"]["homePill"]
+
+
+def test_what_speaks_of_her_carries_her_name_too() -> None:
+    """Chiesto dall'utente il 29/09/2026 dopo la verifica: la riga «Jenny» delle
+    Impostazioni, il titolo della sua stanza, il testo della finestra
+    flottante e quello della posizione parlano di lei. Il titolo delle
+    notifiche resta «Jenny»: e' l'app che avvisa."""
+    for locale in ("en", "it"):
+        data = json.loads((ASSETS / "i18n" / f"{locale}.json").read_text(encoding="utf-8"))
+        assert data["home"]["jenny"]["title"] == "{name}"
+        for text in (data["settings"]["floatingHint"], data["settings"]["location"]["hint"]):
+            assert "{name}" in text and "Jenny" not in text, (locale, text)
+    assert "i18n.t('home.jenny.title', { name: botName.get() })" in _read("home-you.js")
+    assert "i18n.t('home.jenny.title', { name: this._personalName || DEFAULT_BOT_NAME })" in _read("home-app.js")
+    assert "{ name: botName.get() }" in member(_read("home-jenny.js"), "_sayFloating")
+    assert "i18n.t('settings.location.hint', { name: botName.get() })" in _read("mobile-settings.js")
+    apply = member(_read("home-app.js"), "_applyBotName")
+    assert "this.you?.applyTranslations()" in apply and "this.jennyRoom?.applyTranslations()" in apply

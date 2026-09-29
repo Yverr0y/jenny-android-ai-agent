@@ -20,7 +20,7 @@ Two independent switches must both be on for any location data to reach Jenny at
 | In-app toggle | Workshop → **Hands** → **Location** → **Share my location** | ON |
 | Android runtime permission | System permission prompt (`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`, precise or approximate — either one is enough) | Requested at first launch |
 
-The toggle is exactly this text, with the hint: "Jenny uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour."
+The toggle is exactly this text, with the hint (with her name, if you renamed her): "Jenny uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour."
 
 The toggle flips `tools.location.enable` in the backend config; the permission is Android's. It is first asked when the app starts up, right after the notification permission, and Android offers both **Precise** and **Approximate** — either one is enough for Jenny.
 

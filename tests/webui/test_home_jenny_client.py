@@ -53,6 +53,8 @@ import assert from 'node:assert/strict';
 
 const TRANSLATIONS = __TRANSLATIONS__;
 const i18n = { locale: 'it', translations: TRANSLATIONS, __T__ };
+/* Il nome di lei (`shared/bot-name.js`): qui quello di partenza. */
+const botName = { get: () => 'Jenny', set() {}, onChange() { return () => {}; } };
 
 function makeEl(tag) {
   const el = {
@@ -324,7 +326,7 @@ def test_the_row_is_not_there_where_the_window_cannot_exist() -> None:
 
       she.setFloating({ available: true, enabled: false, active: false });
       assert.equal(she.floatingRow.hidden, false);
-      assert.equal(she.floatingNote.textContent, i18n.t('settings.floatingHint'));
+      assert.equal(she.floatingNote.textContent, i18n.t('settings.floatingHint', { name: 'Jenny' }));
     """)
 
 
@@ -360,7 +362,7 @@ def test_the_switch_moves_before_the_server_answers_and_takes_its_word_after() -
       await tick;
       assert.deepEqual(calls, [{ enabled: true }]);
       assert.equal(she.floating.active, true, 'il permesso concesso non e arrivato');
-      assert.equal(she.floatingNote.textContent, i18n.t('settings.floatingHint'),
+      assert.equal(she.floatingNote.textContent, i18n.t('settings.floatingHint', { name: 'Jenny' }),
                    'la risposta del server non e\\u2019 stata ascoltata');
     """)
 

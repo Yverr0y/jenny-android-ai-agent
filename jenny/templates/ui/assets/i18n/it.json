@@ -215,7 +215,7 @@
     "mascotSizeMedium": "Media",
     "mascotSizeLarge": "Grande",
     "floatingEnabled": "Mascotte flottante",
-    "floatingHint": "Jenny resta sopra le altre app: toccala e le parli, la risposta compare in un fumetto. È la stessa conversazione dell'app.",
+    "floatingHint": "{name} resta sopra le altre app: toccala e le parli, la risposta compare in un fumetto. È la stessa conversazione dell'app.",
     "floatingBlocked": "Android non le lascia aprire la finestra: concedi «Sovrapponi ad altre app» dalle impostazioni di sistema.",
     "tokenUsage": "Utilizzo token",
     "version": "Versione",
@@ -238,7 +238,7 @@
     "location": {
       "section": "Posizione",
       "enable": "Condividi la mia posizione",
-      "hint": "Jenny usa il GPS del telefono per sapere dove sei: la posizione recente entra nel contesto a ogni messaggio, un fix preciso solo su richiesta. Serve il permesso di localizzazione Android. Le posizioni condivise via Telegram valgono solo lì e scadono dopo un'ora.",
+      "hint": "{name} usa il GPS del telefono per sapere dove sei: la posizione recente entra nel contesto a ogni messaggio, un fix preciso solo su richiesta. Serve il permesso di localizzazione Android. Le posizioni condivise via Telegram valgono solo lì e scadono dopo un'ora.",
       "on": "Posizione attivata",
       "off": "Posizione disattivata",
       "denied": "Android non ha ancora concesso a Jenny la posizione: finché non lo fa, lei non sa dove sei.",
@@ -982,7 +982,7 @@
       "workshopHint": "osserva, regola, ripara"
     },
     "jenny": {
-      "title": "Jenny",
+      "title": "{name}",
       "hidden": "nascosta",
       "floatingShort": "flottante",
       "name": "Come si chiama",

@@ -50,6 +50,8 @@ import assert from 'node:assert/strict';
 
 const TRANSLATIONS = __TRANSLATIONS__;
 const i18n = { locale: 'it', translations: TRANSLATIONS, __T__ };
+/* Il nome di lei (`shared/bot-name.js`): qui quello di partenza. */
+const botName = { get: () => 'Jenny', set() {}, onChange() { return () => {}; } };
 
 function makeEl(tag) {
   const el = {
@@ -272,7 +274,7 @@ def test_the_words_come_back_when_the_language_changes() -> None:
       assert.equal(you.themeLabel.textContent, i18n.t('settings.themeLabel'));
       assert.equal(you.workshopName.textContent, i18n.t('home.workshop'));
       assert.equal(you.workshopHint.textContent, i18n.t('home.you.workshopHint'));
-      assert.equal(you.jennyLabel.textContent, i18n.t('home.jenny.title'));
+      assert.equal(you.jennyLabel.textContent, i18n.t('home.jenny.title', { name: 'Jenny' }));
       assert.equal(you.themeDesc.textContent, i18n.t('themes.chanel.desc'));
     """)
 

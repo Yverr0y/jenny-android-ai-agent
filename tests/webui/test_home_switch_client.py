@@ -1102,7 +1102,7 @@ def test_the_way_back_to_the_chat_belongs_to_a_notebook() -> None:
       assert.equal(app.viewSwitch.hidden, true, 'nel lettore c\\u2019e\\u2019 l\\u2019interruttore: li\\u2019 il comando e\\u2019 «Modifica»');
       app._setView('jenny');
       assert.equal(app.viewSwitch.hidden, true, 'l\\u2019interruttore in mezzo alle impostazioni');
-      assert.equal(app.nameEl.textContent, i18n.t('home.jenny.title'), 'la testa non dice dove sei');
+      assert.equal(app.nameEl.textContent, i18n.t('home.jenny.title', { name: 'Jenny' }), 'la testa non dice dove sei');
     """)
 
 
@@ -1163,7 +1163,7 @@ def test_her_room_hangs_off_you_and_jenny() -> None:
       app.openJenny();
       assert.equal(app.view, 'jenny');
       assert.ok(app.actions.includes('jenny aperta'));
-      assert.equal(app.nameEl.textContent, i18n.t('home.jenny.title'), 'la testa non dice dove sei');
+      assert.equal(app.nameEl.textContent, i18n.t('home.jenny.title', { name: 'Jenny' }), 'la testa non dice dove sei');
       app.handleHardwareBack();
       assert.equal(app.view, 'chat');
       assert.equal(app.homePages.current, 'settings');

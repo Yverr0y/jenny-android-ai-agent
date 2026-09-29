@@ -901,6 +901,11 @@ class HomeApp {
     this._personalName = newName;
     botName.set(newName);
     this.strip?.draw();
+    // La riga delle Impostazioni, la sua stanza e il testo della finestra
+    // flottante portano il nome: rinominata li' dentro, cambiano subito.
+    this.you?.applyTranslations();
+    this.jennyRoom?.applyTranslations();
+    if (this.view === 'jenny') this._applyHead();
     this.who?.render();
     this._applyConversationTexts();
   }
@@ -1273,7 +1278,9 @@ class HomeApp {
     this.audit?.refresh();
     this._applyPill(notebook);
     if (this.view === 'pages') this._setHeadTitle(notebook);
-    if (this.view === 'jenny') this._setHeadTitle(i18n.t('home.jenny.title'));
+    if (this.view === 'jenny') {
+      this._setHeadTitle(i18n.t('home.jenny.title', { name: this._personalName || DEFAULT_BOT_NAME }));
+    }
     if (this.view === 'model') this._setHeadTitle(i18n.t('home.model.title'));
     if (this.view === 'updates') this._setHeadTitle(i18n.t('home.updates.title'));
     if (this.view === 'backup') this._setHeadTitle(i18n.t('home.backup.title'));

@@ -15,6 +15,7 @@
  */
 
 import { i18n } from './shared/i18n.js';
+import { botName } from './shared/bot-name.js';
 import { THEMES, currentTheme, setTheme } from './shared/theme.js';
 
 /** Le tre tinte di un tema, in un quadrato solo.
@@ -119,7 +120,8 @@ export class HomeYou {
     if (this.themeLabel) this.themeLabel.textContent = i18n.t('settings.themeLabel');
     if (this.workshopName) this.workshopName.textContent = i18n.t('home.workshop');
     if (this.workshopHint) this.workshopHint.textContent = i18n.t('home.you.workshopHint');
-    if (this.jennyLabel) this.jennyLabel.textContent = i18n.t('home.jenny.title');
+    /* La riga della sua stanza porta il suo nome, non quello dell'app. */
+    if (this.jennyLabel) this.jennyLabel.textContent = i18n.t('home.jenny.title', { name: botName.get() });
     if (this.modelLabel) this.modelLabel.textContent = i18n.t('home.model.title');
     if (this.updatesLabel) this.updatesLabel.textContent = i18n.t('home.updates.title');
     if (this.backupLabel) this.backupLabel.textContent = i18n.t('home.backup.title');

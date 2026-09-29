@@ -215,7 +215,7 @@
     "mascotSizeMedium": "Medium",
     "mascotSizeLarge": "Large",
     "floatingEnabled": "Floating mascot",
-    "floatingHint": "Jenny stays above other apps: tap her and you can talk, with the answer in a bubble. It's the same conversation as in the app.",
+    "floatingHint": "{name} stays above other apps: tap her and you can talk, with the answer in a bubble. It's the same conversation as in the app.",
     "floatingBlocked": "Android won't let her open the window: allow “Display over other apps” in the system settings.",
     "tokenUsage": "Token Usage",
     "version": "Version",
@@ -238,7 +238,7 @@
     "location": {
       "section": "Location",
       "enable": "Share my location",
-      "hint": "Jenny uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour.",
+      "hint": "{name} uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour.",
       "on": "Location enabled",
       "off": "Location disabled",
       "denied": "Android hasn't allowed Jenny to use the location yet: until it does, she can't tell where you are.",
@@ -982,7 +982,7 @@
       "workshopHint": "watch, tune, repair"
     },
     "jenny": {
-      "title": "Jenny",
+      "title": "{name}",
       "hidden": "hidden",
       "floatingShort": "floating",
       "name": "Her name",

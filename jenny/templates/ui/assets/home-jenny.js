@@ -23,6 +23,7 @@
 
 import { api } from './shared/api-client.js';
 import { i18n } from './shared/i18n.js';
+import { botName } from './shared/bot-name.js';
 import { rpc } from './shared/rpc-client.js';
 import { showToast } from './shared/utils.js';
 import { MASCOT_SIZES, mascotSize, mascotVisible, setMascotSize, setMascotVisible }
@@ -337,6 +338,7 @@ export class HomeJenny {
     if (!available) return;
     this.floatingNote.textContent = i18n.t(
       blocked ? 'settings.floatingBlocked' : 'settings.floatingHint',
+      { name: botName.get() },
     );
   }
 
