@@ -3513,6 +3513,20 @@ body {
   border-radius: var(--radius-sm);
 }
 .oc-dialog-input:focus { outline: none; border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+/* La regola sotto il campo e l'errore che tiene aperto il dialog: il margine
+   del campo passa a loro, cosi' i bottoni restano alla stessa distanza. */
+.oc-dialog-input:has(~ .oc-dialog-hint:not([hidden])),
+.oc-dialog-input:has(~ .oc-dialog-error:not([hidden])) { margin-bottom: 6px; }
+.oc-dialog-hint,
+.oc-dialog-error {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.oc-dialog-hint { color: var(--text-faint); }
+.oc-dialog-error { color: var(--error); }
+.oc-dialog-hint:not([hidden]) + .oc-dialog-error:not([hidden]) { margin-top: -4px; }
+.oc-dialog-input[aria-invalid="true"] { border-color: var(--error); }
 .oc-dialog-buttons {
   display: flex;
   justify-content: flex-end;

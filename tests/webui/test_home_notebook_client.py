@@ -312,7 +312,15 @@ def _run_rename(
         const {{ isOpenableProjectName }} = await import({json.dumps((ASSETS / "shared" / "conversation-list.js").as_uri())});
         const history = [];
         const projectKey = (n) => 'project:' + n;
-        async function promptDialog(msg, opts) {{ history.push(['chiede', opts.initial]); return {json.dumps(written)}; }}
+        async function promptDialog(msg, opts) {{
+          history.push(['chiede', opts.initial]);
+          /* Il dialog vero, con un `validate` che dice no, resta aperto: qui
+             l'errore si segna, e chi l'ha scritto annulla. */
+          const answer = {json.dumps(written)};
+          const problem = opts.validate && typeof answer === "string" ? opts.validate(answer) : null;
+          if (problem) {{ history.push(['resta aperto', problem]); return null; }}
+          return {json.dumps(written)};
+        }}
         const rpc = {{
           async renameProject(a, b) {{
             history.push(['rpc', a, b]);
@@ -392,11 +400,12 @@ def test_nothing_to_rename_asks_nothing_of_the_gateway(written) -> None:
 
 def test_a_name_that_would_not_open_is_said_before_the_round_trip() -> None:
     """La stessa regola del gateway, detta subito: senza, «Ricerca ETNA»
-    andrebbe e tornerebbe col suo rifiuto."""
+    andrebbe e tornerebbe col suo rifiuto. Dal 29/09/2026 la si dice **dentro**
+    il dialog, che resta aperto col testo scritto (collaudo del 27/09)."""
     _run_rename(
         "assert.equal(await g.renameNotebook('viaggio'), false);\n"
         "assert.ok(!history.some((x) => x[0] === 'rpc'), 'un nome non valido e arrivato al gateway');\n"
-        "assert.deepEqual(history.at(-1), ['avviso', 'scope.invalidName', 'error']);\n",
+        "assert.deepEqual(history.at(-1), ['resta aperto', 'scope.invalidName']);\n",
         written="Ricerca ETNA",
         current_key=None,
     )

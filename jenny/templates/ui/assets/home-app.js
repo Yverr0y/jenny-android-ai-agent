@@ -619,15 +619,19 @@ class HomeApp {
    *  (che il gateway ha gia' rinominato) si rileggono.
    */
   async renameNotebook(name) {
+    /* Come alla creazione: la regola sotto il campo, e un nome sbagliato
+       tiene aperto il dialog col testo scritto invece di chiuderlo. */
     const written = await promptDialog(i18n.t('home.notebook.renamePrompt', { name: name }), {
       initial: name,
+      hint: i18n.t('scope.newProjectHint'),
+      validate: (value) => {
+        const clean = value.trim();
+        return !clean || clean === name || isOpenableProjectName(clean)
+          ? null : i18n.t('scope.invalidName');
+      },
     });
     const newName = (written || '').trim();
     if (!newName || newName === name) return false;
-    if (!isOpenableProjectName(newName)) {
-      showToast(i18n.t('scope.invalidName'), 'error');
-      return false;
-    }
     try {
       await rpc.renameProject(name, newName);
     } catch (err) {

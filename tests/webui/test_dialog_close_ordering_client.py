@@ -260,3 +260,44 @@ def test_no_modal_resolves_on_a_timer() -> None:
     assert "addEventListener('close'" in body and "{ once: true }" in body
     timers = re.findall(r"setTimeout\(\(\) => ([^,]+),", src)
     assert timers == ["inputEl.focus()"], f"timer inattesi: {timers}"
+
+
+# ── La regola detta prima, e l'errore che tiene aperto (collaudo 27/09/2026) ──
+
+
+def test_a_refused_value_keeps_the_dialog_open_with_the_text_and_the_error() -> None:
+    """Un nome non valido chiudeva il dialog e un toast lo diceva dopo: quel
+    che avevi scritto era perso. Con ``validate`` il dialog resta, col testo e
+    l'errore sotto; correggendo l'errore sparisce, e Conferma riprova."""
+    _run_js("""
+      const nodes = mountPrompt(0);
+      for (const id of ['oc-prompt-hint', 'oc-prompt-error']) {
+        nodes[id] = new FakeEl(id);
+        nodes[id].hidden = true;
+      }
+      nodes['oc-prompt-input'].setAttribute = function (k, v) { this[k] = v; };
+      const p = promptDialog('nome', {
+        hint: 'niente spazi',
+        validate: (v) => (v.includes(' ') ? 'ha uno spazio' : null),
+      });
+      assert.equal(nodes['oc-prompt-hint'].textContent, 'niente spazi');
+      assert.equal(nodes['oc-prompt-hint'].hidden, false);
+
+      answer('Prova UI');
+      await sleep(10);
+      assert.equal(nodes['oc-prompt-dialog'].open, true, 'il dialog si e chiuso');
+      assert.equal(nodes['oc-prompt-input'].value, 'Prova UI', 'il testo scritto e perso');
+      assert.equal(nodes['oc-prompt-error'].textContent, 'ha uno spazio');
+      assert.equal(nodes['oc-prompt-error'].hidden, false);
+
+      nodes['oc-prompt-input'].dispatch('input');
+      assert.equal(nodes['oc-prompt-error'].hidden, true, 'l errore resta su un testo corretto');
+      answer('Prova-UI');
+      assert.equal(await within(200, p), 'Prova-UI');
+
+      // Chi non passa niente ha il dialog di sempre: niente riga, niente errore.
+      const q = promptDialog('altro');
+      assert.equal(nodes['oc-prompt-hint'].hidden, true);
+      answer('con spazi');
+      assert.equal(await within(200, q), 'con spazi');
+    """)

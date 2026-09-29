@@ -850,6 +850,7 @@
     "newProjectSeed": "What is “{name}” about?",
     "newProjectSeedPlaceholder": "one line: what belongs here and what does not",
     "seedRequired": "I need one line on what the notebook is about: without it the chat starts on nothing.",
+    "newProjectHint": "Letters, numbers, dot, dash and underscore — no spaces.",
     "invalidName": "Letters, numbers, dot, dash and underscore, never two dots in a row; it must start with a letter or a digit and fit in 64 characters.",
     "unopenableSection": "Cannot be opened",
     "unopenableInvalidName": "These folders are there, but their name cannot be a conversation name. {rule} Ask me from the personal chat to rename one.",

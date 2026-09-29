@@ -62,6 +62,7 @@ export const CREATE_ERROR_KEYS = {
 export const NOTEBOOK_WORDS = {
   namePrompt: 'scope.newProjectName',
   namePlaceholder: 'scope.newProjectPlaceholder',
+  nameHint: 'scope.newProjectHint',
   invalidName: 'scope.invalidName',
   nameTaken: 'scope.nameTaken',
   nameTakenContinue: 'scope.nameTakenContinue',
@@ -91,15 +92,16 @@ export const NOTEBOOK_WORDS = {
  *           `null` vuol dire *davvero* niente su disco, in tutte le uscite.
  */
 export async function createProjectFlow({ words = NOTEBOOK_WORDS, t, known = [] }) {
+  /* La regola si dice prima (`hint`) e un nome che non la rispetta tiene il
+     dialog aperto col testo scritto (`validate`): prima era un toast dopo
+     Conferma, e il giro ricominciava da zero. */
   const name = await promptDialog(t(words.namePrompt), {
     placeholder: t(words.namePlaceholder),
+    hint: t(words.nameHint),
+    validate: (value) => (isOpenableProjectName(value.trim()) ? null : t(words.invalidName)),
   });
   if (!name) return null;
   const clean = name.trim();
-  if (!isOpenableProjectName(clean)) {
-    showToast(t(words.invalidName), 'error');
-    return null;
-  }
 
   /* L'avviso **prima** della riga di scope: scriverla per poi vedersi rifiutare
      la creazione è il modo peggiore di scoprirlo. */
@@ -111,13 +113,13 @@ export async function createProjectFlow({ words = NOTEBOOK_WORDS, t, known = [] 
     if (!goOn) return null;
   }
 
+  /* Una riga vuota non annulla piu' la creazione: il dialog resta e lo dice.
+     Annullare resta annullare. */
   const seed = await promptDialog(t(words.seedPrompt, { name: clean }), {
     placeholder: t(words.seedPlaceholder),
+    validate: (value) => (value.trim() ? null : t(words.seedRequired)),
   });
-  if (!seed || !seed.trim()) {
-    showToast(t(words.seedRequired), 'info');
-    return null;
-  }
+  if (!seed || !seed.trim()) return null;
 
   try {
     const first = await rpc.createProject(clean, seed.trim());

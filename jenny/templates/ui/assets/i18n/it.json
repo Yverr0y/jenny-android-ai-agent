@@ -850,6 +850,7 @@
     "newProjectSeed": "Di cosa si occupa “{name}”?",
     "newProjectSeedPlaceholder": "una riga: cosa ci va e cosa no",
     "seedRequired": "Serve una riga su cos’è il quaderno: senza, la chat parte a vuoto.",
+    "newProjectHint": "Lettere, numeri, punto, trattino e trattino basso — niente spazi.",
     "invalidName": "Lettere, numeri, punto, trattino e underscore, mai due punti di fila; deve iniziare con una lettera o un numero e stare in 64 caratteri.",
     "unopenableSection": "Non apribili",
     "unopenableInvalidName": "Queste cartelle ci sono, ma il loro nome non può essere il nome di una conversazione. {rule} Chiedimi dalla chat personale di rinominarne una.",

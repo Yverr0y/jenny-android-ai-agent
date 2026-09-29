@@ -74,6 +74,8 @@ const MARKUP = `
   <div class="oc-dialog-inner">
     <p class="oc-dialog-message" id="oc-prompt-message"></p>
     <input type="text" class="oc-dialog-input" id="oc-prompt-input" />
+    <p class="oc-dialog-hint" id="oc-prompt-hint" hidden></p>
+    <p class="oc-dialog-error" id="oc-prompt-error" role="alert" hidden></p>
     <div class="oc-dialog-buttons">
       <button class="oc-btn oc-btn-cancel" id="oc-prompt-cancel" data-i18n="dialog.cancel">Cancel</button>
       <button class="oc-btn oc-btn-confirm" id="oc-prompt-ok" data-i18n="dialog.confirm">Confirm</button>
@@ -219,8 +221,17 @@ export function detailDialog({ title = '', bodyHtml = '', actions = [] } = {}) {
   });
 }
 
-/** Prompt con input testuale. Risolve con la stringa inserita, o null se annullato. */
-export function promptDialog(message, { placeholder = '', initial = '', okText, cancelText } = {}) {
+/** Prompt con input testuale. Risolve con la stringa inserita, o null se annullato.
+ *
+ *  `hint` e' una riga sotto il campo, per dire la regola **prima** che la si
+ *  sbagli. `validate(value)` torna `null` se il valore va bene, altrimenti il
+ *  testo dell'errore: il dialog allora resta aperto, col testo scritto e
+ *  l'errore sotto, e Conferma riprova. Senza, un nome sbagliato chiudeva tutto
+ *  con un toast e quel che avevi scritto era perso (collaudo del 27/09/2026).
+ *  Chi non passa `validate` ha il comportamento di sempre. */
+export function promptDialog(message, {
+  placeholder = '', initial = '', okText, cancelText, hint = '', validate = null,
+} = {}) {
   okText = okText || i18n.t('dialog.confirm');
   cancelText = cancelText || i18n.t('dialog.cancel');
   const dialog = document.getElementById('oc-prompt-dialog');
@@ -233,11 +244,25 @@ export function promptDialog(message, { placeholder = '', initial = '', okText, 
   const cancelBtn = document.getElementById('oc-prompt-cancel');
   if (!msgEl || !inputEl || !okBtn || !cancelBtn) return Promise.resolve(null);
 
+  const hintEl = document.getElementById('oc-prompt-hint');
+  const errorEl = document.getElementById('oc-prompt-error');
+
   msgEl.textContent = message;
   inputEl.placeholder = placeholder;
   inputEl.value = initial;
   okBtn.textContent = okText;
   cancelBtn.textContent = cancelText;
+  if (hintEl) {
+    hintEl.textContent = hint;
+    hintEl.hidden = !hint;
+  }
+  const showError = (text) => {
+    if (!errorEl) return;
+    errorEl.textContent = text || '';
+    errorEl.hidden = !text;
+    inputEl.setAttribute('aria-invalid', text ? 'true' : 'false');
+  };
+  showError('');
 
   return new Promise((resolve) => {
     let settled = false;
@@ -247,18 +272,30 @@ export function promptDialog(message, { placeholder = '', initial = '', okText, 
       okBtn.removeEventListener('click', onOk);
       cancelBtn.removeEventListener('click', onCancel);
       inputEl.removeEventListener('keydown', onKey);
+      inputEl.removeEventListener('input', onInput);
       dialog.removeEventListener('close', onClose);
       dialog.removeEventListener('cancel', onCancel);
       closeThenResolve(dialog, resolve, val);
     };
-    const onOk = () => cleanup(inputEl.value);
+    const onOk = () => {
+      const problem = typeof validate === 'function' ? validate(inputEl.value) : null;
+      if (problem) {
+        showError(problem);
+        inputEl.focus();
+        return;
+      }
+      cleanup(inputEl.value);
+    };
     const onCancel = () => cleanup(null);
     const onClose = () => cleanup(null);
     const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); onOk(); } };
+    // L'errore e' di quel che c'era scritto: correggendo, sparisce.
+    const onInput = () => showError('');
 
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
     inputEl.addEventListener('keydown', onKey);
+    inputEl.addEventListener('input', onInput);
     dialog.addEventListener('close', onClose);
     dialog.addEventListener('cancel', onCancel);
 

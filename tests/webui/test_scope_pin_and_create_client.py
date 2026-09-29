@@ -119,7 +119,20 @@ const AppState = {
 // I due dialoghi, a risposte prenotate. `undefined` = annullato.
 let answers = [];
 const asked = [];
-function promptDialog(text) { asked.push(text); return Promise.resolve(answers.shift()); }
+/* Col `validate` del dialog vero, una risposta che non va **non lo chiude**:
+   l'errore si segna in `stayed` e la risposta prenotata dopo e' la
+   correzione. Finite le risposte, `undefined` = annullato. */
+const stayed = [];
+function promptDialog(text, opts = {}) {
+  asked.push(text);
+  for (;;) {
+    const answer = answers.shift();
+    if (answer === undefined || typeof opts.validate !== 'function') return Promise.resolve(answer);
+    const problem = opts.validate(answer);
+    if (!problem) return Promise.resolve(answer);
+    stayed.push([answer, problem]);
+  }
+}
 
 /* L'avviso «questo nome c'e' gia'»: un conferma/annulla, non un rifiuto. La
    risposta si prenota, perche' entrambe le vie contano — proseguire e' il caso
@@ -186,6 +199,7 @@ function makeChip() {
   AppState.published.length = 0;
   answers = [];
   asked.length = 0;
+  stayed.length = 0;
   toasts.length = 0;
   created.length = 0;
   confirms.length = 0;
@@ -491,11 +505,12 @@ def test_the_names_the_server_refuses_never_leave_the_dialog() -> None:
       ];
       for (const name of refused) {
         const chip = makeChip();
-        answers = [name, 'una riga'];
+        answers = [name];
         await chip._createProject();
         assert.deepEqual(created, [], 'il server lo rifiuterebbe: ' + name);
         assert.deepEqual(asked.length, 1, 'e non deve costare il secondo dialogo: ' + name);
-        assert.deepEqual(toasts, [['i18n:scope.invalidName', 'error']], name);
+        assert.deepEqual(stayed, [[name, 'i18n:scope.invalidName']], name);
+        assert.deepEqual(toasts, [], 'il dialog si e chiuso con un toast: ' + name);
       }
     """)
 
@@ -586,22 +601,23 @@ def test_nothing_is_created_and_nothing_is_entered_without_both_answers() -> Non
       assert.deepEqual(created, []);
       assert.deepEqual(chip.switched, []);
 
-      // Riga di scope annullata: il nome da solo non crea niente.
+      // Riga di scope vuota: il dialog resta e lo dice; annullato, il nome da
+      // solo non crea niente.
       chip = makeChip();
       answers = ['bordi', '   '];
       await chip._createProject();
       assert.deepEqual(created, []);
       assert.deepEqual(chip.switched, []);
       assert.equal(chip.scope.kind, 'personal');
-      assert.deepEqual(toasts, [['i18n:scope.seedRequired', 'info']]);
+      assert.deepEqual(stayed, [['   ', 'i18n:scope.seedRequired']]);
 
       // Nome non valido: nemmeno arriva al secondo dialogo.
       chip = makeChip();
-      answers = ['../fuori', 'qualcosa'];
+      answers = ['../fuori'];
       await chip._createProject();
       assert.deepEqual(created, []);
       assert.deepEqual(chip.switched, []);
-      assert.deepEqual(toasts, [['i18n:scope.invalidName', 'error']]);
+      assert.deepEqual(stayed, [['../fuori', 'i18n:scope.invalidName']]);
     """)
 
 
@@ -695,3 +711,25 @@ def test_the_creation_no_longer_reopens_the_menu() -> None:
     assert code.index("if (!clean) return;") < code.index("this.select("), (
         "un giro annullato o rifiutato porterebbe dentro un progetto che non c'è"
     )
+
+
+# ── Dal collaudo del 27/09/2026 ────────────────────────────────────────────
+
+
+def test_a_wrong_name_or_an_empty_line_can_be_corrected_in_place() -> None:
+    """Un nome con uno spazio, o la riga vuota, chiudevano tutto con un toast e
+    quel che avevi scritto era perso. Ora il dialog resta: si corregge e si va
+    avanti, e la regola dei nomi si legge prima di sbagliarla."""
+    _run_js("""
+      const chip = makeChip();
+      answers = ['Prova UI', 'Prova-UI', '', 'a cosa serve'];
+      createOutcome = { name: 'Prova-UI', created: ['AGENTS.md'], seeded: true };
+      await chip._createProject();
+      assert.deepEqual(stayed, [['Prova UI', 'i18n:scope.invalidName'],
+                                ['', 'i18n:scope.seedRequired']]);
+      assert.deepEqual(asked.length, 2, 'ogni errore ha riaperto il giro da capo');
+      assert.deepEqual(created, [['Prova-UI', 'a cosa serve']]);
+    """)
+    flow = _read(CREATE_JS)
+    assert "hint: t(words.nameHint)" in flow
+    assert "nameHint: 'scope.newProjectHint'" in flow
