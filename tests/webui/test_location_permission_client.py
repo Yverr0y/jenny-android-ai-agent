@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from support.js_harness import member, requires_node, run_js
+from support.kotlin_source import read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 SETTINGS_JS = ROOT / "jenny" / "templates" / "ui" / "assets" / "mobile-settings.js"
@@ -72,7 +73,7 @@ def test_switching_it_on_asks_and_the_answer_redraws() -> None:
     assert "if (enabled) this._askLocationPermission();" in src
     assert "window.addEventListener('jenny-location-permission', this._onLocationPermission)" in src
     assert "document.addEventListener('visibilitychange', this._onLocationPermission)" in src
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     assert "new Event('jenny-location-permission')" in kotlin
     assert "ActivityResultContracts.RequestMultiplePermissions()" in kotlin
     ensure = re.search(r"private fun ensureLocationPermission\(\) \{(.*?)\n    \}", kotlin, re.S).group(1)
