@@ -29,7 +29,7 @@ pip install -e ".[dev]"
 That is what CI installs. The `dev` extra in `pyproject.toml` pins, to exact versions, pytest, pytest-asyncio and ruff plus three test-only packages. Two of them are **not optional if you intend to run the suite**:
 
 - `cryptography` — the encrypted-backup tests. On Android backup crypto uses `javax.crypto` instead, so this must never end up in `requirements-android.txt` / `requirements-android.lock.txt`.
-- `asyncssh` — the desktop SSH backend raises an in-process server for the suite. Without it **eight SSH test modules fail at collection**, which looks like a broken checkout rather than a missing package. On Android the client is jsch through a native bridge, so the same rule applies: never in the Android requirements.
+- `asyncssh` — the desktop SSH backend raises an in-process server for the suite. Without it the SSH suites do not run: `test_ssh.py`, `test_ssh_jobs.py` and `test_ssh_backend_dev.py` (and one test in `test_ssh_api.py`) call `pytest.importorskip("asyncssh")` and **skip**, so nothing fails and the suite stays green while the SSH coverage quietly disappears. On Android the client is jsch through a native bridge, so the same rule applies: never in the Android requirements.
 
 The third is **Pillow**, for `tests/webui/test_mascot_layer_sources.py`, which skips whole without it. `android/image_source/gen_icons.py` and `gen_pose_webp.py` use it too, to regenerate the shipped icon and mascot assets; they are not part of a normal build, which is why Pillow is in no Android requirement file.
 
@@ -38,7 +38,7 @@ Two more things the suite can want, outside Python:
 - **node** — about twenty WebUI suites execute the real JS. They *skip* without it, so the suite still goes green while ~200 behaviour tests quietly do not run.
 - **jsdom** — the suites that mount the whole home in a DOM (`tests/support/home_dom.py`) and the graph contract need it, and skip without it. It is not a dependency of the repo: `npm install --no-save jsdom@30.1.1`, then run the suite with `NODE_PATH=$PWD/node_modules`, as CI does. `node_modules/` is not in `.gitignore`, so delete it afterwards.
 
-In CI, `tests/webui/test_node_is_available.py` fails instead of letting node, jsdom or Pillow go missing in silence.
+In CI, `tests/webui/test_node_is_available.py` fails instead of letting node, jsdom or Pillow go missing in silence. It guards only those three: a broken `asyncssh` or `cryptography` install would still skip its suites silently in CI. That is a known gap, not a design choice.
 
 ## Where subsystems live
 
@@ -51,11 +51,11 @@ The high-level data flow: an async `MessageBus` (`jenny/bus/queue.py`) decouples
 | Channels | `jenny/channels/` | Four channels: WebSocket (`websocket.py`), Telegram (`telegram.py`), and on Android Notification (`notification.py`) and Floating (`floating.py`); `dispatcher.py` routes outbound bus messages to whichever are active, with retry, delta coalescing, and progress filtering. |
 | Tools | `jenny/agent/tools/` | Filesystem, `python_exec`, Android web search/fetch, cron, subagent spawning, long-running tasks, self-modification. Tools are registered **explicitly**: `loader.py` imports a fixed module list and each module declares its own `TOOLS = [...]`; name collisions raise at startup — there is no automatic module scanning. See [Write a tool](write-a-tool.md). |
 | Memory | `jenny/agent/memory.py` | Session history persistence plus Dream two-phase memory consolidation. Atomic writes with `fsync` for durability. |
-| Sessions | `jenny/session/` | History persistence, context compaction, TTL-based auto-compaction (`manager.py`), sustained-goal state tracking (`goal_state.py`). The user conversation is a single unified session (`unified:default`, see `keys.py`); internal work (cron, Dream, heartbeat) uses separate internal keys via `session_key_override`. |
+| Sessions | `jenny/session/` | History persistence, context compaction, sustained-goal state tracking (`goal_state.py`); TTL-based auto-compaction lives next door in `jenny/agent/autocompact.py` (`AutoCompact`). The user conversation is a single unified session (`unified:default`, see `keys.py`), except that a project chat on the WebSocket channel gets its own `project:<name>` session; internal work (cron, Dream, heartbeat) uses separate internal keys via `session_key_override`. |
 | Config | `jenny/config/schema.py`, `loader.py` | Pydantic-*style* config (`jenny/pydantic_compat/` — a stdlib-only reimplementation, see `FORK_BOUNDARY.md`) loaded from `workspace/config.json`. Supports camelCase aliases for JSON compatibility. |
 | WebUI (frontend) | `jenny/templates/ui/` | The mobile-first SPA. Talks to the gateway over the same WebSocket used for chat, plus HTTP routes under `/api/`. |
 | WebUI (backend) | `jenny/webui/` | The `/api/` route handlers backing the SPA — apps, settings, media, skills, transcript, token usage, workspaces, file preview — plus gateway service/token wiring. |
-| Jenny Apps | `jenny/apps/` | Runtime for user-authored mini-apps: `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`. See [Write a mini-app](write-a-mini-app.md). |
+| Jenny Apps | `jenny/apps/` | Runtime for user-authored mini-apps: `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`, `proxy.py`, `token.py`. See [Write a mini-app](write-a-mini-app.md). |
 | Command router | `jenny/command/` | Slash command routing and built-in command handlers. |
 | Skills | `jenny/skills/` | Built-in skill definitions loaded into agent context. |
 | Security | `jenny/security/` | Workspace policy/access control plus SSRF network protections. |

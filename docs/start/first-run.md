@@ -62,7 +62,7 @@ This step tries to fetch the live list of models straight from the provider's `/
 
 - If the fetch succeeds, you get a searchable list — type in the **Search models** box to filter it. There's no manual field in this case.
 - If the fetch fails, the list comes back empty, or the provider doesn't expose a `/models` endpoint, the reason is shown where the list would be, and an **Or type a custom model name** field appears below it so you can enter the model ID by hand.
-- This step also has an **Assistant name** field for what you want Jenny to call herself (default "Jenny").
+- This step also has an **Assistant name** field for what you want Jenny to call herself (default "Jenny"). You can change it later in the home's **Settings → Jenny → Her name** (up to 40 characters; changing it erases no memory).
 
 Once a model is selected (from the list or typed manually), the **Launch** button enables. The choice belongs to the provider you entered: if you go back and change the format, the key or the base URL, the model is cleared and you pick it again from the new list.
 

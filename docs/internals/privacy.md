@@ -1,26 +1,27 @@
 # Privacy
 
-There is no Jenny backend and no telemetry: everything Jenny sends off the device is a direct, traceable consequence of something you asked it to do, going to a service you configured.
+There is no Jenny backend and no telemetry: what Jenny sends off the device is either a direct, traceable consequence of something you asked it to do, going to a service you configured, or the one daily update check against GitHub Releases, which carries nothing about you and has its own switch.
 
 ## No telemetry, no Jenny-operated backend
 
-Jenny does not phone home. There is no analytics SDK, no crash reporter, and no Jenny-operated server anywhere in the stack — the codebase has been checked for common telemetry/crash-reporting libraries (Firebase, Crashlytics, Sentry, generic "analytics" SDKs) and none are present. The one thing in the code that uses the word "telemetry" internally is the token-usage counter, and that counter is purely local bookkeeping (visible in the workshop, under **Brain → System → Token Usage**): it is never transmitted anywhere.
+Jenny does not phone home in the telemetry sense (the daily update check, covered below, only asks GitHub for a public file). There is no analytics SDK, no crash reporter, and no Jenny-operated server anywhere in the stack — the codebase has been checked for common telemetry/crash-reporting libraries (Firebase, Crashlytics, Sentry, generic "analytics" SDKs) and none are present. The one thing in the code that uses the word "telemetry" internally is the token-usage counter, and that counter is purely local bookkeeping (visible in the workshop, under **Brain → System → Token Usage**): it is never transmitted anywhere.
 
 The WebUI itself is served entirely from `127.0.0.1` — no page, font, or script it loads comes from the internet.
 
-## The five data recipients
+## The six data recipients
 
-Data only leaves the phone through one of these five paths, each gated by a condition you control.
+Data only leaves the phone through one of these six paths, each gated by a condition you control.
 
 | Recipient | What it receives | Condition |
 |---|---|---|
 | **Your configured LLM provider** | Chat messages, session history, tool results, and the content of any file the agent reads from the workspace. **Also your device's last-known location, on every single turn**, if location sharing is on and the Android permission is granted — not only when you explicitly ask "where am I". | Always, for any turn — this is the provider you added in onboarding/Settings. Location is additionally gated by `tools.location.enable` (default `true`) **and** the Android location permission. |
-| **Bing** | Your `web_search` queries. | Only when the agent actually calls `web_search` (`tools.androidWeb.search.enable`, default `true`). The search engine is currently fixed to Bing — there's no picker. |
-| **Sites visited by `web_fetch` / `download_file`** | Whatever a normal browser visit to that site would reveal: the site sees the request coming from a real, hidden Android WebView, with the phone's own IP address, user-agent, and WebView cookies — not an anonymized fetch. | Only when the agent calls `web_fetch` or `download_file` on a URL. |
+| **Bing** | Your `web_search` queries. | Only when the agent actually calls `web_search` (`tools.androidWeb.enable`, default `true`; it is the only switch, and also gates `web_fetch` and the `browser_*` tools). The search engine is currently fixed to Bing — there's no picker. |
+| **Sites visited by `web_fetch` / `browser_open` / `download_file`** | Whatever a normal browser visit to that site would reveal: the site sees the request coming from a real, hidden Android WebView, with the phone's own IP address, user-agent, and WebView cookies — not an anonymized fetch. | Only when the agent calls `web_fetch`, `browser_open` or `download_file` on a URL. |
 | **`api.telegram.org`** | Messages, if you've paired a Telegram bot: your conversation transits Telegram's servers under Telegram's terms, not Jenny's. | Only if `telegram.enabled` is `true` (default `false` — off until you explicitly connect a bot). |
+| **GitHub Releases** (`github.com`) | A plain `GET` of the release's `latest.json`, to find out whether a newer version exists. No identifier, no version, no query string: GitHub sees an IP address and a timestamp, like any HTTP server. Nothing about you or your data is in it. | Every 24 hours by default (`updates.enabled`, default `true`; `updates.checkIntervalH`, default `24`). `updates.enabled: false` stops the periodic check; the **Check now** button in Settings still makes one request when you press it. |
 | **The SSH hosts you registered** | The commands the agent runs on that machine, and — through `ssh_transfer` — the content of any workspace file it uploads there. Files fetched with `ssh_transfer` travel the other way, from the server into the workspace. | Only if `tools.ssh.enable` is `true` (default `false`), only for an alias a person registered in the workshop (**Hands → SSH**) whose host key you accepted by hand, and only through a `sysadmin` subagent. The agent can never name an address, only one of your aliases. |
 
-One more, smaller case: if your configured provider is OpenRouter, Jenny adds fixed attribution headers to every request (`HTTP-Referer` pointing at Jenny's GitHub repo, `X-OpenRouter-Title: Jenny`) so OpenRouter can attribute traffic to the app. This doesn't add a new recipient — OpenRouter is already your chosen LLM provider — but it does add identifying metadata to that traffic.
+One more, smaller case: if your configured provider is OpenRouter, Jenny adds fixed attribution headers to every request (`HTTP-Referer` pointing at Jenny's GitHub repo, `X-OpenRouter-Title: Jenny`, `X-OpenRouter-Categories: android-agent,personal-agent`) so OpenRouter can attribute traffic to the app. This doesn't add a new recipient — OpenRouter is already your chosen LLM provider — but it does add identifying metadata to that traffic.
 
 ## What stays local
 
@@ -28,7 +29,7 @@ Everything else lives in the app's private storage (`<filesDir>/workspace` and n
 
 - `config.json` — including provider API keys, stored in plaintext (see the caveat below).
 - Chat history and consolidated long-term memory (`memory/history.jsonl`, `MEMORY.md`, `USER.md`).
-- Uploaded attachments (`workspace/uploads/`) and agent downloads (`workspace/downloads/`).
+- Uploaded attachments (`workspace/uploads/`) and agent downloads (`downloads/` under the turn's root: `workspace/downloads/`, or `<project>/downloads/` inside a notebook).
 - Media (images, previews).
 - Workspace snapshots (the local "time machine" backups — see [Backup and restore](../using/backup.md)).
 - Token usage counts.
@@ -51,8 +52,9 @@ It's worth stating this relationship plainly, because it's easy to underestimate
 
 ## How to shrink the surface
 
-None of the five recipients above are mandatory except your LLM provider (Jenny can't function without one). To reduce what leaves the device:
+None of the six recipients above are mandatory except your LLM provider (Jenny can't function without one). To reduce what leaves the device:
 
+- **Turn off update checks** (`updates.enabled: false`) if you don't want the daily request to GitHub; you can still look for a new version by hand with **Check now**.
 - **Turn off location sharing** in the workshop (**Hands → Location**) if you don't want your last-known location included in every turn sent to the provider.
 - **Leave SSH off** unless you actually want Jenny reaching a server — it is off by default, and every registered host is a machine that receives commands and can receive workspace files.
 - **Don't enable Telegram** unless you actually want a second channel — it's off by default, and enabling it means your conversation also flows through Telegram's servers.

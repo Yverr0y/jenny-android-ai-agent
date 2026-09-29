@@ -40,7 +40,7 @@ needs a computer, not just the phone.
 | `adb` | Ships with the Android SDK platform-tools |
 | A phone or tablet running Android 8.0 (API 26) or newer | `minSdk` is 26, `targetSdk`/`compileSdk` is 34 |
 | USB debugging enabled on the device, and the device visible to `adb` | See below |
-| Network access on the first build | Gradle downloads the Chaquopy Python 3.11 runtime and every wheel in `requirements-android.lock.txt` (20 pinned packages, direct and transitive) the first time you build |
+| Network access on the first build | Gradle downloads the Chaquopy Python 3.11 runtime and every wheel in `requirements-android.lock.txt` (17 pinned packages, direct and transitive) the first time you build |
 
 You do **not** need anything installed on the phone beyond the APK itself. Jenny bundles a full Python 3.11 interpreter and its entire dependency set inside the app via [Chaquopy](https://chaquo.com/chaquopy/) — there is no separate Python install, no Termux, nothing to `pip install` on-device.
 

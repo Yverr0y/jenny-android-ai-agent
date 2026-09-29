@@ -10,7 +10,7 @@ pytest -q
 
 The suite uses `pytest-asyncio` in **auto mode** (`asyncio_mode = "auto"` in `pyproject.toml`'s `[tool.pytest.ini_options]`) — async test functions run without needing an explicit `@pytest.mark.asyncio` decorator on each one. `testpaths` is set to `tests/`, so a bare `pytest` from the repo root already scopes correctly.
 
-Tests mirror the `jenny/` package structure directory-for-directory: `tests/agent/` covers `jenny/agent/`, `tests/webui/` covers `jenny/webui/`, `tests/config/` covers `jenny/config/`, and so on. When you add a module under `jenny/`, its tests belong in the matching relative path under `tests/`, not wherever is convenient.
+Tests mirror the `jenny/` package structure directory-for-directory: `tests/agent/` covers `jenny/agent/`, `tests/webui/` covers `jenny/webui/`, `tests/config/` covers `jenny/config/`, and so on. When you add a module under `jenny/`, its tests belong in the matching relative path under `tests/`, not wherever is convenient. The one exception is `jenny/pydantic_compat/`, which is tested by the single file `tests/test_pydantic_compat.py`.
 
 ### Running a subset
 

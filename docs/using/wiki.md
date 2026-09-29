@@ -20,9 +20,9 @@ The one thing that *does* happen on its own is the reverse direction: the person
 
 ## Wikis and notebooks
 
-Everything on this page describes a wiki as something you *ask* Jenny to build and maintain. There is a second way to work with one: open it as a **[notebook](./projects.md)** from the chip above the message box. A notebook is a wiki — the same folder, the same pages, the same graph — but the conversation is bound to it, its map and pages are put in front of Jenny on every turn, facts you mention are captured into a journal inside it, and a background pass (the [gardener](./gardener.md)) turns those journal lines into pages between conversations.
+Everything on this page describes a wiki as something you *ask* Jenny to build and maintain. There is a second way to work with one: open it as a **[notebook](./projects.md)** from the **Notebooks** page. A notebook is a wiki — the same folder, the same pages, the same graph — but the conversation is bound to it, its map and pages are put in front of Jenny on every turn, facts you mention are captured into a journal inside it, and a background pass (the [gardener](./gardener.md)) turns those journal lines into pages between conversations.
 
-So the two views are not alternatives: a wiki you created by asking can be opened as a notebook tomorrow, and a notebook you created from the chip is immediately a wiki you can ask Jenny about.
+So the two views are not alternatives: a wiki you created by asking can be opened as a notebook tomorrow, and a notebook you created in the app is immediately a wiki you can ask Jenny about.
 
 ## Multiple wikis
 
@@ -33,9 +33,11 @@ Because everything is plain Markdown under the workspace, wiki pages are files l
 ## Opening a notebook
 
 A wiki is reached through the conversation that belongs to it, not from a tab of
-its own. Pick a notebook from the chevron next to the title at the top of the
-chat, and the header grows a pill with that notebook's page count. Tapping the
-pill opens its pages.
+its own. Open the **Notebooks** page and tap the notebook: it opens there, and its
+header row reads **← Notebooks › name**, with a **Chat | Pages** switch at the
+right that carries the notebook's page count. Tap **Pages** to open its pages,
+and **Chat** to come back. A notebook you pinned as a page of its own has the
+same way in as a pill at the left of its composer, with the name and the count.
 
 There are two tabs over the same data — **Pages** and **Map** — and one search
 box shared by both.
@@ -142,6 +144,6 @@ silently.
 
 - [Notebooks](projects.md) — opening a wiki as a conversation: capture, the map, and the write boundary.
 - [The gardener](gardener.md) — the pass that maintains a notebook's pages on its own.
-- [Tour of the WebUI](webui-tour.md) — overall navigation, dock, and tab layout.
+- [Tour of the WebUI](webui-tour.md) — overall navigation: the home's pages, and the workshop's dock.
 - [Backup and restore](backup.md) — wiki content is part of your regular workspace backup.
-- [Phone app launcher](app-launcher.md) — the app drawer, and the other corner of the Apps tab.
+- [Phone app launcher](app-launcher.md) — the app drawer, and the Apps page it lives on.

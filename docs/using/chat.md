@@ -1,6 +1,8 @@
 # Chat basics
 
-The chat tab is where you talk to Jenny; this page covers how a message goes out, how a reply is built on screen, and what all the small pieces of a response mean.
+This page describes the **Console**, the chat of the workshop: the view where everything under a turn is on show — thoughts, tool calls, the Subagents strip, the files a turn changed. The home's **Jenny** page is a plainer chat (a paperclip, the text box and a send button, and one line saying what she is doing); its behavior is in [the home section of the WebUI tour](webui-tour.md#the-conversation). Wherever a control below is one only the Console has, it says so.
+
+The Console is where you talk to Jenny at full detail; this page covers how a message goes out, how a reply is built on screen, and what all the small pieces of a response mean.
 
 ## Sending a message
 
@@ -10,7 +12,7 @@ Type in the box at the bottom (placeholder "Ask something…") and either:
 - Press **Shift+Enter** to insert a line break without sending.
 - Tap the send (arrow) button — it stays disabled until there is text in the box; as soon as you type something, the **Attach** button hides to make room for it.
 
-If you have a hardware keyboard (for example on a Unihertz Titan-style device), you don't have to tap the input first: typing any single printable character while the chat tab is active moves focus into the message box automatically ("type-ahead focus"). This does not trigger on Enter, Escape, arrow keys, spacebar, key combinations with a modifier held down, or while another input/textarea/select/dialog already has focus.
+If you have a hardware keyboard (for example on a Unihertz Titan-style device), you don't have to tap the input first: typing any single printable character while the Console is active moves focus into the message box automatically ("type-ahead focus"). This does not trigger on Enter, Escape, arrow keys, spacebar, key combinations with a modifier held down, or while another input/textarea/select/dialog already has focus.
 
 At the top of the chat there is an identity row, "✿" and her name ("Jenny" unless you renamed her) with a small status dot next to it — this scrolls away with the rest of the conversation, it is not a fixed header. The dot reflects only the WebSocket link between the WebUI and the local gateway inside the app, not your internet connection in general:
 
@@ -24,9 +26,9 @@ Reconnection is automatic and unlimited: the app retries with a growing delay st
 
 Tapping the identity row opens a "Session Info" popover with details such as the model in use, the workspace path, and whether the agent is currently running; see [Tour of the WebUI](webui-tour.md) for what each line means.
 
-### There is no stop button
+### There is no stop button in the Console
 
-Jenny's chat has no visible stop/cancel control. To interrupt a turn that is in progress, send **`/stop`** as a chat message. `/stop` is processed with priority even while the agent is mid-turn — it doesn't wait in line behind whatever the model is doing — and it always ends the turn cleanly (you'll see something like "Stopped 1 task(s)." or "No active task to stop."). See [Slash commands](slash-commands.md) for the rest of the command list.
+The Console has no visible stop/cancel control (in the home, the send button turns into **Stop** while a turn runs and sends `/stop` for you). To interrupt a turn that is in progress here, send **`/stop`** as a chat message. `/stop` is processed with priority even while the agent is mid-turn — it doesn't wait in line behind whatever the model is doing — and it always ends the turn cleanly (you'll see something like "Stopped 1 task(s)." or "No active task to stop."). See [Slash commands](slash-commands.md) for the rest of the command list.
 
 ## Anatomy of a response
 
@@ -79,14 +81,14 @@ When the agent writes or edits files in your workspace during a turn (using its 
 A few honest caveats:
 
 - If a file is binary, unreadable, or larger than 2 MB, no line-count numbers are shown for it at all (no `+N`/`−N` badge) — the file still appears in the list, just without any diff indicator next to its name.
-- Tapping a file jumps to the Workspace tab and opens it in the file editor there; you can edit and save it from there.
+- Tapping a file jumps to the Memory drawer and opens it in the file editor there (the same one as **The real files**); you can edit and save it from there.
 - The pill is not just a live-session thing: it is persisted in chat history, so it reappears exactly as it was after you close and reopen the app.
 
 ## Clickable file paths in replies
 
 Separately from the "files modified" pill, Jenny turns file-path-looking text inside a reply into clickable links. A string only becomes a link if it looks like a **relative path with a directory prefix and a file extension** — for example `jenny/foo.py` or `./notes.md` work, but a bare `config.json` or an absolute path like `/data/.../file.py` does not.
 
-Tapping such a link opens a read-only inline preview attached to that message: file path, detected language, size, and syntax-highlighted content with line numbers, plus an **"Open in editor"** link that jumps to the Workspace tab with the file loaded there for editing. Tapping the path again (or the close button) closes the preview.
+Tapping such a link opens a read-only inline preview attached to that message: file path, detected language, size, and syntax-highlighted content with line numbers, plus an **"Open in editor"** link that jumps to the Memory drawer (**The real files**) with the file loaded there for editing. Tapping the path again (or the close button) closes the preview.
 
 The preview has a hardcoded cap: it reads at most **384 KB** of the file. If the file is bigger, the content is silently truncated — there is no warning shown in the preview itself, even though the size shown in the header is the file's real, full size. Binary files can't be previewed this way at all; the preview shows **"Failed to load"** instead (the same message is used for a few different underlying errors, including "file not found" and "outside workspace").
 
@@ -112,13 +114,14 @@ Scrolling to the very top of the chat automatically loads older history (infinit
 ## Common errors
 
 - **"WebSocket not connected. Waiting for reconnection..."** — appears if you try to send a message while the socket is down. Wait for the status dot to turn green, or just try again shortly; reconnection is automatic.
-- **"Error: `<detail>`"** — a generic error line prefixed with "Error:", shown when something goes wrong server-side during a turn (for example, a rejected attachment or a provider failure). The text after the colon is whatever detail the backend reported, which is sometimes a raw internal token rather than a friendly sentence — see [Files and attachments](attachments.md) for a concrete example (`image_rejected`).
+- **A rejected message or attachment** — when the gateway refuses what you sent (too many images, a file over its size cap, a payload that arrived damaged, an empty message) the chat shows a plain sentence in your language, such as "Too many images in one message", and the message counts as not sent: your text goes back into the box. A refusal the app has no wording for reads "Something went wrong" with the code in brackets. See [Files and attachments](attachments.md) for the limits.
+- **A provider failure** — comes back as ordinary text in the chat rather than as an error line.
 
 ## Related pages
 
-- [Tour of the WebUI](webui-tour.md) — the Session Info popover, the dock, and how the chat tab fits into the rest of the app.
+- [Tour of the WebUI](webui-tour.md) — the Session Info popover, the dock, and how the Console fits into the rest of the app, and the home's plainer chat.
 - [Scheduling and proactivity](scheduling.md) — why delegation is the normal path, the six subagent types, and what Jenny can do to a running subagent from her side.
 - [Files and attachments](attachments.md) — sending images/files, attachment limits, and what the agent can actually read from them.
-- [Slash commands](slash-commands.md) — the command list, including `/stop` and `/new`, which commands work where, and the Commands chip that shows the ones this conversation can use.
+- [Slash commands](slash-commands.md) — the command list, including `/stop` and `/new`, which commands work where, and the workshop's Commands chip that shows the ones this conversation can use.
 - [Memory and Dream](memory.md) — the difference between what stays on screen and what the model actually remembers.
 - [Settings](../reference/settings.md#parameters) and [Configuration reference](../reference/configuration.md) — where "Reasoning effort" and `websocket.showReasoning` live.

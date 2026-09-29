@@ -155,12 +155,10 @@ updater, which is a useful way to stage an APK without offering it to anyone.
 ### 5. Check it
 
 Fetch the URL above and confirm you get the manifest you just wrote. Then, on a phone still
-running the old build, wait for the next update check and confirm it sees the new version.
-
-There is no "check now" button: the check runs on a schedule (`updates.checkIntervalH`, 24 hours
-by default) and nowhere else, so on a freshly published release you may be waiting up to a day.
-To see it immediately, lower the interval in `config.json` and restart the gateway — the job is
-registered at startup, so the new interval does not apply until then.
+running the old build, press **Check now** on the Updates page in Settings (`/api/updates/check`)
+and confirm it sees the new version. The button makes one request straight away, so you do not have
+to wait for the scheduled check (`updates.checkIntervalH`, 24 hours by default), which may be up to
+a day away. It ignores `updates.enabled`: that switch only stops the periodic job.
 
 ## What the user actually sees
 
@@ -379,7 +377,7 @@ ever looked at, so they belong on this page.
 
 | Key | Effect |
 |---|---|
-| `enabled` | Whether the `update_check` job is registered at all. Off means the device never fetches the manifest and never learns a new version exists. Default `true`. |
+| `enabled` | Whether the `update_check` job is registered at all. Off means the device never fetches the manifest on its own, so it only learns a new version exists when the user presses **Check now** (which ignores this switch). The check job, if already registered by an earlier boot, also exits before touching the network. Default `true`. |
 | `manifestUrl` | Where to look. Defaults to the `releases/latest/download/latest.json` URL above; override it to point a device at a staging manifest. |
 | `checkIntervalH` | Hours between checks, 1–168. Default `24`. Read once at startup, so a change needs a gateway restart. |
 | `notifyInChat` | Whether a new version opens a message in chat. Off leaves the Updates row and page as the only signal — the check still runs. Default `true`. |

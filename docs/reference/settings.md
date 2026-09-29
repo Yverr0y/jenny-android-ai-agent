@@ -160,7 +160,7 @@ The Search engine dropdown looks like a choice but has exactly one working optio
 
 A single toggle, **"Share my location"**, default **on**. Its hint explains the model: a recent last-known position is injected into the conversation context on every message (free, no GPS fix), and a precise fix is only requested on demand. It applies immediately on toggle, with a toast confirming "Location enabled"/"Location disabled" and a rollback if the request fails.
 
-This toggle is a software gate only: it does **not** request or manage the Android location permission. If the OS permission was never granted, turning this toggle on does nothing by itself; both the toggle and the Android permission have to be satisfied for location to reach the agent. <!-- TODO: verify on-device (O-10): UI state when the Android permission is denied while the toggle is on -->
+The toggle records your preference; it does not grant the Android permission, and both have to be satisfied for location to reach the agent. When the toggle is on and Android has not allowed Jenny to use the location, the group says so with a warning notice and an **Allow location** button. The button asks Android for the permission, and if Android will no longer ask (it was denied for good), it opens Jenny's page in the system app settings instead. The notice disappears as soon as the permission is granted, and it only appears in the Android app — a browser has no permission to ask for.
 
 Two related values exist only in `config.json`, with no UI control: `tools.location.telegram_ttl_s` (default 3600, how long a location shared from Telegram stays valid) and `tools.location.fresh_timeout_s` (default 15, how long Jenny waits for a fresh GPS fix). See [Location](../using/location.md).
 

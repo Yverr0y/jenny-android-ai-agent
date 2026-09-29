@@ -2,11 +2,11 @@
 
 Every key Jenny reads from `config.json`, with the default value that actually ships in the code and what changing it does.
 
-Most people never need this page: the [Settings screen](./settings.md) covers the common choices, and everything it writes ends up here anyway. Come here for the settings that have no UI — Dream, heartbeat, timezone, tool toggles, snapshot retention, model presets — and for exact defaults and ranges.
+Most people never need this page: the [Settings screen](./settings.md) covers the common choices, and everything it writes ends up here anyway. Come here for the settings that have no UI — heartbeat, timezone, tool toggles, snapshot retention, model presets — and for exact defaults and ranges.
 
 ## Where the file lives
 
-On Android the file is `<data_dir>/workspace/config.json`, inside the app's private storage (`<filesDir>/workspace/`). It is created on first boot with a minimal skeleton — a `gateway.host` and a per-install `websocket.token_issue_secret` — and then filled in by the onboarding wizard.
+On Android the file is `<data_dir>/workspace/config.json`, inside the app's private storage (`<filesDir>/workspace/`). It is created on first boot with a minimal skeleton — a `gateway.host`, `websocket.enabled: true` and a per-install `websocket.token_issue_secret` — and then filled in by the onboarding wizard.
 
 The in-app file browser **never lists `config.json`**, along with its backup and any quarantined copy (see below) — they carry the same secrets. That is deliberate: the file holds your API keys and the WebUI bootstrap secret. There is no switch to reveal them: the old developer-mode toggle was removed.
 
@@ -18,7 +18,7 @@ Three things to know before you hand-edit it:
 
 ## Key naming
 
-Jenny writes camelCase (`apiKey`, `maxTokens`, `intervalS`), and this page uses camelCase throughout. snake_case is accepted everywhere on read (`api_key`, `max_tokens`, `interval_s`), so a hand-written config in either style loads fine — but a save from the UI rewrites the whole file in camelCase.
+Jenny writes camelCase (`apiKey`, `maxTokens`, `intervalS`), and this page uses camelCase throughout. snake_case is accepted on read (`api_key`, `max_tokens`, `interval_s`), so a hand-written config in either style loads fine — but a save from the UI rewrites the whole file in camelCase. There is one exception: `agents.defaults.idleCompactAfterMinutes` is read under that name and under its legacy name (`sessionTtlMinutes` / `session_ttl_minutes`), but **not** as `idle_compact_after_minutes`, which is silently ignored — a typo-shaped key like any other unknown one.
 
 Two more parsing rules worth knowing:
 
@@ -47,7 +47,7 @@ The list of LLM endpoints you configured, plus which one is active. There is no 
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `providers.providers[]` | array | `[]` | The configured endpoints. Empty means no agent: the gateway still starts and serves the WebUI, but every turn fails with `No provider configured. Add one in settings or config.json.` |
+| `providers.providers[]` | array | `[]` | The configured endpoints. Empty means no agent: the gateway still starts and serves the WebUI, but every turn fails with `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` |
 | `providers.providers[].name` | string | required | Free-form identifier, referenced by `providers.default` and by `modelPresets.<preset>.provider`. |
 | `providers.providers[].format` | `"openai_compat"` \| `"anthropic"` | required | Selects the wire format. The only field that decides which client is built. |
 | `providers.providers[].apiKey` | string \| null | `null` | Credential, stored in clear text. Local servers that ignore auth still usually want a placeholder such as `"EMPTY"`. |
@@ -139,7 +139,7 @@ A number outside its range in a file written by an older version is **clamped to
 | `gateway.heartbeat.intervalS` | int ≥ 1 | `1800` | Seconds between heartbeat checks (30 minutes). Every cycle that finds a task costs an LLM call. |
 | `gateway.heartbeat.keepRecentMessages` | int | `8` | Messages retained in the internal heartbeat session after each run. |
 
-**On the phone, `host` and `port` are imposed by the Android runtime.** The service calls the gateway entry point with `127.0.0.1:18790` explicitly, which overwrites whatever the file says — both for the HTTP API and for the WebSocket, which share that single port. Editing them in `config.json` changes nothing on-device; they only matter when running the gateway yourself for local testing.
+**On the phone, `host` and `port` are imposed by the Android runtime.** The service calls the gateway entry point with `127.0.0.1:18790` explicitly, which overwrites whatever the file says — both for the HTTP API and for the WebSocket, which share that single port. Editing them in `config.json` changes nothing on-device. The same holds off-device: `run_gateway(data_dir, host="127.0.0.1", port=18790)` always passes both and they overwrite `gateway.host`/`gateway.port` and `websocket.host`/`websocket.port` alike, so to run the gateway yourself on another address pass `host=`/`port=` (see [WebSocket protocol](./websocket.md#quick-start-off-device--standalone-gateway)).
 
 The heartbeat job is stored like any other cron job (`<workspace>/cron/jobs.json`) and appears in `cron(action="list")` as `heartbeat`, but it is system-managed and cannot be removed with the `cron` tool — disable it here and restart. See [Scheduling and proactivity](../using/scheduling.md).
 
@@ -184,7 +184,7 @@ Pairing, the throttle, and the asymmetric view between Telegram and the WebUI: [
 
 ## tools
 
-Toggles for the built-in tool groups. Only web search and location have UI controls; everything else here is config-only. Full behavior of each tool: [Tool reference](./tools.md).
+Toggles for the built-in tool groups. Only web search, location and SSH (`tools.ssh.enable` and `tools.ssh.hosts`, in the workshop's Hands drawer) have UI controls; everything else here is config-only. Full behavior of each tool: [Tool reference](./tools.md).
 
 ### tools.file
 
@@ -199,7 +199,7 @@ Toggles for the built-in tool groups. Only web search and location have UI contr
 |---|---|---|---|
 | `tools.pythonExec.enable` | bool | `true` | Registers `python_exec` and the exec-session tools. |
 | `tools.pythonExec.timeout` | int ≥ 0 | `60` | Seconds per execution. `0` means no limit. |
-| `tools.pythonExec.maxOutputChars` | int 1000–50000 | `10000` | Default output cap of `python_exec`, stated in the tool's description. A single call can ask for a different cap with its own `max_output_chars` (1000–50000). `write_stdin` polls keep a fixed default of 10000 and do not read this key. |
+| `tools.pythonExec.maxOutputChars` | int 1000–50000 | `10000` | Default output cap of `python_exec`, stated in the tool's description. A single call can ask for a different cap with its own `max_output_chars` (1000–50000). `write_stdin` polls use the same value as their default when they carry no `max_output_chars` of their own. |
 | `tools.pythonExec.allowedModules` | string[] | see below | Import allowlist. |
 | `tools.pythonExec.blockedModules` | string[] | see below | Import denylist. |
 
@@ -359,6 +359,7 @@ Local versioning of the workspace, plus the key derivation used by encrypted bac
 | `snapshots.retentionRecent` | int ≥ 1 | `20` | The most recent N snapshots are always protected from pruning, including from the age horizon. |
 | `snapshots.retentionThinAfterDays` | int ≥ 1 | `30` | Beyond this age, history is thinned to roughly one snapshot per day. |
 | `snapshots.retentionMaxAgeDays` | int ≥ 0 | `0` | Age horizon in days; `0` means keep forever. The Settings selector maps to 7 / 30 / 365 / 0. **Changing retention prunes immediately.** |
+| `snapshots.lastExportAt` | float ≥ 0 | `0` | Unix time of the last encrypted backup export, stamped when the app confirms the file was really saved (not when it was prepared; `0` means never). Not a setting to edit: it is exposed to the UI as `backup.last_export_at`, and the Backup row in Settings shows it. |
 | `snapshots.pbkdf2Iterations` | int 100000–10000000 | `600000` | PBKDF2 iterations for the exported `.jbk` backup key. The ceiling mirrors the container format's own limit. |
 | `snapshots.excludeGlobs` | string[] | see below | Paths never captured. |
 
@@ -385,7 +386,7 @@ The in-app update check. It is the one outbound connection you did not switch on
 | `updates.checkIntervalH` | int 1–168 | `24` | Hours between checks. The default is not a network compromise — it is how often it makes sense to *interrupt*, since every positive result is an interruption. |
 | `updates.notifyInChat` | bool | `true` | Whether a newer version opens a chat message, or stays visible only where you go looking for it. |
 
-Turning `enabled` off stops the check; the `install_update` tool remains available for when you ask for it explicitly. See also [Android permissions](android-permissions.md) for the three permissions the install half needs.
+Turning `enabled` off stops the check; the `install_update` tool remains available for when you ask for it explicitly. See also [Android permissions](android-permissions.md) for what the install half needs: two manifest permissions (`REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION`) plus the per-app "Install unknown apps" switch.
 
 ## floating
 

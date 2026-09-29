@@ -161,6 +161,11 @@ window.jenny = { slug, theme, lang, accent, action, discuss, navigate, back };
 
 The `data-changed` push comes from the agent side: `AppActionTool._notify_data_changed()` (`jenny/agent/tools/app_actions.py`) publishes an `OutboundMessage` with `metadata={"_app_data_changed": True, "app_slug": ...}` after any agent-triggered storage mutation that isn't a `query` — the SPA relays it into the iframe as `postMessage({type: 'jenny:data-changed', slug})`, and the SDK re-dispatches it as the `jenny:data-changed` `CustomEvent` your app listens for. It only fires for writes made *while the app happens to be open*; there's no catch-up mechanism for changes made while the app was closed, so always fetch fresh data when the app opens rather than relying on the event alone.
 
+Two optional helpers ship next to `jenny-sdk.js` in `jenny/templates/ui/assets/apps/`, served from the same `/html-mobile/assets/apps/` path:
+
+- `jenny-kit.css` — the shared design system for apps: it carries its own copy of the SPA's theme tokens (CSS custom properties do not cross the iframe boundary), which the SDK then overrides at runtime with the active theme's palette.
+- `jenny-charts.js` — a few tiny chart helpers (`JennyCharts.line`, `.bars`, `.gauge`) built on a global `d3`, so load d3 first (`/html-mobile/assets/vendor/d3@7/d3.min.js`). Colors come from the Jenny Kit variables, so the charts follow the theme.
+
 Because the iframe has no `allow-same-origin`, its origin is opaque — that's why auth travels as a `?token=` query param baked into the iframe `src` rather than an `Authorization` header (a header would need a CORS preflight the GET-only server can't answer).
 
 That token is the app's own, not the gateway's: an HMAC of the per-install secret over the app's slug (`jenny/apps/token.py`), which the gateway accepts on `/apps/<slug>/…` and `/api/apps/<slug>/actions/…` and nowhere else — not on any other `/api/` route, not on another app's routes, not on the WebSocket. Don't try to reuse it for anything else; it won't open it.

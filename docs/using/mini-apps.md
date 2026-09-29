@@ -70,6 +70,18 @@ Actions that call an external server (a `http`-kind action, e.g. talking to a LA
 
 **Authenticated external servers are not supported.** There is no credential store for app servers, so a manifest that declares a `server.auth` block is rejected when the app is loaded: the app shows up as broken, with an error telling Jenny to remove the `auth` block. Don't build an app around the assumption that it can log in to a service on your behalf — it can only talk to servers that don't require authentication (e.g. a plain LAN device).
 
+## Apps whose screen is a server: external views
+
+Normally an app's screen is its own `app/index.html`. An app can instead declare, in `app.json`, `"view": {"kind": "external"}` together with a `server.baseUrl`: then its screen *is* the page that server serves — a dashboard already running on a device in your house, say. A manifest that asks for an external view without a `server.baseUrl` is rejected and the app shows up as broken.
+
+Jenny does not put that address straight in a frame, because the app's network policy allows plain `http://` only to the phone itself. Instead the gateway starts a small proxy on the phone's loopback address, in front of that one server, and the app opens through it. The proxy exists only while the app is open (and closes itself after 30 idle minutes), it only ever talks to the server named in the manifest, and the address it hands the WebView cannot be used by another app on the phone. If it cannot start, you get "Could not open the external view" with the reason.
+
+What you notice as a user:
+
+- The app's row in the drawer carries a small cloud glyph, tooltip **Has its own server** (any app with a `server.baseUrl` gets it, external view or not).
+- **Add as a page** is greyed out with the reason "It opens outside Jenny, so it can't be a page": an external view is not something the home can hold as one of its own pages.
+- A plain `http://` address in an ordinary app's frame does not load; the message says it needs an https server or an external-view app.
+
 ## When an app is broken
 
 If a manifest fails to load — malformed JSON, an invalid action definition — the gateway never crashes. The app simply shows up in the app drawer with an alert glyph and the readable error in red on the second line of its row, where the description would be. Tapping it prompts: `The app "{name}" is broken: {error}. Ask Jenny to fix it?` — confirming sends the error straight to chat so Jenny can look at the files and repair them. Since the app generator is itself an LLM, occasionally getting a manifest wrong is expected, and this is the recovery path.

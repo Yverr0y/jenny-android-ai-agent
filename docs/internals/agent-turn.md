@@ -4,9 +4,9 @@ What happens, step by step, between a message arriving on the bus and a reply go
 
 ## Overview
 
-Every inbound message — from the WebUI, from Telegram, from a cron job, from a subagent announcing its result — goes through the same pipeline:
+Every inbound message — from the WebUI, from Telegram, from a reply typed into a notification, from the floating mascot's bubble, from a cron job, from a subagent announcing its result — goes through the same pipeline:
 
-1. **Bus.** The channel (`jenny/channels/websocket.py`, `telegram.py`) publishes an `InboundMessage` to the async `MessageBus` (`jenny/bus/queue.py`). This decouples "a message arrived" from "the agent is ready to process it."
+1. **Bus.** The channel (`jenny/channels/websocket.py`, `telegram.py`, `notification.py`, `floating.py`) publishes an `InboundMessage` to the async `MessageBus` (`jenny/bus/queue.py`). This decouples "a message arrived" from "the agent is ready to process it."
 2. **`AgentLoop.run()`** (`jenny/agent/loop.py`) consumes the bus in a loop, resolves the session key for the message, and dispatches it as an `asyncio.Task` — one task per session at a time; other sessions run concurrently. Priority commands (`/stop`) and non-priority commands (`/new`, `/status`, …) for a session that already has a turn in flight are special-cased: they run inline instead of queuing behind the active turn. Ordinary follow-up messages sent while a turn is running are not dropped and not raced against it — they go into a per-session pending queue and are drained as mid-turn injections by the runner (see below).
 3. **`_process_message`** drives a small state machine (below) that builds context, calls **`AgentRunner`** (`jenny/agent/runner.py`) to talk to the provider and execute tools, persists the turn, and assembles the outbound reply. It returns a `TurnOutcome` (`jenny/agent/turn_types.py`): either `DELIVERED` with a message, `SPOKE_VIA_TOOL` (the agent called `message` itself), or `SILENT` — a successful turn with nothing to say, which is a first-class outcome and not a failure.
 4. If the outcome carries a message it is published as an `OutboundMessage` back onto the bus; the dispatcher (`jenny/channels/dispatcher.py`) delivers it to whichever channel(s) should see it. This is the single point of implicit delivery in the system.
@@ -96,7 +96,9 @@ The same consolidator also runs synchronously, mid-conversation, whenever the se
 
 ## Session keys
 
-There is exactly one user-facing conversation. `session_key_for_channel()` (`jenny/session/keys.py`) maps **every** channel/chat pair — WebUI, Telegram, whatever chat ID — onto the single constant `unified:default`. This is deliberate: a message sent from Telegram and one sent from the WebUI land in the same session, the same transcript, the same model context. There is no per-channel or per-device session.
+There is one user-facing conversation. `session_key_for_channel()` (`jenny/session/keys.py`) maps every channel/chat pair — WebUI, Telegram, notification, floating bubble, whatever chat ID — onto the single constant `unified:default`. This is deliberate: a message sent from Telegram and one sent from the WebUI land in the same session, the same transcript, the same model context. There is no per-channel or per-device session.
+
+The one exception is a **project** conversation: a chat ID of the form `project:<name>` (with a valid project name) on the WebSocket channel maps to the session key `project:<name>`, which has its own history and memory rules (see [Concepts](./concepts.md#channels-and-sessions) and [Projects](../using/projects.md)). Any other channel sending the same chat ID, and any invalid name, falls back to `unified:default`.
 
 Internal work uses a small set of explicit override keys (`InboundMessage.session_key_override`), which bypass the unified mapping entirely and never appear in the WebUI transcript as part of the user's conversation:
 
@@ -105,7 +107,12 @@ Internal work uses a small set of explicit override keys (`InboundMessage.sessio
 | `dream:<timestamp>` | Each Dream consolidation run (`MemoryStore.dream_session_key()`) — an isolated session, never merged into the user's history. |
 | `heartbeat` | The periodic `HEARTBEAT.md` check (`runtime/cron_dispatch.py`); its own small session with a bounded tail of recent turns. |
 | the session key stored on the job itself (`job.payload.session_key`) | Scheduled reminders (`cron` tool). A reminder created from the user's conversation is bound to `unified:default` at creation time, so it delivers into the one real conversation rather than a hidden side-session. |
-| *(none — no session at all)* | Subagents (`spawn`). A subagent's run starts from a bare `[system prompt, task]` pair with no session history; it is blind to the ongoing conversation by design. When it finishes, its result is injected back into the *origin* session (typically `unified:default`) as a synthetic system-role turn, so only the outcome — never the subagent's intermediate reasoning — becomes part of what the main agent and the user see. |
+| `cron:<job_id>` | The runs of a monitor job (`monitor_session_key()` in `cron/session_turns.py`): an isolated session per monitor, so it does not dirty the conversation it was created from. |
+| `gardener:<project>-<timestamp>` | One pass of a project's gardener. Every pass starts from zero: its memory is the pages it wrote and its cursor, not a session. |
+| `internal:<name>` | The generic internal turn (`internal:direct`, the default of `AgentLoop.process_direct`); production callers pass an explicit key instead. |
+| `subagent:<lineage_id>` | Subagents (`spawn`). A run starts from a bare `[system prompt, task]` pair: it is blind to the ongoing conversation by design. Once it finishes, its conversation is kept as a session under this key so a follow-up can resume it, but the retention is deliberately short (3 finished lineages per origin session key, 6-hour TTL; `agent/subagent_history.py`) and these sessions are not readable from the WebUI's HTTP routes. When it finishes, its result is injected back into the *origin* session (typically `unified:default`) as a synthetic system-role turn, so only the outcome — never the subagent's intermediate reasoning — becomes part of what the main agent and the user see. |
+
+Keys are classified as `personal`, `project` or `internal` (`session_kind()`); anything that is neither the unified key nor a project key counts as internal (`is_internal_session_key()`), which is what keeps these sessions out of every user-facing listing.
 
 See [Scheduling and proactivity](../using/scheduling.md) for the user-facing behavior of cron/heartbeat/subagents, and [Memory and Dream](../using/memory.md) for the Dream pipeline in detail.
 

@@ -1,6 +1,6 @@
 # Tool reference
 
-Every capability Jenny can invoke on its own — files, code execution, web, device sensors, scheduling, self-diagnosis, and whatever your Jenny Apps expose — documented tool by tool.
+Every capability Jenny can invoke on its own — files, code execution, web, device sensors, scheduling, self-diagnosis and app updates, and whatever your Jenny Apps expose — documented tool by tool.
 
 ## The list is dynamic
 
@@ -43,6 +43,7 @@ Reads a text file, an image, or a PDF.
 | Default lines per read | 2000 |
 | Max output | ~128,000 chars |
 | Max PDF pages per call | 20 |
+| Max text file size | 16 MiB — a larger file is refused with an error before it is read (`grep` skips it too) |
 | Default offset | 1 |
 
 Config: `tools.file.enable` (default `true`). Gotcha: CRLF line endings are normalized to LF in the output, so a diff against the original file may show whitespace-only differences you didn't make.
@@ -95,9 +96,11 @@ Finds files by path fragment, glob, or file-type shorthand — the fastest way t
 
 | Parameter | Behavior |
 |---|---|
+| `path` | Directory (or file) to search in, default `.` |
 | `query` | Case-insensitive path fragment search; whitespace-separated terms are AND'ed |
 | `glob` | e.g. `*.py` or `tests/**/test_*.py` |
 | `type` | Shorthand: `py`, `ts`, `tsx`, `jsx`, `js`, `json`, `md`, `go`, `rs`, `java`, `yaml`, `toml`, `sql`, `html`, `css`, and a few more |
+| `include_dirs` | Also list matching directories, not only files (default `false`) |
 | `sort` | `path` (default) or `modified` (most recent first) |
 | `head_limit` | Default 200, max 1000, `0` = all |
 | `offset` | Skip N results before applying `head_limit` |
@@ -112,6 +115,8 @@ Searches file **contents** with a regex (or literal text via `fixed_strings=true
 
 The default `output_mode` is **`files_with_matches`** — it returns only the list of matching file paths, sorted by most recently modified. If you want the matching lines themselves, you have to ask for `output_mode="content"` (with `context_before`/`context_after`, up to 20 lines each). There's also `output_mode="count"` for per-file match counts.
 
+Other parameters: `path` (file or directory, default `.`), `glob` and `type` (the same file filters as `find_files`), `case_insensitive`, `fixed_strings` and `offset` (skip the first N results before `head_limit` applies).
+
 | Limit | Value |
 |---|---|
 | Default results | 250 (`head_limit`, max 1000) |
@@ -123,7 +128,7 @@ Legacy aliases `max_matches` (content mode) and `max_results` (other modes) stil
 
 Gotcha: if you're used to shell `grep`, the file-names-only default is the biggest surprise here — say explicitly that you want matching lines.
 
-**In orchestrator mode the main agent gets a reduced `grep`: an index.** `output_mode` offers only `files_with_matches` and `count`, results are capped at 60 files, and asking for `content` anyway returns the paths with a note pointing at `read_file`. The reason is the same one behind the whole orchestrator split: everything the main agent produces stays in the conversation permanently, while a subagent's tool output does not — so knowing *where* something is stays cheap, and reading it there would not. Subagents and `core` mode keep the full tool.
+**In orchestrator mode the main agent gets a reduced `grep`: an index.** `output_mode` offers only `files_with_matches` and `count`, results are capped at 60 files, and asking for `content` anyway returns the paths with a note pointing at `read_file`. The schema itself drops `context_before`, `context_after` and `max_matches`, since there are no lines to add context to. The reason is the same one behind the whole orchestrator split: everything the main agent produces stays in the conversation permanently, while a subagent's tool output does not — so knowing *where* something is stays cheap, and reading it there would not. Subagents and `core` mode keep the full tool.
 
 Config: `tools.file.enable` (default `true`).
 
@@ -138,6 +143,7 @@ Runs Python code **in-process**, inside the same Chaquopy interpreter the whole 
 - Call with `code="..."` for inline expressions/statements, or `function="name"` with `args`/`kwargs` to call one of the ~30 registered helper functions (`read_file`, `write_file`, `append_file`, `list_dir`, `file_exists`, `read_json`/`write_json`, `find_files`, `grep_files`, `http_get`/`http_post`, `json_parse`/`json_dump`, `regex_match`/`regex_replace`, path helpers, `get_env`/`list_env`, `platform_info`, `now_iso`/`timestamp`, `md5`/`sha256`, base64/URL encode-decode, and `wiki_scaffold`/`wiki_lint`/`wiki_audit` for the Wiki feature).
 - **`http_get`/`http_post` are the only way to make an HTTP request from `python_exec`.** Raw `httpx` and `urllib` are deliberately left off the default module allowlist for exactly this reason — importing them would bypass the SSRF check that the helper functions enforce.
 - Default timeout is 60 seconds (max 600); output is capped at `tools.pythonExec.maxOutputChars` characters (10,000 by default, and the tool description states the configured value). A single call can ask for a different cap with `max_output_chars`, from 1,000 up to 50,000.
+- Two more optional parameters: `working_dir`, the directory the run resolves relative paths against (it must be inside the workspace and never widens the boundary; it is also put at the head of `sys.path`, so a skill's own scripts can be imported), and `timeout`, in seconds, per call (1–600).
 - For anything that runs long, pass `yield_time_ms` — the call starts in the background and returns a `session_id` immediately instead of blocking; poll it with `write_stdin`.
 
 **Read this like the code does, not like marketing:** the module allow/block lists (`os`, `sys`, `pathlib`, `json`, `re`, `math`, and others allowed; `subprocess`, `socket`, `ctypes`, `multiprocessing`, and others blocked) are a **usability guardrail**, not a security sandbox. `os` and `sys` are in the allowlist, and a sufficiently motivated piece of code running with those available has no real containment from the interpreter itself. The actual containment comes from three other layers: the Android app sandbox, the workspace path policy (which also confines `open()`/`os.open`/pathlib I/O when `restrictToWorkspace` is on), and the SSRF policy on outbound network calls. If you don't trust what a model might write here, the honest mitigation is `tools.pythonExec.enable=false`, not the module list.
@@ -162,7 +168,7 @@ Despite the name, this **does not write to stdin**. It polls, waits for specific
 | `terminate` | Stop the session (cooperative — see gotcha below) |
 | `yield_time_ms` | How long to wait before returning what's accumulated (default 1000, max 30000) |
 | `wait_for` + `wait_timeout_ms` | Block until specific text appears in output, or timeout (default 10s, max 120s) |
-| `max_output_chars` | Default 10000 (fixed — not read from `tools.pythonExec.maxOutputChars`), max 50000 |
+| `max_output_chars` | Defaults to `tools.pythonExec.maxOutputChars` (10000 if unset), same 1000–50000 range |
 
 Sessions are only visible to the chat session that created them.
 
@@ -217,7 +223,7 @@ Config: `tools.androidWeb.enable` (default `true`, config-only), `tools.androidW
 
 ### download_file
 
-Downloads **any** file from the web — image, PDF, archive, whatever — and saves the raw bytes. It **always** lands in `<workspace>/downloads/`, never anywhere else, and always registers regardless of any toggle or platform (it uses `httpx` directly, not the WebView).
+Downloads **any** file from the web — image, PDF, archive, whatever — and saves the raw bytes. It **always** lands in a `downloads/` folder, never anywhere else — the one under the current turn's write root: `<workspace>/downloads/`, or `<project>/downloads/` when the turn runs inside a notebook. On a read-only turn the call is refused before any network traffic. It always registers regardless of any toggle or platform (it uses `httpx` directly, not the WebView).
 
 - Filename resolution order: explicit `filename` parameter → `Content-Disposition` header → URL basename → a generated `download-XXXXXXXX` name. Collisions get `-1`, `-2`, … suffixes.
 - If the resolved name has no extension, one is guessed from the file's magic bytes (for images) so later embedding/serving recognizes the type.
@@ -243,11 +249,9 @@ Returns the device's location: a reverse-geocoded place name, latitude/longitude
 
 - Default behavior returns the **last-known** fix — free, and this same position is already injected into the model's context on every turn regardless of whether the tool is called (see the Location page for the privacy implications of that).
 - `precise=true` forces a fresh GPS fix: turns the radio on, costs battery, and can take up to the configured `freshTimeoutS` (default 15s, range 1–60).
-- Gated on two independent things: the app-level toggle (the workshop's Hands drawer → Location → "Share my location", default on) **and** the Android `ACCESS_FINE_LOCATION` runtime permission. Without the permission the tool always returns "Location unavailable," no matter what the toggle says.
+- Gated on two independent things: the app-level toggle (the workshop's Hands drawer → Location → "Share my location", default on) **and** the Android `ACCESS_FINE_LOCATION` runtime permission. Without the permission the tool always returns "Location unavailable," no matter what the toggle says. Settings does not hide that gap: with the toggle on and the permission missing, the Location group shows a notice and an **Allow location** button that asks Android for it (see [Settings](settings.md#location)).
 
 Config: `tools.location.enable` (default `true`), `tools.location.telegramTtlS` (default 3600 — how long a location shared via Telegram overrides the device fix, for that channel only), `tools.location.freshTimeoutS` (default 15, range 1–60).
-
-<!-- TODO: verify on-device (O-10): whether the Location toggle in Settings shows a coherent state when the Android permission is denied -->
 
 ### ui_view
 
@@ -284,7 +288,7 @@ Config: `tools.ssh.enable`, `tools.ssh.hosts`. Gotcha: the tool distinguishes "n
 
 Runs **one short command** and waits for it: exit code, stdout, stderr in the result.
 
-- `timeout_s` is optional and can only **lower** the configured cap (`tools.ssh.commandTimeoutS`, default 60s, hard maximum 300) — a tool cannot raise its own ceiling.
+- Parameters: `host` (an alias), `command`, and the optional `timeout_s`. `timeout_s` can only **lower** the configured cap (`tools.ssh.commandTimeoutS`, default 60s, hard maximum 300) — a tool cannot raise its own ceiling.
 - Output above `tools.ssh.maxOutputChars` (default 10,000) is truncated, and the result reports how many characters were **dropped** so the model can decide to re-run narrowed rather than guess.
 - A non-zero exit code is a normal result, not an error.
 
@@ -304,6 +308,7 @@ Long remote commands, detached from the connection. Actions: `start`, `poll`, `s
 - `poll` returns **only the output produced since the previous poll**, plus liveness and the exit code once there is one. The byte cursor is kept by Jenny — never by the model — and it is persisted, so it survives context compaction, a gateway restart, and days of elapsed time. If the log was rotated or truncated under it, the cursor resets to 0 rather than reading garbage.
 - `stop` sends SIGTERM to the process's children and then to the process itself. Best-effort by construction: a deep process tree or a program that ignores SIGTERM survives, and only a subsequent `poll` says what really happened.
 - `list` is answered from the local registry with **no connection at all**, so pending jobs stay readable when the host is unreachable or its key has changed.
+- Parameters: `host`, `action`, `command` (required for `start`) and `job_id` (required for `poll` and `stop`).
 
 Statuses are four, and the fourth matters: `running`, `finished` (with an exit code), `stopped` (signalled by us), and **`lost`** — the process is gone but never recorded an exit code, i.e. it was killed (OOM, server reboot). `lost` is deliberately not reported as `finished`, because that would hide a failure.
 
@@ -319,7 +324,7 @@ Gotcha: nothing cleans up the server-side logs, and `/tmp` is wiped on reboot on
 
 ### ssh_transfer
 
-Copies **one file** over SFTP on the same connection: `direction="up"` sends from the workspace, `direction="down"` fetches to it.
+Copies **one file** over SFTP on the same connection: `direction="up"` sends from the workspace, `direction="down"` fetches to it. All four parameters are required: `host`, `direction`, `local_path` (relative to the workspace) and `remote_path` (absolute, on the server).
 
 - The local side is always resolved inside the workspace — the workspace is the only allowed root, so a path outside it (including the SSH key directory) is refused.
 - `tools.ssh.maxTransferBytes` (default 50 MB) caps both directions. On a download the size is checked with a remote `stat` **before** the local file is opened, so a too-large transfer leaves nothing behind rather than a truncated file that looks complete.
@@ -339,6 +344,7 @@ Schedules reminders and recurring work. Actions: `add`, `list`, `remove`.
   - `every_seconds` — recurring interval.
   - `cron_expr` — a cron expression (`"0 9 * * *"`), optionally with an explicit `tz` (IANA name). `tz` is **only** accepted alongside `cron_expr` — passing it with `every_seconds` or `at` is an error.
   - `at` — a one-shot ISO datetime; the job auto-deletes itself after it fires.
+- `add` also takes an optional `name`, a short label for the job (it defaults to the first 30 characters of the `message`).
 - Naive (timezone-less) `cron_expr`/`at` values fall back to the device's configured timezone.
 - `add` also takes an optional `mode`, which decides whether the job is allowed to stay quiet:
   - `reminder` (default) — the job **always** messages you when it fires. This is every job created before this option existed, and every job that omits `mode`.
@@ -347,8 +353,10 @@ Schedules reminders and recurring work. Actions: `add`, `list`, `remove`.
   - A monitor still costs a full turn every cycle even when it says nothing. Silence saves the notification, not the tokens.
   - The mode is fixed at creation: to change it, remove the job and create it again.
 - `remove` needs a `job_id` from `list`.
+- `list` also shows a job the user paused from the workshop (Hands), marked as paused since a given time, so Jenny does not recreate it; a job that simply ran out (a fired `at`) is left out.
 - System-managed jobs show up in `list` for transparency but are **protected** — removal is refused with an explanation, not silently ignored. `list` prints the purpose of each next to it: `dream` (memory consolidation), `heartbeat` (checks `HEARTBEAT.md` for tasks you left), the [gardener](../using/gardener.md) and the update check. Each is registered only if its own config enables it — `agents.defaults.dream.enabled`, `agents.defaults.gardener.enabled`, `gateway.heartbeat.enabled`, `updates.enabled` — so a disabled one is absent from `list` rather than present and idle.
 - Jobs cannot be created from inside another cron job's own execution (no self-scheduling chains).
+- **`cron` is closed inside a notebook conversation, in all three directions** — `add`, `list` and `remove` all return a refusal that tells Jenny to ask again in the personal chat, where reminders are also delivered. It is closed on a read-only turn too, wherever that turn happens.
 
 Config: no direct user toggle; the default timezone comes from the device/config, not a tool setting.
 
@@ -360,12 +368,12 @@ Starts a subagent to work a task in the background and reports the result back i
 
 - Parameters: `task` (required), `label` (display name), `agent_type` (which kind of subagent — see below), `quick` (mark a short job), `temperature` (0.0–2.0, optional override).
 - **Concurrency defaults to 3** (`agents.defaults.maxConcurrentSubagents`), and **one slot is always kept free for short jobs**: an ordinary `spawn` may occupy at most `maxConcurrentSubagents - 1` slots. Past that the call is rejected outright with "concurrency limit reached" — there is no queue. A `quick=true` spawn may use the reserved slot.
-- A subagent only gets tools scoped `subagent`: file tools (including `apply_patch`), search, `python_exec` (plus its session tools `write_stdin`/`list_exec_sessions`), the web tools, `download_file`, `get_location`, introspection, and logs. It explicitly does **not** get `spawn` (no subagents spawning subagents), `cron`, `message`, `my`, `long_task`, or `ui_view`.
+- A subagent only gets tools scoped `subagent`: file tools (including `apply_patch`), search, `python_exec` (plus its session tools `write_stdin`/`list_exec_sessions`), the web tools and the five `browser_*` tools, `download_file`, `get_location`, `journal_append`, introspection, and logs. It explicitly does **not** get `spawn` (no subagents spawning subagents), `cron`, `message`, `my`, `long_task`, or `ui_view`.
 - The **agent type** narrows that scope further, and comes with its own role prompt plus sampling defaults:
 
 | `agent_type` | Tools | Temp. | Max iterations | Notes |
 |---|---|---|---|---|
-| `researcher` | `web_search`, `web_fetch`, `read_file`, `list_dir`, `write_file` | 0.2 | 60 | Gathers material online. **No code execution** — it is the type most exposed to untrusted pages. |
+| `researcher` | `web_search`, `web_fetch`, `browser_open`, `browser_snapshot`, `browser_do`, `browser_read`, `browser_close`, `read_file`, `list_dir`, `write_file` | 0.2 | 60 | Gathers material online, including pages that need clicks or a cookie banner dismissed (the browser tools exist only on Android). **No code execution** — it is the type most exposed to untrusted pages. |
 | `writer` | `read_file`, `list_dir`, `write_file`, `apply_patch` | 0.5 | 40 | Docs, wiki pages, synthesis. **No network at all.** The highest temperature of the six, because prose is the one output where variety helps. |
 | `coder` | filesystem, `find_files`, `grep`, `apply_patch`, `python_exec`, `write_stdin`, `list_exec_sessions`, `get_recent_logs` | 0.1 | 120 | Writes and changes code. No network. The longest leash, because a build/test loop legitimately takes many steps. |
 | `analyst` | `python_exec`, `read_file`, `list_dir`, `write_file` | 0.1 | 60 | Computation, data, charts. No network. |
@@ -447,7 +455,9 @@ Gotcha: it is not a way to report a check that *failed*. A check that could not 
 
 ---
 
-## 7. Self-diagnosis
+## 7. Self-diagnosis and updates
+
+`my`, `get_source` and `get_recent_logs` let Jenny look at her own runtime; `update_status` and `install_update`, at the end of this section, deal with the app itself.
 
 ### my
 
@@ -486,22 +496,21 @@ Reads recent runtime log lines (DEBUG and above) from an in-memory ring buffer.
 
 Config: `tools.diagnostics.enable` (default `true`). Gotcha: the buffer **empties on every app restart** — asking Jenny to "check its logs" only works for things that happened since the app last started. This is the recommended first troubleshooting step for a failing tool. Note also that log lines can contain URLs visited and file names — worth knowing before pasting logs into a screenshot or bug report.
 
----
-
 ### update_status
 
 Reports whether a newer version of the Jenny app is available for this device, and how far along a started installation is.
 
 - Reads local state only: **no network call and no side effects**, so it is safe to call whenever you ask "is there an update?". The check that fetches the manifest is the periodic `update_check` job, not this tool (see `updates.*` in [Configuration](configuration.md)).
-- Android-only: it registers only when an Android context is present.
+- Android-only: it registers only when an Android context is present. Scope `core` + `orchestrator`: the agent you talk to has it, never a subagent.
 
 ### install_update
 
 Downloads and installs the pending app update on this device.
 
+- **Requires `confirm=true`** — the only parameter, and a call without it is refused. Jenny should set it only after you asked, in this conversation, for the update to be installed now.
 - **Destructive and final.** Android replaces the app and kills the process, so Jenny restarts and the conversation is cut off mid-turn — she does not get to report back. Ask before calling it.
 - Requires the "Install unknown apps" permission for Jenny; without it `PackageInstaller` refuses the session. Android normally still shows its own install prompt (see [Android permissions](android-permissions.md)).
-- Android-only, same as `update_status`.
+- Android-only and scoped `core` + `orchestrator`, same as `update_status`; refused on a read-only turn.
 
 ---
 
@@ -541,6 +550,7 @@ Searches the verbatim turn-by-turn log of the personal conversation — what was
 Appends one line to the current project's working journal (`raw/journal/<today>.md`).
 
 - Meant for the moment something is said that will still be true next week — a constraint, a decision, a preference, a name, a date.
+- Parameters: `text` (required, one short line, at most 500 characters — a longer one is refused as page material; the timestamp and the leading dash are added for you) and `attribution`, `said` when you stated the fact yourself or `inferred` when Jenny concluded it (default `inferred`). Only a `said` line can later become a decided page.
 - The only tool in this group a subagent also gets (`core`, `orchestrator`, `subagent`), and it has no config toggle: it is always registered.
 
 ---
@@ -553,15 +563,19 @@ A session is exclusive and expensive: about **100 MB of RAM** while open, so `br
 
 ### browser_open
 
-Opens a URL and returns the page as a list of elements that can be acted on. Cookies and logins persist until `browser_close`.
+Opens a URL and returns the page as a list of elements that can be acted on. Cookies and logins persist until `browser_close`. Takes `url` (http/https only) and an optional `filter`: show only the elements whose label contains that text.
 
 ### browser_snapshot
 
-Shows the current page again: interactive elements with their refs, plus headings. The default `diff` mode returns only what changed since the last snapshot. Elements below the fold are counted, not listed.
+Shows the current page again: interactive elements with their refs, plus headings. The default `mode` is `diff`, which returns only what changed since the last snapshot; `full` returns the whole page again. Elements below the fold are counted, not listed — `filter` (label text) or a scroll step reaches them.
 
 ### browser_do
 
 Runs a **sequence** of actions and returns what changed. Filling a form is one call, not one per field: steps run in order and stop at the first failure.
+
+Each step has an `action` — `click`, `type`, `select`, `press`, `scroll` or `wait` — and the fields that action uses: `ref` (an element from the last snapshot; `click`/`type`/`select`), `text` (`type`), `value` (`select`), `key` (`press`, default `Enter`), `direction` (`up`/`down`) and `amount` (`scroll`, in screenfuls, capped at 10), `ms` (`wait`).
+
+Two guards run **before** the page is touched, and refuse the whole call rather than one step: a step never types into a password field (credentials are typed by you, on the phone), and a click — or an `Enter` that would submit a form — on something that costs money, deletes or signs in is refused until you have agreed, after which the step is repeated with `confirm: true`.
 
 ### browser_read
 

@@ -41,7 +41,7 @@ Exact errors you might see appended after "Error: " in the chat, and what they m
 | `401` / Unauthorized | The API key is wrong, expired, or was pasted with extra whitespace. Regenerate it on the provider's dashboard and update it in Settings → Who answers. |
 | `429` / rate limit | You've hit the provider's rate limit. Wait and retry, or switch to a different model in Settings → Who answers. |
 | `404` / model not found | The model ID doesn't exist for that provider — a display name was used instead of the API model ID, or the model was deprecated. Pick a different one in Settings → Who answers. |
-| Connection refused | Only relevant if you pointed the provider at a self-hosted endpoint (Ollama, LM Studio, vLLM) — the server isn't reachable from the phone, or it isn't HTTPS (cleartext HTTP is only allowed to `127.0.0.1` and `localhost`). See [Local models](../reference/local-models.md). |
+| Connection refused | Only relevant if you pointed the provider at a self-hosted endpoint (Ollama, LM Studio, vLLM) — the server isn't reachable from the phone (and outside the phone itself it should be served over HTTPS). See [Local models](../reference/local-models.md). |
 
 Changing the model or provider in Settings applies immediately — there's no restart required to try again.
 
@@ -51,7 +51,7 @@ Changing the model or provider in Settings applies immediately — there's no re
 
 Attachments are checked twice, and both checks tell you why in plain words rather than dropping the file silently:
 
-- **In the composer**, before anything is sent: more than 4 images, more than 1 video or more than 4 other files in one message, a file over its size cap, or a file the phone couldn't read. The file is not added and the chat says which limit it hit ("Too many images in one message", "The file is too large", "I couldn't open this file", …). Attach fewer files, or smaller ones.
+- **In the composer**, before anything is sent: more than 4 images, more than 1 video or more than 4 other files in one message, a file over its size cap, or a file the phone couldn't read. The file is not added and the app says which limit it hit (a line in the home chat, a toast in the workshop) ("Too many images in one message", "The file is too large", "I couldn't open this file", …). Attach fewer files, or smaller ones.
 - **On the gateway**, after sending: the same limits, plus files it couldn't decode. The chat shows the same kind of explanation, and the message is treated as not sent.
 
 See [Files and attachments](./attachments.md) for the exact limits.
@@ -127,6 +127,12 @@ Note that this whitelist only affects the agent's *tools*. It does not affect ca
 ## A notebook's pages show an error (503)
 
 If opening a notebook's pages says the wiki is switched off, the feature has been disabled in configuration (`wiki.enabled: false` in `config.json`). Re-enable it there; the setting is read on every request, so the pages come back without restarting the app. The notebook list itself still shows what is on disk — it reads the folders, not the wiki API.
+
+## A new version doesn't show up, or won't install
+
+Open the home's **Settings → Updates**. It shows the last successful check; if the checks keep starting but never reach the update server, it says so in words, and **Check now** asks the server right away and reports what happened ("No update: you already have the latest version", or that the server could not be reached). The periodic daily check follows `updates.enabled` in `config.json`; **Check now** works even with that switched off.
+
+**Install now** ends in an Android confirmation prompt that only you can accept. If nothing appeared on screen, look for the "Update ready to install" notification and tap it; if you dismissed the prompt, press **Install now** again. Android may also ask once for permission to install from Jenny. See [the tour](webui-tour.md#updates).
 
 ## Collecting information before asking for help
 

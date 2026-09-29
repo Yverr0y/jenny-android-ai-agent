@@ -96,7 +96,8 @@ jobs:
       # i backend dei soli test: `cryptography` per il backup cifrato (su
       # Android javax.crypto), `asyncssh` per il server SSH in-process di
       # `ssh_backends/dev.py` (su Android jsch; senza, i tre moduli di test SSH
-      # falliscono in collection), `pillow` per test_mascot_layer_sources.py.
+      # si saltano con `importorskip`, in verde: nessun guard li protegge, a
+      # differenza di node/jsdom/Pillow), `pillow` per test_mascot_layer_sources.py.
       # Nessuno dei tre va mai nei requirements Android.
       - run: pip install -e ".[dev]"
       # jsdom non è una dipendenza del repo, ma le suite che montano la casa

@@ -15,7 +15,7 @@ Concretely, this means the agent:
 - **cannot** read contacts, SMS, or call logs (no permission is ever requested for them),
 - **cannot** access shared/external storage except through user-initiated actions (`share`, `save to Downloads`) that go through Android's own share sheet or Storage Access Framework.
 
-Location and notifications *are* requested at runtime (`ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, `POST_NOTIFICATIONS`), but both are optional, user-facing toggles — see [Location](../using/location.md).
+Location and notifications *are* requested at runtime (`ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, `POST_NOTIFICATIONS`), but both are optional, user-facing toggles — see [Location](../using/location.md). They are not the only permissions the manifest declares: the floating mascot (`SYSTEM_ALERT_WINDOW`), reminders that fire on time (`SCHEDULE_EXACT_ALARM`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `WAKE_LOCK`), restarting after a reboot (`RECEIVE_BOOT_COMPLETED`), the foreground service (`FOREGROUND_SERVICE*`) and installing updates each have theirs, granted at install or through a system settings screen. [Android permissions](../reference/android-permissions.md) lists every one and what happens if you refuse it.
 
 Everything below this line is Jenny's own code running *inside* that sandbox. None of it can widen the sandbox; it can only narrow what the agent is allowed to do within it.
 
@@ -57,7 +57,7 @@ An address that carries an IPv4 inside it — IPv4-mapped (`::ffff:a.b.c.d`), we
 
 `security.ssrfWhitelist` (default `[]`) lists CIDR ranges that are exempted from this block — the documented use case is a Tailscale range like `100.64.0.0/10` so the agent's tools can reach a self-hosted service over your own VPN.
 
-**This filter does not cover calls to your configured LLM provider.** Provider requests (the actual chat completions) go out through the HTTP client used by the provider integration, not through the tool-layer SSRF check. If you point a provider's `apiBase` at a LAN or VPN address, that call is not subject to the SSRF whitelist at all — reachability and the HTTPS-outside-localhost constraint (below) are what actually gate it. See [Local models](../reference/local-models.md).
+**This filter does not cover calls to your configured LLM provider.** Provider requests (the actual chat completions) go out through the HTTP client used by the provider integration, not through the tool-layer SSRF check. If you point a provider's `apiBase` at a LAN or VPN address, that call is not subject to the SSRF whitelist at all — reachability is what actually gates it, plus whatever Android's network security config (`network_security_config.xml`) enforces, which permits plaintext `http://` only to `127.0.0.1` and `localhost`. That config governs Java/Kotlin and WebView traffic; the provider client is Python `httpx` on the Chaquopy interpreter, and nothing in `jenny/providers/` checks the URL scheme itself, so treat the HTTPS requirement for a remote provider as a rule to follow rather than a wall Jenny is known to enforce for that path (a Jenny App's `http://` server, which goes through the same Python client, is a working example of a cleartext LAN call). See [Local models](../reference/local-models.md).
 
 Jenny Apps get a separate, looser policy for their own outbound `http` actions: RFC1918, IPv6 ULA *and* the CGNAT range `100.64.0.0/10` are allowed there, since an app server is a LAN or Tailscale device the user named in the app's manifest. Loopback and link-local stay blocked, so an app manifest can't use the proxy as a back door into the gateway's own API, and redirects are never followed.
 
@@ -107,7 +107,7 @@ Two things this does **not** protect against, stated plainly: a command the agen
 
 - Read files inside `workspace/` (and read Jenny's own source, read-only), and locate them with an index-only `grep`.
 - Write, edit, and patch files inside `workspace/` — but with `agents.defaults.orchestratorMode` at its default of `true`, only through a subagent; the main agent has no write tool at all.
-- Download files from the web into `workspace/downloads/` — only through a subagent, for the same reason.
+- Download files from the web into `downloads/` under the turn's root (`workspace/downloads/`, or `<project>/downloads/` inside a notebook) — only through a subagent, for the same reason.
 - Search the web and fetch/read pages (through the hidden WebView — see [Tool reference](../reference/tools.md)) — only through a subagent, typically a `researcher`.
 - Send you notifications and schedule reminders (`cron`).
 - Read your last-known device location, or request a fresh GPS fix, if the location toggle and the Android permission are both granted.
@@ -229,4 +229,4 @@ refactor.
 - [SSH access](../using/ssh.md) — setting up a remote host, and why a restore does not restore access.
 - [Configuration reference](../reference/configuration.md) — the `security.*` and `tools.*` keys in full.
 - [Tool reference](../reference/tools.md) — per-tool limits and behavior.
-- [Local models](../reference/local-models.md) — the HTTPS-outside-localhost constraint for self-hosted providers.
+- [Local models](../reference/local-models.md) — self-hosted providers, reachability and the HTTPS guidance.

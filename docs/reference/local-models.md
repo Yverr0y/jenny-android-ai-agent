@@ -10,20 +10,20 @@ Jenny itself needs no internet access to run — the gateway, the WebUI, and the
 
 Concretely, the endpoint must be **reachable from the phone itself** — not from a desktop browser, not from the machine running the model server. If your phone and your model server aren't on the same network (or connected through a VPN), the request will simply fail to connect, the same as pointing a browser at an address it can't route to.
 
-## Cleartext HTTP is blocked except on loopback
+## Use HTTPS for anything that is not on the phone
 
-Android's network security config on Jenny only allows plaintext (unencrypted) `http://` traffic to `127.0.0.1` and `localhost`. Every other destination — including a `192.168.x.x` LAN address, a Tailscale IP, or a plain hostname — is refused unless it's `https://`. This is enforced at the OS/network layer, before Jenny's own code ever sees the request; it isn't a Jenny setting you can flip.
+Jenny's Android network security config only allows plaintext (unencrypted) `http://` traffic to `127.0.0.1` and `localhost`. That config governs the app's Java/Kotlin and WebView traffic. The provider client is Python (`httpx`) running under Chaquopy, and Jenny does not check the URL scheme itself, so it has not been established that a plain-`http://` provider on a LAN or Tailscale address is refused. Treat HTTPS as the rule to follow for every address other than the phone itself: a request that goes out in cleartext can be read by anyone on the path, API key included.
 
 Practically, this means:
 
-| Endpoint location | Works with plain `http://`? | What you need |
+| Endpoint location | Plain `http://` | What you need |
 |---|---|---|
-| `http://127.0.0.1:PORT` or `http://localhost:PORT` | Yes | Only reachable if the model server runs *on the phone itself* — not a typical setup. |
-| `http://192.168.x.x:PORT` (LAN) | **No** | Put a TLS-terminating reverse proxy in front of the model server, or otherwise serve it over `https://`. A self-signed certificate works, but installing the CA on the phone does **not** make Jenny trust it — see [Self-signed certificates](./providers.md#self-signed-certificates) for the field that does. |
-| `http://<tailscale-ip>:PORT` | **No** | Same requirement: HTTPS. Tailscale itself doesn't change the cleartext rule — it just changes the routing. |
-| `https://anything` | Yes | No special handling needed beyond a TLS chain Jenny trusts — the bundled default roots, plus whatever the provider's `caBundle` adds. |
+| `http://127.0.0.1:PORT` or `http://localhost:PORT` | Allowed | Only reachable if the model server runs *on the phone itself* — not a typical setup. |
+| `http://192.168.x.x:PORT` (LAN) | **Not recommended** | Put a TLS-terminating reverse proxy in front of the model server, or otherwise serve it over `https://`. A self-signed certificate works, but installing the CA on the phone does **not** make Jenny trust it — see [Self-signed certificates](./providers.md#self-signed-certificates) for the field that does. |
+| `http://<tailscale-ip>:PORT` | **Not recommended** | Same advice: HTTPS. Tailscale itself doesn't change the cleartext rule — it just changes the routing. |
+| `https://anything` | n/a (already HTTPS) | No special handling needed beyond a TLS chain Jenny trusts — the bundled default roots, plus whatever the provider's `caBundle` adds. |
 
-If you're used to running Ollama or LM Studio with their default plain-HTTP listener and pointing a desktop app at it directly, that setup will not work unmodified from the phone — you'll need HTTPS in front of it.
+If you're used to running Ollama or LM Studio with their default plain-HTTP listener and pointing a desktop app at it directly, don't point Jenny at it unmodified from the phone — put HTTPS in front of it.
 
 ## The Tailscale note: SSRF whitelist does not apply here
 
@@ -33,7 +33,7 @@ Jenny has an SSRF (server-side request forgery) protection layer that blocks its
 
 ## `10.0.2.2` is emulator-only
 
-If you've seen `10.0.2.2` in older examples pointing at a host machine's Ollama or vLLM instance, that address only means anything inside the Android emulator — it's the emulator's special alias for "the machine running the emulator." On a real phone, `10.0.2.2` is just an unreachable address like any other; it resolves to nothing on your actual network. On a real device you need the model server's actual LAN IP (or a Tailscale/VPN address, or a public hostname), reachable per the HTTPS rule above.
+If you've seen `10.0.2.2` in older examples pointing at a host machine's Ollama or vLLM instance, that address only means anything inside the Android emulator — it's the emulator's special alias for "the machine running the emulator." On a real phone, `10.0.2.2` is just an unreachable address like any other; it resolves to nothing on your actual network. On a real device you need the model server's actual LAN IP (or a Tailscale/VPN address, or a public hostname), reachable, and served over HTTPS as advised above.
 
 ## Tool calling and grammars
 
@@ -47,9 +47,9 @@ parse: error parsing grammar: number of repetitions exceeds sane defaults, pleas
 
 surfacing to Jenny as `HTTP 400: Failed to initialize samplers: failed to parse grammar`. The failure is all-or-nothing: llama-server compiles **one** grammar from the union of every tool schema, so a single out-of-range field breaks every request that carries tools, including a bare "hi". It is not a symptom of a bad model, a bad prompt, or a missing `--jinja`.
 
-Measured against llama-server b10210 with Qwen2.5-3B-Instruct: Jenny's two long free-text fields (`long_task.goal`, `complete_goal.recap`) failed even when lowered to 2000, and passed at 1000. Rather than pick a number that happens to fit today, both dropped their schema-level bound entirely and check the length in `execute` instead — the limit the model sees is unchanged, and it costs nothing on the wire. With that in place the full 22-tool set compiles and answers normally. A test in `tests/agent/tools/test_schema_wire_limits.py` fails the build if any schema drifts back over the cap.
+Measured against llama-server b10210 with Qwen2.5-3B-Instruct: Jenny's two long free-text fields (`long_task.goal`, `complete_goal.recap`) failed even when lowered to 2000, and passed at 1000. Rather than pick a number that happens to fit today, both dropped their schema-level bound entirely and check the length in `execute` instead — the limit the model sees is unchanged, and it costs nothing on the wire. With that in place the full tool set as it was then (22 tools; there are more now, see the [tool reference](tools.md)) compiled and answered normally. A test in `tests/agent/tools/test_schema_wire_limits.py` fails the build if any schema drifts back over the cap.
 
-Re-checked on-device against b10229 built from source in Termux, same model, `llama-server -m … --host 127.0.0.1 --port 8080`: the pre-fix schemas return the grammar error, the same schemas capped at 2000/1500 still return it, and the current ones answer HTTP 200 with all 22 tools present.
+Re-checked on-device against b10229 built from source in Termux, same model, `llama-server -m … --host 127.0.0.1 --port 8080`: the pre-fix schemas return the grammar error, the same schemas capped at 2000/1500 still return it, and the current ones answered HTTP 200 with all 22 tools of that time present.
 
 If you write your own tool ([Write a tool](../contribute/write-a-tool.md)), the same applies: keep length and item bounds small, or leave them out of the schema and validate inside `execute`.
 
@@ -63,11 +63,12 @@ So the wait *before* the first token and a gap *inside* a running stream are dif
 
 | | Loopback endpoint | Everything else |
 |---|---|---|
-| Wait for the model's first output | 600 s | 300 s, but capped by the request timeout below |
+| Wait for the model's first output | 600 s | 300 s |
 | Gap after the first output (stall) | 90 s | 90 s |
-| HTTP request/read timeout | 600 s | 120 s |
+| HTTP connect / write / pool timeout | 600 s | 120 s |
+| HTTP read timeout | 610 s | 310 s |
 
-Two consequences worth knowing. A self-hosted server that is *not* on loopback — a LAN or Tailscale box behind HTTPS — is treated like any other remote endpoint, so its effective first-token budget is the 120 s request timeout; if it needs longer, that has to be raised. And the knobs (`JENNY_STREAM_FIRST_OUTPUT_TIMEOUT_S`, `JENNY_STREAM_IDLE_TIMEOUT_S`, `JENNY_OPENAI_COMPAT_TIMEOUT_S`) are read from the environment, which the Android runtime has no way to set — on a phone the defaults in that table are what you get.
+Two consequences worth knowing. The first-output wait is measured by the stream itself and is **not** capped by the HTTP request timeout: the read timeout is never lower than the longer of the first-output and idle budgets plus 10 seconds (so a silent model is cut by the stream budget, with a readable message, not by an anonymous `ReadTimeout`), which is where 610 s and 310 s come from. A self-hosted server that is *not* on loopback — a LAN or Tailscale box behind HTTPS — is treated like any other remote endpoint, so its first-token budget is 300 s; if it needs longer, `JENNY_STREAM_FIRST_OUTPUT_TIMEOUT_S` has to be raised. Only connecting, writing and the connection pool stay on the 600 s / 120 s request timeout, since a connection that will not open has nothing to do with a model that is thinking. And the knobs (`JENNY_STREAM_FIRST_OUTPUT_TIMEOUT_S`, `JENNY_STREAM_IDLE_TIMEOUT_S`, `JENNY_OPENAI_COMPAT_TIMEOUT_S`) are read from the environment, which the Android runtime has no way to set — on a phone the defaults in that table are what you get.
 
 Before this split, every path shared the 90 s stall timeout, so a local 3B never survived its own first turn: the grammar compiled, the server started working, and Jenny gave up with `stream stalled for more than 90 seconds` at 0 tokens received.
 

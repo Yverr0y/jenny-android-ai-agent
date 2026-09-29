@@ -48,7 +48,7 @@ work and proactive messages possible at all.
 If you have ever self-hosted an AI agent on a server, this is that: except the host is a
 phone you already own, it has a screen, and its battery is the UPS.
 
-**It is a pre-release prototype.** Sideloaded, no store and no auto-updates, and the
+**It is a pre-release prototype.** Sideloaded, no store and no silent auto-updates (Jenny tells you when a release exists and installs it only when you confirm), and the
 [known limitations](#known-limitations) are listed in full rather than discovered later.
 
 ## Is it actually free software?
@@ -79,7 +79,7 @@ device, so switching provider doesn't cost you your memory.
 
 **📚 It builds you a wiki.** Feed it articles, notes, PDFs or web pages and ask it to compile
 them: you get cross-linked Markdown pages — concepts and entities, joined by `[[wikilinks]]` —
-browsable in their own tab, with a graph view of how they connect (that's the fourth screenshot
+browsable from the notebook they belong to, with a graph view of how they connect (that's the fourth screenshot
 above). Driven entirely from chat through a built-in `llm-wiki` skill: create one, ingest a
 source, compile, ask it questions, run a lint pass for dead links and orphan pages. It does
 **not** update itself — every step is a request you make, or a job you schedule. Multiple wikis
@@ -144,7 +144,9 @@ token-gated even on loopback, because Android does not isolate loopback TCP betw
 Jenny makes six kinds of outbound connection — your provider, Bing when it searches,
 `api.telegram.org` if you enabled the bridge, any URL you or the agent explicitly fetch,
 OpenRouter's attribution headers when that's your provider, and a daily check for a new
-release. **None of them carries anything about you.** The update check is a plain `GET` of the
+release. **None of them carries anything about you.** (Beyond these, there are only the
+connections you set up yourself: SSH to hosts you register, and the HTTP actions of mini-apps you
+install.) The update check is a plain `GET` of the
 `latest.json` published with the release: no identifier, no version, no headers of ours, no
 query string — a public file fetched and compared on the device. It is the only one that goes
 to a server this project controls, and the only one you did not switch on: it runs every 24h,

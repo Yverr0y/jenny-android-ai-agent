@@ -1,10 +1,15 @@
 # Phone app launcher
 
-Jenny can open the other apps installed on your phone, from a **drawer** that slides up over the conversation. It is where you launch things and, with a long press on a row, where you manage them too. This page covers it, and is honest about where it still falls short.
+Jenny can open the other apps installed on your phone, from a **drawer**. It is where you launch things and, with a long press on a row, where you manage them too. This page covers it, and is honest about where it still falls short.
 
 ## The drawer: where you launch things
 
-Tap the **grid icon in the middle of the dock** and a sheet slides up over the chat. (There used to be a second entrance, a button in the message box; it is gone — one way in that works everywhere beats two where one lies.) It is a search field with a list under it — not a grid of icons — and it holds the two kinds of thing that can actually be *launched*, mixed together:
+There is one drawer, and two ways in, one per shell:
+
+- **In the home**, the drawer is the **Apps** page — the first of the four fixed pages, so it is a swipe away from the conversation, and it is a page of its own rather than something laid over it.
+- **In the workshop**, tap the **grid button at the left of the Console's message box** and a sheet slides up over the chat. The dock has no grid icon: its four items are Console, Brain, Hands and Memory.
+
+Either way it is a search field with a list under it — not a grid of icons — and it holds the two kinds of thing that can actually be *launched*, mixed together:
 
 - your installed **Android apps**,
 - your **Jenny Apps** (see [Mini-apps](mini-apps.md)).
@@ -22,7 +27,7 @@ The Android apps are the ones that have a launcher icon of their own — anythin
 - **Long-press a row** for its card — see [The card](#the-card-where-you-manage-things) below.
 - **↑ / ↓** move the highlighted row without moving the cursor out of the search field, so you can keep typing. **Enter** opens the highlighted row; **Shift+Enter** opens its card instead, the same one a long press gives you.
 - **Esc** — and the hardware Back button, which does the same thing — clears the search first, and closes the sheet on the second press. With a card open, Back closes the card first.
-- **Drag the handle or the title row down** to dismiss it. Dragging inside the list scrolls the list and never moves the sheet.
+- **In the workshop's sheet, drag the handle or the title row down** to dismiss it. Dragging inside the list scrolls the list and never moves the sheet.
 - On a phone with a scroll wheel, the wheel is wired to move the highlighted row as well — though that has only been exercised with synthetic wheel events so far, not on a real wheel.
 
 With an empty search field the list is titled **Most used** and is ordered by how often you open things, then by how recently. That ranking is stored on the device only; clearing the app's data resets it, and it rebuilds itself in a few days of use.
@@ -54,6 +59,7 @@ For a **Jenny App**:
 | Action | What it does |
 |---|---|
 | Open | Same as tapping the row. |
+| Add as a page / Remove from pages | Home only. Puts the mini-app in the home's row of pages, or takes it out again. Greyed out, with the reason, when the app opens outside Jenny (an external-view app), when it is broken, or when the eight custom pages are already taken. See [Tour of the WebUI](webui-tour.md#the-pages). |
 | Edit | Not an editor: it puts a request to change the app into the chat, for Jenny to work on. |
 | Delete | Asks for confirmation, then deletes the mini-app. |
 
@@ -72,6 +78,6 @@ There used to be an **Apps tab** for this, with a grid of every app, and a **Hid
 
 ## See also
 
-- [Tour of the WebUI](webui-tour.md) — overall navigation.
+- [Tour of the WebUI](webui-tour.md) — overall navigation, including the home's Apps page.
 - [Mini-apps](mini-apps.md) — the Jenny Apps the drawer opens alongside your phone's apps.
 - [Skills](skills.md) — what skills are, and why they aren't in the drawer.

@@ -14,11 +14,33 @@ This is a deliberate fork boundary (see [`FORK_BOUNDARY.md`](../../FORK_BOUNDARY
 
 ```python
 _HARDCODED_TOOL_MODULES = [
-    "filesystem", "python_exec", "android_web", "download", "location",
-    "long_task", "spawn", "cron", "self", "search", "message",
-    "apply_patch", "exec_session", "introspect", "diagnostics", "ui_view",
+    "filesystem",
+    "python_exec",
+    "android_web",
+    "browser",
+    "download",
+    "location",
+    "long_task",
+    "spawn",
+    "subagent_control",
+    "cron",
+    "journal",
+    "self",
+    "memory_recall",
+    "search",
+    "message",
+    "nothing_to_report",
+    "apply_patch",
+    "exec_session",
+    "introspect",
+    "diagnostics",
+    "ui_view",
+    "ssh",
+    "app_update",
 ]
 ```
+
+That is the order `discover()` walks (23 modules at the time of writing; the file is the authority).
 
 To add a new tool:
 
@@ -46,7 +68,8 @@ grep -rnE '^ +(name = "|def name)' jenny/agent/tools/
 
 - a name collision;
 - a module without a `TOOLS` list;
-- a `TOOLS` entry that isn't a `Tool` subclass.
+- a `TOOLS` entry that isn't a `Tool` subclass;
+- an `allow` entry (the per-agent-type tool list passed to `load()`) that names no known tool in that scope — a typo in an agent type definition, caught at load time instead of leaving the subagent with fewer tools than intended. The check is against the names the in-scope classes declare, not against what `enabled()` let through, so a tool the user switched off does not abort the boot.
 
 These are programming errors: deterministic, reproducible on every boot, and catchable in a test. Failing loudly is cheaper than shipping a gateway that's quietly missing a tool.
 
@@ -75,7 +98,7 @@ Jenny App actions (`<slug>_<action>`, see [Write a mini-app](write-a-mini-app.md
     )
 )
 class GetLocationTool(Tool):
-    _scopes = {"core", "subagent"}
+    _scopes = {"core", "orchestrator", "subagent"}
     name = "get_location"
     description = "Get the user's current location (reverse-geocoded place plus latitude/longitude)..."
     @classmethod

@@ -55,6 +55,10 @@ The full field set, only reachable by hand-editing `providers.providers[]` in `c
 
 Keys may be written as camelCase or snake_case in the file; Jenny always writes camelCase back when it saves.
 
+### A base URL without its version
+
+The `apiBase` above should carry the version path, but one common slip is forgiven for `openai_compat` providers. If a request gets a `404` and the base has no version segment (a last path segment like `v1`), Jenny retries **once** on `<base>/v1`. If that answers, it adopts the corrected base for the rest of the run and logs `API base URL auto-corrected`; nothing is written to `config.json`, so fix the field in Settings if you want the log line gone. If the retry also returns `404`, the error names both URLs it tried, so it reads as a wrong base and not a wrong key. A base that already ends in a version segment is never retried.
+
 ## Self-signed certificates
 
 If your server's certificate is signed by a CA of your own, installing that CA on the phone
@@ -106,11 +110,15 @@ If you export an unencrypted copy of `config.json` yourself (e.g. by pulling it 
 - the base URL points directly at `api.openai.com` (not OpenRouter, not any other gateway), **and**
 - the request either sets a `reasoningEffort` value, or the model is one of OpenAI's reasoning families (o1/o3/o4, or any `gpt-5*` model).
 
-When both hold, Jenny tries the Responses API — and if it starts failing, a small circuit breaker kicks in: after **3 consecutive failures** for that model, it stops trying Responses and falls back to Chat Completions for **5 minutes** before probing Responses again (a single "half-open" retry). This is per-model, automatic, and not configurable beyond forcing `apiType` to `"chat_completions"` or `"responses"` explicitly if you want to skip the auto-detection entirely.
+When both hold, Jenny tries the Responses API — and if it starts failing, a small circuit breaker kicks in: after **3 consecutive failures** for that model and reasoning-effort pair, it stops trying Responses and falls back to Chat Completions for **5 minutes** before probing Responses again (a single "half-open" retry). This is tracked per model *and* reasoning effort (the breaker key is `model:reasoning_effort`, so a failing `high` does not shut out `low`), automatic, and not configurable beyond forcing `apiType` to `"chat_completions"` or `"responses"` explicitly if you want to skip the auto-detection entirely.
 
 For every other endpoint — Groq, DeepSeek, Ollama, OpenRouter, a self-hosted server, anything that isn't `api.openai.com` directly — `auto` always means Chat Completions; the Responses API is never attempted.
 
 That last sentence is about `auto` only. Setting `apiType: "responses"` **explicitly** forces the Responses API on any `openai_compat` base URL, auto-detection included — which is what makes gateways that serve a Responses-shaped endpoint of their own reachable (see [OpenCode Go](#opencode-go) below).
+
+## Session affinity header
+
+Every request from the `openai_compat` provider carries an `x-session-affinity` header: a random ID generated once when the provider is built, so it stays the same for the whole run and changes when the gateway restarts. It exists so that a gateway that routes or caches by session can keep a run's requests together; it carries nothing about you. An `extraHeaders` entry with the same name replaces it. The `anthropic` format does not send it, and OpenCode Go adds its own `x-opencode-session` header on top (see below).
 
 ## Prompt caching: what's actually happening
 

@@ -105,6 +105,7 @@ Snapshots are an automatic, content-addressed version history of your workspace.
 | Daily safety net | If no snapshot has been taken in the last 24 hours, one is taken regardless |
 | App shutdown | Every time the app closes |
 | Before memory consolidation | Right before each Dream run |
+| Before a gardener pass | Right before each [gardener](gardener.md) pass on a notebook (tagged `pre_gardener`) — the local history list may show that tag as the raw id rather than a translated label |
 | Before export / before restore | Automatically, as described above (`pre-export`, `pre-restore`) |
 | Manual | Tap **Create snapshot now** in the workshop's **Memory → Local history** panel |
 

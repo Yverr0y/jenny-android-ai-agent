@@ -52,7 +52,7 @@ CI pins the checker version (`npx --yes pyright@1.1.411`); a bare `npx pyright` 
 
 `pytest` runs with `asyncio_mode = "auto"` and `testpaths = ["tests"]`, so async tests need no `@pytest.mark.asyncio` decorator and a bare `pytest` from the repo root is already scoped correctly.
 
-**Tests mirror the `jenny/` package structure directory for directory.** `jenny/agent/tools/download.py` is tested by `tests/agent/tools/test_download.py`; `jenny/apps/storage.py` by `tests/apps/test_storage.py`. A new module goes with a test file at the matching relative path, not wherever is convenient. See [Testing](./testing.md) for what CI runs and how to scope a subset.
+**Tests mirror the `jenny/` package structure directory for directory.** `jenny/agent/tools/download.py` is tested by `tests/agent/tools/test_download.py`; `jenny/apps/storage.py` by `tests/apps/test_storage.py`. A new module goes with a test file at the matching relative path, not wherever is convenient. The one exception is `jenny/pydantic_compat/`, which is tested by the single file `tests/test_pydantic_compat.py`. See [Testing](./testing.md) for what CI runs and how to scope a subset.
 
 ## The full check before a PR
 
@@ -81,7 +81,7 @@ Jenny's codebase is bilingual on purpose, and the split is by *audience*, not by
 Every string a user sees in the SPA lives in `jenny/templates/ui/assets/i18n/it.json` and `en.json`, and is read through the shared helper:
 
 ```js
-import { i18n } from './i18n.js';
+import { i18n } from './shared/i18n.js';
 button.textContent = i18n.t('dialog.confirm');
 ```
 

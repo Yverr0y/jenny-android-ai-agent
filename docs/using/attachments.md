@@ -4,9 +4,9 @@ You can attach photos, camera shots, and any other file to a chat message; this 
 
 ## Attaching something
 
-Tap the paperclip button in the composer. It opens the Android system chooser — the same picker any app uses — so you get your file manager, your gallery, and a "take a photo" option all in one place. Jenny does not request the `CAMERA` permission for this: taking a photo is delegated entirely to your phone's own camera app, which hands the finished picture back to Jenny.
+Tap the paperclip button in the composer (in the home and in the workshop's Console alike). It opens the Android system chooser — the same picker any app uses — so you get your file manager, your gallery, and a "take a photo" option all in one place. Jenny does not request the `CAMERA` permission for this: taking a photo is delegated entirely to your phone's own camera app, which hands the finished picture back to Jenny.
 
-The paperclip hides itself once you start typing text, and reappears when the input is empty again.
+In the workshop's Console the paperclip hides itself once you start typing text, and reappears when the input is empty again; in the home it stays where it is.
 
 You can send a message that is attachments only, with no text at all — an empty message is only rejected if it has neither text nor attachments.
 
@@ -14,7 +14,7 @@ Before you hit send, each attachment shows up in the composer as a thumbnail (im
 
 ## Limits per message
 
-Jenny enforces the same limits on both the phone (composer) and the gateway (server), so a well-formed message never gets silently truncated after the fact — see the honesty notes below for what happens when you go over.
+Jenny enforces the same limits on both the phone (composer) and the gateway (server), so a well-formed message never gets silently truncated after the fact — see the notes below for what happens when you go over.
 
 | Kind | Max count per message | Max size each | Recognized formats |
 |---|---|---|---|
@@ -24,7 +24,7 @@ Jenny enforces the same limits on both the phone (composer) and the gateway (ser
 
 "Image" here is a strict allowlist by MIME type (or, when the camera hands back a file with no MIME type, by file extension): PNG, JPEG, WebP, and GIF. **SVG is not on that list** — an attached SVG is treated as a generic file, never rendered inline as an image.
 
-All attachments, once sent, are saved on the device under `workspace/uploads/` — they're ordinary files in your workspace, visible and browsable from the Workspace tab (see [Tour of the WebUI](webui-tour.md)) and included in workspace backups and snapshots (see [Backup and restore](backup.md)).
+All attachments, once sent, are saved on the device under `workspace/uploads/` — they're ordinary files in your workspace, visible and browsable from the workshop's Memory drawer, under **The real files** (see [Tour of the WebUI](webui-tour.md)) and included in workspace backups and snapshots (see [Backup and restore](backup.md)).
 
 ## What the model actually sees
 
@@ -46,19 +46,19 @@ If the active model doesn't support vision, Jenny drops the attached images and 
 
 - **Non-image attachments** show up in the chat as a chip: `📄 filename`. Tapping it opens the file in your phone's system viewer (the same "open with" mechanism Android uses everywhere), falling back to opening the file's URL in a new browser tab if the native bridge isn't available (this fallback only matters when debugging the WebUI from a desktop browser, not on the phone).
 - **Images** — both attached and any inline in a message — open in an in-app lightbox with pinch-to-zoom, since normal browser/page pinch-zoom is disabled across the whole app. Close with the "×", by tapping the background, or with Esc on a physical keyboard.
-- **From the Workspace file browser**, long-pressing (about 600 ms) any file opens a context sheet with: **Open with system app**, **Share** (the normal Android share sheet), **Save to Downloads** (copies the file into your phone's public Downloads folder), **Rename**, **Clone**, and **Delete**. Images opened directly (not long-pressed) go to the same in-app lightbox, with the same three actions available from its action bar.
+- **From the file browser** (workshop: Memory drawer → **The real files**), long-pressing (about 600 ms) any file opens a context sheet with: **Open with system app**, **Share** (the normal Android share sheet), **Save to Downloads** (copies the file into your phone's public Downloads folder), **Rename**, **Clone**, and **Delete**. Images opened directly (not long-pressed) go to the same in-app lightbox, with the same three actions available from its action bar.
 
 ## Honesty: things that can surprise you
 
-- **Going over a limit fails silently in the composer.** If you try to attach a 5th image, or a file bigger than its size cap, the composer just... doesn't add it. There is no toast, no error, nothing — the attachment simply never appears in your pending list. If you expected 5 images and only see 4, that's why.
-- **If the server itself rejects a message** (for example because the two of you disagree on the count somehow, or the payload is malformed), the chat shows a raw, non-localized error token rather than a friendly sentence — something like `Error: image_rejected`. It's not broken, it's just not translated to a human-readable message yet.
-- **Video has a client/server mismatch.** The composer counts a video toward the same "4 generic files" bucket the client enforces, but the gateway itself only accepts **1 video per message**. Attaching two videos will pass the composer's own check and then get rejected by the server as `too_many_videos`.
+- **Going over a limit is refused, out loud.** If you try to attach a 5th image, a 2nd video, a 5th other file, or a file bigger than its size cap, the composer does not add it and says which limit it hit — a toast in the workshop, a line in the chat in the home ("Too many images in one message", "The file is too large", "I couldn't open this file" if the phone could not read it). Files already in the pending list stay. If you expected 5 images and only see 4, that's why.
+- **If the gateway rejects a message** (for example because the payload is malformed or the two sides disagree on a limit), you get the same kind of plain sentence in your language, not the internal `image_rejected` token, and the message is treated as not sent: your text comes back into the box, but the attachments do not, since the rejection covers the whole batch. A reason the app has no wording for shows as "Something went wrong" with the code in brackets.
+- **There are three buckets, and the phone enforces all three.** Images (4), video (1) and other files (4) are counted separately, and the composer's video limit matches the gateway's: a second video is turned away on the phone, before anything is sent.
 - **The WebView suspends background fetches when the screen is off or the phone is in Doze.** If you're waiting on an attachment to load or upload and the screen has gone dark, don't be surprised if nothing happens until you wake the phone.
 
 ## See also
 
 - [Chat basics](chat.md) — sending, streaming, and reading a response
-- [Tour of the WebUI](webui-tour.md) — the Workspace tab file browser
+- [Tour of the WebUI](webui-tour.md) — where the file browser lives
 - [Backup and restore](backup.md) — what happens to `workspace/uploads/` on backup and restore
 - [Configuration](../reference/configuration.md) — `extractDocumentText` and other config-only keys
 - [Tool reference](../reference/tools.md) — how the agent reads attachment references on demand

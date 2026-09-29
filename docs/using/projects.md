@@ -2,11 +2,11 @@
 
 Everything you say to Jenny normally lands in one continuous personal conversation. A **notebook** is the other kind: a separate conversation bound to one folder, which remembers what it is told by *writing it down* in that folder instead of by feeding Jenny's personal memory.
 
-You switch between them with the chip above the message box. The chip says `jenny` when you are in the personal chat, and `wikis › <name>` when you are inside a notebook.
+In the home you switch between them on the **Notebooks** page: tap the personal row for the personal chat, or a notebook to open it there. In the workshop's Console you switch with the chip above the message box: it shows her name (*Jenny* unless you renamed her) when you are in the personal chat, and `wikis › <name>` when you are inside a notebook.
 
 ## What a notebook is
 
-A notebook is a folder under `workspace/wikis/<name>/` — the same place [wikis](./wiki.md) live, because a notebook *is* a wiki. There is no separate `notebooks/` directory, and a notebook you create from the chip is a wiki like any other.
+A notebook is a folder under `workspace/wikis/<name>/` — the same place [wikis](./wiki.md) live, because a notebook *is* a wiki. There is no separate `notebooks/` directory, and a notebook you create in the app is a wiki like any other.
 
 A freshly created notebook looks like this:
 
@@ -50,33 +50,33 @@ This is enforced by the turn's own write boundary, not by a prompt asking nicely
 
 ## Creating a notebook
 
-From the chip above the message box: tap the chip, then **New notebook...**. Two questions follow.
+In the home, tap the round **+** on the **Notebooks** page; in the workshop's Console, tap the chip above the message box, then **New notebook...**. Two questions follow.
 
-1. **Notebook name.** Letters, numbers, dot, dash and underscore; it must start with a letter or a digit and fit in 64 characters. No spaces and no accents — this name is a folder name *and* a conversation address, so `Greenhouse Notes` and `caffè` are refused. The rule is written under the field, and a name that breaks it keeps the dialog open with what you typed and the reason underneath, so you can fix it in place (the same goes for **Rename**). If the name already exists you get a warning rather than a refusal ("If it was left half-built I will finish it, otherwise the creation will be refused") with a **Try anyway** button.
+1. **Notebook name.** Letters, numbers, dot, dash and underscore; it must start with a letter or a digit and fit in 64 characters. No spaces and no accents — this name is a folder name *and* a conversation address, so `Greenhouse Notes` and `caffè` are refused. The rule is written under the field, and a name that breaks it keeps the dialog open with what you typed and the reason underneath, so you can fix it in place (the same goes for **Rename**). If the name already exists you get a warning rather than a refusal ("If it was left half-built I'll finish it, otherwise the creation will be refused") with a **Try anyway** button. If the name matches a conversation whose notebook folder is gone, you are asked first — "“name” still has a conversation", with the number of messages — and choose **Pick it up** to carry on in that chat or **Start clean** to throw it away.
 2. **What is it about** — one line: what belongs here and what does not. This is required; without it the chat starts on nothing. It is stored as the notebook's summary and as the opening line of both `AGENTS.md` and the map, and it is capped at 500 characters.
 
-On success the chip drops you straight into the new notebook. The scaffolding — folders, `AGENTS.md`, an empty-but-structured `wiki/index.md`, today's `log/` entry — is written for you; nothing that already exists is overwritten, which is why re-running the creation on a half-built folder repairs it instead of clobbering it.
+On success you land straight in the new notebook. The scaffolding — folders, `AGENTS.md`, an empty-but-structured `wiki/index.md`, today's `log/` entry — is written for you; nothing that already exists is overwritten, which is why re-running the creation on a half-built folder repairs it instead of clobbering it.
 
-Later, once the notebook has some pages, `/init` inside it rewrites that notebook's `AGENTS.md` from what the folder actually contains — its scope, the conventions the pages already follow, and the open questions. Outside a notebook, `/init` refuses and tells you to open one — the chip above the composer does it.
+Later, once the notebook has some pages, `/init` inside it rewrites that notebook's `AGENTS.md` from what the folder actually contains — its scope, the conventions the pages already follow, and the open questions. Outside a notebook, `/init` refuses and tells you to open one (in the home from the **Notebooks** page; the server's text also mentions the workshop's chip above the composer, and still calls the notebook a *project*).
 
-To **delete** a notebook, open the chip and tap the bin on its row, then confirm — the same place you created it. The confirmation names how many messages of its conversation go with it, because a notebook's chat is deleted together with its folder. The Workspace file browser offers the same thing from the notebook's folder. (Deleting the folder by hand, or over [ssh](./ssh.md), also works but leaves the conversation behind under a name that is now free — which is why the file browser refuses that route and routes you to the notebook delete instead.)
+To **delete** a notebook, in the home press and hold its row on the **Notebooks** page and choose **Delete**; in the workshop, open the chip and tap the bin on its row. Then confirm. The confirmation names how many messages of its conversation go with it, because a notebook's chat is deleted together with its folder. The workshop's file browser (Memory drawer → **The real files**) offers the same thing from the notebook's folder. (Deleting the folder by hand, or over [ssh](./ssh.md), also works but leaves the conversation behind under a name that is now free — which is why the file browser refuses that route and routes you to the notebook delete instead.)
 
-A folder whose name breaks the naming rule is **not listed in the chip** at all, and cannot be opened as a conversation. Renaming it (letters, numbers, dot, dash, underscore) makes it appear.
+A folder whose name breaks the naming rule is not listed as a notebook and cannot be opened as a conversation. It appears instead under a **Cannot be opened** heading — on the **Notebooks** page and in the chip's list — with a line saying why, so it does not look deleted. There is no file manager to fix it from the home: ask Jenny from the personal chat to rename it (letters, numbers, dot, dash, underscore), and it becomes a notebook.
 
 ## The switch beside the chip: Writes or Read-only
 
-Next to the chip is a two-state switch — **Writes** (pencil) and **Read-only** (eye). It applies to both kinds of conversation, and it answers one question about the message you are *about to send*: may it change anything on this device?
+This is a workshop feature: the home has no such switch, and a message sent from the home always goes out with writes on. In the workshop's Console, next to the chip, is a two-state switch — **Writes** (pencil) and **Read-only** (eye). It applies to both kinds of conversation, and it answers one question about the message you are *about to send*: may it change anything on this device?
 
 - **Writes** is the default. The chat can create and edit files, download, capture to a notebook's journal, schedule reminders, install an app update.
 - **Read-only** means nothing on the device changes. Jenny still reads anything, still runs code that computes and reports, still answers and still messages you. What it does instead of writing is *describe* the change: which file, what would go in it, and why. That description is the deliverable, not a preamble to an attempt.
 
 What read-only refuses, concretely: `write_file` / `edit_file` / `apply_patch`; every write route inside `python_exec` (including `open(..., 'w')`, `os.remove`, `shutil.rmtree`); downloading a file; appending to a notebook journal; adding, listing or removing scheduled jobs; starting a sustained goal or long task; changing mini-app data; installing an app update. Delegating does not lift it — a subagent runs under the same restriction. Two things stay open on purpose: finishing an *already active* goal (so a read-only turn is not trapped), and `ssh_exec`, because a remote machine is a different axis from this device.
 
-The switch is remembered **per conversation, in memory only**. Reloading the WebUI starts you back in the personal chat with Writes on. The state is not held on the server: the flag rides along with each message you send, so what you saw on screen is what the turn actually got.
+The switch is remembered **per conversation, in memory only**. Reloading the workshop starts you back in the personal chat with Writes on. The state is not held on the server: the flag rides along with each message you send, so what you saw on screen is what the turn actually got.
 
 ## Capture: the conversation is a source
 
-This is the point of a notebook. In a notebook, with the switch on **Writes**, anything you say that will still be true next week gets written to the journal *before* Jenny answers you.
+This is the point of a notebook. In a notebook, with writes on (always, in the home; the **Writes** side of the switch in the workshop), anything you say that will still be true next week gets written to the journal *before* Jenny answers you.
 
 - **Yes**: a constraint, a decision, a preference, a name, a date.
 - **No**: mood, courtesies, the thread of the discussion.
@@ -94,7 +94,7 @@ The journal is append-only by construction — the tool that writes it can only 
 
 Two things follow from this design that surprise people:
 
-- **Jenny does not ask permission to write.** The switch already answered that question; asking again in words would reopen what you closed. If you do not want a turn to capture, flip the switch to Read-only — in read-only the capture instructions are not even part of the prompt, so Jenny does not attempt it and does not offer.
+- **Jenny does not ask permission to write.** The switch already answered that question; asking again in words would reopen what you closed. If you do not want a turn to capture, flip the workshop's switch to Read-only — in read-only the capture instructions are not even part of the prompt, so Jenny does not attempt it and does not offer.
 - **Capture is not authorship.** A journal line is not a page. Turning lines into pages, and keeping the map current, happens when you ask for it — or on its own, later, in a [gardener](./gardener.md) pass.
 
 What arrives from outside — an article, a document, a page you pasted — goes verbatim into `raw/research/` first, and into a page second, with the page's `source:` pointing back at the raw copy.
@@ -133,13 +133,19 @@ Two gates still protect a notebook even with compaction on, and both are checked
 
 When a notebook's history *is* compacted, the messages that leave the live session are replaced by a summary, and the visible transcript still holds the whole conversation — so nothing disappears from your screen. The one path that could have lost text is covered too: if the summarising call to the provider fails, the dropped messages are written verbatim to `<notebook>/raw/compacted/<YYYYMMDD-HHMMSS>.jsonl` *before* the session is trimmed, and if even that copy cannot be written, nothing is trimmed at all and the next idle window tries again. (The failed summary is also dumped raw into `memory/history.jsonl` under the notebook's key, but no notebook prompt reads that file, which is why the notebook gets a copy of its own. On the personal chat the same failure trims nothing: the conversation stays whole and the next idle window tries again.)
 
+## Renaming a notebook from the app
+
+In the home, press and hold the notebook's row on the **Notebooks** page and choose **Rename**. The name follows the same rule as at creation (letters, numbers, dot, dash and underscore; the rule is written under the field and a name that breaks it keeps the dialog open). Jenny renames the folder first and then moves the conversation after it, so the chat, its history and a page you pinned for the notebook all follow the new name; if you were inside it, you stay inside, under the new name.
+
+It is refused, before anything moves, in three cases, each with its own message: she is still working in that notebook (a turn, a subagent, a gardener pass or an idle compaction is writing — try again once she has finished); the new name already belongs to a notebook or a conversation; or the notebook is no longer there. If the process dies between the folder and the chat, what is left is exactly the state the next section describes, and the gateway finishes the move on its own at the next turn or start.
+
 ## If you rename a notebook's folder from outside Jenny
 
 The folder name is the conversation's address, so renaming it — from the file browser, over ssh, from a computer — moves the address. Jenny records a stable id in each notebook's `AGENTS.md`, and uses it to chase the chat after the fact. On the next message you send to that notebook, one of these happens, and in **every** case Jenny does not read that message until the situation is resolved:
 
 | What happened | What you see |
 |---|---|
-| Renamed to a valid name | Jenny says it moved the history to the new name, nothing was lost, and asks you to open the new name from the chip. |
+| Renamed to a valid name | Jenny says it moved the history to the new name, nothing was lost, and asks you to open the new name (from **Notebooks** in the home, from the chip in the workshop). |
 | Renamed to a name that cannot be a conversation (spaces, accents) | Jenny says it found the folder but left the history under the old name rather than moving it somewhere nothing could open, names the character rule, and points out that renaming it back also works. Nothing is moved. |
 | The folder is simply gone | Jenny says it could not find where it went, that nothing is lost, and that the chat comes back as soon as the folder does. |
 | A previous move stopped halfway | Jenny says part of the history is under each name, that nothing was deleted, and that restarting it finishes the join on the way up. This is the one case that does **not** claim "nothing is lost" in the same breath. |

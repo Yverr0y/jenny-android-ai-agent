@@ -6,10 +6,10 @@ Jenny exposes a WebSocket server channel used by the Android WebView UI and any 
 
 Everything below describes the general-purpose channel as configured through `config.json`'s `websocket` object. On the shipped Android app, the runtime overrides several of these fields at startup regardless of what `config.json` says:
 
-- The gateway always binds host `127.0.0.1` and a single port, **18790**, shared by both the WebSocket upgrade and the HTTP `/api/` and `/webui/` routes — one origin for the WebView to talk to. This overrides `gateway.port` / `websocket.port` from config every time the app starts.
-- `websocket.enabled` ends up `true` in practice: the auto-generated `config.json` created on first run writes `"websocket": {"enabled": true, ...}` explicitly, and the startup path additionally fills in `enabled: true` if the key is ever missing. The schema-level default of `enabled: false` (documented below) only applies when the gateway is run detached from the Android runtime — e.g. invoking `run_gateway(...)` yourself for local testing, where you own `config.json` and nothing forces it on.
+- The gateway binds host `127.0.0.1` and a single port, **18790**, shared by both the WebSocket upgrade and the HTTP `/api/` and `/webui/` routes — one origin for the WebView to talk to. These are the defaults of `run_gateway(data_dir, android_context=None, *, host="127.0.0.1", port=18790)`, and `run_gateway` **always** passes them on: at startup they overwrite `gateway.host`, `gateway.port`, `websocket.host` and `websocket.port` from config, on or off Android. Kotlin calls it with the defaults, so on the phone the values in `config.json` never win.
+- `websocket.enabled` ends up `true` in practice: the auto-generated `config.json` created on first run writes `"websocket": {"enabled": true, ...}` explicitly, and the same override fills in `enabled: true` if the key is ever missing. The schema-level default of `enabled: false` (documented below) only applies when the gateway is started without that override — see [Quick Start](#quick-start-off-device--standalone-gateway).
 
-So: the `enabled: false` default, the `8765` default port, and a custom `host`/`path` are all real and correct for **off-device** use of this channel (running the gateway standalone on a workstation), but not for the Android APK, which always ends up on `ws://127.0.0.1:18790/`.
+So: the `enabled: false` default, the `8765` default port, and a custom `host` are real and correct for **off-device** use of this channel (running the gateway standalone on a workstation), but through `run_gateway` they take effect only if you pass them as `host=` and `port=`. The Android APK always ends up on `ws://127.0.0.1:18790/`. Everything else in the `websocket` object (`path`, `allowFrom`, the token and TLS fields, `streaming`) is read from `config.json` as documented.
 
 ## Features
 
@@ -43,16 +43,22 @@ Add to `config.json` under the top-level `websocket` object:
 
 The default `host: 127.0.0.1` is intended for loopback use. External connections can be allowed by setting `host` to `"0.0.0.0"` (or `"::"`), which the config refuses unless `tokenIssueSecret` is set, and configuring `allowFrom` carefully.
 
+Only `path`, `allowFrom`, the token and TLS fields and `streaming` are honoured from this block when you start the gateway through `run_gateway`: `host` and `port` are overwritten (see the next step), and `enabled` defaults to `true` when the key is missing.
+
 ### 2. Start the gateway
 
-Use the same entry point the Android runtime uses:
+Use the same entry point the Android runtime uses, and pass the address you want:
 
 ```python
 from jenny.android_entry import run_gateway
-run_gateway("/path/to/data_dir")
+run_gateway("/path/to/data_dir", host="127.0.0.1", port=8765)
 ```
 
-Note the argument is a *data directory*, not the workspace itself — the gateway creates and uses `<data_dir>/workspace`. Passing a path that already ends in `workspace` produces a nested `workspace/workspace`.
+Note the first argument is a *data directory*, not the workspace itself — the gateway creates and uses `<data_dir>/workspace`. Passing a path that already ends in `workspace` produces a nested `workspace/workspace`.
+
+Called as `run_gateway("/path/to/data_dir")`, with no `host=`/`port=`, it binds `127.0.0.1:18790` whatever `config.json` says — the same as the app. `host` and `port` set both the gateway and the WebSocket channel, since they share one port.
+
+If you would rather have `websocket.host` and `websocket.port` come from `config.json`, skip `run_gateway` and call the lower-level `jenny.gateway_runtime._run_gateway(config=None)` yourself: with no overrides given, it loads the config as it is and the schema defaults (`enabled: false`, port `8765`) apply. It is a private, test-patchable function and it does none of the workspace preparation `run_gateway` does — you set the workspace (`jenny.config.paths.set_workspace_dir`) and create the config first.
 
 You should see:
 
@@ -60,7 +66,7 @@ You should see:
 WebSocket server listening on ws://127.0.0.1:8765/
 ```
 
-(On the Android device this line always reads `ws://127.0.0.1:18790/` instead, per the note above.)
+with the host, port and path you actually ended up with (with no arguments to `run_gateway`, and on the Android device, it reads `ws://127.0.0.1:18790/`).
 
 ### 3. Connect a client
 
@@ -180,7 +186,7 @@ Reasoning frames only flow when the channel's `showReasoning` is `true` (default
 }
 ```
 
-`model_preset` is omitted when no named preset is active. WebUI clients use this event to keep the displayed model badge in sync across slash commands, config reloads, and settings changes.
+`model_preset` is omitted when no named preset is active. The frame can also carry a `provider` field (the name of the active provider entry), present only when the gateway knows it. WebUI clients use this event to keep the displayed model badge in sync across slash commands, config reloads, and settings changes.
 
 **`subagent_status`** — snapshot of the background subagents, pushed on every state transition:
 
@@ -206,6 +212,8 @@ Reasoning frames only flow when the channel's `showReasoning` is `true` (default
 `state` is one of `running`, `done`, `failed`, `cancelled`, `stalled`; `recent` is newest-first and capped at 10 entries. `idle_s` is seconds since the last observed sign of progress — it is what distinguishes a subagent stuck for four minutes from one working for four minutes. `can_restart` reflects the cap on *automatic* restarts only: a human pressing Relaunch is never refused.
 
 The frame is a recomputable refresh hint — it is never persisted to the transcript and never retried, since the next snapshot replaces it. The same payload is served verbatim by `GET /api/subagents`, which is how the WebUI panel comes back after a page reload instead of waiting for the next transition. `POST`-style actions ride on GET like every other gateway route (see the transport constraint in [Write a mini-app](../contribute/write-a-mini-app.md)): `GET /api/subagents/<task_id>/restart` (always a manual relaunch) and `GET /api/subagents/<task_id>/cancel`.
+
+`GET /api/subagents/<task_id>/digest` serves the condensed "what did it do" of one subagent, for the block the chat shows under its result: `{"task_id", "events", "count", "source"}`, up to 300 events. `source` says how complete it is — `"digest"` is the persisted, immutable one written when the subagent finished, `"live"` is a preview built from the running subagent's activity (it will change), and `"none"` means there is nothing to show (empty `events`, never a 404). Unlike `/activity`, it has no cursor.
 
 **`subagent_activity`** — the fine-grained activity of one subagent, sent **only** to the
 connections that asked for it with `subagent_watch` (see [Client → Server](#client--server)):
@@ -467,7 +475,7 @@ All fields go under the top-level `websocket` object in `config.json`. These are
 | `sendProgress` | bool | `true` | Send interim progress text while a turn runs. With it off the client sees nothing until the turn produces its answer. |
 | `sendToolHints` | bool | `false` | Include one-line tool hints in that progress stream ("reading SOUL.md", "searching…"). Off by default: it is the noisiest of the four. |
 | `showReasoning` | bool | `true` | Forward `reasoning_delta` / `reasoning_end` frames when the provider exposes incremental reasoning. |
-| `sendMaxRetries` | int | `3` | Attempts the dispatcher makes for one outbound frame before dropping it. Refresh-hint frames (`goal_status`, `app_data_changed`, `apps_list_changed`) are exempt by design: the next one replaces a pending one, so retrying them is pointless. |
+| `sendMaxRetries` | int | `3` | Attempts the dispatcher makes for one outbound frame before dropping it. Refresh-hint frames (`goal_status`, `mascot_mood`, `subagent_status`, `runtime_model_updated`, `app_data_changed`, `apps_list_changed`) are exempt by design: the next one replaces a pending one, so retrying them is pointless. `subagent_activity` is not retried as a frame either — the watcher's cursor simply does not move, so the next tick resends the same events. |
 
 ### Keep-alive
 
@@ -582,7 +590,7 @@ Outbound `message` events may include a `media` field containing local filesyste
 
 ## Common Patterns
 
-These are off-device / standalone-gateway patterns — they do not apply to the Android app, which always forces `host: 127.0.0.1`, `port: 18790`, `enabled: true`.
+These are off-device / standalone-gateway patterns — they do not apply to the Android app, which always forces `host: 127.0.0.1`, `port: 18790`, `enabled: true`. The `host` and `port` in the examples below reach the server only if you start the gateway with `run_gateway(data_dir, host=..., port=...)` (or through `_run_gateway(config=None)`, see [Quick Start](#quick-start-off-device--standalone-gateway)): a bare `run_gateway(data_dir)` overwrites them with `127.0.0.1:18790`.
 
 ### Trusted local network (no auth)
 
