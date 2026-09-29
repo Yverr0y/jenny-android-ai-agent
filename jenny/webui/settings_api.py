@@ -1139,8 +1139,12 @@ async def update_provider(data: dict[str, Any]) -> dict[str, Any]:
     if not name:
         raise WebUISettingsError("name is required")
 
-    fmt = data.get("format", "openai_compat")
-    if fmt not in ("openai_compat", "anthropic"):
+    # Assente vuol dire «invariato» su un provider che c'e' gia', e
+    # ``openai_compat`` solo per uno nuovo (v. ``_upsert_provider``). Il
+    # predefinito applicato qui faceva di un provider Anthropic un OpenAI a
+    # ogni chiave salvata dalla casa, che il formato non lo manda.
+    fmt = data.get("format") or None
+    if fmt is not None and fmt not in ("openai_compat", "anthropic"):
         raise WebUISettingsError(f"unknown format: {fmt}")
 
     api_key = (data.get("api_key") or "").strip() or None
@@ -1194,19 +1198,23 @@ def _resolved_ca_bundle(
 def _upsert_provider(
     config: Config,
     name: str,
-    fmt: str,
+    fmt: str | None,
     api_key: str | None,
     api_base: str | None,
     *,
     ca_bundle: str | None = None,
     clear_ca_bundle: bool = False,
 ) -> None:
-    """Inserisce o aggiorna il provider *name* dentro *config*."""
+    """Inserisce o aggiorna il provider *name* dentro *config*.
+
+    *fmt* ``None`` lascia il formato di un provider esistente com'e', e ne da'
+    ``openai_compat`` a uno nuovo."""
     providers = config.providers.providers
 
     for p in providers:
         if p.name == name:
-            p.format = fmt
+            if fmt is not None:
+                p.format = fmt
             # Chiave vuota = "tieni quella salvata". Rifiutiamo anche il
             # suggerimento offuscato (`sk-a...j8f9`): un client vecchio che
             # lo pre-compila nel campo lo rimanderebbe qui identico e
@@ -1221,7 +1229,7 @@ def _upsert_provider(
 
         providers.append(ProviderConfig(
             name=name,
-            format=fmt,
+            format=fmt or "openai_compat",
             api_key=api_key,
             api_base=api_base,
             ca_bundle=_resolved_ca_bundle(None, ca_bundle, clear_ca_bundle),

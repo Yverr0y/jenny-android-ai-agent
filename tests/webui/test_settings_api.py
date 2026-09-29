@@ -138,6 +138,28 @@ async def test_update_provider_still_replaces_key_when_retyped(
     assert saved.api_key == "sk-new-secret-key-9999"
 
 
+@pytest.mark.asyncio
+async def test_a_key_saved_without_a_format_keeps_the_provider_anthropic(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La casa salva la chiave con ``{name, api_key}`` e basta: il predefinito
+    ``openai_compat`` finiva scritto sul provider, e un Anthropic smetteva di
+    rispondere. Assente = invariato; il predefinito vale per un provider nuovo."""
+    config_path = tmp_path / "config.json"
+    config = _add_provider(Config(), "claude", format="anthropic", api_key="not-a-real-credential")
+    save_config(config, config_path)
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+
+    await update_provider({"name": "claude", "api_key": "another-fake-credential"})
+    await update_provider({"name": "fresh", "api_key": "a-third-fake-credential"})
+
+    saved = {p.name: p for p in load_config(config_path).providers.providers}
+    assert saved["claude"].format == "anthropic"
+    assert saved["claude"].api_key == "another-fake-credential"
+    assert saved["fresh"].format == "openai_compat"
+
+
 async def test_update_agent_settings_accepts_context_window_options(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

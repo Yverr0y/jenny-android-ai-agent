@@ -129,7 +129,19 @@ export class HomeModel {
        sull'attivo mentre stai guardando l'elenco di un'altra marca vorrebbe
        dire cambiare pagina sotto le mani. */
     if (!this.viewing || !this._provider(this.viewing)) this.viewing = active;
+    /* Un elenco tenuto vale per il provider com'era quando lo si e' chiesto:
+       formato, indirizzo o chiave cambiati (anche dall'officina) e la
+       risposta di allora — «serve una chiave», «manca l'indirizzo» — non dice
+       piu' niente. Quello guardato si richiede subito, gli altri alla
+       prossima apertura. */
+    let staleViewed = false;
+    for (const [name, catalog] of this._catalogs) {
+      if (catalog.status === 'loading' || catalog.fingerprint === this._fingerprint(name)) continue;
+      this._catalogs.delete(name);
+      if (name === this.viewing) staleViewed = true;
+    }
     this._paint();
+    if (staleViewed) this._loadModels(this.viewing);
   }
 
   /** Il nome della marca che stai **guardando**, per il titolo dell'elenco.
@@ -210,15 +222,21 @@ export class HomeModel {
     const key = (this.keyInput?.value || '').trim();
     if (!provider || !key) return;
     try {
-      const payload = await api.updateProvider({ name: provider, api_key: key });
+      /* Il formato va sempre con la chiave: senza, il server lo considerava
+         assente e ci scriveva il suo predefinito, `openai_compat`. */
+      const format = this._provider(provider)?.format;
+      const payload = await api.updateProvider({ name: provider, api_key: key, ...(format ? { format } : {}) });
       if (this.keyInput) this.keyInput.value = '';
       if (this.keyEdit) this.keyEdit.hidden = true;
       this._syncKeySave();
       this._apply(payload);
       /* Il catalogo si richiede: una chiave nuova puo' essere esattamente la
-         ragione per cui l'elenco era vuoto. */
-      this._catalogs.delete(provider);
-      this._loadModels(provider);
+         ragione per cui l'elenco era vuoto. Di solito l'ha gia' richiesto
+         `setSettings`, vedendo cambiare la chiave: allora non si raddoppia. */
+      if (this._catalogs.get(provider)?.status !== 'loading') {
+        this._catalogs.delete(provider);
+        this._loadModels(provider);
+      }
       showToast(i18n.t('home.model.keySaved'), 'success');
     } catch (err) {
       /* Il motivo nel log, e a schermo una frase nella lingua di chi legge:
@@ -234,6 +252,12 @@ export class HomeModel {
     return (this.data?.providers || []).find((p) => p.name === name) || null;
   }
 
+  /** Quel che di un provider decide il suo elenco dei modelli. */
+  _fingerprint(name) {
+    const p = this._provider(name);
+    return p ? `${p.format || ''}|${p.api_base || ''}|${p.api_key_hint || ''}` : '';
+  }
+
   /* Il payload che torna da un salvataggio e' gia' quello di `/api/settings`:
      si usa qui e si passa al guscio, invece di chiederlo una seconda volta. */
   _apply(payload) {
@@ -247,14 +271,19 @@ export class HomeModel {
     if (!provider || !this.modelsEl) return;
     /* Un elenco che non e' arrivato non si tiene: si richiede alla prossima
        apertura. Tenuto, la stanza diceva «non e' arrivato» fino al riavvio
-       della casa, che e' il launcher e vive per giorni.
+       della casa, che e' il launcher e vive per giorni. Vale per l'eccezione
+       della chiamata **e** per lo stato `error` che il server risponde con un
+       200 (rete giu', provider irraggiungibile): era questo il caso del
+       collaudo, e passava per una risposta definitiva.
        Quel che il provider ha risposto — anche «serve una chiave» —
-       si tiene: e' una risposta, non una rete andata male. */
-    if (this._catalogs.has(provider) && !this._catalogs.get(provider).failed) {
+       si tiene, finche' il provider resta quello (v. `setSettings`). */
+    const cached = this._catalogs.get(provider);
+    if (cached && cached.status !== 'error' && cached.fingerprint === this._fingerprint(provider)) {
       this._paintModels();
       return;
     }
-    this._catalogs.set(provider, { status: 'loading', models: [] });
+    const fingerprint = this._fingerprint(provider);
+    this._catalogs.set(provider, { status: 'loading', models: [], fingerprint });
     this._paintModels();
     let outcome;
     try {
@@ -263,10 +292,11 @@ export class HomeModel {
         status: res?.status || 'available',
         models: (res?.models || []).map((m) => m.id || m),
         message: res?.message || '',
+        fingerprint,
       };
     } catch (err) {
       console.warn('home.model: model list not read', err);
-      outcome = { status: 'error', models: [], message: '', failed: true };
+      outcome = { status: 'error', models: [], message: '', fingerprint };
     }
     this._catalogs.set(provider, outcome);
     /* Il catalogo si tiene comunque; il ridisegno si salta se nel frattempo
@@ -360,8 +390,10 @@ export class HomeModel {
        puo' essere un id battuto a mano in officina, o l'elenco puo' non
        essere arrivato. Non vederlo da nessuna parte vorrebbe dire una stanza
        che non risponde alla domanda che ha in testa. */
-    const rows = [...catalog.models];
-    if (active && current && !rows.includes(current)) rows.unshift(current);
+    /* E sta in cima sempre, non solo quando manca: in quinta riga di un
+       elenco lungo non si vedeva senza scorrere. */
+    const rows = catalog.models.filter((id) => !(active && id === current));
+    if (active && current) rows.unshift(current);
 
     this.modelsEl.replaceChildren();
     for (const id of rows) {

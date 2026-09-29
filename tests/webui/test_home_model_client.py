@@ -130,6 +130,7 @@ class HomeModel {
   __TOGGLE_KEY_EDIT__
   __SAVE_KEY__
   __PROVIDER__
+  __FINGERPRINT__
   __APPLY__
   __LOAD_MODELS__
   __PAINT__
@@ -216,6 +217,7 @@ def _harness() -> str:
         .replace("__TOGGLE_KEY_EDIT__", member(src, "toggleKeyEdit"))
         .replace("__SAVE_KEY__", member(src, "saveKey"))
         .replace("__PROVIDER__", member(src, "_provider"))
+        .replace("__FINGERPRINT__", member(src, "_fingerprint"))
         .replace("__APPLY__", member(src, "_apply"))
         .replace("__LOAD_MODELS__", member(src, "_loadModels"))
         .replace("__PAINT__", member(src, "_paint"))
@@ -628,4 +630,64 @@ def test_save_stays_off_until_there_is_a_key_to_save() -> None:
       s.toggleKeyEdit();
       s.toggleKeyEdit();
       assert.equal(save.disabled, true, 'riaperto vuoto, Salva spento');
+    """)
+
+
+# ── Dal collaudo del 27/09/2026 ─────────────────────────────────────────────
+
+
+def test_an_error_answer_is_asked_again_on_the_next_opening() -> None:
+    """Il server risponde 200 con ``status: 'error'`` quando il provider non si
+    raggiunge. Era tenuto come una risposta, e la stanza diceva «non e'
+    arrivato» finche' la casa — il launcher — non si ricaricava."""
+    _run_js("""
+      const data = settings([{ name: 'groq', format: 'openai_compat' }], 'groq', 'm');
+      const s = await room(data, { groq: { status: 'error', models: [], message: 'down' } });
+      catalogs = { groq: { status: 'available', models: [{ id: 'm' }, { id: 'n' }] } };
+      s.open();
+      await new Promise((r) => setImmediate(r));
+      assert.deepEqual(requested, ['groq', 'groq'], 'l errore e stato tenuto come definitivo');
+      assert.deepEqual(modelsOnScreen(), ['m', 'n']);
+    """)
+
+
+def test_an_answer_is_kept_only_while_the_provider_stays_the_same() -> None:
+    """«Serve una chiave» e' una risposta e si tiene; ma se dall'officina
+    cambiano formato, indirizzo o chiave, non dice piu' niente."""
+    _run_js("""
+      const before = settings([{ name: 'groq', format: 'openai_compat', api_key_hint: '' }], 'groq', '');
+      const s = await room(before, { groq: { status: 'not_configured', models: [] } });
+      s.open();
+      await new Promise((r) => setImmediate(r));
+      assert.deepEqual(requested, ['groq'], 'una risposta tenuta e stata richiesta di nuovo');
+
+      catalogs = { groq: { status: 'available', models: [{ id: 'x' }] } };
+      s.setSettings(settings([{ name: 'groq', format: 'openai_compat', api_key_hint: 'gsk_...4f2a' }], 'groq', ''));
+      await new Promise((r) => setImmediate(r));
+      assert.deepEqual(requested, ['groq', 'groq'], 'la chiave e cambiata ma l elenco no');
+      assert.deepEqual(modelsOnScreen(), ['x']);
+    """)
+
+
+def test_the_model_in_use_is_first_even_when_the_list_has_it_further_down() -> None:
+    _run_js("""
+      const data = settings([{ name: 'groq' }], 'groq', 'e');
+      await room(data, { groq: { status: 'available',
+        models: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id })) } });
+      assert.deepEqual(modelsOnScreen(), ['e', 'a', 'b', 'c', 'd', 'f']);
+      assert.deepEqual(active(), ['e']);
+    """)
+
+
+def test_a_key_saved_from_the_home_carries_the_format() -> None:
+    """Senza il formato il server scriveva il suo predefinito, e un provider
+    Anthropic diventava OpenAI (corretto anche dal lato server)."""
+    _run_js("""
+      const data = settings([{ name: 'claude', format: 'anthropic', api_key_hint: '' }], 'claude', '');
+      const s = await room(data, { claude: { status: 'not_configured', models: [] } });
+      lastPayload = data;
+      nodi['home-key-input'].value = 'una-chiave-finta';
+      await s.saveKey();
+      assert.deepEqual(saves, [{ type: 'provider', name: 'claude', api_key: 'una-chiave-finta',
+                                 format: 'anthropic' }]);
     """)
