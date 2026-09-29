@@ -18,17 +18,19 @@ Two independent switches must both be on for any location data to reach Jenny at
 | Gate | Where | Default |
 |---|---|---|
 | In-app toggle | Workshop → **Hands** → **Location** → **Share my location** | ON |
-| Android runtime permission | System permission prompt (`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`) | Requested at first launch |
+| Android runtime permission | System permission prompt (`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`, precise or approximate — either one is enough) | Requested at first launch |
 
 The toggle is exactly this text, with the hint: "Jenny uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour."
 
-Important: **the in-app toggle does not request the Android permission.** It only flips `tools.location.enable` in the backend config. The permission itself is asked once, separately, when the app starts up (alongside the notification permission) — not from this toggle. If you denied it at that point, turning the in-app toggle ON later does nothing: the native bridge always returns nothing without the permission, and the toggle has no way to trigger the system prompt itself. In that case go to Android's own app settings (Settings → Apps → Jenny → Permissions → Location) to grant it.
+The toggle flips `tools.location.enable` in the backend config; the permission is Android's. It is first asked when the app starts up, right after the notification permission, and Android offers both **Precise** and **Approximate** — either one is enough for Jenny.
+
+If the toggle is on but Android hasn't granted the permission, **Hands → Location** says so under the toggle — *"Android hasn't allowed Jenny to use the location yet"* — with an **Allow location** button. Tapping it, or turning the toggle on while the permission is missing, asks Android again. Once Android stops asking (after you've refused twice, or chose "Don't ask again"), the same button opens Jenny's page in Android's settings instead, where the permission is granted under **Permissions → Location**. The notice disappears as soon as the permission is there.
 
 If you ask Jenny for your location while either gate is off, the `get_location` tool replies with an explicit error rather than failing silently:
 
 > "Location unavailable — the toggle may be off, the Android location permission not granted, or no GPS fix is currently known."
 
-The passive context line, on the other hand, fails silently by design: it is just omitted, with no error and nothing shown in the chat. <!-- TODO: verify on-device (O-10): confirm the Settings toggle's visual state and the get_location error text when the Android permission has been denied, and whether the app ever re-prompts for it. -->
+The passive context line, on the other hand, fails silently by design: it is just omitted, with no error and nothing shown in the chat. <!-- TODO: verify on-device (O-10): the get_location error text when the Android permission has been denied. The notice, the re-prompt and the fallback to Android's settings were checked on the emulator on 29/09/2026. -->
 
 Jenny never requests background location access (`ACCESS_BACKGROUND_LOCATION`) — reads only happen while the app's foreground service is alive, which on Android is the same lifetime as the gateway itself (see [Android permissions](../reference/android-permissions.md)).
 

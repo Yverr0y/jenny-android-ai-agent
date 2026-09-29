@@ -69,9 +69,7 @@ What actually gets replaced: the whole workspace tree is swapped for the one in 
 
 **The snapshot history is the one exception to "replace everything."** The snapshot history bundled inside the `.jbk` is merged additively into your local snapshot store — nothing is thrown away. After the restore, you can see both the snapshots that came with the backup and the ones you had locally before, including the `pre-restore` snapshot the import just took. So even after a full restore, you can still step back to the moment right before you imported.
 
-Restore is also offered on the **"Restore from backup"** card during [first-run onboarding](../start/first-run.md) (*"Used Jenny before? Bring everything back from an encrypted backup file"*) for people setting up a new phone.
-<!-- TODO: verify on-device (O-2) -->
-Whether restoring during onboarding skips the rest of the setup wizard on the next boot hasn't been confirmed on-device.
+Restore is also offered on the **"Restore from backup"** card during [first-run onboarding](../start/first-run.md) (*"Used Jenny before? Bring everything back from an encrypted backup file"*) for people setting up a new phone. After the restart the rest of the setup wizard is skipped: the app opens straight on the home, on Jenny's page, with the restored provider, name and history. The phone's Back button closes the passphrase dialog; it doesn't close the final **Restart now** dialog.
 
 ### Errors and edge cases
 

@@ -59,7 +59,7 @@ The list of LLM endpoints you configured, plus which one is active. There is no 
 | `providers.providers[].extraQuery` | object \| null | `null` | Query parameters merged into every request. |
 | `providers.default` | string \| null | `null` | Name of the active provider. When unset or unmatched, the **first** entry in the list is used. |
 
-The onboarding wizard **replaces the entire provider list** with the single provider you enter. Details, error strings, and prompt-caching behavior: [Providers and models](./providers.md).
+The onboarding wizard writes a provider list with just the single provider you enter — it only runs while no provider exists, and it can't be reopened from the interface afterwards. Every base URL saved from the interface (wizard or workshop) must be an `http://` or `https://` address; the scheme is stored in lower case, and a `${VAR}` placeholder is kept as it is. Details, error strings, and prompt-caching behavior: [Providers and models](./providers.md).
 
 ## agents.defaults
 

@@ -12,7 +12,7 @@ Type in the box at the bottom (placeholder "Ask something…") and either:
 
 If you have a hardware keyboard (for example on a Unihertz Titan-style device), you don't have to tap the input first: typing any single printable character while the chat tab is active moves focus into the message box automatically ("type-ahead focus"). This does not trigger on Enter, Escape, arrow keys, spacebar, key combinations with a modifier held down, or while another input/textarea/select/dialog already has focus.
 
-At the top of the chat there is an identity row, "✿ Jenny" with a small status dot next to it — this scrolls away with the rest of the conversation, it is not a fixed header. The dot reflects only the WebSocket link between the WebUI and the local gateway inside the app, not your internet connection in general:
+At the top of the chat there is an identity row, "✿" and her name ("Jenny" unless you renamed her) with a small status dot next to it — this scrolls away with the rest of the conversation, it is not a fixed header. The dot reflects only the WebSocket link between the WebUI and the local gateway inside the app, not your internet connection in general:
 
 | Dot | Label | Meaning |
 |---|---|---|

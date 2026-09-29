@@ -14,7 +14,7 @@ Keep in mind:
 
 ## The status dot is gray / "WebSocket not connected. Waiting for reconnection..."
 
-The dot next to the "✿ Jenny" line at the top of the chat reflects the WebSocket connection between the WebUI and the gateway running on your phone — it says nothing about your internet connection.
+The dot next to the "✿" line with her name at the top of the chat reflects the WebSocket connection between the WebUI and the gateway running on your phone — it says nothing about your internet connection.
 
 If you see it turn gray/offline, or you try to send a message and get:
 
@@ -36,7 +36,7 @@ Exact errors you might see appended after "Error: " in the chat, and what they m
 
 | Error | Meaning |
 |---|---|
-| `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` | Onboarding was interrupted before "Start", or the provider list was later emptied. Add one in the workshop under **Brain → Who thinks**. |
+| `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` | Onboarding was interrupted before "Launch", or the provider list was later emptied. Add one in the workshop under **Brain → Who thinks**. |
 | `Provider '<name>': api_key is required.` | A provider entry exists but its API key field is empty. Edit it in Settings → Who answers and paste the key again. |
 | `401` / Unauthorized | The API key is wrong, expired, or was pasted with extra whitespace. Regenerate it on the provider's dashboard and update it in Settings → Who answers. |
 | `429` / rate limit | You've hit the provider's rate limit. Wait and retry, or switch to a different model in Settings → Who answers. |

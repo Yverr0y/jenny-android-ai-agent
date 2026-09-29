@@ -90,7 +90,7 @@ Back in the workshop follows the same rule as at home — one press, one thing: 
 
 ### The identity row and connection status
 
-Above the Console there's an identity row, "✿ Jenny", with a small status dot next to it. This row is **not a fixed header** — it's the first item in the scrollable message list, so once you scroll up into your conversation history it scrolls away with everything else.
+Above the Console there's an identity row, "✿" followed by her name ("Jenny" unless you renamed her), with a small status dot next to it. This row is **not a fixed header** — it's the first item in the scrollable message list, so once you scroll up into your conversation history it scrolls away with everything else.
 
 The dot reflects only the state of the WebSocket connection between the WebUI and the local gateway — it says nothing about your phone's internet connection:
 
@@ -110,15 +110,15 @@ Close it with the X in its corner, by tapping anywhere outside it, or with back 
 
 | Row | Value | Meaning |
 |---|---|---|
-| **Session** | always `default` | A fixed string in the UI, not something read from the backend. |
-| **Channel** | always `websocket` | Also fixed. It stays `websocket` even for turns that came in from Telegram — see [Telegram bridge](telegram.md). |
+| **Session** | `websocket:default`, or `project:<name>` | The key of the conversation that's open: `websocket:default` for the personal one, `project:<name>` for a notebook. |
+| **Channel** | `websocket` or `project` | The first part of that key. It stays `websocket` in the personal conversation even for turns that came in from Telegram — see [Telegram bridge](telegram.md). |
 | **Model** | provider / model | The model answering now, colored with its provider's brand. It is filled from the gateway when the page loads and updated live when the model is switched. |
 | **Preset** | a preset name | Shown only when a model preset is active. |
-| **Project** | an absolute path | The workspace folder the agent reads and writes files in (Jenny's private storage on the device, not shared phone storage). |
+| **Notebook** | an absolute path | The workspace folder the agent reads and writes files in (Jenny's private storage on the device, not shared phone storage). |
 | **Access** | a badge with a lock icon | Whether the agent's file tools are confined to that folder — see below. |
 | **Status** | `Running` or `Idle` | Whether a turn is being processed, with a live timer if so — see below. |
 
-**Access.** The badge reflects the `security.restrictToWorkspace` config setting (default `true`): **Restricted** means the file tools are confined inside the Project folder, **Full access** that they can also reach outside it. **Default** is a transient placeholder shown only until the chat history has loaded. There is no toggle for this in the app — it is set only in `config.json` — and the restriction is enforced by Jenny's own code, not by an Android sandbox. See [Security model](../internals/security-model.md). Project and Access are read when the chat history loads, so a config change shows after a reload.
+**Access.** The badge reflects the `security.restrictToWorkspace` config setting (default `true`): **Restricted** means the file tools are confined inside the Notebook folder, **Full access** that they can also reach outside it. **Default** is a transient placeholder shown only until the chat history has loaded. There is no toggle for this in the app — it is set only in `config.json` — and the restriction is enforced by Jenny's own code, not by an Android sandbox. See [Security model](../internals/security-model.md). Notebook and Access are read when the chat history loads, so a config change shows after a reload.
 
 **Status.** While a turn runs, Status shows **Running** with a spinner and an elapsed-time counter. The timer is backed by the turn's start time on the gateway, so it survives reloading the page mid-turn. It only reflects turns from the WebUI: a turn started from Telegram does not turn it on, even though its messages appear in the same unified chat.
 

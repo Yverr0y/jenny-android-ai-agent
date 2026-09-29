@@ -30,7 +30,7 @@ Providers are managed in the workshop, under **Brain → Who thinks** (the same 
 - **API Key** — shown masked, as a 4+4 character hint (first four and last four characters) once one is configured, never displayed in full again.
 - **Base URL** — shown as `(default)` when left empty.
 
-Actions available there: **Add provider** below the list, and **Edit** and **Delete** in the panel that the settings button beside each provider opens. Adding one also asks for its **First model**, with a **Use it now** switch (on by default) that makes it the one that answers as soon as it's saved. A few things worth knowing:
+Actions available there: **Add provider** below the list, and **Edit** and **Delete** in the panel that the settings button beside each provider opens. Adding one has a **Use it now** switch (on by default) that makes it the one that answers as soon as it's saved, and while it's on it asks for its **First model**; with the switch off the field goes away and the model is picked when you switch to that brand. A few things worth knowing:
 
 - Saving shows **"Provider saved"** (or **"Saved, and it answers now"** with **Use it now** on); deleting asks **`Delete provider "{name}"?`** and then confirms **"Provider deleted"**.
 - You cannot delete the last remaining provider (**"Cannot delete the last provider"**) — Jenny always needs at least one configured to keep the agent runnable.
