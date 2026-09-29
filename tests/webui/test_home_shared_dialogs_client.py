@@ -114,3 +114,23 @@ await tick(20);
 assert.equal($('oc-backup-restart-dialog').open, true, 'il riavvio non deve chiudersi');
 assert.equal(app.view, 'backup', 'Indietro e\\u2019 passato sotto il riavvio');
 """)
+
+
+def test_back_closes_the_import_passphrase_too() -> None:
+    """Il ripristino chiede la passphrase una volta sola (``confirm`` spento):
+    e' lo stesso dialog dell'export, ma un altro ramo del markup, e non era
+    coperto. Il 29/09/2026 l'utente lo ricordava come ancora rotto."""
+    run_home(_HEAD + f"""
+const {{ promptPassphrase }} = await import({UI_JSON} + '/assets/shared/backup-flow.js');
+app._setView('backup');
+await tick(20);
+const asked = promptPassphrase();
+await tick(20);
+assert.equal($('oc-backup-passphrase-dialog').open, true, 'la passphrase non si e\\u2019 aperta');
+
+app.handleHardwareBack();
+await tick(20);
+assert.equal($('oc-backup-passphrase-dialog'), null, 'Indietro ha lasciato la passphrase aperta');
+assert.equal(app.view, 'backup', 'una pressione ha tolto anche la stanza');
+assert.equal(await asked, null);
+""")
