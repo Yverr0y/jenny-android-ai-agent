@@ -360,11 +360,17 @@ def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
     assert "app.openChat()" in body
     assert "goHome()" not in body, "il guscio non ricompone il comportamento a mano"
 
-    # E il lato SPA deve davvero fare le tre cose, non solo esistere.
+    # E il lato SPA deve davvero farlo, non solo esistere. Dal 29/09/2026
+    # l'officina non apre piu' la sua Console — l'ultima vista usata, magari un
+    # quaderno — ma va a casa, che nasce sulla chat personale (collaudo del
+    # 27/09). Torna false: la chat li' non si e' aperta, e gli avvisi li
+    # cancella la casa quando la mostra.
     open_chat = _method(_app_js(), "openChat")
-    assert "this._dismissAllOverlays()" in open_chat
-    assert "collapseToRoot?.()" in open_chat
-    assert "this._navPos = 0" in open_chat, "la chat diventa la radice, non una entry sopra"
+    assert "api.navigate('/html-mobile/', { replace: true })" in open_chat
+    assert "return false;" in open_chat
+    home = _method((UI_ASSETS / "home-app.js").read_text(encoding="utf-8"), "openChat")
+    assert "this._closeAllOverlays()" in home
+    assert "this.switchConversation(null)" in home, "la casa deve aprire la conversazione personale"
 
 
 def test_pending_alerts_are_cleared_where_the_chat_reaches_the_screen() -> None:
@@ -426,8 +432,12 @@ def test_both_shells_answer_the_chat_visible_question(shell: str) -> None:
 
 
 def test_the_workshop_answer_is_its_chat_mode() -> None:
+    """La Console, e con la conversazione personale: se e' un quaderno, l'avviso
+    li' non c'e' (collaudo del 27/09/2026)."""
     app_js = _app_js()
-    assert "return this.currentMode === 'chat';" in _method(app_js, "isChatOnScreen")
+    answer = _method(app_js, "isChatOnScreen")
+    assert "this.currentMode === 'chat'" in answer
+    assert "sessionManager.currentKey === sessionManager.personalKey" in answer
     assert "this.currentMode = mode" in app_js
     assert "switchMode('chat'" in app_js
 

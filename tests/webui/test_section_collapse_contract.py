@@ -84,17 +84,17 @@ def test_home_dismounts_the_editor_without_navigating() -> None:
 
 
 def test_open_chat_is_one_behaviour_in_one_place() -> None:
-    """La chat *diventa* la radice: non è la vista home con sopra un cambio di
-    tab."""
+    """Il tocco su un avviso porta alla chat personale, e nell'officina quella
+    chat non c'e': si va a casa, come la pillola «⌂ Jenny», con un indirizzo e
+    non componendo cambi di vista. Aggiornato il 29/09/2026: prima apriva la
+    Console, cioe' l'ultima vista usata (collaudo del 27/09).
+
+    Il guscio deve poter distinguere "aperta qui" da "ci pensa la casa",
+    altrimenti cancella una notifica che l'utente non ha ancora visto."""
     body = _method(_src("mobile-app.js"), "openChat")
-    assert "this._dismissAllOverlays()" in body
-    assert "collapseToRoot?.()" in body
-    assert "this.switchMode('chat', false)" in body, "niente push: si collassa, non si impila"
-    assert "this._navPos = 0" in body
-    assert "homeView()" not in body, "la vista home è una preferenza, la chat no"
-    # Il guscio deve poter distinguere "aperta" da "bloccata dall'onboarding",
-    # altrimenti cancella una notifica che l'utente non ha ancora visto.
-    assert "return false;" in body and "return true;" in body
+    assert "api.navigate('/html-mobile/', { replace: true })" in body
+    assert "switchMode" not in body, "la Console non e' la chat dell'avviso"
+    assert "return false;" in body
 
 
 def test_the_session_popover_has_no_escape_listener_of_its_own() -> None:

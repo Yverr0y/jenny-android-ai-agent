@@ -599,25 +599,24 @@ class MobileApp {
      primo piano (`CHAT_ON_SCREEN_JS`) per cancellare gli avvisi già letti. È
      un metodo e non il campo `currentMode` letto da fuori perché la casa, che
      `currentMode` non ce l'ha, risponde alla stessa domanda a modo suo. */
+  /* La chat dove arrivano gli avvisi e' la conversazione personale: la
+     Console la mostra solo se e' quella la conversazione aperta, e non un
+     quaderno. Nel dubbio no = gli avvisi restano finche' non li vedi davvero,
+     che e' la direzione d'errore giusta. */
   isChatOnScreen() {
-    return this.currentMode === 'chat';
+    return this.currentMode === 'chat'
+      && sessionManager.currentKey === sessionManager.personalKey;
   }
 
-  /* Tap sulla notifica di un messaggio proattivo (MainActivity). Non è "vai a
-     casa e poi in chat": quella composizione lasciava la entry di radice a
-     descrivere la *vista home* mentre a schermo c'era la chat, e con una vista
-     home diversa da chat il primo Indietro atterrava dove l'utente non era mai
-     stato — più un activate/deactivate di troppo sul controller di mezzo.
-     Qui la chat *diventa* la radice. Ritorna false se non ci si è arrivati,
-     così il guscio nativo sa che non deve ancora cancellare la notifica. */
+  /* Tap sulla notifica di un messaggio proattivo (MainActivity), con
+     l'officina come documento vivo. Apriva la Console — l'ultima vista usata
+     — e non la chat personale, dove l'avviso sta davvero (v. `openChat` della
+     casa). Adesso si va a casa, come la pillola «⌂ Jenny», e la casa nasce
+     sulla sua chat. Torna false: la chat qui non si e' aperta, e gli avvisi li
+     cancella la casa quando la mostra (`chatOpened`). */
   openChat() {
-    this._dismissAllOverlays();
-    Object.values(this.controllers).forEach((c) => c.collapseToRoot?.());
-    this.switchMode('chat', false);
-    if (this.currentMode !== 'chat') return false;
-    this._navPos = 0;
-    this.replaceNav(this._navStateFor('chat'));
-    return true;
+    api.navigate('/html-mobile/', { replace: true });
+    return false;
   }
 
   /** Torna alla schermata precedente se ce n'è una nostra sotto, altrimenti
