@@ -2565,6 +2565,7 @@ body.home {
 
 .home-update-dot.is-new { background: var(--accent); }
 .home-update-dot.is-warn { background: var(--warning); }
+.home-update-dot.is-idle { background: var(--text-faint); }
 
 .home-update-notes {
   display: block;

@@ -1057,6 +1057,8 @@
       "title": "Aggiornamenti",
       "current": "{version} · aggiornata",
       "waiting": "{version} → {latest}",
+      "currentUnchecked": "{version}",
+      "onVersion": "Sei alla {version}.",
       "upToDate": "Sei alla {version}, ed è l'ultima.",
       "unknown": "Non so ancora a che versione sei."
     },

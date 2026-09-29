@@ -25,7 +25,17 @@ export function updatesValue(version) {
   if (v.update_available && v.latest) {
     return i18n.t('home.updates.waiting', { version: v.current, latest: v.latest });
   }
+  /* «Aggiornata» solo dopo un controllo riuscito: su un'installazione nuova
+     accanto a «il primo controllo non e' ancora partito» era una frase che
+     nessuno aveva verificato (collaudo del 27/09/2026). */
+  if (!hasChecked(v)) return i18n.t('home.updates.currentUnchecked', { version: v.current });
   return i18n.t('home.updates.current', { version: v.current });
+}
+
+/** C'e' stato almeno un controllo riuscito? Senza, «e' l'ultima» non lo sa
+ *  nessuno. */
+function hasChecked(version) {
+  return (Number(version?.last_success) || 0) > 0;
 }
 
 /** Di che colore sta il meccanismo: `ok`, `warn`, `new`.
@@ -36,7 +46,10 @@ export function updatesValue(version) {
  */
 export function updatesMood(version) {
   if (checkLines(version).some((row) => row.warn)) return 'warn';
-  return version?.update_available ? 'new' : 'ok';
+  if (version?.update_available) return 'new';
+  /* Verde vuol dire «il controllo funziona»: prima del primo esito positivo
+     non lo si sa, e il pallino resta neutro. */
+  return hasChecked(version) ? 'ok' : 'idle';
 }
 
 export class HomeUpdates {
@@ -139,9 +152,10 @@ export class HomeUpdates {
           { version: v.latest || '' },
         );
       } else {
-        phrase = v.current
-          ? i18n.t('home.updates.upToDate', { version: v.current })
-          : i18n.t('home.updates.unknown');
+        phrase = !v.current
+          ? i18n.t('home.updates.unknown')
+          : i18n.t(hasChecked(v) ? 'home.updates.upToDate' : 'home.updates.onVersion',
+            { version: v.current });
       }
       this.headline.textContent = phrase;
     }

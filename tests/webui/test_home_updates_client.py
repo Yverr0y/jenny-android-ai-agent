@@ -95,6 +95,7 @@ class UpdateFlow {
   __FLOW_SCHEDULE__
 }
 
+__HAS_CHECKED__
 __UPDATES_VALUE__
 __UPDATES_MOOD__
 
@@ -148,6 +149,7 @@ def _harness() -> str:
         .replace("__FLOW_STOP__", member(flow, "stop"))
         .replace("__FLOW_RESUME__", member(flow, "resume"))
         .replace("__FLOW_SCHEDULE__", member(flow, "_schedulePoll"))
+        .replace("__HAS_CHECKED__", function(room, "hasChecked"))
         .replace("__UPDATES_VALUE__", function(room, "updatesValue"))
         .replace("__UPDATES_MOOD__", function(room, "updatesMood"))
         .replace("__CTOR__", member(room, "constructor"))
@@ -334,4 +336,23 @@ def test_not_knowing_the_version_is_said_and_not_masked() -> None:
       assert.ok(nodi['home-update-headline'].textContent.includes('0.11.0'));
       assert.ok(!nodi['home-update-headline'].textContent.includes('{'),
         'il segnaposto e rimasto dentro');
+    """)
+
+
+def test_the_latest_is_said_only_after_a_check_that_worked() -> None:
+    """Dal collaudo del 27/09/2026: su un'installazione nuova la stanza diceva
+    «You're on 0.11.0, and that's the latest» accanto a «The first update
+    check hasn't run yet». Prima del primo esito positivo si dice la versione
+    e basta, e il pallino non e' verde."""
+    _run_js("""
+      room({ current: '0.11.0' });
+      assert.equal(nodi['home-update-headline'].textContent, 'Sei alla 0.11.0.');
+      assert.ok(dot().includes('is-idle'), dot());
+      assert.equal(updatesValue({ current: '0.11.0' }), '0.11.0');
+
+      room({ current: '0.11.0', last_check: Date.now(), last_success: Date.now() });
+      assert.equal(nodi['home-update-headline'].textContent, "Sei alla 0.11.0, ed è l'ultima.");
+      assert.ok(dot().includes('is-ok'), dot());
+      assert.equal(updatesValue({ current: '0.11.0', last_success: Date.now() }),
+                   '0.11.0 · aggiornata');
     """)
