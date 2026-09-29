@@ -389,10 +389,11 @@ def _render_step1(fields: str) -> str:
     """L'HTML vero di ``_renderStep1`` con lo stato *fields*, su un contenitore
     finto che accetta i listener."""
     source = _wizard()
+    shared = (ASSETS / "shared" / "api-base.js").read_text(encoding="utf-8")
     consts = "\n".join(
         re.search(rf"^const {name} = .*?;$", source, re.S | re.M).group(0)
-        for name in ("DEFAULT_API_BASE", "PLACEHOLDER_SUFFIX", "NO_AUTOCORRECT")
-    )
+        for name in ("DEFAULT_API_BASE", "PLACEHOLDER_SUFFIX")
+    ) + "\n" + re.search(r"^export (const NO_AUTOCORRECT = .*?;)$", shared, re.M).group(1)
     return run_js(
         "const i18n = { t: (k) => k };\n"
         "const escapeHtml = (s) => String(s);\n"
@@ -452,6 +453,10 @@ def test_a_model_of_another_provider_does_not_survive() -> None:
     source = _wizard()
     run_js(
         "import assert from 'node:assert/strict';\n"
+        f"const {{ normalizeApiBase }} = await import('{(ASSETS / 'shared' / 'api-base.js').as_uri()}');\n"
+        "const toasts = [];\n"
+        "const showToast = (m) => toasts.push(m);\n"
+        "const i18n = { t: (k) => k };\n"
         "class W {\n"
         "  _captureStep1() {}\n"
         "  _loadModels() {}\n"
@@ -472,6 +477,18 @@ w.model = 'gpt-y';
 w.format = 'anthropic';
 w._goToStep2();
 assert.equal(w.model, '', 'formato cambiato: il modello era di un altro provider');
+
+// L'indirizzo storpiato dall'autocorrezione si ferma qui, e «Http://» si
+// corregge da solo (collaudo del 27/09/2026).
+w.step = 1;
+w.apiBase = 'Http:/10.0.2.2:8765/v1';
+w._goToStep2();
+assert.equal(w.step, 1, 'con un indirizzo storpiato si e andati a chiedere i modelli');
+assert.deepEqual(toasts, ['onboarding.baseUrlInvalid']);
+w.apiBase = 'Http://10.0.2.2:8765/v1';
+w._goToStep2();
+assert.equal(w.step, 2);
+assert.equal(w.apiBase, 'http://10.0.2.2:8765/v1');
 """
     )
     assert "this.model = ''" in _method(source, "_selectFormat")

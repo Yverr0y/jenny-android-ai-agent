@@ -20,8 +20,11 @@ dove si va, e un banco che la incrocia con quel che esiste davvero.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
+
+from support.js_harness import requires_node, run_js
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
@@ -313,7 +316,7 @@ def test_adding_a_brand_finishes_the_job() -> None:
     assert 'id="dlg-use-now" checked' in src, (
         "«usala adesso» parte spento: nove volte su dieci la aggiungi per usarla"
     )
-    assert "firstModel: isEdit ? '' : " in src and "useItNow: !isEdit" in src, (
+    assert "firstModel: isEdit || !useNow?.checked" in src and "useItNow: !isEdit" in src, (
         "il primo modello si raccoglie anche in modifica: cambiare l'endpoint di "
         "una marca in uso non deve poter cambiare chi risponde"
     )
@@ -325,6 +328,40 @@ def test_adding_a_brand_finishes_the_job() -> None:
         "`default_provider` punta a un provider che non c'e'"
     )
     assert "useItNow && firstModel" in save, "si attiva anche senza un modello"
+
+
+def test_the_first_model_goes_with_use_it_now() -> None:
+    """Con «Use it now» spento il modello scritto era buttato senza dirlo:
+    una marca non ha un modello suo (collaudo del 27/09/2026, decisione del
+    29/09: il campo va con l'interruttore). Spento, il campo sparisce e una
+    riga dice quando lo si sceglie."""
+    src = _src("mobile-settings.js")
+    dialog = re.search(r"(?s)_showAddProviderDialog\(existingProvider\) \{.*?\n  \}\n", src).group(0)
+    assert 'id="dlg-first-model-field"' in dialog and 'id="dlg-first-model-later" hidden' in dialog
+    assert dialog.index('id="dlg-use-now"') < dialog.index('id="dlg-first-model-field"'), (
+        "il campo che dipende dall'interruttore sta sopra l'interruttore"
+    )
+    assert "useNow?.addEventListener('change', syncFirstModel)" in dialog
+    assert ".settings-field[hidden] { display: none; }" in _src("mobile-style.css")
+    for locale in ("en", "it"):
+        data = json.loads((ASSETS / "i18n" / f"{locale}.json").read_text(encoding="utf-8"))
+        assert data["settings"]["firstModelLater"].strip()
+        assert "http" in data["settings"]["baseUrlInvalid"]
+
+
+def test_the_technical_fields_keep_the_keyboard_out() -> None:
+    """«http://» diventava «Http:/» con l'autocorrezione, e si salvava così."""
+    src = _src("mobile-settings.js")
+    dialog = re.search(r"(?s)_showAddProviderDialog\(existingProvider\) \{.*?\n  \}\n", src).group(0)
+    for field in ("dlg-provider-name", "dlg-api-key", "dlg-api-base", "dlg-ca-bundle", "dlg-first-model"):
+        tag = re.search(rf'<input[^>]*id="{field}"[^>]*>', dialog, re.S).group(0)
+        assert "${NO_AUTOCORRECT}" in tag, field
+    base = re.search(r'<input[^>]*id="dlg-api-base"[^>]*>', dialog, re.S).group(0)
+    assert 'type="url"' in base and 'inputmode="url"' in base
+    assert "normalizeApiBase(dialog.querySelector('#dlg-api-base').value)" in dialog
+    shared = _src("shared/api-base.js")
+    for attr in ('autocorrect="off"', 'autocapitalize="none"', 'spellcheck="false"'):
+        assert attr in shared
 
 
 # ── La wiki e' uscita dall'officina ─────────────────────────────────────────
@@ -409,3 +446,27 @@ def test_the_notebook_did_not_disappear_with_it() -> None:
     home = (ASSETS.parent / "index.html").read_text(encoding="utf-8")
     for node in ('id="home-notebook-pages"', 'id="home-map"', 'id="home-reader"'):
         assert node in home, f"{node} manca dalla casa"
+
+
+@requires_node
+def test_the_client_rule_for_the_base_url_is_the_servers() -> None:
+    """Il client la dice nella sua lingua, il server la riapplica: due copie
+    della stessa regola, e qui si tiene che dicano lo stesso."""
+    from jenny.webui.settings_api import WebUISettingsError, normalize_api_base
+
+    cases = ["", "Http://10.0.2.2:8765/v1", "HTTPS://api.example.test/v1", "${BASE}",
+             "Http:/10.0.2.2:8765/v1", "ftp://files.example.test", "api.example.test/v1", "https://"]
+    expected = []
+    for case in cases:
+        try:
+            expected.append(normalize_api_base(case) or "")
+        except WebUISettingsError:
+            expected.append(None)
+    run_js(
+        "import assert from 'node:assert/strict';\n"
+        f"const {{ normalizeApiBase }} = await import('{(ASSETS / 'shared' / 'api-base.js').as_uri()}');\n"
+        f"const cases = {json.dumps(cases)};\n"
+        f"const expected = {json.dumps(expected)};\n"
+        "const got = cases.map((c) => { const r = normalizeApiBase(c); return r.error ? null : r.value; });\n"
+        "assert.deepEqual(got, expected);\n"
+    )

@@ -13,6 +13,8 @@ import { runImportFlow } from './shared/backup-flow.js';
 import { TelegramPairingWidget } from './shared/telegram-pairing.js';
 import { BatteryExemptionCard } from './shared/battery-exemption.js';
 import { getProviderBrand } from './shared/provider-brand.js';
+// Con l'autocorrezione accesa «http://» diventava «Http:/» e partiva cosi'.
+import { NO_AUTOCORRECT, normalizeApiBase } from './shared/api-base.js';
 
 /* ── Mini Jenny sul footer ──
    Decorativa, fuori da #onboarding-content (che viene ri-renderizzato a ogni
@@ -46,9 +48,6 @@ const PLACEHOLDER_SUFFIX = {
   'anthropic': 'Anthropic',
 };
 
-/* Gli attributi che tengono la tastiera lontana da un campo tecnico: con
-   l'autocorrezione accesa «http://» diventava «Http:/» e partiva cosi'. */
-const NO_AUTOCORRECT = 'autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"';
 
 export class OnboardingController {
   constructor() {
@@ -276,6 +275,15 @@ export class OnboardingController {
 
   _goToStep2() {
     this._captureStep1();
+    // L'indirizzo storpiato si dice qui, prima di chiedere i modelli a un
+    // indirizzo che non esiste; «Http://» si corregge da solo.
+    const base = normalizeApiBase(this.apiBase);
+    if (base.error) {
+      showToast(i18n.t('onboarding.baseUrlInvalid'), 'error');
+      this.contentEl?.querySelector('#api-base')?.focus();
+      return;
+    }
+    this.apiBase = base.value;
     // Il modello scelto prima vale solo per lo stesso provider: cambiati
     // formato, chiave o indirizzo, Launch partiva col modello dell'altro.
     const fingerprint = this._modelsFingerprint();

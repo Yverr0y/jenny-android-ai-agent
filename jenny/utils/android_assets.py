@@ -271,6 +271,7 @@ _UI_MANIFEST = [
     # Il primo avvio: un documento suo, di nessuno dei due gusci.
     "assets/onboarding-app.js",
     "assets/onboarding-wizard.js",
+    "assets/shared/api-base.js",
     "assets/shared/api-client.js",
     "assets/shared/apps-actions.js",
     "assets/shared/apps-source.js",

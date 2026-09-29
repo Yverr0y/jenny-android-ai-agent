@@ -7,6 +7,7 @@ import { confirmDialog, detailDialog } from './shared/dialog.js';
 import { TelegramPairingWidget, telegramSummary } from './shared/telegram-pairing.js';
 import { getProviderBrand } from './shared/provider-brand.js';
 import { botName } from './shared/bot-name.js';
+import { NO_AUTOCORRECT, normalizeApiBase } from './shared/api-base.js';
 import {
   BatteryExemptionCard,
   batteryExemptionSupported,
@@ -935,7 +936,7 @@ export class SettingsController {
           <button class="brand-more" type="button" data-brand-more hidden></button>
           <button class="brand-custom-open" type="button" data-brand-custom><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.customModel')}</button>
           <form class="brand-custom" data-brand-custom-form hidden>
-            <input class="settings-input" type="text" data-brand-custom-input autocomplete="off" autocapitalize="off" spellcheck="false"
+            <input class="settings-input" type="text" data-brand-custom-input autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
                    placeholder="${escapeHtml(i18n.t('settings.customModelPlaceholder'))}"
                    aria-label="${escapeHtml(i18n.t('settings.customModelLabel', { name: p.name }))}">
             <button class="settings-btn-add" type="submit">${i18n.t('settings.customModelUse')}</button>
@@ -3313,7 +3314,7 @@ export class SettingsController {
         </h3>
         <div class="settings-field">
           <label class="settings-label">${i18n.t('settings.name')}</label>
-          <input type="text" class="settings-input" id="dlg-provider-name" placeholder="${i18n.t('settings.namePlaceholder')}"
+          <input type="text" class="settings-input" id="dlg-provider-name" ${NO_AUTOCORRECT} placeholder="${i18n.t('settings.namePlaceholder')}"
             value="${isEdit ? escapeHtml(existingProvider.name) : ''}"
             ${isEdit ? 'readonly' : ''} />
         </div>
@@ -3328,34 +3329,35 @@ export class SettingsController {
           <label class="settings-label">${i18n.t('settings.apiKey')}</label>
           <input type="password" class="settings-input" id="dlg-api-key"
             placeholder="${escapeHtml(keyPlaceholder)}"
-            autocomplete="off" data-lpignore="true" value="" />
+            ${NO_AUTOCORRECT} data-lpignore="true" value="" />
           ${hasStoredKey ? `<span class="settings-field-hint">${i18n.t('settings.apiKeyKeepBlank')}</span>` : ''}
         </div>
         <div class="settings-field">
           <label class="settings-label">${i18n.t('settings.baseUrl')}</label>
-          <input type="text" class="settings-input" id="dlg-api-base" placeholder="https://api.openai.com/v1"
+          <input type="url" inputmode="url" class="settings-input" id="dlg-api-base" ${NO_AUTOCORRECT} placeholder="https://api.openai.com/v1"
             value="${isEdit ? escapeHtml(existingProvider.api_base || '') : ''}" />
         </div>
         <div class="settings-field">
           <label class="settings-label">${i18n.t('settings.caBundle')}</label>
           <input type="text" class="settings-input" id="dlg-ca-bundle" placeholder="${i18n.t('settings.caBundlePlaceholder')}"
-            autocomplete="off" value="${isEdit ? escapeHtml(existingProvider.ca_bundle || '') : ''}" />
+            ${NO_AUTOCORRECT} value="${isEdit ? escapeHtml(existingProvider.ca_bundle || '') : ''}" />
           <span class="settings-field-hint">${i18n.t('settings.caBundleHint')}</span>
         </div>
         ${isEdit ? '' : `
-        <div class="settings-field">
-          <label class="settings-label">${i18n.t('settings.firstModel')}</label>
-          <input type="text" class="settings-input" id="dlg-first-model"
-            placeholder="${i18n.t('settings.firstModelPlaceholder')}" autocomplete="off" value="" />
-          <span class="settings-field-hint">${i18n.t('settings.firstModelHint')}</span>
-        </div>
         <div class="settings-field settings-toggle-row">
           <label class="settings-label" for="dlg-use-now">${i18n.t('settings.useNow')}</label>
           <label class="toggle-switch">
             <input type="checkbox" id="dlg-use-now" checked>
             <span class="toggle-slider"></span>
           </label>
-        </div>`}
+        </div>
+        <div class="settings-field" id="dlg-first-model-field">
+          <label class="settings-label">${i18n.t('settings.firstModel')}</label>
+          <input type="text" class="settings-input" id="dlg-first-model"
+            placeholder="${i18n.t('settings.firstModelPlaceholder')}" ${NO_AUTOCORRECT} value="" />
+          <span class="settings-field-hint">${i18n.t('settings.firstModelHint')}</span>
+        </div>
+        <p class="settings-field-hint" id="dlg-first-model-later" hidden>${i18n.t('settings.firstModelLater')}</p>`}
         <div class="oc-dialog-buttons" style="margin-top:16px">
           <button class="oc-btn oc-btn-cancel" id="dlg-provider-cancel">${i18n.t('common.cancel')}</button>
           <button class="oc-btn oc-btn-confirm" id="dlg-provider-save">${i18n.t('settings.save')}</button>
@@ -3366,6 +3368,20 @@ export class SettingsController {
 
     const formatSelect = dialog.querySelector('#dlg-provider-format');
     const baseInput = dialog.querySelector('#dlg-api-base');
+    /* «First model» vale solo con «Use it now»: spento, il modello scritto non
+       andava da nessuna parte (una marca non ha un modello suo) e spariva
+       senza dirlo. Spento, il campo si nasconde e una riga dice quando lo si
+       sceglie. */
+    const useNow = dialog.querySelector('#dlg-use-now');
+    const syncFirstModel = () => {
+      const on = !!useNow?.checked;
+      const field = dialog.querySelector('#dlg-first-model-field');
+      const later = dialog.querySelector('#dlg-first-model-later');
+      if (field) field.hidden = !on;
+      if (later) later.hidden = on;
+    };
+    useNow?.addEventListener('change', syncFirstModel);
+    syncFirstModel();
     formatSelect.addEventListener('change', () => {
       const defaults = {
         'openai_compat': 'https://api.openai.com/v1',
@@ -3384,7 +3400,15 @@ export class SettingsController {
       const name = dialog.querySelector('#dlg-provider-name').value.trim();
       const format = dialog.querySelector('#dlg-provider-format').value;
       const apiKey = dialog.querySelector('#dlg-api-key').value.trim();
-      const apiBase = dialog.querySelector('#dlg-api-base').value.trim();
+      // L'indirizzo si controlla qui per dirlo nella lingua di chi legge; il
+      // server lo ricontrolla (v. `shared/api-base.js`).
+      const base = normalizeApiBase(dialog.querySelector('#dlg-api-base').value);
+      if (base.error) {
+        showToast(i18n.t('settings.baseUrlInvalid'), 'error');
+        baseInput.focus();
+        return;
+      }
+      const apiBase = base.value;
       const caBundle = dialog.querySelector('#dlg-ca-bundle').value.trim();
       // In modifica il campo vuoto vale sempre "tieni la chiave salvata":
       // il provider esiste già, non serve ridigitarla per cambiare l'URL.
@@ -3396,8 +3420,9 @@ export class SettingsController {
         clearCaBundle: !caBundle && !!(isEdit && existingProvider.ca_bundle),
         /* Solo in aggiunta, mai in modifica: cambiare l'endpoint di una marca
            gia' in uso non deve poter cambiare anche chi risponde. */
-        firstModel: isEdit ? '' : (dialog.querySelector('#dlg-first-model')?.value.trim() || ''),
-        useItNow: !isEdit && !!dialog.querySelector('#dlg-use-now')?.checked,
+        firstModel: isEdit || !useNow?.checked
+          ? '' : (dialog.querySelector('#dlg-first-model')?.value.trim() || ''),
+        useItNow: !isEdit && !!useNow?.checked,
       });
     });
     // Il congedo (Indietro, Esc, catena della shell) passa da un `cancel`

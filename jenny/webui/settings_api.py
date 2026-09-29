@@ -796,7 +796,7 @@ async def save_onboarding(
     provider_name = (data.get("provider_name") or "").strip()
     provider_format = (data.get("format") or "openai_compat").strip()
     api_key = (data.get("api_key") or "").strip()
-    api_base = (data.get("api_base") or "").strip()
+    api_base = normalize_api_base(data.get("api_base")) or ""
     model = (data.get("model") or "").strip()
     bot_name = (data.get("bot_name") or "Jenny").strip()
     bot_icon = (data.get("bot_icon") or "✿").strip()
@@ -1133,6 +1133,44 @@ def _apply_agent_settings(config: Config, query: QueryParams) -> tuple[bool, boo
     return changed, restart_required
 
 
+def normalize_api_base(value: str | None) -> str | None:
+    """L'indirizzo di un provider, controllato prima di scriverlo.
+
+    Vuoto e' ``None`` (l'indirizzo predefinito del formato); un segnaposto
+    d'ambiente ``${...}`` passa com'e' (lo risolve ``_resolve_env_placeholders``);
+    lo schema si porta in minuscolo, e sono accettati solo ``http`` e ``https``
+    con un host. Il resto e' un :class:`WebUISettingsError`: nel collaudo del
+    27/09/2026 l'autocorrezione aveva fatto di ``http://`` un ``Http:/``, e
+    l'indirizzo storpiato era stato salvato senza una parola.
+
+    Si chiama sui valori che arrivano da una richiesta, non su quelli gia' in
+    config: un controllo nello schema girerebbe a ogni caricamento e
+    renderebbe illeggibile una config vecchia.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None
+    if text.startswith("${"):
+        return text
+    from urllib.parse import urlsplit
+
+    scheme, sep, rest = text.partition("://")
+    if not sep:
+        raise WebUISettingsError(
+            f"base URL is not a web address (http:// or https://): {text!r}"
+        )
+    text = scheme.lower() + "://" + rest
+    try:
+        parts = urlsplit(text)
+    except ValueError as exc:
+        raise WebUISettingsError(f"base URL is not a web address: {text!r}") from exc
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise WebUISettingsError(
+            f"base URL is not a web address (http:// or https://): {text!r}"
+        )
+    return text
+
+
 async def update_provider(data: dict[str, Any]) -> dict[str, Any]:
     """Create or update a provider in the providers array."""
     name = (data.get("name") or "").strip()
@@ -1148,7 +1186,7 @@ async def update_provider(data: dict[str, Any]) -> dict[str, Any]:
         raise WebUISettingsError(f"unknown format: {fmt}")
 
     api_key = (data.get("api_key") or "").strip() or None
-    api_base = (data.get("api_base") or "").strip() or None
+    api_base = normalize_api_base(data.get("api_base"))
     ca_bundle = (data.get("ca_bundle") or "").strip() or None
     # Il campo vuoto non arriva fin qui: ``_postWithQuery`` scarta le stringhe
     # vuote, ed e' quello che fa funzionare "chiave vuota = tieni quella

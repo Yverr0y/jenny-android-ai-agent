@@ -4510,6 +4510,9 @@ body {
   flex-direction: column;
   gap: 3px;
 }
+/* `display: flex` qui sopra vincerebbe su `hidden` (il «First model» spento
+   col suo interruttore). */
+.settings-field[hidden] { display: none; }
 
 /* ── La riga di un lavoro periodico ───────────────────────────────────────
    Nome e natura a sinistra, l'esito dell'ultimo giro sotto, **quando tocca di

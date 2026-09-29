@@ -8,6 +8,7 @@ from jenny.config.schema import Config, ProviderConfig
 from jenny.runtime.context import get_runtime_context
 from jenny.webui.settings_api import (
     WebUISettingsError,
+    normalize_api_base,
     provider_models_payload,
     save_onboarding,
     settings_payload,
@@ -528,3 +529,67 @@ def test_settings_payload_reports_a_recovered_cron_store(tmp_path) -> None:
     finally:
         ctx.cron_recovered_from = None
         ctx.cron_quarantine_path = None
+
+
+# ── L'indirizzo del provider si controlla prima di scriverlo (collaudo 27/09) ─
+
+
+@pytest.mark.parametrize(
+    ("typed", "saved"),
+    [
+        ("", None),
+        ("   ", None),
+        (None, None),
+        ("Http://10.0.2.2:8765/v1", "http://10.0.2.2:8765/v1"),
+        ("HTTPS://api.example.test/v1", "https://api.example.test/v1"),
+        ("https://api.example.test", "https://api.example.test"),
+        ("${PROVIDER_BASE}", "${PROVIDER_BASE}"),
+    ],
+)
+def test_the_base_url_is_normalised(typed: str | None, saved: str | None) -> None:
+    assert normalize_api_base(typed) == saved
+
+
+@pytest.mark.parametrize(
+    "typed", ["Http:/10.0.2.2:8765/v1", "ftp://files.example.test", "api.example.test/v1", "https://"]
+)
+def test_a_base_url_that_is_not_a_web_address_is_refused(typed: str) -> None:
+    """«http://» diventato «Http:/» con l'autocorrezione era salvato così."""
+    with pytest.raises(WebUISettingsError):
+        normalize_api_base(typed)
+
+
+@pytest.mark.asyncio
+async def test_a_bad_base_url_does_not_reach_the_config(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config = _add_provider(Config(), DYNAMIC_PROVIDER_NAME, api_base=DYNAMIC_PROVIDER_API_BASE)
+    save_config(config, config_path)
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+
+    with pytest.raises(WebUISettingsError):
+        await update_provider({"name": DYNAMIC_PROVIDER_NAME, "api_base": "Http:/broken"})
+    await update_provider({"name": DYNAMIC_PROVIDER_NAME, "api_base": "Https://ok.example.test/v1"})
+
+    saved = next(
+        p for p in load_config(config_path).providers.providers if p.name == DYNAMIC_PROVIDER_NAME
+    )
+    assert saved.api_base == "https://ok.example.test/v1"
+
+
+@pytest.mark.asyncio
+async def test_the_onboarding_refuses_a_bad_base_url_too(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    save_config(Config(), config_path)
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+    with pytest.raises(WebUISettingsError):
+        await save_onboarding({
+            "provider_name": "p", "format": "openai_compat", "api_key": "not-a-real-credential",
+            "api_base": "Http:/10.0.2.2", "model": "m",
+        })
+    assert load_config(config_path).providers.providers == []
