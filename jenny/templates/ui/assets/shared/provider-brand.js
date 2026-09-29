@@ -1,6 +1,17 @@
+/* Il segno di Anthropic (la «A» e la barra), in linea e monocromatico: prende
+   il colore del testo come i glifi Tabler, che un'icona Anthropic non ce
+   l'hanno — al suo posto c'era `ti-brand-figma`. In linea perche' la CSP della
+   WebUI non carica immagini da fuori; decorativo, perche' accanto c'e' sempre
+   il nome. Il riquadro ha il margine dei glifi Tabler (24 su 28), cosi' alla
+   stessa taglia le due schede si somigliano. */
+const ANTHROPIC_LOGO = '<svg class="brand-logo" viewBox="-2 -2 28 28" aria-hidden="true" focusable="false">'
+  + '<path fill="currentColor" fill-rule="evenodd" d="M17.304 3.541h-3.672l6.696 16.918H24Z'
+  + 'M6.696 3.541 0 20.459h3.744l1.37-3.553h7.005l1.369 3.553h3.744L10.536 3.541Z'
+  + 'm-.371 10.223 2.291-5.945 2.291 5.945Z"/></svg>';
+
 const PROVIDER_BRANDS = {
   openai:        { label: "OpenAI",        color: "#10a37f", logo: null },
-  anthropic:     { label: "Anthropic Compatible", labelKey: "provider.anthropic", color: "#d4a574", logo: null },
+  anthropic:     { label: "Anthropic Compatible", labelKey: "provider.anthropic", color: "#d4a574", logo: ANTHROPIC_LOGO },
   google:        { label: "Google",        color: "#4285f4", logo: null },
   groq:          { label: "Groq",          color: "#f55036", logo: null },
   deepseek:      { label: "DeepSeek",      color: "#4d6bfe", logo: null },

@@ -5517,6 +5517,12 @@ body {
   flex-shrink: 0;
   color: var(--text);
 }
+.format-card .brand-logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--text);
+}
 .format-label {
   font-weight: 600;
   color: var(--text);

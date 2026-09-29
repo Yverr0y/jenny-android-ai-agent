@@ -12,6 +12,7 @@ import { i18n } from './shared/i18n.js';
 import { runImportFlow } from './shared/backup-flow.js';
 import { TelegramPairingWidget } from './shared/telegram-pairing.js';
 import { BatteryExemptionCard } from './shared/battery-exemption.js';
+import { getProviderBrand } from './shared/provider-brand.js';
 
 /* ── Mini Jenny sul footer ──
    Decorativa, fuori da #onboarding-content (che viene ri-renderizzato a ogni
@@ -38,6 +39,17 @@ const DEFAULT_API_BASE = {
   'anthropic': 'https://api.anthropic.com',
 };
 
+/* Il suffisso delle chiavi i18n dei segnaposto dello step 1, per formato: il
+   nome e la chiave d'esempio erano quelli di Claude anche scegliendo OpenAI. */
+const PLACEHOLDER_SUFFIX = {
+  'openai_compat': 'Openai',
+  'anthropic': 'Anthropic',
+};
+
+/* Gli attributi che tengono la tastiera lontana da un campo tecnico: con
+   l'autocorrezione accesa «http://» diventava «Http:/» e partiva cosi'. */
+const NO_AUTOCORRECT = 'autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"';
+
 export class OnboardingController {
   constructor() {
     this.contentEl = document.getElementById('onboarding-content');
@@ -49,6 +61,10 @@ export class OnboardingController {
     this.model = '';
     this.botName = 'Jenny';
     this.models = [];
+    // Formato, chiave e indirizzo con cui e' stata chiesta la lista dello step
+    // 2: se al ritorno sono cambiati, il modello scelto era di un altro
+    // provider e non vale piu'.
+    this._modelsFor = null;
     this._showCustomModel = false;
     this.saving = false;
     // Token della fetch modelli: la risposta che torna dopo un cambio di step
@@ -134,12 +150,12 @@ export class OnboardingController {
         ${this._progress()}
         <div class="format-cards">
           <button class="format-card${this.format === 'openai_compat' ? ' selected' : ''}" data-format="openai_compat">
-            <i class="ti ti-brand-openai"></i>
+            <i class="ti ti-brand-openai" aria-hidden="true"></i>
             <span class="format-label">${i18n.t('onboarding.openaiCompat')}</span>
             <span class="format-hint">${i18n.t('onboarding.openaiCompatHint')}</span>
           </button>
           <button class="format-card${this.format === 'anthropic' ? ' selected' : ''}" data-format="anthropic">
-            <i class="ti ti-brand-figma"></i>
+            ${getProviderBrand('anthropic').logo}
             <span class="format-label">${i18n.t('onboarding.anthropicCompat')}</span>
             <span class="format-hint">${i18n.t('onboarding.anthropicCompatHint')}</span>
           </button>
@@ -148,7 +164,7 @@ export class OnboardingController {
           <button id="btn-next-0" class="onboarding-btn onboarding-btn-primary onboarding-btn-lg" ${this.format ? '' : 'disabled'}>${i18n.t('onboarding.next')}</button>
         </div>
         <button id="btn-restore-backup" class="onboarding-btn" style="margin-top:18px;opacity:.85">
-          <i class="ti ti-file-import"></i> ${i18n.t('onboarding.restoreFromBackup')}
+          <i class="ti ti-file-import" aria-hidden="true"></i> ${i18n.t('onboarding.restoreFromBackup')}
         </button>
         <p class="onboarding-desc" style="font-size:11px;margin-top:6px">${i18n.t('onboarding.restoreFromBackupHint')}</p>
       </div>`;
@@ -167,6 +183,7 @@ export class OnboardingController {
   }
 
   _selectFormat(format) {
+    if (format !== this.format) this.model = '';
     this.format = format;
     this.contentEl.querySelectorAll('.format-card').forEach(c => c.classList.remove('selected'));
     this.contentEl.querySelector(`[data-format="${format}"]`).classList.add('selected');
@@ -183,6 +200,10 @@ export class OnboardingController {
 
   _renderStep1() {
     const defaults = DEFAULT_API_BASE;
+    const suffix = PLACEHOLDER_SUFFIX[this.format] || 'Openai';
+    // Nasce acceso se nome e chiave ci sono gia' (ritorno da Indietro): prima
+    // era spento fisso, e si riaccendeva solo scrivendo in un campo.
+    const canContinue = this.providerName && this.apiKey;
 
     this.contentEl.innerHTML = `
       <div class="onboarding-step onboarding-center">
@@ -190,24 +211,24 @@ export class OnboardingController {
         ${this._progress()}
         <div class="onboarding-field">
           <label class="onboarding-label" for="provider-name">${i18n.t('onboarding.providerName')}</label>
-          <input type="text" class="onboarding-input" id="provider-name"
-                 placeholder="${i18n.t('onboarding.providerNamePlaceholder')}" value="${escapeHtml(this.providerName)}">
+          <input type="text" class="onboarding-input" id="provider-name" ${NO_AUTOCORRECT}
+                 placeholder="${i18n.t(`onboarding.providerNamePlaceholder${suffix}`)}" value="${escapeHtml(this.providerName)}">
           <span class="onboarding-hint">${i18n.t('onboarding.providerNameHint')}</span>
         </div>
         <div class="onboarding-field">
           <label class="onboarding-label" for="api-key">${i18n.t('onboarding.apiKey')}</label>
-          <input type="password" class="onboarding-input" id="api-key" autocomplete="off" data-lpignore="true"
-                 placeholder="sk-ant-api03-..." value="${escapeHtml(this.apiKey)}">
+          <input type="password" class="onboarding-input" id="api-key" ${NO_AUTOCORRECT} data-lpignore="true"
+                 placeholder="${i18n.t(`onboarding.apiKeyPlaceholder${suffix}`)}" value="${escapeHtml(this.apiKey)}">
         </div>
         <div class="onboarding-field">
           <label class="onboarding-label" for="api-base">${i18n.t('onboarding.baseUrl')}</label>
-          <input type="text" class="onboarding-input" id="api-base"
+          <input type="url" inputmode="url" class="onboarding-input" id="api-base" ${NO_AUTOCORRECT}
                  placeholder="${escapeHtml(defaults[this.format] || '')}" value="${escapeHtml(this.apiBase)}">
           <span class="onboarding-hint">${i18n.t('onboarding.baseUrlHint')}</span>
         </div>
         <div class="onboarding-nav">
           <button class="onboarding-btn onboarding-btn-secondary" id="btn-back-1">${i18n.t('onboarding.back')}</button>
-          <button class="onboarding-btn onboarding-btn-primary" id="btn-next-1" disabled>${i18n.t('onboarding.next')}</button>
+          <button class="onboarding-btn onboarding-btn-primary" id="btn-next-1" ${canContinue ? '' : 'disabled'}>${i18n.t('onboarding.next')}</button>
         </div>
       </div>`;
 
@@ -237,6 +258,11 @@ export class OnboardingController {
     if (base) this.apiBase = base.value.trim();
   }
 
+  /** L'impronta del provider per cui si chiede la lista dei modelli. */
+  _modelsFingerprint() {
+    return `${this.format}|${this.apiKey}|${this.apiBase}`;
+  }
+
   /* Cattura i campi come fa il gemello `_goBackToStep1`. Prima non li
      catturava: tornare allo step 0 — col pulsante "Indietro" o col tasto
      hardware — cancellava nome provider, chiave API e base URL appena
@@ -250,6 +276,11 @@ export class OnboardingController {
 
   _goToStep2() {
     this._captureStep1();
+    // Il modello scelto prima vale solo per lo stesso provider: cambiati
+    // formato, chiave o indirizzo, Launch partiva col modello dell'altro.
+    const fingerprint = this._modelsFingerprint();
+    if (this._modelsFor !== null && this._modelsFor !== fingerprint) this.model = '';
+    this._modelsFor = fingerprint;
     this.step = 2;
     this._loadModels();
   }

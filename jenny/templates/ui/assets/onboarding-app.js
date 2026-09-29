@@ -95,8 +95,19 @@ class OnboardingApp {
     }
   }
 
-  /** Indietro risale di un passo; dal wizard non si esce (v. `handleBack`). */
+  /** Indietro chiude prima il dialog aperto piu' in alto (la passphrase del
+   *  ripristino), poi risale di un passo; dal wizard non si esce (v.
+   *  `handleBack`). Senza il primo gradino, col dialog aperto la pressione
+   *  cambiava il passo sotto di lui. Il dialog si congeda con la semantica di
+   *  Esc, come nell'officina (`_dismissTopDialog`): un `cancel` annullabile, e
+   *  chi lo rifiuta — il «Restart now» dopo il ripristino — resta aperto. */
   handleHardwareBack() {
+    const dialogs = document.querySelectorAll('dialog[open]');
+    if (dialogs.length) {
+      const top = dialogs[dialogs.length - 1];
+      if (top.dispatchEvent(new Event('cancel', { cancelable: true }))) top.close();
+      return true;
+    }
     return this.controller ? this.controller.handleBack() : true;
   }
 

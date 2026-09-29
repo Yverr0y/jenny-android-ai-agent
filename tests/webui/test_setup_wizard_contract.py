@@ -380,3 +380,150 @@ def test_the_strings_of_the_button_went_with_the_button() -> None:
             f"c'e' piu': {remaining}"
         )
         assert "onboarding" not in data["nav"], f"{locale}.json: la voce del dock e' uscita"
+
+
+# ── Dal collaudo del 27/09/2026 ──────────────────────────────────────────────
+
+
+def _render_step1(fields: str) -> str:
+    """L'HTML vero di ``_renderStep1`` con lo stato *fields*, su un contenitore
+    finto che accetta i listener."""
+    source = _wizard()
+    consts = "\n".join(
+        re.search(rf"^const {name} = .*?;$", source, re.S | re.M).group(0)
+        for name in ("DEFAULT_API_BASE", "PLACEHOLDER_SUFFIX", "NO_AUTOCORRECT")
+    )
+    return run_js(
+        "const i18n = { t: (k) => k };\n"
+        "const escapeHtml = (s) => String(s);\n"
+        f"{consts}\n"
+        "class W {\n"
+        "  _progress() { return ''; }\n"
+        f"{member(source, '_renderStep1')}\n"
+        "}\n"
+        "const w = new W();\n"
+        "w.contentEl = { innerHTML: '', querySelector: () => ({ addEventListener() {} }) };\n"
+        f"Object.assign(w, {fields});\n"
+        "w._renderStep1();\n"
+        "process.stdout.write(w.contentEl.innerHTML);\n"
+    )
+
+
+@requires_node
+def test_next_is_already_on_when_name_and_key_come_back() -> None:
+    """Il grave del collaudo: passo 1 → Next → Back (o 1 → Back → Next) e Next
+    restava spento con i campi pieni, perché il tasto nasceva ``disabled``
+    fisso e si riaccendeva solo scrivendo. Lo stato viene dai campi."""
+    full = _render_step1("{ format: 'openai_compat', providerName: 'p', apiKey: 'k', apiBase: '' }")
+    assert re.search(r'id="btn-next-1"\s*>', full), "con nome e chiave Next nasce spento"
+    for fields in ("{ format: 'openai_compat', providerName: 'p', apiKey: '', apiBase: '' }",
+                   "{ format: 'openai_compat', providerName: '', apiKey: 'k', apiBase: '' }"):
+        assert re.search(r'id="btn-next-1"\s*disabled>', _render_step1(fields)), fields
+
+
+@requires_node
+def test_the_examples_follow_the_chosen_format() -> None:
+    """Scegliendo OpenAI il nome d'esempio era «My Claude» e la chiave
+    ``sk-ant-api03-...``, scritta nel codice. E i campi tecnici tengono lontana
+    l'autocorrezione, che su «http://» scriveva «Http:/»."""
+    openai = _render_step1("{ format: 'openai_compat', providerName: '', apiKey: '', apiBase: '' }")
+    anthropic = _render_step1("{ format: 'anthropic', providerName: '', apiKey: '', apiBase: '' }")
+    assert "onboarding.providerNamePlaceholderOpenai" in openai
+    assert "onboarding.apiKeyPlaceholderOpenai" in openai
+    assert "onboarding.providerNamePlaceholderAnthropic" in anthropic
+    assert "onboarding.apiKeyPlaceholderAnthropic" in anthropic
+    assert "sk-ant" not in _wizard(), "una chiave d'esempio scritta nel codice invece che in i18n"
+
+    base = re.search(r'<input[^>]*id="api-base"[^>]*>', openai, re.S).group(0)
+    for attr in ('type="url"', 'inputmode="url"', 'autocorrect="off"',
+                 'autocapitalize="none"', 'spellcheck="false"'):
+        assert attr in base, f"Base URL senza {attr}"
+
+    for locale in ("it", "en"):
+        onboarding = json.loads((I18N / f"{locale}.json").read_text(encoding="utf-8"))["onboarding"]
+        assert "GPT" not in onboarding["providerNameHint"], "l'aiuto del nome cita ancora una marca"
+
+
+@requires_node
+def test_a_model_of_another_provider_does_not_survive() -> None:
+    """Trovato rileggendo il codice: scelto un modello, tornare indietro e
+    cambiare chiave o formato lasciava Launch acceso col modello dell'altro
+    provider. Lo stesso provider invece lo tiene."""
+    source = _wizard()
+    run_js(
+        "import assert from 'node:assert/strict';\n"
+        "class W {\n"
+        "  _captureStep1() {}\n"
+        "  _loadModels() {}\n"
+        f"{member(source, '_modelsFingerprint')}\n"
+        f"{member(source, '_goToStep2')}\n"
+        "}\n"
+        """
+const w = new W();
+Object.assign(w, { format: 'openai_compat', apiKey: 'a', apiBase: '', model: '', _modelsFor: null });
+w._goToStep2();
+w.model = 'gpt-x';
+w._goToStep2();
+assert.equal(w.model, 'gpt-x', 'stesso provider: il modello si tiene');
+w.apiKey = 'b';
+w._goToStep2();
+assert.equal(w.model, '', 'chiave cambiata: il modello era di un altro provider');
+w.model = 'gpt-y';
+w.format = 'anthropic';
+w._goToStep2();
+assert.equal(w.model, '', 'formato cambiato: il modello era di un altro provider');
+"""
+    )
+    assert "this.model = ''" in _method(source, "_selectFormat")
+
+
+@requires_node
+def test_back_closes_the_restore_passphrase_before_the_step() -> None:
+    """``ead21dad`` aveva insegnato a casa e officina a chiudere il dialog della
+    passphrase col Back; l'onboarding, che ha il suo host, cambiava invece il
+    passo sotto al dialog. Il «Restart now» rifiuta il ``cancel`` e resta."""
+    run_js(
+        "import assert from 'node:assert/strict';\n"
+        "function dialog(refuse) {\n"
+        "  return { open: true, dispatchEvent(e) { return !(refuse && e.cancelable); },\n"
+        "           close() { this.open = false; } };\n"
+        "}\n"
+        "let open = [];\n"
+        "globalThis.document = { querySelectorAll: () => open.filter((d) => d.open) };\n"
+        "class H {\n"
+        f"{member(_host(), 'handleHardwareBack')}\n"
+        "}\n"
+        """
+let steps = 0;
+const h = new H();
+h.controller = { handleBack() { steps++; return true; } };
+const passphrase = dialog(false);
+open = [passphrase];
+assert.equal(h.handleHardwareBack(), true);
+assert.equal(passphrase.open, false, 'la passphrase resta aperta');
+assert.equal(steps, 0, 'il passo sotto al dialog e cambiato');
+const restart = dialog(true);
+open = [restart];
+assert.equal(h.handleHardwareBack(), true);
+assert.equal(restart.open, true, 'il Restart now si e chiuso');
+assert.equal(steps, 0);
+open = [];
+h.handleHardwareBack();
+assert.equal(steps, 1, 'senza dialog il Back non risale piu');
+"""
+    )
+
+
+def test_every_wizard_icon_exists_and_anthropic_is_not_figma() -> None:
+    """La scheda Anthropic mostrava il logo di Figma (``ti-brand-figma``):
+    Tabler un'icona Anthropic non ce l'ha, e ora c'è il segno vero in SVG."""
+    from test_command_specs import _tabler_icon_names
+
+    available = _tabler_icon_names()
+    used = set(re.findall(r"\bti-([a-z0-9-]+)", _wizard()))
+    assert used and used <= available, f"icone che il font non ha: {sorted(used - available)}"
+    assert "brand-figma" not in used
+    brand = (ASSETS / "shared" / "provider-brand.js").read_text(encoding="utf-8")
+    logo = re.search(r"const ANTHROPIC_LOGO = (.*?);\n", brand, re.S).group(1)
+    assert 'aria-hidden="true"' in logo and 'fill="currentColor"' in logo
+    assert "http" not in logo, "il logo deve stare in linea: la CSP non carica niente da fuori"
