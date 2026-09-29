@@ -9,6 +9,7 @@ lingua si ritrova ``subagents.relaunch`` stampato nell'interfaccia. Questo test
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 _I18N_DIR = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets" / "i18n"
@@ -181,3 +182,27 @@ def test_placeholders_match_between_locales() -> None:
         if key in en_strings and placeholders(text) != placeholders(en_strings[key])
     ]
     assert mismatched == []
+
+
+def _leaves(value: dict, prefix: str = ""):
+    for key, child in value.items():
+        full = f"{prefix}.{key}" if prefix else key
+        if isinstance(child, dict):
+            yield from _leaves(child, full)
+        else:
+            yield full, child
+
+
+def test_a_notebook_is_never_called_a_project_on_screen() -> None:
+    """La cartella con le sue pagine e la sua conversazione è un quaderno, in casa
+    come in officina; «progetto» e «scope» restano nomi interni (`project:`,
+    `PROJECT_SESSION_PREFIX`). Erano tre vocabolari per una cosa sola.
+
+    Fa eccezione ``workspace.fileHelp.*``, dove «progetto» non è la cartella ma
+    quel che l'utente sta facendo (il contesto di lavoro in MEMORY.md)."""
+    word = re.compile(r"progett|project|\bscope\b", re.IGNORECASE)
+    for locale in ("it", "en"):
+        for key, text in _leaves(_load(locale)):
+            if key.startswith("workspace.fileHelp."):
+                continue
+            assert not word.search(str(text)), f"{locale}: {key} dice ancora «progetto»/«scope»"

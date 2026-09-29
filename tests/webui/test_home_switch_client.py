@@ -27,7 +27,6 @@ from support.js_harness import function, member, requires_node, run_js
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 APP_JS = ASSETS / "home-app.js"
-CREATE_JS = ASSETS / "shared" / "project-create.js"
 WHO_JS = ASSETS / "home-who.js"
 LIST_JS = ASSETS / "shared" / "conversation-list.js"
 I18N_JS = ASSETS / "shared" / "i18n.js"
@@ -153,8 +152,6 @@ const clearSelection = () => { selectionsCleared += 1; };
    chiama `reply`, come una modale vera. */
 let reply = null;
 const confirmDialog = () => new Promise((r) => { reply = r; });
-__NOTEBOOK_DELETE_WORDS__
-
 /* Il filo: ricorda cosa gli si manda. */
 const wsManager = { posted: [], sendToChat(...a) { this.posted.push(a); return true; } };
 
@@ -163,11 +160,6 @@ __FLOOR__
 __SHEETS__
 __DEFAULT_BOT_NAME__
 __BACK_TO__
-
-/* I due vocabolari, presi dai sorgenti: quello dell'officina e quello di casa,
-   che dal primo eredita tutto quel che non dice «progetto». */
-__PROJECT_WORDS__
-__NOTEBOOK_WORDS__
 
 /* Il giro di creazione è esercitato dal suo banco; qui si misura l'aggancio —
    con quali parole viene chiamato, e cosa succede dopo. */
@@ -440,8 +432,6 @@ def _harness() -> str:
         .replace("__APPLY_TRANSLATIONS__", member(src, "_applyTranslations"))
         .replace("__APPLY_CONVERSATION_TEXTS__", member(src, "_applyConversationTexts"))
         .replace("__CREATE_NOTEBOOK__", member(src, "createNotebook"))
-        .replace("__PROJECT_WORDS__", _const_block(_read_create(), "PROJECT_WORDS"))
-        .replace("__NOTEBOOK_WORDS__", _const_block(src, "NOTEBOOK_WORDS"))
         .replace("__OPEN_PAGES__", member(src, "openPages"))
         .replace("__GO_BACK_ONE_ROOM__", member(src, "goBackOneRoom"))
         .replace("__OPEN_SETTINGS__", member(src, "_openSettings"))
@@ -487,20 +477,15 @@ def _harness() -> str:
         .replace("__SHEETS__", _const_block_scalar(src, "LONG_PRESS_SHEETS") + "\n"
                  + _const_block_scalar(src, "REPORT_SHEET") + "\n"
                  + _const_block_scalar(src, "SHARED_DIALOGS"))
-        .replace("__NOTEBOOK_DELETE_WORDS__", _const_block(src, "NOTEBOOK_DELETE_WORDS"))
         .replace("__FLOOR__", _const_block_scalar(src, "FLOOR_NO_COMPOSER"))
         .replace("__BACK_TO__", _const_block(src, "BACK_TO"))
     )
 
 
 def _const_block_scalar(source: str, name: str) -> str:
-    m = re.search(rf"(?m)^const {re.escape(name)} = .+?;$", source)
+    m = re.search(rf"(?ms)^const {re.escape(name)} = (?:\[\n.*?^\]|[^\n]+?);$", source)
     assert m, f"const {name} non trovata"
     return m.group(0)
-
-
-def _read_create() -> str:
-    return CREATE_JS.read_text(encoding="utf-8")
 
 
 def _run_js(script: str) -> None:
@@ -755,23 +740,17 @@ def test_a_reading_that_works_takes_the_error_back() -> None:
 # ── Un quaderno nuovo ───────────────────────────────────────────────────────
 
 
-def test_the_house_asks_in_its_own_words() -> None:
-    """Il giro di creazione è uno solo e non sa come si chiami quel che crea:
-    prende le chiavi da chi lo chiama. Qui si controlla che la casa gliene passi
-    di sue **solo** dove l'officina direbbe «progetto» — e che la regola dei
-    nomi resti una, citata da un punto solo."""
+def test_the_house_asks_in_the_shared_words() -> None:
+    """Officina e casa dicono «quaderno» con le stesse parole: il giro di
+    creazione ha un vocabolario solo, e la casa non ne passa uno suo. Se
+    tornasse un `words` qui, i due tornerebbero a divergere senza che nessun
+    test se ne accorga."""
     _run_js("""
-      const own = Object.keys(NOTEBOOK_WORDS)
-        .filter((k) => NOTEBOOK_WORDS[k] !== PROJECT_WORDS[k]);
-      assert.ok(own.length >= 6, 'la casa ha smesso di parlare come casa');
-      for (const k of own) {
-        assert.ok(NOTEBOOK_WORDS[k].startsWith('home.'), k + ' non è una parola di casa');
-      }
-      assert.equal(NOTEBOOK_WORDS.invalidName, PROJECT_WORDS.invalidName,
-                   'la regola dei nomi è stata copiata una seconda volta');
-      for (const k of Object.keys(PROJECT_WORDS)) {
-        assert.ok(NOTEBOOK_WORDS[k], 'manca un posto del vocabolario: ' + k);
-      }
+      const app = home();
+      createOutcome = null;
+      await app.createNotebook();
+      assert.equal(creations[0].words, undefined,
+                   'la casa ha un vocabolario suo: due posti da tenere allineati');
     """)
 
 
@@ -782,7 +761,6 @@ def test_a_notebook_created_is_a_notebook_you_are_in() -> None:
       const app = home();
       createOutcome = 'orto';
       await app.createNotebook();
-      assert.equal(creations[0].words, NOTEBOOK_WORDS);
       assert.deepEqual(creations[0].known, [{ name: 'piante', modified: 1 }],
                        'i nomi già noti non vengono dal pannello');
       assert.ok(app.actions.includes('elenco da rileggere'), 'la cache è rimasta vecchia');

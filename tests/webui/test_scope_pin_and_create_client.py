@@ -104,7 +104,7 @@ const i18n = {
 };
 __VALID_NAME__
 __CREATE_ERROR_KEYS__
-__PROJECT_WORDS__
+__NOTEBOOK_WORDS__
 __CREATE_FLOW__
 
 /* `published` resta anche senza l'aggancio, e adesso misura una cosa diversa:
@@ -218,7 +218,7 @@ def _harness() -> str:
             _const(lst, "VALID_NAME") + "\n" + function(lst, "isOpenableProjectName"),
         )
         .replace("__CREATE_ERROR_KEYS__", _const_block(flow, "CREATE_ERROR_KEYS"))
-        .replace("__PROJECT_WORDS__", _const_block(flow, "PROJECT_WORDS"))
+        .replace("__NOTEBOOK_WORDS__", _const_block(flow, "NOTEBOOK_WORDS"))
         .replace("__CREATE_FLOW__", function(flow, "createProjectFlow"))
         .replace("__LIST_URL__", LIST_JS.as_uri())
         .replace("__PROJECTS__", _member(src, "_projects"))
@@ -608,16 +608,16 @@ def test_nothing_is_created_and_nothing_is_entered_without_both_answers() -> Non
 def test_every_word_the_flow_names_exists_in_both_languages() -> None:
     """Una chiave che manca stampa se stessa: `scope.createRejected` a schermo.
 
-    Il giro non conosce nessuna stringa: conosce dei *posti* (`words`), e chi lo
-    chiama ci mette le proprie chiavi. Quindi si controlla il vocabolario intero
-    dell'officina, non solo la mappa dei codici — compreso il ripiego per un
+    Il giro non conosce nessuna stringa: conosce dei *posti* (`words`), e il
+    vocabolario è uno solo, quello dei quaderni. Quindi si controlla il
+    vocabolario intero, non solo la mappa dei codici — compreso il ripiego per un
     codice sconosciuto, che è la sola voce raggiungibile senza essere nominata
     dalla mappa.
     """
     import json
 
     flow = _read(CREATE_JS)
-    slots = set(re.findall(r"(?m)^\s*(\w+): '([^']+)'", _const_block(flow, "PROJECT_WORDS")))
+    slots = set(re.findall(r"(?m)^\s*(\w+): '([^']+)'", _const_block(flow, "NOTEBOOK_WORDS")))
     keys = {key for _, key in slots}
     assert len(keys) >= 15, f"il vocabolario si è accorciato: {sorted(keys)}"
     # Ogni posto che la mappa dei codici nomina deve esistere nel vocabolario.

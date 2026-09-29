@@ -195,9 +195,8 @@ def _run_follow_up(body: str, *, confirmed: bool, current_key: str | None) -> No
         f"""
         import assert from 'node:assert/strict';
         const history = [];
-        const NOTEBOOK_DELETE_WORDS = {{ confirm: 'c' }};
-        async function deleteProjectFlow(name, words) {{
-          history.push(['chiede', name, words === NOTEBOOK_DELETE_WORDS]);
+        async function deleteProjectFlow(...args) {{
+          history.push(['chiede', args[0], args.length]);
           return {json.dumps(confirmed)};
         }}
         const projectNameOf = (k) => (k && k.startsWith('project:') ? k.slice(8) : null);
@@ -223,11 +222,11 @@ def _run_follow_up(body: str, *, confirmed: bool, current_key: str | None) -> No
     run_js(script)
 
 
-def test_a_delete_asks_with_the_notebook_words() -> None:
-    """In casa quel che si cancella e' un quaderno, non un progetto."""
+def test_a_delete_asks_with_the_one_vocabulary() -> None:
+    """Il vocabolario e' uno solo: la casa non passa parole proprie."""
     _run_follow_up(
         "await g.deleteNotebook('piante');\n"
-        "assert.deepEqual(history[0], ['chiede', 'piante', true]);\n",
+        "assert.deepEqual(history[0], ['chiede', 'piante', 1]);\n",
         confirmed=True,
         current_key=None,
     )
@@ -288,15 +287,14 @@ def test_the_sheet_is_in_the_page_and_shipped() -> None:
     assert '"assets/home-notebook.js"' in manifest
 
 
-def test_the_workshop_still_asks_about_a_project() -> None:
-    """Le parole sono diventate un parametro: chi non lo passa — l'officina —
-    deve sentire la domanda di prima, parola per parola."""
+def test_the_delete_flow_has_a_single_notebook_vocabulary() -> None:
+    """Casa e officina condividono le stesse parole: un quaderno, in entrambe."""
     src = (ASSETS / "shared" / "project-delete.js").read_text(encoding="utf-8")
-    words = src.split("export const PROJECT_DELETE_WORDS = {", 1)[1].split("};", 1)[0]
+    words = src.split("export const NOTEBOOK_DELETE_WORDS = {", 1)[1].split("};", 1)[0]
     assert "confirm: 'workspace.deleteProjectConfirm'" in words
     assert "confirmWithChat: 'workspace.deleteProjectConfirmWithChat'" in words
     assert "failed: 'workspace.deleteProjectFailed'" in words
-    assert "export async function deleteProjectFlow(name, words = PROJECT_DELETE_WORDS)" in src
+    assert "export async function deleteProjectFlow(name, words = NOTEBOOK_DELETE_WORDS)" in src
 
 
 # ── Rinomina, dal lato della casa ───────────────────────────────────────────

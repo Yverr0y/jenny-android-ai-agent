@@ -18,11 +18,11 @@ There is no in-app "new wiki" form: everything starts as a chat request.
 
 The one thing that *does* happen on its own is the reverse direction: the personal chat's system prompt lists every wiki you have — name and one-line scope, read from disk on every turn — so Jenny knows a wiki exists and what it is about before she opens it. See [How Jenny knows which wikis you have](./memory.md#how-jenny-knows-which-wikis-you-have).
 
-## Wikis and projects
+## Wikis and notebooks
 
-Everything on this page describes a wiki as something you *ask* Jenny to build and maintain. There is a second way to work with one: open it as a **[project](./projects.md)** from the chip above the message box. A project is a wiki — the same folder, the same pages, the same graph — but the conversation is bound to it, its map and pages are put in front of Jenny on every turn, facts you mention are captured into a journal inside it, and a background pass (the [gardener](./gardener.md)) turns those journal lines into pages between conversations.
+Everything on this page describes a wiki as something you *ask* Jenny to build and maintain. There is a second way to work with one: open it as a **[notebook](./projects.md)** from the chip above the message box. A notebook is a wiki — the same folder, the same pages, the same graph — but the conversation is bound to it, its map and pages are put in front of Jenny on every turn, facts you mention are captured into a journal inside it, and a background pass (the [gardener](./gardener.md)) turns those journal lines into pages between conversations.
 
-So the two views are not alternatives: a wiki you created by asking can be opened as a project tomorrow, and a project you created from the chip is immediately a notebook you can open from the chat.
+So the two views are not alternatives: a wiki you created by asking can be opened as a notebook tomorrow, and a notebook you created from the chip is immediately a wiki you can ask Jenny about.
 
 ## Multiple wikis
 
@@ -140,8 +140,8 @@ silently.
 
 ## See also
 
-- [Projects](projects.md) — opening a wiki as a conversation: capture, the map, and the write boundary.
-- [The gardener](gardener.md) — the pass that maintains a project's pages on its own.
+- [Notebooks](projects.md) — opening a wiki as a conversation: capture, the map, and the write boundary.
+- [The gardener](gardener.md) — the pass that maintains a notebook's pages on its own.
 - [Tour of the WebUI](webui-tour.md) — overall navigation, dock, and tab layout.
 - [Backup and restore](backup.md) — wiki content is part of your regular workspace backup.
 - [Phone app launcher](app-launcher.md) — the app drawer, and the other corner of the Apps tab.

@@ -24,8 +24,8 @@ Start here if you just want to install and use the app.
 | [Chat basics](using/chat.md) | Sending messages, streaming replies, tool call pills, the reasoning block, the changed-files pill, and inline file previews. |
 | [Files and attachments](using/attachments.md) | Sending images, files, and camera captures from chat; the exact size limits and what the model actually gets to see. |
 | [Memory and Dream](using/memory.md) | How session history, idle compaction, and the two-phase Dream consolidation build Jenny's long-term memory — and how the list of your wikis reaches every prompt. |
-| [Projects](using/projects.md) | Project conversations: a chat bound to one folder that remembers by writing pages, and passes only facts about you on to Jenny's personal memory — the scope chip, the Writes/Read-only switch, capture, and the map. |
-| [The gardener](using/gardener.md) | The background pass that turns a project's journal lines into pages and keeps its map true: when it runs, what it refuses to touch, and how to turn it off. |
+| [Notebooks](using/projects.md) | Notebook conversations: a chat bound to one folder that remembers by writing pages, and passes only facts about you on to Jenny's personal memory — the scope chip, the Writes/Read-only switch, capture, and the map. |
+| [The gardener](using/gardener.md) | The background pass that turns a notebook's journal lines into pages and keeps its map true: when it runs, what it refuses to touch, and how to turn it off. |
 | [Scheduling and proactivity](using/scheduling.md) | Reminders (one-shot, recurring, cron), the heartbeat loop, goals/long tasks, and subagents — and what silently breaks when the app is killed. |
 | [Mini-apps (Jenny Apps)](using/mini-apps.md) | Chat-authored mini web apps backed by native tools, how they differ from skills, and their sandboxing limits. |
 | [Skills](using/skills.md) | Markdown-based skill folders that extend agent behavior in chat, where to see and switch them, and why built-in ones can't be switched off. |
@@ -36,7 +36,7 @@ Start here if you just want to install and use the app.
 | [Backup and restore](using/backup.md) | Encrypted `.jbk` backups (for disaster recovery) vs. local workspace snapshots (a time machine), and how to restore either. |
 | [Phone app launcher](using/app-launcher.md) | The search drawer that opens your phone's apps and mini-apps, and the card a long press on a row opens, for app info, uninstalling, editing and deleting. |
 | [Wiki](using/wiki.md) | The knowledge base Jenny compiles on request: its pages and map, editing a page, and reporting one. |
-| [Slash commands](using/slash-commands.md) | Built-in commands like `/new` and `/stop`, where each one works (this conversation, the personal chat, or inside a project), the Commands chip that lists them, and how unrecognized commands fall through to the LLM. |
+| [Slash commands](using/slash-commands.md) | Built-in commands like `/new` and `/stop`, where each one works (this conversation, the personal chat, or inside a notebook), the Commands chip that lists them, and how unrecognized commands fall through to the LLM. |
 | [Troubleshooting](using/troubleshooting.md) | Diagnosing common on-device symptoms — offline dot, silent errors, missed reminders, silent Telegram, blocked URLs. |
 
 ### Reference

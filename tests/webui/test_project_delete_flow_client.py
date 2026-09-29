@@ -37,7 +37,7 @@ def _run(code: str | None, words: str) -> None:
     refusal = "null" if code is None else json.dumps(code)
     script = f"""
 import assert from 'node:assert/strict';
-const {{ deleteProjectFlow, PROJECT_DELETE_WORDS }} = await import('./project-delete.js');
+const {{ deleteProjectFlow, NOTEBOOK_DELETE_WORDS }} = await import('./project-delete.js');
 const {{ toasts }} = await import('./utils.js');
 globalThis.__refusal = {refusal};
 const words = {words};
@@ -63,7 +63,7 @@ console.log(JSON.stringify(globalThis.__outcome));
 _NB = "{ confirm: 'c', confirmWithChat: 'cc', failed: 'nb.failed', busy: 'nb.busy' }"
 _WITHOUT_BUSY = "{ confirm: 'c', confirmWithChat: 'cc', failed: 'nb.failed' }"
 _EXPECTED = {
-    ("conflict", "PROJECT_DELETE_WORDS"):
+    ("conflict", "NOTEBOOK_DELETE_WORDS"):
         "assert.equal(outcome, false);\n"
         "assert.deepEqual(toasts, [['workspace.deleteProjectBusy:viaggio', 'error']]);\n",
     ("conflict", _NB):

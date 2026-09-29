@@ -16,11 +16,11 @@ You can type them by hand, or pick them from the **Commands** chip in the row ab
 |---|---|---|
 | **this conversation** | `/new` `/stop` `/status` `/history` `/goal` `/help` | anywhere |
 | **the personal memory, or the installation** | `/dream` `/model` `/skill` | the personal chat only |
-| **this project** | `/gardener` `/tidy` `/init` | inside a [project](./projects.md) only |
+| **this notebook** | `/gardener` `/tidy` `/init` | inside a [notebook](./projects.md) only |
 
-Both halves are enforced, and both are visible: the Commands chip lists what this conversation can do — entering a project *removes* `/dream` and friends as well as adding `/tidy` — and `/help` prints the same list. Sending one anyway is refused with a line that says where it does work, and the refusal comes from the command layer: it never reaches the model as a message.
+Both halves are enforced, and both are visible: the Commands chip lists what this conversation can do — entering a notebook *removes* `/dream` and friends as well as adding `/tidy` — and `/help` prints the same list. Sending one anyway is refused with a line that says where it does work, and the refusal comes from the command layer: it never reaches the model as a message.
 
-Two consequences worth naming. Working on a project is always done **from inside** it: no command takes a project name, the same way the journal tool has no argument to reach another project's journal. And on Telegram — always the personal conversation — the project commands simply do not exist.
+Two consequences worth naming. Working on a notebook is always done **from inside** it: no command takes a notebook name, the same way the journal tool has no argument to reach another notebook's journal. And on Telegram — always the personal conversation — the notebook commands simply do not exist.
 
 Two commands — `/stop` and `/status` — are handled on a "priority" fast path that runs even while a turn is actively streaming or a tool is executing. The rest wait for the current dispatch to be free, which in practice is rarely noticeable.
 
@@ -37,11 +37,11 @@ All server-side command responses below are **hardcoded in English**, regardless
 | `/history` | `[n]` | Prints the last `n` persisted user/assistant messages (default 10, max 50) |
 | `/goal` | `<description>` | Tells the agent to treat the request as a long-running goal |
 | `/dream` | none | Manually triggers a memory consolidation (Dream) run in the background |
-| `/gardener` | none | Runs one [gardener](./gardener.md) pass on the project you are in, now |
+| `/gardener` | none | Runs one [gardener](./gardener.md) pass on the notebook you are in, now |
 | `/skill` | none | Lists the currently enabled skills with their descriptions |
 | `/help` | none | Lists the commands of this conversation |
 
-Two more, `/tidy` and `/init`, appear in the chip and in `/help` but are not in the list above because they are not commands in the same sense: inside a [project](./projects.md) each is expanded into an ordinary agent turn — one restructures that project's wiki, the other writes its `AGENTS.md`. Outside a project they are refused like any other project command.
+Two more, `/tidy` and `/init`, appear in the chip and in `/help` but are not in the list above because they are not commands in the same sense: inside a [notebook](./projects.md) each is expanded into an ordinary agent turn — one restructures that notebook's wiki, the other writes its `AGENTS.md`. Outside a notebook they are refused like any other notebook command.
 
 **The knobs are not here.** Dream's budgets and review cadence, and everything about the periodic gardener pass, used to be arguments of `/dream` and `/gardener`. They are settings, so they live in the workshop's **Memory** drawer — in the *Dream* and *Gardener* groups — next to the numbers they act on. Typing the old form answers with where it went.
 
@@ -202,28 +202,28 @@ If there's no new history to process yet (common on a fresh or short chat, since
 
 The command takes no arguments. The three file budgets, the review cadence, and Dream's own schedule are in the workshop's **Memory** drawer (*How much she remembers* and *Dream*), which also shows what each file currently measures — the number the budget is chosen from. `/dream budget …` answers with a line saying so.
 
-### `/gardener` — run a gardener pass on this project
+### `/gardener` — run a gardener pass on this notebook
 
-Inside a [project](./projects.md), `/gardener` runs one [gardener](./gardener.md) pass on that project right now: it acknowledges with `Gardening <name>...` and follows up when the pass finishes. It takes no arguments — the project you are in *is* the subject.
+Inside a [notebook](./projects.md), `/gardener` runs one [gardener](./gardener.md) pass on that notebook right now: it acknowledges with `Gardening <name>...` and follows up when the pass finishes. It takes no arguments — the notebook you are in *is* the subject.
 
-Outside a project it is refused, and the refusal says to open one. There is no way to garden a project from the personal chat: that is deliberate, and it matches the tool layer, where the journal has no argument for reaching another project either.
+Outside a notebook it is refused, and the refusal says to open one. There is no way to garden a notebook from the personal chat: that is deliberate, and it matches the tool layer, where the journal has no argument for reaching another notebook either.
 
-The periodic pass — whether it runs at all, how often it looks, how much silence it waits for, how long before it returns to the same project — is in the workshop's **Memory** drawer, in the *Gardener* group. Turning it off there leaves `/gardener` working by hand. `/gardener settings` and the other old words answer with a line saying where they went.
+The periodic pass — whether it runs at all, how often it looks, how much silence it waits for, how long before it returns to the same notebook — is in the workshop's **Memory** drawer, in the *Gardener* group. Turning it off there leaves `/gardener` working by hand. `/gardener settings` and the other old words answer with a line saying where they went.
 
-### `/tidy` — restructure this project's wiki
+### `/tidy` — restructure this notebook's wiki
 
-Only inside a project, and like `/init` it is not answered by the command layer: it becomes a full agent turn, in this conversation, with the project's pages and your answers in hand. It splits pages that have outgrown the per-turn budget, moves prose out of an oversized map, and realigns the page list — the operation a periodic gardener pass cannot do, because it has nobody to ask. If the wiki is already in good shape it says so in one line and changes nothing.
+Only inside a notebook, and like `/init` it is not answered by the command layer: it becomes a full agent turn, in this conversation, with the notebook's pages and your answers in hand. It splits pages that have outgrown the per-turn budget, moves prose out of an oversized map, and realigns the page list — the operation a periodic gardener pass cannot do, because it has nobody to ask. If the wiki is already in good shape it says so in one line and changes nothing.
 
-### `/init` — write this project's instructions
+### `/init` — write this notebook's instructions
 
-Only inside a project. Unlike everything else on this page it is not answered by the command layer: it is expanded into a full agent turn that reads `wiki/index.md`, the pages, the recent `log/` entries and the existing instructions file, and then writes that project's `AGENTS.md` — scope, the conventions the pages already follow, and the open questions. If the file already has content it is updated rather than replaced. What you see in the chat stays `/init`.
+Only inside a notebook. Unlike everything else on this page it is not answered by the command layer: it is expanded into a full agent turn that reads `wiki/index.md`, the pages, the recent `log/` entries and the existing instructions file, and then writes that notebook's `AGENTS.md` — scope, the conventions the pages already follow, and the open questions. If the file already has content it is updated rather than replaced. What you see in the chat stays `/init`.
 
-Outside a project, the same refusal every project command gives:
+Outside a notebook, the same refusal every notebook command gives:
 
 ```text
-`/init` works on one project, and this conversation is not a project.
+`/init` works on one notebook, and this conversation is not a notebook.
 
-Open the project — the chip above the composer does it — and send `/init` there.
+Open the notebook — the chip above the composer does it — and send `/init` there.
 ```
 
 ### `/skill` — list enabled skills
@@ -259,7 +259,7 @@ In the personal chat:
 /help — List available slash commands.
 ```
 
-Inside a project the list is a different one, not a longer one: `/dream`, `/model` and `/skill` drop out, and `/gardener`, `/tidy` and `/init` appear.
+Inside a notebook the list is a different one, not a longer one: `/dream`, `/model` and `/skill` drop out, and `/gardener`, `/tidy` and `/init` appear.
 
 ## What `/new` does and does not delete
 
@@ -272,7 +272,7 @@ Inside a project the list is a different one, not a longer one: `/dream`, `/mode
 | The persisted transcript | Untouched — it is a separate, permanent log, and the page break only changes where reading starts. |
 | Long-term memory | Untouched. The discarded conversation is archived for Dream, which will consolidate it into `MEMORY.md` as usual. |
 
-If you want a conversation to actually go away, deleting it is a different operation: a [project](./projects.md) and its conversation are removed together (tap the bin on its row in the scope chip, or use the file manager), and the personal conversation's transcript lives in the workspace.
+If you want a conversation to actually go away, deleting it is a different operation: a [notebook](./projects.md) and its conversation are removed together (tap the bin on its row in the scope chip, or use the file manager), and the personal conversation's transcript lives in the workspace.
 
 > **A note for anyone upgrading.** There used to be a `/clear` command, undocumented in `/help` and handled entirely inside the WebUI: it wiped the screen, printed `Chat cleared.` and left the model's context completely intact. It gave a convincing confirmation for something it had not done — the model went on remembering everything — and it was the first thing most people tried. It has been removed. Typing `/clear` now just sends an ordinary message to the agent; the command you want is `/new`.
 

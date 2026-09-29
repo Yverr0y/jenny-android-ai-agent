@@ -88,11 +88,11 @@ Everything about how the agent talks to the model and manages its own context.
 | `agents.defaults.consolidationRatio` | float 0.1–0.95 | `0.5` | Fraction of the live context consolidated when a consolidation runs. |
 | `agents.defaults.dream.enabled` | bool | `true` | Registers the periodic Dream memory-consolidation job at startup. |
 | `agents.defaults.dream.intervalH` | int ≥ 1 | `2` | Hours between Dream runs. The deadline survives an app restart; a run missed while the app was down happens at the next tick. |
-| `agents.defaults.gardener.enabled` | bool | `true` | Registers the periodic [gardener](../using/gardener.md) job, which turns a project's journal lines into wiki pages. With no projects, or with no unread journal lines, a tick exits before reaching the provider. The switch in the workshop's Memory drawer («Gardener — who fills the notebooks») writes this. |
-| `agents.defaults.gardener.intervalMin` | int 1–1440 | `30` | Minutes between ticks — how often it *looks* for a project to garden. Past a day the pass has stopped being periodic; `enabled: false` is the way to say never. |
-| `agents.defaults.gardener.idleMin` | int 0–1440 | `30` | How long that project's conversation must have been silent before a pass starts. `0` lets a pass begin while you are talking in it (it can promote half a conversation, and rewrite the map while you read it). A project with a turn actually in flight is skipped regardless. |
-| `agents.defaults.gardener.minHoursBetweenPasses` | int 0–8760 | `6` | Minimum gap before returning to the *same* project, counted from the last **attempt** rather than the last success. `0` lets it come straight back, which is the measured Dream degradation written as a number. |
-| `agents.defaults.compactProjectsWhenIdle` | bool | `false` | Whether a project's conversation is archived once it goes idle, like the personal one. Off by default: a project can sit for three weeks and pick up where it was. Read when the agent starts, so a change needs a gateway restart. Even when on, a project is not compacted while journal lines are still unpromoted, or while it has no pages at all. |
+| `agents.defaults.gardener.enabled` | bool | `true` | Registers the periodic [gardener](../using/gardener.md) job, which turns a notebook's journal lines into wiki pages. With no notebooks, or with no unread journal lines, a tick exits before reaching the provider. The switch in the workshop's Memory drawer («Gardener — who fills the notebooks») writes this. |
+| `agents.defaults.gardener.intervalMin` | int 1–1440 | `30` | Minutes between ticks — how often it *looks* for a notebook to garden. Past a day the pass has stopped being periodic; `enabled: false` is the way to say never. |
+| `agents.defaults.gardener.idleMin` | int 0–1440 | `30` | How long that notebook's conversation must have been silent before a pass starts. `0` lets a pass begin while you are talking in it (it can promote half a conversation, and rewrite the map while you read it). A notebook with a turn actually in flight is skipped regardless. |
+| `agents.defaults.gardener.minHoursBetweenPasses` | int 0–8760 | `6` | Minimum gap before returning to the *same* notebook, counted from the last **attempt** rather than the last success. `0` lets it come straight back, which is the measured Dream degradation written as a number. |
+| `agents.defaults.compactProjectsWhenIdle` | bool | `false` | Whether a notebook's conversation is archived once it goes idle, like the personal one. Off by default: a notebook can sit for three weeks and pick up where it was. Read when the agent starts, so a change needs a gateway restart. Even when on, a notebook is not compacted while journal lines are still unpromoted, or while it has no pages at all. |
 | `agents.defaults.maxToolIterations` | int | `200` | Hard ceiling on tool calls in a single turn. |
 | `agents.defaults.maxToolResultChars` | int | `16000` | Tool output above this is truncated before it reaches the model. |
 | `agents.defaults.contextBlockLimit` | int \| null | `null` | Optional cap on context blocks; unset means no extra limit. |
@@ -428,7 +428,7 @@ These live in `config.json` and not in the browser's storage on purpose: they ar
 
 See [Wiki](../using/wiki.md).
 
-`wiki.wikisDir` is also where [projects](../using/projects.md) live — a project is a wiki — so `wiki.enabled: false` disables project creation too, and the create dialog says so. Renaming this directory moves every project with it; the gardener and the project-scope resolver both read the configured name rather than a hardcoded `wikis`.
+`wiki.wikisDir` is also where [notebooks](../using/projects.md) live — a notebook is a wiki — so `wiki.enabled: false` disables notebook creation too, and the create dialog says so. Renaming this directory moves every project with it; the gardener and the project-scope resolver both read the configured name rather than a hardcoded `wikis`.
 
 ## modelPresets
 
@@ -482,6 +482,6 @@ How switching behaves:
 - [Tool reference](./tools.md) — what each tool actually does with these toggles
 - [Security model](../internals/security-model.md) — workspace policy, SSRF, and where the real boundaries are
 - [Android permissions](./android-permissions.md) — `WAKE_LOCK`, `SCHEDULE_EXACT_ALARM` and the battery exemption behind the `power.*` keys
-- [Projects](../using/projects.md) and [The gardener](../using/gardener.md) — the `gardener.*` keys and `compactProjectsWhenIdle` from the user's side
+- [Notebooks](../using/projects.md) and [The gardener](../using/gardener.md) — the `gardener.*` keys and `compactProjectsWhenIdle` from the user's side
 - [Memory and Dream](../using/memory.md), [Scheduling and proactivity](../using/scheduling.md), [SSH access](../using/ssh.md), [Telegram bridge](../using/telegram.md), [Backup and restore](../using/backup.md)
 - [Troubleshooting](../using/troubleshooting.md) — what to do when a config change breaks the boot

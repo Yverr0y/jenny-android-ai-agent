@@ -185,7 +185,7 @@ export class NotebookPages {
       /* Le wiki spente sono un 503 e non un guasto: la frase esiste gia', ed e'
          quella che il giro di creazione usa per dire la stessa cosa. */
       const off = /\b503\b/.test(String(err?.message || ''));
-      this._say(off ? 'home.who.create.wikiOff' : 'home.notebookPages.failed');
+      this._say(off ? 'scope.createWikiOff' : 'home.notebookPages.failed');
       return;
     }
     if (token !== this._token) return;

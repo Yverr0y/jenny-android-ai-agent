@@ -77,10 +77,10 @@
       "title": "List the enabled skills"
     },
     "tidy": {
-      "title": "Restructure this project's wiki"
+      "title": "Tidy this notebook's pages"
     },
     "init": {
-      "title": "Write this project's instructions"
+      "title": "Write this notebook's instructions"
     },
     "help": {
       "title": "List every command"
@@ -156,7 +156,7 @@
     "channel": "Channel",
     "model": "Model",
     "preset": "Preset",
-    "project": "Project",
+    "project": "Notebook",
     "access": "Access",
     "status": "Status",
     "running": "Running",
@@ -192,14 +192,14 @@
       "unavailable": "The periodic worker settings could not be read. Reopen this screen; if it stays like this, check config.json.",
       "gardener": "Gardener",
       "gardenerEnabled": "Periodic pass",
-      "gardenerOffHint": "Turning it off is not uninstalling it: /gardener inside a project still runs a pass by hand.",
+      "gardenerOffHint": "Turning it off is not uninstalling it: /gardener inside a notebook still runs a pass by hand.",
       "gardenerInterval": "How often it looks (min)",
-      "gardenerIdle": "Silence required in the project (min)",
-      "gardenerDistance": "Gap between two passes on one project (h)",
+      "gardenerIdle": "Silence required in the notebook (min)",
+      "gardenerDistance": "Gap between two passes on one notebook (h)",
       "gardenerNumbersHint": "A tick that finds no new journal lines spends no tokens, so looking often is cheap: what decides is the silence. The gardener works on cold material — going in while you are talking would promote half of a conversation and rewrite the map while you read it. The gap is the measured degradation of Dream written as a number: a second close pass on one subject reworks what the first wrote instead of adding to it.",
-      "compact": "Project history",
-      "compactEnabled": "Archive an idle project's chat",
-      "compactHint": "Off, a project can sit for three weeks and pick up where it was. On, its conversation is compacted like the personal one: Jenny then has in context what was written in the pages, not what was said. The transcript you read is untouched.",
+      "compact": "Notebook history",
+      "compactEnabled": "Archive an idle notebook's chat",
+      "compactHint": "Off, a notebook can sit for three weeks and pick up where it was. On, its conversation is compacted like the personal one: Jenny then has in context what was written in the pages, not what was said. The transcript you read is untouched.",
       "compactRestart": "This one takes effect from the next gateway start.",
       "savedRestart": "Saved. Takes effect from the next start.",
       "notAWholeNumber": "That needs a whole number."
@@ -507,7 +507,7 @@
     "requestTimeout": "No answer from the gateway. Try again.",
     "wireError": {
       "decode": "I couldn't open this file",
-      "invalid_project_name": "That project cannot be opened: its folder name is not a valid project name (letters, numbers, dot, dash and underscore only — no spaces or accents). Rename the folder, you can ask me to do it from the personal chat, then pick it again.",
+      "invalid_project_name": "That notebook cannot be opened: its folder name is not a valid notebook name (letters, numbers, dot, dash and underscore only — no spaces or accents). Rename the folder, you can ask me to do it from the personal chat, then pick it again.",
       "invalid_task_id": "That job no longer exists",
       "malformed": "The attachment didn't arrive intact",
       "missing_content": "The message was empty, so I didn't send it",
@@ -558,11 +558,11 @@
       "memory": "Long-term memory: what has to survive from one session to the next — project context, useful facts, notes worth keeping.\n\nDream, the consolidation pass that runs after conversations, is what maintains it. You can read it and correct it, but you rarely need to write here by hand.\n\nNot here: facts about you (USER.md), working conventions (AGENTS.md), repeatable procedures (Skills).",
       "heartbeat": "The recurring checks Jenny goes through on every heartbeat.\n\nWrite them under \"## Active Tasks\": that is the only section that gets read. When a task is done, delete it instead of leaving it there — a list of finished work is re-read on every beat.\n\nNot here: one-off requests (just ask in chat) and repeatable procedures (Skills)."
     },
-    "deleteProjectConfirm": "Delete the project “{name}”? The folder goes, and so does the conversation: they are two different things on disk, and this removes both.",
-    "deleteProjectConfirmWithChat": "Delete the project “{name}”? The folder goes, and the conversation with it: {count} messages.",
-    "deleteProjectFailed": "I could not delete the project “{name}”. Nothing was changed.",
-    "deleteProjectBusy": "I'm still working in the project “{name}”: delete it once I've finished.",
-    "deletedProject": "Project “{name}” deleted, conversation included",
+    "deleteProjectConfirm": "Delete the notebook “{name}”? Its pages and its conversation go with it.",
+    "deleteProjectConfirmWithChat": "Delete the notebook “{name}”? Its pages and its conversation go with it: {count} messages.",
+    "deleteProjectFailed": "I could not delete the notebook “{name}”. Nothing was changed.",
+    "deleteProjectBusy": "I'm still working in “{name}”: delete it once I've finished.",
+    "deletedProject": "Notebook “{name}” deleted, conversation included",
     "nameTaken": "Something already has this name: pick another.",
     "changedOnDisk": "The file changed since you opened it: nothing was saved. Close the editor and reopen it to see how it is now."
   },
@@ -835,30 +835,30 @@
   },
   "scope": {
     "personal": "jenny",
-    "change": "Change scope",
-    "personalSection": "Personal session",
-    "projectsSection": "Projects",
+    "change": "Change conversation",
+    "personalSection": "Personal conversation",
+    "projectsSection": "Notebooks",
     "loading": "Loading...",
-    "noProjects": "No projects yet",
-    "loadFailed": "Could not read the project list: what you see may be incomplete",
-    "newProject": "New project...",
-    "newProjectName": "Project name:",
+    "noProjects": "No notebooks yet",
+    "loadFailed": "Could not read the notebook list: what you see may be incomplete",
+    "newProject": "New notebook...",
+    "newProjectName": "Notebook name:",
     "newProjectPlaceholder": "e.g. recipes",
     "newProjectSeed": "What is “{name}” about?",
     "newProjectSeedPlaceholder": "one line: what belongs here and what does not",
-    "seedRequired": "One line about the project is needed — without it the chat starts on nothing.",
+    "seedRequired": "I need one line on what the notebook is about: without it the chat starts on nothing.",
     "invalidName": "Letters, numbers, dot, dash and underscore, never two dots in a row; it must start with a letter or a digit and fit in 64 characters.",
     "unopenableSection": "Cannot be opened",
     "unopenableInvalidName": "These folders are there, but their name cannot be a conversation name. {rule} Ask me from the personal chat to rename one.",
     "unopenableOther": "These folders are there, but they do not open as a conversation. Ask me from the personal chat to take a look.",
-    "nameTaken": "A project called “{name}” already exists. If it was left half-built I will finish it, otherwise the creation will be refused.",
+    "nameTaken": "A notebook “{name}” already exists. If it was left half-built I’ll finish it, otherwise the creation will be refused.",
     "nameTakenContinue": "Try anyway",
     "createFailed": "Could not create: {error}",
-    "createRejected": "Could not create “{name}”: either it already exists, or a folder with that name is in the way and is not a project.",
-    "createSeedTooLong": "The scope line is too long: shorten it and try again.",
-    "createWikiOff": "Wikis are switched off in settings, and a project is a wiki: turn them back on and try again.",
+    "createRejected": "I could not create “{name}”: either it already exists, or a folder with that name is in the way and is not a notebook.",
+    "createSeedTooLong": "The intro line is too long: shorten it and try again.",
+    "createWikiOff": "Wikis are switched off in the settings, and a notebook is a wiki: turn them back on and try again.",
     "createInternal": "Creation failed on a gateway error. Try again.",
-    "created": "Project “{name}” created",
+    "created": "Notebook “{name}” created",
     "askAbout": "Ask something about {name}...",
     "ago": {
       "now": "just now",
@@ -868,11 +868,11 @@
       "days": "{n} days ago"
     },
     "leftoverChatTitle": "“{name}” still has a conversation",
-    "leftoverChatBody": "This name still carries the chat of a project that is gone: {count} messages. I can pick it up again — if you deleted it by mistake it is all there — or start clean and throw it away.",
-    "leftoverChatBodyNoCount": "This name still carries the chat of a project that is gone. I can pick it up again — if you deleted it by mistake it is all there — or start clean and throw it away.",
+    "leftoverChatBody": "There is still the chat of a notebook that no longer exists under this name: {count} messages. I can pick it back up — if you deleted it by mistake it is all there — or start clean and throw it away.",
+    "leftoverChatBodyNoCount": "There is still the chat of a notebook that no longer exists under this name. I can pick it back up — if you deleted it by mistake it is all there — or start clean and throw it away.",
     "leftoverChatKeep": "Pick it up",
     "leftoverChatDiscard": "Start clean",
-    "deleteProject": "Delete the project {name}"
+    "deleteProject": "Delete the notebook {name}"
   },
   "write": {
     "write": "Writes",
@@ -995,17 +995,7 @@
       "notebooks": "Notebooks",
       "none": "No notebooks yet.",
       "loadFailed": "I could not read the list: what you see may be incomplete.",
-      "newNotebook": "New notebook",
-      "create": {
-        "name": "Notebook name:",
-        "taken": "A notebook “{name}” already exists. If it was left half-built I’ll finish it, otherwise the creation will be refused.",
-        "seedRequired": "I need one line on what the notebook is about: without it the chat starts on nothing.",
-        "created": "Notebook “{name}” created",
-        "wikiOff": "Wikis are switched off in the settings, and a notebook is a wiki: turn them back on and try again.",
-        "rejected": "I could not create “{name}”: either it already exists, or a folder with that name is in the way and is not a notebook.",
-        "leftover": "There is still the chat of a notebook that no longer exists under this name: {count} messages. I can pick it back up — if you deleted it by mistake it is all there — or start clean and throw it away.",
-        "leftoverNoCount": "There is still the chat of a notebook that no longer exists under this name. I can pick it back up — if you deleted it by mistake it is all there — or start clean and throw it away."
-      }
+      "newNotebook": "New notebook"
     },
     "notebookPages": {
       "open": "Notebook pages",
@@ -1099,10 +1089,6 @@
     "notebook": {
       "rename": "Rename",
       "deleted": "Notebook “{name}” deleted",
-      "deleteConfirm": "Delete the notebook “{name}”? Its pages and its conversation go with it.",
-      "deleteConfirmWithChat": "Delete the notebook “{name}”? Its pages and its conversation go with it: {count} messages.",
-      "deleteFailed": "I could not delete the notebook “{name}”. Nothing was changed.",
-      "deleteBusy": "I'm still working in “{name}”: delete it once I've finished.",
       "renamePrompt": "New name for “{name}”",
       "renamed": "Notebook renamed to “{name}”",
       "renameFailed": "I could not rename “{name}”. {error}",

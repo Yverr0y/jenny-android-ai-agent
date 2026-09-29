@@ -58,8 +58,8 @@ export const CREATE_ERROR_KEYS = {
   internal: 'internal',
 };
 
-/** Le parole dell'officina: lì una conversazione nuova è un **progetto**. */
-export const PROJECT_WORDS = {
+/** Le parole del giro: quel che si crea è un **quaderno**, in casa come in officina. */
+export const NOTEBOOK_WORDS = {
   namePrompt: 'scope.newProjectName',
   namePlaceholder: 'scope.newProjectPlaceholder',
   invalidName: 'scope.invalidName',
@@ -83,14 +83,14 @@ export const PROJECT_WORDS = {
 
 /** Chiede, crea, e dice com'è andata.
  *
- *  @param words  le chiavi i18n da usare (v. `PROJECT_WORDS`).
+ *  @param words  le chiavi i18n da usare (v. `NOTEBOOK_WORDS`); di norma quelle di default.
  *  @param t      il traduttore: `(key, vars) => string`.
  *  @param known  i nomi già in elenco, per l'avviso della regola 3. Può essere
  *                vecchio o mancante, ed è previsto: non è lui l'ultima parola.
  *  @returns il nome creato, oppure `null` se non è stato creato niente — e
  *           `null` vuol dire *davvero* niente su disco, in tutte le uscite.
  */
-export async function createProjectFlow({ words, t, known = [] }) {
+export async function createProjectFlow({ words = NOTEBOOK_WORDS, t, known = [] }) {
   const name = await promptDialog(t(words.namePrompt), {
     placeholder: t(words.namePlaceholder),
   });

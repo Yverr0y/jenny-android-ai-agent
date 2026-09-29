@@ -21,7 +21,7 @@ import { AppState, armComposeMenu, claimComposeMenu } from './state.js';
 import { api } from './api-client.js';
 import { showToast } from './utils.js';
 import { deleteProjectFlow } from './project-delete.js';
-import { PROJECT_WORDS, createProjectFlow } from './project-create.js';
+import { createProjectFlow } from './project-create.js';
 import {
   ConversationList, UNOPENABLE_HINT_KEYS, ago, projectKey,
 } from './conversation-list.js';
@@ -550,7 +550,6 @@ export class ScopeChip {
    */
   async _createProject() {
     const clean = await createProjectFlow({
-      words: PROJECT_WORDS,
       t: (key, vars) => i18n.t(key, vars),
       known: this._projects || [],
     });

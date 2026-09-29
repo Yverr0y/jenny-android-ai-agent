@@ -51,7 +51,7 @@ import { ChatMove } from './home-move.js';
 import { AppsSource } from './shared/apps-source.js';
 import { AppsActions } from './shared/apps-actions.js';
 import { isOpenableProjectName, projectKey, projectNameOf } from './shared/conversation-list.js';
-import { PROJECT_WORDS, createProjectFlow } from './shared/project-create.js';
+import { createProjectFlow } from './shared/project-create.js';
 import { deleteProjectFlow } from './shared/project-delete.js';
 import { moveLayoutKey } from './shared/map-layout.js';
 import { showToast } from './shared/utils.js';
@@ -115,35 +115,16 @@ const REPORT_SHEET = 'home-audit-dialog';
    quaderno?», «Nuovo nome per …», il dettaglio. Si aprono *da* una scheda o da
    una pagina, quindi stanno sopra a tutto il resto, e Indietro li chiude per
    primi. */
-const SHARED_DIALOGS = ['oc-confirm-dialog', 'oc-prompt-dialog', 'oc-detail-dialog'];
-
-/* Le stesse domande dell'officina, dette come si dicono in casa.
- *
- *  Il giro di creazione e' uno solo (`shared/project-create.js`) e non sa come
- *  si chiami quel che sta creando: prende le chiavi da qui. Si sovrascrivono
- *  **solo** le frasi che dicono «progetto» — invalidName no, perche' la regola
- *  dei nomi e' una e citarla due volte vorrebbe dire tenerne due allineate.
- */
-const NOTEBOOK_WORDS = {
-  ...PROJECT_WORDS,
-  namePrompt: 'home.who.create.name',
-  nameTaken: 'home.who.create.taken',
-  seedRequired: 'home.who.create.seedRequired',
-  created: 'home.who.create.created',
-  wikiOff: 'home.who.create.wikiOff',
-  rejected: 'home.who.create.rejected',
-  leftoverBody: 'home.who.create.leftover',
-  leftoverBodyNoCount: 'home.who.create.leftoverNoCount',
-};
-
-/* ...e quelle della cancellazione, per la stessa ragione: il giro e' uno
-   (`shared/project-delete.js`), e in casa quel che si cancella e' un quaderno. */
-const NOTEBOOK_DELETE_WORDS = {
-  confirm: 'home.notebook.deleteConfirm',
-  confirmWithChat: 'home.notebook.deleteConfirmWithChat',
-  failed: 'home.notebook.deleteFailed',
-  busy: 'home.notebook.deleteBusy',
-};
+const SHARED_DIALOGS = [
+  'oc-confirm-dialog', 'oc-prompt-dialog', 'oc-detail-dialog',
+  /* Le due finestre di `shared/backup-flow.js`, che si costruiscono al volo
+     invece di stare nel DOM: la passphrase e il riavvio dopo un ripristino.
+     Mancavano, e nella stanza Backup Indietro passava sotto la passphrase —
+     via la stanza, la domanda restava aperta sopra Impostazioni (visto
+     sull'emulatore il 29/09/2026). Il riavvio rifiuta `cancel`, quindi la
+     pressione e' consumata senza chiuderlo: e' quel che deve fare. */
+  'oc-backup-passphrase-dialog', 'oc-backup-restart-dialog',
+];
 
 class HomeApp {
   constructor() {
@@ -601,8 +582,8 @@ class HomeApp {
    *
    *  Le due domande — come si chiama, di cosa si occupa — e tutto quel che puo'
    *  andare storto stanno in `shared/project-create.js`, che e' lo stesso giro
-   *  che fa l'officina. Qui c'e' quel che e' di casa: le parole, i nomi gia'
-   *  noti per l'avviso, e dove si va dopo.
+   *  che fa l'officina, con le stesse parole. Qui c'e' quel che e' di casa: i nomi
+   *  gia' noti per l'avviso, e dove si va dopo.
    *
    *  Ci si entra, e non e' un di piu': aver dato un nome e scritto la riga di
    *  scope senza finire nella conversazione vorrebbe dire lasciare a meta' il
@@ -610,7 +591,6 @@ class HomeApp {
    */
   async createNotebook() {
     const name = await createProjectFlow({
-      words: NOTEBOOK_WORDS,
       t: (key, vars) => i18n.t(key, vars),
       known: this.who.known,
     });
@@ -740,7 +720,7 @@ class HomeApp {
    *  una (v. `project_delete.py`).
    */
   async deleteNotebook(name) {
-    if (!(await deleteProjectFlow(name, NOTEBOOK_DELETE_WORDS))) return false;
+    if (!(await deleteProjectFlow(name))) return false;
     /* La chiave della sua mappa l'ha tolta dal file `deleteProjectFlow`; la
        mappa, se c'e', dimentica la copia che aveva letto. */
     this.map?.forgetPins();

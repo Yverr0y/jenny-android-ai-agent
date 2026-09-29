@@ -107,6 +107,9 @@ export function promptPassphrase({ confirm = false } = {}) {
   return new Promise((resolve) => {
     const dialog = document.createElement('dialog');
     dialog.className = 'oc-dialog';
+    // L'id lo legge la casa (`SHARED_DIALOGS` in home-app.js): senza, Indietro
+    // non lo vedeva e portava via la stanza sotto, lasciando la domanda aperta.
+    dialog.id = 'oc-backup-passphrase-dialog';
     dialog.innerHTML = `
       <div class="oc-dialog-inner">
         <h3 style="margin:0 0 8px;font-size:15px;font-weight:600">${i18n.t('backup.passphraseTitle')}</h3>
@@ -168,6 +171,9 @@ export function promptPassphrase({ confirm = false } = {}) {
 export function showRestartDialog() {
   const dialog = document.createElement('dialog');
   dialog.className = 'oc-dialog';
+  // Stesso id-contratto della passphrase: Indietro lo trova, `cancel` qui
+  // sotto lo rifiuta, e la pressione e' consumata senza chiudere niente.
+  dialog.id = 'oc-backup-restart-dialog';
   dialog.innerHTML = `
     <div class="oc-dialog-inner">
       <h3 style="margin:0 0 8px;font-size:15px;font-weight:600">${i18n.t('backup.restartTitle')}</h3>

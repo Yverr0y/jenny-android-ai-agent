@@ -238,8 +238,8 @@ The three files that go into every prompt, `MEMORY.md`, `USER.md` and `SOUL.md`,
 
 ### Gardener
 
-- **Periodic pass**, **How often it looks (min)**, **Silence required in the project (min)**, **Gap between two passes on one project (h)**: the gardener's `enabled`, `intervalMin`, `idleMin` and `minHoursBetweenPasses`. A hint says that turning it off is not uninstalling it: `/gardener` inside a project still runs a pass by hand.
-- **Project history** → **Archive an idle project's chat**: `compactProjectsWhenIdle`. It takes effect from the next gateway start, which the group says on the spot.
+- **Periodic pass**, **How often it looks (min)**, **Silence required in the notebook (min)**, **Gap between two passes on one notebook (h)**: the gardener's `enabled`, `intervalMin`, `idleMin` and `minHoursBetweenPasses`. A hint says that turning it off is not uninstalling it: `/gardener` inside a notebook still runs a pass by hand.
+- **Notebook history** → **Archive an idle notebook's chat**: `compactProjectsWhenIdle`. It takes effect from the next gateway start, which the group says on the spot.
 
 ### Local history
 

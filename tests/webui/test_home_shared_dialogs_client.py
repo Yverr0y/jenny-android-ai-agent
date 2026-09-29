@@ -15,9 +15,14 @@ risposta la riceve, ed e' un no.
 
 from __future__ import annotations
 
-from support.home_dom import requires_jsdom, run_home
+import json
+
+from support.home_dom import UI, requires_jsdom, run_home
 
 pytestmark = requires_jsdom
+
+# Il percorso della UI, gia' quotato per il modulo ES del banco.
+UI_JSON = json.dumps(str(UI))
 
 _HEAD = """
 import assert from 'node:assert/strict';
@@ -68,4 +73,44 @@ assert.equal(app.isChatOnScreen(), false, 'una domanda aperta copre la chat');
 app.handleHardwareBack();
 await asked;
 assert.equal(app.isChatOnScreen(), true);
+""")
+
+
+def test_back_closes_the_backup_passphrase_before_the_room_under_it() -> None:
+    """Le due finestre di ``shared/backup-flow.js`` nascono al volo, non stanno
+    nel DOM: senza un id nella lista, Indietro non le vedeva e portava via la
+    stanza Backup lasciando la passphrase aperta sopra Impostazioni."""
+    run_home(_HEAD + f"""
+const {{ promptPassphrase }} = await import({UI_JSON} + '/assets/shared/backup-flow.js');
+app._setView('backup');
+await tick(20);
+assert.equal(app.view, 'backup', 'la stanza Backup non si e\\u2019 aperta');
+const asked = promptPassphrase({{ confirm: true }});
+await tick(20);
+assert.equal($('oc-backup-passphrase-dialog').open, true, 'la passphrase non si e\\u2019 aperta');
+assert.equal(app.hasOverlayAbove(), true, 'la passphrase non conta come strato sopra');
+
+app.handleHardwareBack();
+await tick(20);
+assert.equal($('oc-backup-passphrase-dialog'), null, 'Indietro ha lasciato la passphrase aperta');
+assert.equal(app.view, 'backup', 'una pressione ha tolto anche la stanza');
+assert.equal(await asked, null, 'chiudere la domanda non e\\u2019 un no');
+""")
+
+
+def test_back_is_consumed_by_the_restart_dialog_without_closing_it() -> None:
+    """Il riavvio dopo un ripristino rifiuta ``cancel``: la pressione e'
+    consumata, la finestra resta, e la stanza sotto non si muove."""
+    run_home(_HEAD + f"""
+const {{ showRestartDialog }} = await import({UI_JSON} + '/assets/shared/backup-flow.js');
+app._setView('backup');
+await tick(20);
+showRestartDialog();
+await tick(20);
+assert.equal($('oc-backup-restart-dialog').open, true);
+
+app.handleHardwareBack();
+await tick(20);
+assert.equal($('oc-backup-restart-dialog').open, true, 'il riavvio non deve chiudersi');
+assert.equal(app.view, 'backup', 'Indietro e\\u2019 passato sotto il riavvio');
 """)

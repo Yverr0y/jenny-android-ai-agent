@@ -22,13 +22,11 @@ import { confirmDialog } from './dialog.js';
 import { i18n } from './i18n.js';
 import { dropLayoutKey } from './map-layout.js';
 
-/** Le frasi del giro, come chiavi i18n.
- *
- *  Il giro è uno e non sa come si chiami quel che cancella: in officina è un
- *  *progetto*, in casa un *quaderno*. Stessa soluzione di `PROJECT_WORDS` in
- *  `project-create.js`: chi chiama passa le sue parole, le regole restano qui.
+/** Le frasi del giro, come chiavi i18n: quel che si cancella è un **quaderno**,
+ *  in casa come in officina. Stessa forma di `NOTEBOOK_WORDS` in
+ *  `project-create.js`.
  */
-export const PROJECT_DELETE_WORDS = {
+export const NOTEBOOK_DELETE_WORDS = {
   confirm: 'workspace.deleteProjectConfirm',
   confirmWithChat: 'workspace.deleteProjectConfirmWithChat',
   failed: 'workspace.deleteProjectFailed',
@@ -41,9 +39,9 @@ export const PROJECT_DELETE_WORDS = {
  *  detto di no, oppure il server ha rifiutato — perché in entrambi il progetto
  *  c'è ancora e non va tolto da nessun elenco. L'errore lo dice il toast, qui.
  *
- *  @param words  le chiavi i18n da usare (v. `PROJECT_DELETE_WORDS`).
+ *  @param words  le chiavi i18n da usare (v. `NOTEBOOK_DELETE_WORDS`).
  */
-export async function deleteProjectFlow(name, words = PROJECT_DELETE_WORDS) {
+export async function deleteProjectFlow(name, words = NOTEBOOK_DELETE_WORDS) {
   if (!name) return false;
 
   let described = null;

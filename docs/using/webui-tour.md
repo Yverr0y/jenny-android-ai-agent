@@ -12,7 +12,7 @@ The home is a row of pages, and their names run along the top of the screen: the
 |---|---|
 | **Apps** | The app drawer: your Android apps and your [mini-apps](mini-apps.md), with a search box and the ones you use most at the top. See [App launcher](app-launcher.md). |
 | **Jenny** | The conversation. This page is named after the conversation it shows: *Jenny* for the personal one, the notebook's name when you are talking inside a notebook. See [Chat basics](chat.md). |
-| **Notebooks** | Who you are talking to: the personal conversation and every notebook, with a check mark on the one you are in. Tap a row to switch the chat to it; the round **+** makes a new notebook. See [Projects](projects.md). |
+| **Notebooks** | Who you are talking to: the personal conversation and every notebook, with a check mark on the one you are in. Tap a row to switch the chat to it; the round **+** makes a new notebook. See [Notebooks](projects.md). |
 | **Settings** | The settings of whoever uses the phone — theme, who answers, Jenny herself, updates, backup — and, at the bottom, the door to the workshop. |
 
 The home always opens on **Jenny**. Beside the four you can keep up to eight pages of your own: press and hold a mini-app in the drawer, or a notebook in **Notebooks**, and choose **Add as a page**. A mini-app that opens outside Jenny, or one that is broken, shows that row greyed out with the reason. A notebook page is a shortcut, not a second chat: landing on it switches the one conversation to that notebook.
@@ -131,7 +131,7 @@ It exists because Jenny delegates by default: the real work often happens in sub
 ## Where to go next
 
 - [Chat basics](chat.md) — sending messages, reading a response, the Subagents panel, `/stop`.
-- [Projects](projects.md) and [Wiki](wiki.md) — notebooks, their conversation and their pages.
+- [Notebooks](projects.md) and [Wiki](wiki.md) — notebooks, their conversation and their pages.
 - [Slash commands](slash-commands.md) — the full command list.
 - [Settings](../reference/settings.md) — every setting, including the ones only the workshop shows.
 - [Security model](../internals/security-model.md) — what "Restricted" access actually enforces.

@@ -400,7 +400,7 @@ def test_wikis_switched_off_say_the_sentence_the_house_already_has() -> None:
       const p = homePages();
       error = new Error('Graph failed: 503');
       await p.load('orto');
-      assert.equal(p.noteEl.textContent, i18n.t('home.who.create.wikiOff'));
+      assert.equal(p.noteEl.textContent, i18n.t('scope.createWikiOff'));
     """)
 
 
