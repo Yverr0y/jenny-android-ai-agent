@@ -131,7 +131,8 @@ def test_build_zip_metadata_and_tree(tmp_path: Path) -> None:
     import jenny
 
     env = _make_env(tmp_path)
-    with zipfile.ZipFile(io.BytesIO(env.manager._build_zip())) as archive:
+    env.manager._build_zip(tmp_path / "export.zip")
+    with zipfile.ZipFile(tmp_path / "export.zip") as archive:
         metadata = json.loads(archive.read("metadata.json").decode("utf-8"))
         assert metadata["format_version"] == 1
         assert metadata["jenny_version"] == jenny.__version__

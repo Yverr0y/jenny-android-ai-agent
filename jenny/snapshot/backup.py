@@ -5,6 +5,10 @@ L'export produce un singolo file ``.jbk``: un container AES-256-GCM (vedi
 workspace così com'è (``tree/``) più lo store degli snapshot (``snapshots/``).
 Disaster recovery senza Jenny = decifrare e aprire lo zip.
 
+Zip e container passano da file temporanei in staging, mai interi in memoria:
+il workspace può pesare centinaia di MB (le foto della chat), e un export che
+li teneva in RAM due volte non entrava nell'heap del telefono.
+
 L'import e il ripristino da snapshot non toccano MAI il workspace vivo:
 preparano un albero in staging e scrivono il marker; lo swap avviene al boot
 successivo (vedi ``restore_marker.py``), dopo il riavvio del processo.
@@ -15,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
 import shutil
 import time
 import zipfile
@@ -25,8 +30,8 @@ from loguru import logger
 
 from jenny.snapshot.crypto import (
     BACKUP_FILE_EXTENSION,
-    decrypt_container,
-    encrypt_container,
+    decrypt_file,
+    encrypt_file,
 )
 from jenny.snapshot.locations import (
     STAGED_SNAPSHOTS_DIR_NAME,
@@ -36,13 +41,31 @@ from jenny.snapshot.locations import (
 )
 from jenny.snapshot.restore_marker import write_marker, write_staging_sanity
 from jenny.snapshot.types import SnapshotManifest, is_snapshot_id, unsafe_entry_reason
-from jenny.utils.path import atomic_write
 
 if TYPE_CHECKING:
     from jenny.snapshot.service import SnapshotService
 
 BACKUP_FORMAT_VERSION = 1
 IMPORT_STAGED_FILENAME = f"import{BACKUP_FILE_EXTENSION}"
+# I temporanei di export/import: in staging, fuori dal workspace (quindi fuori
+# dagli snapshot), e con un suffisso che la rotazione degli export non tocca.
+_PART_SUFFIX = ".part"
+_EXPORT_ZIP_PART = f"export.zip{_PART_SUFFIX}"
+_IMPORT_ZIP_PART = f"import.zip{_PART_SUFFIX}"
+
+# Formati che sono già compressi: deflate non li rimpicciolisce e sul telefono
+# costa secondi di CPU per centinaia di MB. Entrano nello zip così come sono.
+_STORED_SUFFIXES = frozenset({
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif",
+    ".mp4", ".m4v", ".mov", ".webm", ".mkv", ".3gp",
+    ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac",
+    ".zip", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".jbk", ".apk",
+})
+
+
+def _compress_type_for(name: str) -> int:
+    suffix = PurePosixPath(name).suffix.lower()
+    return zipfile.ZIP_STORED if suffix in _STORED_SUFFIXES else zipfile.ZIP_DEFLATED
 
 
 class BackupError(Exception):
@@ -107,30 +130,42 @@ class BackupManager:
         async with self._lock:
             # Punto di export fotografato anche nella storia locale.
             await self._service.snapshot_now("pre_export")
-            plaintext = await asyncio.to_thread(self._build_zip)
-            blob = await encrypt_container(
-                passphrase, plaintext, iterations=self._cfg.pbkdf2_iterations
-            )
             filename = f"jenny-backup-{time.strftime('%Y%m%d-%H%M%S')}{BACKUP_FILE_EXTENSION}"
             path = self._staging / filename
-            await asyncio.to_thread(self._replace_staged_exports, path, blob)
-            logger.info("Backup exported to staging: {} ({} bytes)", filename, len(blob))
+            zip_part = self._staging / _EXPORT_ZIP_PART
+            jbk_part = self._staging / f"{filename}{_PART_SUFFIX}"
+            await asyncio.to_thread(self._clear_parts)
+            try:
+                await asyncio.to_thread(self._build_zip, zip_part)
+                size = await encrypt_file(
+                    passphrase, zip_part, jbk_part, iterations=self._cfg.pbkdf2_iterations
+                )
+                await asyncio.to_thread(self._replace_staged_exports, jbk_part, path)
+            finally:
+                await asyncio.to_thread(self._clear_parts)
+            logger.info("Backup exported to staging: {} ({} bytes)", filename, size)
             return {
                 "staged_path": str(path),
                 "suggested_filename": filename,
-                "size_bytes": len(blob),
+                "size_bytes": size,
             }
 
-    def _replace_staged_exports(self, path: Path, blob: bytes) -> None:
-        """Scrive il nuovo export e rimuove i precedenti (uno alla volta in staging)."""
-        self._staging.mkdir(parents=True, exist_ok=True)
+    def _clear_parts(self) -> None:
+        """Toglie i temporanei, anche quelli di un processo morto a metà."""
+        if not self._staging.is_dir():
+            return
+        for part in self._staging.glob(f"*{_PART_SUFFIX}"):
+            part.unlink(missing_ok=True)
+
+    def _replace_staged_exports(self, part: Path, path: Path) -> None:
+        """Promuove il nuovo export e rimuove i precedenti (uno alla volta in staging)."""
         for old in self._staging.glob(f"jenny-backup-*{BACKUP_FILE_EXTENSION}"):
             old.unlink(missing_ok=True)
-        atomic_write(path, blob)
+        os.replace(part, path)
 
-    def _build_zip(self) -> bytes:
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+    def _build_zip(self, dest: Path) -> None:
+        self._staging.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as archive:
             metadata = {
                 "format_version": BACKUP_FORMAT_VERSION,
                 "exported_at_ms": int(time.time() * 1000),
@@ -141,7 +176,7 @@ class BackupManager:
             # scan e la write non deve far fallire l'intero backup.
             for rel, full in self._engine.iter_tracked_files():
                 try:
-                    archive.write(full, f"tree/{rel}")
+                    archive.write(full, f"tree/{rel}", compress_type=_compress_type_for(rel))
                 except OSError:
                     logger.warning("Backup export: skipping vanished file {}", rel)
             snapshots_dir = self._engine.snapshots_dir
@@ -153,7 +188,6 @@ class BackupManager:
                             archive.write(item, f"snapshots/{rel}")
                         except OSError:
                             logger.warning("Backup export: skipping vanished file {}", rel)
-        return buffer.getvalue()
 
     # -- import -----------------------------------------------------------------
 
@@ -169,9 +203,12 @@ class BackupManager:
             raise BackupError("passphrase required")
         source = self._validated_staged_file(staged_path)
         async with self._lock:
-            data = await asyncio.to_thread(source.read_bytes)
-            plaintext = await decrypt_container(passphrase, data)
-            metadata = await asyncio.to_thread(self._extract_backup, plaintext)
+            zip_part = self._staging / _IMPORT_ZIP_PART
+            try:
+                await decrypt_file(passphrase, source, zip_part)
+                metadata = await asyncio.to_thread(self._extract_backup, zip_part)
+            finally:
+                zip_part.unlink(missing_ok=True)
             # Fotografa lo stato corrente PRIMA di impegnare il restore.
             await self._service.snapshot_now("pre_restore")
             staged_dir = self._runtime_root / STAGED_WORKSPACE_DIR_NAME
@@ -189,15 +226,23 @@ class BackupManager:
             raise FileNotFoundError(f"staged backup file not found: {candidate.name}")
         return candidate
 
-    def _extract_backup(self, plaintext: bytes) -> dict[str, Any]:
-        """Estrae lo zip decifrato negli staging dir. Ritorna il metadata."""
+    def _extract_backup(self, archive_source: bytes | Path) -> dict[str, Any]:
+        """Estrae lo zip decifrato negli staging dir. Ritorna il metadata.
+
+        *archive_source* è il file dello zip; i byte in memoria restano per i
+        test, che costruiscono archivi ostili senza passare dal disco.
+        """
         staged_ws = self._runtime_root / STAGED_WORKSPACE_DIR_NAME
         staged_snap = self._runtime_root / STAGED_SNAPSHOTS_DIR_NAME
         shutil.rmtree(staged_ws, ignore_errors=True)
         shutil.rmtree(staged_snap, ignore_errors=True)
 
         try:
-            archive = zipfile.ZipFile(io.BytesIO(plaintext))
+            archive = zipfile.ZipFile(
+                io.BytesIO(archive_source)
+                if isinstance(archive_source, bytes)
+                else archive_source
+            )
         except zipfile.BadZipFile as exc:
             raise BackupError("decrypted payload is not a valid backup archive") from exc
 
@@ -225,16 +270,21 @@ class BackupManager:
                 pure = PurePosixPath(rel)
                 if pure.is_absolute() or ".." in pure.parts:
                     raise BackupError(f"backup archive contains an unsafe path: {name}")
-                data = archive.read(name)
+                target = dest_root / Path(*pure.parts)
                 if dest_root is staged_snap and pure.parts[0] == "manifests":
+                    data = archive.read(name)
                     problem = _imported_manifest_problem(data, pure)
                     if problem is not None:
                         shutil.rmtree(staged_ws, ignore_errors=True)
                         shutil.rmtree(staged_snap, ignore_errors=True)
                         raise BackupError(f"backup archive {name}: {problem}")
-                target = dest_root / Path(*pure.parts)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(data)
+                else:
+                    # A flusso: una foto da 20 MB non passa intera in memoria.
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(name) as src, open(target, "wb") as dst:
+                        shutil.copyfileobj(src, dst, 1 << 20)
                 if dest_root is staged_ws:
                     extracted_tree += 1
 

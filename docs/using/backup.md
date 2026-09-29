@@ -30,7 +30,27 @@ This is disaster recovery: a single file containing your whole workspace — mem
 3. Jenny takes a `pre-export` snapshot, encrypts everything, and hands the file to Android's Storage Access Framework (SAF) "save as" picker — you can save it to Google Drive, an SD card, or any location the picker offers. No storage permission is requested; SAF handles it.
 4. The suggested filename is `jenny-backup-YYYYMMDD-HHMMSS.jbk`.
 
-Format details, if you care: the container is AES-256-GCM with a key derived via PBKDF2-HMAC-SHA256 at 600,000 iterations by default (configurable between 100,000 and 10,000,000 via `snapshots.pbkdf2_iterations`). Inside the encrypted envelope is a plain, readable zip archive (a file tree plus the snapshot store) — so in a real emergency you can decrypt the container with any standard tool and open the zip even without Jenny installed. This is a deliberate design choice: your backup isn't locked to this app.
+Format details, if you care: the container is AES-256-GCM with a key derived via PBKDF2-HMAC-SHA256 at 600,000 iterations by default (configurable between 100,000 and 10,000,000 via `snapshots.pbkdf2_iterations`). Inside the encrypted envelope is a plain, readable zip archive (a file tree plus the snapshot store) — so in a real emergency you can decrypt the container and open the zip even without Jenny installed. This is a deliberate design choice: your backup isn't locked to this app.
+
+The payload is encrypted in 1 MiB segments rather than in one piece (format version 2), so a workspace full of chat photos doesn't have to fit in the phone's memory to be exported. Photos, audio and video go into the zip as they are, without recompression. Backups in the older single-piece format (version 1) still import. The layout is documented at the top of `jenny/snapshot/crypto.py`. A segmented file is standard AES-GCM, just applied once per segment, so a dozen lines of Python with the `cryptography` package decrypt it:
+
+```python
+import hashlib, struct, sys
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+data, passphrase = open(sys.argv[1], "rb").read(), sys.argv[2].encode()
+header = data[:41]                     # JNBK | 2 | iterations | salt | nonce | segment size
+iterations, salt, nonce = struct.unpack(">I", header[5:9])[0], header[9:25], header[25:37]
+size = struct.unpack(">I", header[37:41])[0] + 16
+key = AESGCM(hashlib.pbkdf2_hmac("sha256", passphrase, salt, iterations, 32))
+body = data[41:]
+segments = [body[i:i + size] for i in range(0, len(body), size)]
+with open("backup.zip", "wb") as out:
+    for i, seg in enumerate(segments):
+        seg_nonce = nonce[:4] + (int.from_bytes(nonce[4:], "big") ^ i).to_bytes(8, "big")
+        aad = header + struct.pack(">QB", i, i == len(segments) - 1)
+        out.write(key.decrypt(seg_nonce, seg, aad))
+```
 
 <!-- TODO: verify on-device (O-2, incl. Google Drive SAF) -->
 The export/import picker uses Android's standard document APIs, so Drive should work like any other SAF target, but a full save-to-Drive round trip hasn't been confirmed on-device yet.

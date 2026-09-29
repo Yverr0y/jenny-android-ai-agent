@@ -73,6 +73,13 @@ from jenny.utils.media_decode import (
 )
 from jenny.webui.metadata import WEBUI_DEFAULT_CHAT_ID
 
+# Per ``websockets`` una richiesta HTTP è un handshake mai concluso, e
+# ``open_timeout`` (10 s di default) lo taglia chiudendo la connessione senza
+# risposta: ogni route ``/api/`` più lunga di così arrivava al client come
+# «Failed to fetch». L'export di un backup da 310 MB sul telefono ne dura di
+# più. Il server ascolta su localhost, quindi un tetto largo non apre niente.
+_HTTP_OPEN_TIMEOUT_S = 600.0
+
 
 class WebSocketConfig(Base):
     """WebSocket server channel configuration.
@@ -395,6 +402,7 @@ class WebSocketChannel(OutboundSenderMixin):
                 self.config.host,
                 self.config.port,
                 process_request=process_request,
+                open_timeout=_HTTP_OPEN_TIMEOUT_S,
                 max_size=self.config.max_message_bytes,
                 ping_interval=self.config.ping_interval_s,
                 ping_timeout=self.config.ping_timeout_s,
