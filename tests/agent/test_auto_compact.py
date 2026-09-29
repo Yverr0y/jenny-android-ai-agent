@@ -353,7 +353,9 @@ class TestAutoCompact:
 
         loop.bus.consume_inbound = _consume_inbound  # type: ignore[method-assign]
         loop.auto_compact.check_expired = MagicMock(side_effect=RuntimeError("boom"))
-        loop._last_ttl_check = 0.0
+        # Non ``0.0``: ``time.monotonic()`` su un runner CI appena acceso vale
+        # pochi secondi, sotto ``_TTL_CHECK_INTERVAL_S``, e il giro non parte.
+        loop._last_ttl_check = -float("inf")
 
         await loop.run()
 
