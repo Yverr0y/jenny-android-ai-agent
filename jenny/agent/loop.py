@@ -1584,8 +1584,8 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # supporto vision) e ha ritentato solo testo: avvisa in chat invece
             # di lasciare che sembri che l'allegato sia stato ignorato.
             notice = (
-                "\n\n⚠️ Le immagini allegate non sono state elaborate: "
-                "il modello attivo non supporta input visivi."
+                "\n\n⚠️ The attached images were not processed: "
+                "the active model does not support image input."
             )
             result.final_content += notice
             if result.messages and result.messages[-1].get("role") == "assistant":

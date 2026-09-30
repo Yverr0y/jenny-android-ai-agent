@@ -275,14 +275,14 @@ class TestDo:
                 super().__init__(context)
                 self.act_payload = {
                     "results": [{"i": 0, "action": "click", "ok": False,
-                                 "error": 'ref "1:e3" e\' della versione 1, lo snapshot corrente e\' 2'}],
+                                 "error": 'ref "1:e3" is from version 1, the current snapshot is 2'}],
                     "failed": True,
                 }
 
         _install(monkeypatch, WithError)
         out = await _tool(BrowserDoTool).execute(steps=[{"action": "click", "ref": "1:e3"}])
-        assert "FALLITO" in out
-        assert "versione" in out
+        assert "FAILED" in out
+        assert "version 1" in out
 
 
 class TestLifecycle:
@@ -655,7 +655,7 @@ class TestSensitiveVerbs:
             {"action": "click", "ref": "1:e9"},
         ])
         assert out.startswith("Error:")
-        assert "passo 1" in out
+        assert "step 1" in out
         assert "bridge" not in holder
 
     async def test_a_name_we_do_not_know_does_not_block(self, monkeypatch):
@@ -745,8 +745,8 @@ class TestTheGuardMakesItselfHeard:
         class WithBlock(FakeBridge):
             def __init__(self, context=None):
                 super().__init__(context)
-                self.notice = "navigazione fermata: la sessione e' aperta su esempio.test"
+                self.notice = "navigation stopped: the session is open on esempio.test"
 
         _install(monkeypatch, WithBlock)
         out = await _tool(BrowserDoTool).execute(steps=[{"action": "click", "ref": "1:e1"}])
-        assert "navigazione fermata" in out
+        assert "navigation stopped" in out

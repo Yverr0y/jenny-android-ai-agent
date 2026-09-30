@@ -968,12 +968,12 @@ async def test_process_direct_appends_notice_when_images_stripped(tmp_path: Path
     assert result is not None
     assert result.content is not None
     assert result.content.startswith("Ecco la risposta")
-    assert "non supporta input visivi" in result.content
+    assert "does not support image input" in result.content
 
     session = loop.sessions.get_or_create("websocket:vision-test")
     assistant_messages = [m["content"] for m in session.messages if m["role"] == "assistant"]
     assert assistant_messages
-    assert "non supporta input visivi" in assistant_messages[-1]
+    assert "does not support image input" in assistant_messages[-1]
 
 
 @pytest.mark.asyncio

@@ -253,7 +253,7 @@ def _decode(raw: Any) -> dict[str, Any]:
     Si prova a scartare due volte e ci si ferma al primo oggetto.
     """
     if raw is None:
-        return {"error": "il bridge non ha restituito niente"}
+        return {"error": "the bridge returned nothing"}
     data: Any = str(raw)
     for _ in range(2):
         if isinstance(data, dict):
@@ -261,8 +261,8 @@ def _decode(raw: Any) -> dict[str, Any]:
         try:
             data = json.loads(data)
         except (json.JSONDecodeError, TypeError):
-            return {"error": f"risposta non decodificabile dal bridge: {str(raw)[:200]}"}
-    return data if isinstance(data, dict) else {"error": "risposta inattesa dal bridge"}
+            return {"error": f"undecodable response from the bridge: {str(raw)[:200]}"}
+    return data if isinstance(data, dict) else {"error": "unexpected response from the bridge"}
 
 
 async def _call(
@@ -287,17 +287,17 @@ async def _call(
             # Una pagina lenta non e` inattivita`: si timbra anche in uscita.
             _LAST_USE = time.monotonic()
         except asyncio.CancelledError:
-            logger.warning("browser.{} annullato", method)
+            logger.warning("browser.{} cancelled", method)
             await _destroy_browser_async()
             raise
         except asyncio.TimeoutError:
             logger.error("browser.{} timed out after {}s", method, timeout + 10)
             await _destroy_browser_async()
-            return {"error": f"browser_{method} non ha risposto entro {timeout + 10}s"}
+            return {"error": f"browser_{method} did not answer within {timeout + 10}s"}
         except Exception as exc:
             logger.exception("browser.{} failed", method)
             await _destroy_browser_async()
-            return {"error": f"browser_{method} fallito: {exc}"}
+            return {"error": f"browser_{method} failed: {exc}"}
     return _decode(raw)
 
 
@@ -372,8 +372,8 @@ def _render_snapshot(data: dict[str, Any]) -> str:
     total = data.get("total", 0)
     mode = data.get("mode", "full")
     head.append(
-        f"snapshot v{data.get('version', '?')} ({mode}) — {refs} elementi con ref "
-        f"su {total} visibili"
+        f"snapshot v{data.get('version', '?')} ({mode}) — {refs} elements with a ref "
+        f"out of {total} visible"
     )
     return "\n".join(head) + "\n\n" + str(data.get("text", ""))
 
@@ -412,21 +412,21 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
             label = _FORM_OF.get(focus) if focus else None
             if label and _is_sensitive(label):
                 return (
-                    f'passo {i}: Enter invierebbe il modulo "{label}", un\'azione che costa '
-                    "(soldi, cancellazione o accesso). Non la faccio da sola: chiedi conferma "
-                    "all'utente, e se dice di si' ripeti lo stesso passo aggiungendo "
+                    f'step {i}: Enter would submit the form "{label}", an action that costs '
+                    "(money, deletion or access). I won't do it on my own: ask the user to "
+                    "confirm, and if they say yes, repeat the same step adding "
                     '"confirm": true.'
                 )
             if not label and _page_has_costly_actions():
                 # Cursore sconosciuto, o un campo fuori da un <form> (etichetta
                 # vuota): che cosa faccia l'Enter lo decide il JavaScript della
                 # pagina, e la pagina ha azioni che costano. Si chiede.
-                where = "un campo fuori da un modulo" if label == "" else "un campo che non so"
+                where = "a field outside any form" if label == "" else "an unknown field"
                 return (
-                    f"passo {i}: Enter su {where}, in una pagina con azioni che costano "
-                    "(soldi o cancellazione): non so che cosa farebbe partire. Clicca il "
-                    "bottone che serve, o chiedi conferma all'utente e, se dice di si', "
-                    'ripeti lo stesso passo aggiungendo "confirm": true.'
+                    f"step {i}: Enter on {where}, on a page with actions that cost "
+                    "(money or deletion): I can't tell what it would trigger. Click the "
+                    "button you need, or ask the user to confirm and, if they say yes, "
+                    'repeat the same step adding "confirm": true.'
                 )
             if label is None:
                 st["submit"] = False
@@ -436,14 +436,14 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
         role, name = _LAST_INDEX.get(ref, ("", ""))
         if action == "type" and role == "password":
             return (
-                f"passo {i}: non scrivo in un campo password. Le credenziali le mette "
-                "l'utente dal telefono, non io — chiediglielo e prosegui da dopo il login."
+                f"step {i}: I don't type into a password field. The user enters "
+                "credentials on the phone, not me — ask them to, and carry on after the login."
             )
         if action == "click" and _is_sensitive(name) and not st.get("confirm"):
             return (
-                f'passo {i}: "{name}" e\' un\'azione che costa (soldi, cancellazione o '
-                "accesso). Non la faccio da sola: chiedi conferma all'utente, e se dice di "
-                'si\' ripeti lo stesso passo aggiungendo "confirm": true.'
+                f'step {i}: "{name}" is an action that costs (money, deletion or '
+                "access). I won't do it on my own: ask the user to confirm, and if they "
+                'say yes, repeat the same step adding "confirm": true.'
             )
     return None
 
@@ -621,7 +621,7 @@ class BrowserDoTool(_BrowserToolBase):
 
     async def execute(self, steps: list[dict[str, Any]] | None = None, **kwargs: Any) -> Any:
         if not steps:
-            return "Error: nessun passo da eseguire"
+            return "Error: no steps to run"
         if (refusal := _refuse_step(steps)) is not None:
             return f"Error: {refusal}"
         payload = json.dumps(steps, ensure_ascii=False)
@@ -632,10 +632,10 @@ class BrowserDoTool(_BrowserToolBase):
 
         lines = []
         for r in out.get("results", []):
-            mark = "ok" if r.get("ok") else "FALLITO"
+            mark = "ok" if r.get("ok") else "FAILED"
             detail = r.get("error") or r.get("selected") or ""
             lines.append(f"  {r.get('i')}. {r.get('action')}: {mark}{' — ' + detail if detail else ''}")
-        header = "passi eseguiti:\n" + "\n".join(lines) if lines else "nessun passo eseguito"
+        header = "steps run:\n" + "\n".join(lines) if lines else "no steps run"
 
         # La guardia lavora **durante** la navigazione, quindi non puo' finire nel
         # risultato dei passi: si ritira qui, altrimenti un blocco resta muto e il
@@ -653,7 +653,7 @@ class BrowserDoTool(_BrowserToolBase):
             timeout=self.timeout, idle_s=self.idle_close_s,
         )
         if shot.get("error"):
-            return f"{header}\n\n(snapshot non disponibile: {shot['error']})"
+            return f"{header}\n\n(snapshot unavailable: {shot['error']})"
         return f"{header}\n\n{_render_snapshot(shot)}"
 
 
@@ -679,7 +679,7 @@ class BrowserReadTool(_BrowserToolBase):
     async def execute(self, ref: str = "", **kwargs: Any) -> Any:
         role, _name = _LAST_INDEX.get(ref, ("", ""))
         if role == "password":
-            return "Error: non leggo un campo password."
+            return "Error: I don't read password fields."
         out = await _call(
             self.android_context, "read", ref or "", self.max_read_chars, self.timeout,
             timeout=self.timeout, idle_s=self.idle_close_s,
@@ -688,7 +688,7 @@ class BrowserReadTool(_BrowserToolBase):
             return f"Error: {out['error']}"
         tail = ""
         if out.get("truncated"):
-            tail = f"\n\n… troncato: la regione ha {out.get('chars')} caratteri."
+            tail = f"\n\n… truncated: the region has {out.get('chars')} characters."
         return f"{_UNTRUSTED_BANNER}\nurl: {out.get('url', '')}\n\n{out.get('text', '')}{tail}"
 
 
@@ -708,7 +708,7 @@ class BrowserCloseTool(_BrowserToolBase):
         # tiene per tutta la sua durata). E fuori dal loop, perche' blocca.
         async with _BROWSER_LOCK:
             await _destroy_browser_async()
-        return "Sessione chiusa."
+        return "Session closed."
 
 
 TOOLS = [

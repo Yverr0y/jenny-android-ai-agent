@@ -599,14 +599,14 @@ class JennyBrowserBridge(context: Context) {
     private fun describeBlock(raw: String): String {
         if (raw.startsWith("PERIMETRO|")) {
             val parts = raw.split("|", limit = 3)
-            return "navigazione fermata: la sessione e' aperta su ${parts[1]} e questo " +
-                "porta fuori (${parts.getOrElse(2) { "?" }}). Se ci vuoi andare davvero, " +
-                "chiama browser_open su quell'indirizzo: e' un atto esplicito e sposta " +
-                "il perimetro."
+            return "navigation stopped: the session is open on ${parts[1]} and this " +
+                "leads outside it (${parts.getOrElse(2) { "?" }}). If you really mean to go " +
+                "there, call browser_open on that address: it is an explicit act and moves " +
+                "the perimeter."
         }
-        return "navigazione rifiutata: $raw e' un indirizzo di rete privata o locale. " +
-            "Se ci sei arrivato da un redirect, il sito di partenza sta puntando dentro " +
-            "la rete del telefono."
+        return "navigation refused: $raw is a private or local network address. " +
+            "If a redirect brought you here, the starting site is pointing into the " +
+            "phone's own network."
     }
 
     /** Restituisce e consuma l'ultimo blocco, per chi non passa da open(). */
@@ -678,12 +678,12 @@ class JennyBrowserBridge(context: Context) {
         }
         if (!done.await(timeoutSeconds, TimeUnit.SECONDS)) {
             if (gate.compareAndSet(GATE_OPEN, GATE_ABANDONED)) {
-                return """{"error":"evaluateJavascript timeout dopo ${timeoutSeconds}s: la pagina non e' stata toccata"}"""
+                return """{"error":"evaluateJavascript timed out after ${timeoutSeconds}s: the page was not touched"}"""
             }
             // Il cancello l'ha gia' preso il main: lo script e' partito, e un
             // `act` puo' aver cliccato. Dirlo, invece di un «timeout» che
             // suona come «non e' successo niente».
-            return """{"error":"evaluateJavascript timeout dopo ${timeoutSeconds}s: lo script e' partito senza rispondere, la pagina puo' essere cambiata"}"""
+            return """{"error":"evaluateJavascript timed out after ${timeoutSeconds}s: the script started without answering, the page may have changed"}"""
         }
         return out.get()
     }
@@ -701,7 +701,7 @@ class JennyBrowserBridge(context: Context) {
     /** Apre [url] e aspetta che la pagina si sia posata. */
     fun open(url: String, timeoutSeconds: Long = DEFAULT_TIMEOUT_SECONDS): String {
         val uri = Uri.parse(url)
-        if (isBlockedLiteral(uri)) return """{"error":"indirizzo non consentito"}"""
+        if (isBlockedLiteral(uri)) return """{"error":"address not allowed"}"""
         lastBlocked.set(null)
         // Un browser_open e' un atto esplicito: il perimetro si rifa' **dopo**,
         // sull'indirizzo dove la pagina si e' posata davvero. Fino ad allora il
@@ -756,12 +756,12 @@ class JennyBrowserBridge(context: Context) {
         // `loadUrl` che solleva quando questo thread sta gia' aspettando.
         if (!started && gate.compareAndSet(GATE_OPEN, GATE_ABANDONED)) {
             openInFlight.set(false)
-            return """{"error":"il browser non si e' aperto: la pagina non e' partita"}"""
+            return """{"error":"the browser did not open: the page never started loading"}"""
         }
         val settled = awaitSettled(timeoutSeconds)
         openInFlight.set(false)
         if (gate.get() == GATE_FAILED) {
-            return """{"error":"il browser non si e' aperto: la pagina non e' partita"}"""
+            return """{"error":"the browser did not open: the page never started loading"}"""
         }
         lastBlocked.getAndSet(null)?.let {
             return """{"error":${quote(describeBlock(it))}}"""

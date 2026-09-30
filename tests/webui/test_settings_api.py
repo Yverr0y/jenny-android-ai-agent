@@ -443,10 +443,10 @@ async def test_save_onboarding_welcome_lands_in_unified_session(
     session = sessions.get_or_create(UNIFIED_SESSION_KEY)
     assert [m.get("role") for m in session.messages] == ["assistant"]
     assert result["welcome_message"] in session.messages[0]["content"]
-    assert "Ciao sono Jenny" in session.messages[0]["content"]
-    # La lingua italiana (fallback) viene persistita nella config.
+    assert "Hi, I'm Jenny" in session.messages[0]["content"]
+    # Senza locale si ripiega sull'inglese, come la WebUI, e lo si persiste.
     saved = load_config(config_path)
-    assert saved.agents.defaults.language == "it"
+    assert saved.agents.defaults.language == "en"
 
 
 @pytest.mark.asyncio
@@ -481,6 +481,45 @@ async def test_save_onboarding_welcome_is_localized_to_english(
     assert "Hi, I'm Jenny" in session.messages[0]["content"]
     saved = load_config(config_path)
     assert saved.agents.defaults.language == "en"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("locale", "greeting", "saved_language"),
+    [("it", "Ciao sono Jenny", "it"), ("fr", "Hi, I'm Jenny", "en")],
+)
+async def test_save_onboarding_welcome_follows_a_known_locale_only(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, locale: str, greeting: str, saved_language: str
+) -> None:
+    """L'italiano resta per chi l'ha scelto; una lingua che non c'è ripiega sull'inglese.
+
+    Il saluto è il primo messaggio della cronologia: un ripiego italiano lo
+    faceva leggere a un modello che per tutto il resto parla inglese.
+    """
+    import asyncio
+
+    from jenny.session.keys import UNIFIED_SESSION_KEY
+    from jenny.session.manager import SessionManager
+
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+    sessions = SessionManager(tmp_path)
+
+    await save_onboarding(
+        {
+            "provider_name": "openai",
+            "format": "openai_compat",
+            "model": "gpt-x",
+            "api_key": "sk-test-123",
+            "locale": locale,
+        },
+        session_manager=sessions,
+        onboarding_event=asyncio.Event(),
+    )
+
+    session = sessions.get_or_create(UNIFIED_SESSION_KEY)
+    assert greeting in session.messages[0]["content"]
+    assert load_config(config_path).agents.defaults.language == saved_language
 
 
 async def test_short_api_key_is_shown_as_present(tmp_path, monkeypatch) -> None:

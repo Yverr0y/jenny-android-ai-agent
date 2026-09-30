@@ -826,8 +826,11 @@ async def save_onboarding(
         config.agents.defaults.bot_icon = bot_icon
 
         # Persist the user's language preference for future backend-localized messages.
-        locale = (data.get("locale") or "it").strip().lower()
-        config.agents.defaults.language = locale if locale in WELCOME_TEMPLATES else "it"
+        # Senza una lingua nota si ripiega sull'inglese, come ``I18n.detectLocale``
+        # nella WebUI: il saluto finisce nella cronologia, e un ripiego italiano
+        # era la prima riga che un modello in inglese leggeva.
+        locale = (data.get("locale") or "en").strip().lower()
+        config.agents.defaults.language = locale if locale in WELCOME_TEMPLATES else "en"
 
         # Fase 6.7: valida il provider PRIMA di persistere/segnalare. Se la config
         # non produce un provider valido, l'errore torna subito alla WebUI di
@@ -846,7 +849,7 @@ async def save_onboarding(
     # Il saluto di benvenuto finisce nell'unica sessione unificata,
     # la stessa che la chat rilegge all'attach.
     chat_id = "default"
-    greeting_template = WELCOME_TEMPLATES.get(config.agents.defaults.language, WELCOME_TEMPLATES["it"])
+    greeting_template = WELCOME_TEMPLATES.get(config.agents.defaults.language, WELCOME_TEMPLATES["en"])
     greeting = greeting_template.format(bot_name=bot_name)
     if session_manager:
         session = session_manager.get_or_create(UNIFIED_SESSION_KEY)
