@@ -281,6 +281,16 @@ status simply replaces a pending one. `started_at` appears only with `"running"`
 {"event": "goal_status", "chat_id": "default", "status": "running", "started_at": 1756640000.0}
 ```
 
+**`turn_waiting`** — the turn is still running but has stopped to wait for the subagents it
+spawned (up to 300 seconds), so no other frame will arrive until one of them reports back. Sent
+once per wait, only to subscribers of that chat, never retried and never persisted. There is no
+matching "done" frame: whatever the turn sends next (reasoning, tools, text, `turn_end`) ends
+the wait. `subagents` is how many it is waiting for; `turn_id` is present when the turn had one:
+
+```json
+{"event": "turn_waiting", "chat_id": "project:garden", "reason": "subagents", "subagents": 2, "turn_id": "webui:A"}
+```
+
 **`mascot_mood`** — how Jenny feels about the reply she just gave, for the on-screen mascot,
 read by the server from the emoji in that reply (no model request). Sent after `turn_end`, only to subscribers of that chat, never retried and never persisted: the
 next turn replaces it, and a reload starts from a neutral face. `mood` is one of `happy`, `sad`,
@@ -473,9 +483,9 @@ All fields go under the top-level `websocket` object in `config.json`. These are
 |-------|------|---------|-------------|
 | `streaming` | bool | `true` | Enable streaming mode. The agent sends `delta` + `stream_end` frames instead of a single `message`. |
 | `sendProgress` | bool | `true` | Send interim progress text while a turn runs. With it off the client sees nothing until the turn produces its answer. |
-| `sendToolHints` | bool | `false` | Include one-line tool hints in that progress stream ("reading SOUL.md", "searching…"). Off by default: it is the noisiest of the four. |
+| `sendToolHints` | bool | `false` | Include one-line tool hints in that progress stream ("reading SOUL.md", "searching…"). Off by default: it is the noisiest of the four. With it off the hint text is dropped but the `tool_events` it carried (the tools that are starting) still arrive, as a `progress` message with no text, wherever `sendProgress` is on. |
 | `showReasoning` | bool | `true` | Forward `reasoning_delta` / `reasoning_end` frames when the provider exposes incremental reasoning. |
-| `sendMaxRetries` | int | `3` | Attempts the dispatcher makes for one outbound frame before dropping it. Refresh-hint frames (`goal_status`, `mascot_mood`, `subagent_status`, `runtime_model_updated`, `app_data_changed`, `apps_list_changed`) are exempt by design: the next one replaces a pending one, so retrying them is pointless. `subagent_activity` is not retried as a frame either — the watcher's cursor simply does not move, so the next tick resends the same events. |
+| `sendMaxRetries` | int | `3` | Attempts the dispatcher makes for one outbound frame before dropping it. Refresh-hint frames (`goal_status`, `turn_waiting`, `mascot_mood`, `subagent_status`, `runtime_model_updated`, `app_data_changed`, `apps_list_changed`) are exempt by design: the next one replaces a pending one, so retrying them is pointless. `subagent_activity` is not retried as a frame either — the watcher's cursor simply does not move, so the next tick resends the same events. |
 
 ### Keep-alive
 
@@ -559,7 +569,7 @@ After a reconnect the connection is back on the personal chat only, so a client 
 
 ### Rules
 
-- A chat's frames (`message`, `user`, `delta`, `stream_end`, `reasoning_*`, `turn_end`, `goal_status`, `mascot_mood`, `file_edit`, `subagent_status`) carry the `chat_id` they belong to and go only to the connections subscribed to it.
+- A chat's frames (`message`, `user`, `delta`, `stream_end`, `reasoning_*`, `turn_end`, `goal_status`, `turn_waiting`, `mascot_mood`, `file_edit`, `subagent_status`) carry the `chat_id` they belong to and go only to the connections subscribed to it.
 - Some frames carry no `chat_id`: `runtime_model_updated`, `app_data_changed` and `apps_list_changed` go to every connection; `error`, `rpc_result`, `ui_query` and `subagent_unwatched` go to one.
 - The personal chat cannot be left: proactive messages and the mascot's frames reach a connection there even while it is showing a project.
 - Errors (invalid envelope, unknown `type`, missing `content`, an impossible project name) are soft: the server replies with `{"event":"error","detail":"...","reason":"..."}` and keeps the connection open.

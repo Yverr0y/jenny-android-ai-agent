@@ -222,6 +222,35 @@ class WebSocketDispatcher:
             return False
         return channel.send_tool_hints if tool_hint else channel.send_progress
 
+    @classmethod
+    def _tool_start_without_hint(
+        cls, msg: OutboundMessage, channel: Any
+    ) -> OutboundMessage | None:
+        """Il ``tool_hint`` scartato, senza il suggerimento ma con gli strumenti.
+
+        L'unico frame che dice quali strumenti **partono** e' il ``tool_hint``
+        (``AgentProgressHook.before_execute_tools``): porta insieme la riga di
+        testo e i ``tool_events`` di fase ``start``. Un canale che i suggerimenti
+        non li vuole (``sendToolHints``, spento di default) buttava via anche gli
+        strumenti, e alla WebUI arrivavano solo gli ``end``: la riga di lavoro
+        della casa non sapeva mai cosa stesse girando, e dopo un pezzo di testo
+        restava spenta per tutto il giro di strumenti che seguiva (misurato il
+        30/09/2026 su un quaderno). Il testo resta fuori, perche' e' quello che
+        l'impostazione spegne; gli eventi passano come un progress qualunque,
+        nella stessa forma degli ``end``, e quindi solo dove i progress sono
+        ammessi.
+        """
+        if not msg.metadata.get("_tool_hint") or not msg.metadata.get("_tool_events"):
+            return None
+        if not cls._channel_allows_progress(channel):
+            return None
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content="",
+            metadata={**msg.metadata, "_tool_hint": False},
+        )
+
     async def _start_channel(self, name: str, channel: Any) -> None:
         logger.info("Starting {} channel...", name)
         try:
@@ -358,7 +387,9 @@ class WebSocketDispatcher:
                     if not self._channel_allows_progress(
                         target, tool_hint=bool(msg.metadata.get("_tool_hint"))
                     ):
-                        continue
+                        msg = self._tool_start_without_hint(msg, target)
+                        if msg is None:
+                            continue
 
                 if msg.metadata.get("_retry_wait"):
                     # L'avviso «il modello non risponde, riprovo fra N s» arriva

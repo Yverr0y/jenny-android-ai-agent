@@ -73,7 +73,12 @@ SHELL_WITHOUT_LISTENER = {
         # legge dalle impostazioni quando la apri.
         "runtime_model_updated": "il modello si rilegge all'apertura della stanza",
     },
-    "workshop.html": {},
+    "workshop.html": {
+        # Serve alla riga di lavoro della casa, che dopo il testo di stato si
+        # spegneva per tutta l'attesa; l'officina i subagent che girano li
+        # mostra gia' nel loro pannello (``subagent_status``).
+        "turn_waiting": "la riga di lavoro: solo casa",
+    },
 }
 
 _IMPORT = re.compile(

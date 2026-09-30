@@ -43,6 +43,7 @@ class App {
       reasoning: () => this.rows.push('reasoning'),
       tools: () => this.rows.push('tools'),
       answering: () => this.rows.push('answering'),
+      waiting: () => this.rows.push('waiting'),
     };
   }
   __READ_RUN__
@@ -100,3 +101,19 @@ def test_frames_of_this_conversation_and_frames_without_a_chat_still_count() -> 
       assert.deepEqual(app.rows, ['start:t1']);
     """)
 
+
+
+def test_a_turn_waiting_for_its_subagents_relights_the_row() -> None:
+    """Dopo il testo di stato la riga e' spenta, e l'attesa dei subagent la
+    riaccende — ma solo se l'attesa e' della conversazione a schermo."""
+    _run("""
+      const app = new App();
+      sessionManager.currentChatId = 'project:orto';
+      app._readActivity({ event: 'delta', chat_id: 'project:orto', text: 'Ho lanciato due aiutanti' });
+      app._readActivity({ event: 'turn_waiting', chat_id: 'project:orto', reason: 'subagents', subagents: 2 });
+      assert.deepEqual(app.rows, ['answering', 'waiting']);
+      app.rows.length = 0;
+      app._readActivity({ event: 'turn_waiting', chat_id: 'default', reason: 'subagents', subagents: 1 });
+      assert.deepEqual(app.rows, [], 'l\u2019attesa di un\u2019altra conversazione ha acceso la riga');
+      sessionManager.currentChatId = 'default';
+    """)

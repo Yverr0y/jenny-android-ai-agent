@@ -140,6 +140,14 @@ export class ActivityLine {
     this._setFamily(FAMILY_BY_TOOL[name] || FALLBACK_FAMILY);
   }
 
+  /** Il turno aspetta i subagent che ha lanciato. Arriva dopo che Jenny ti ha
+   *  scritto a che punto e' — testo che ha spento la riga — e senza questo la
+   *  riga restava spenta per tutta l'attesa, che puo' durare minuti: il turno
+   *  e' vivo, e dal gateway non arriva nient'altro. */
+  waiting() {
+    this._setFamily('delegate');
+  }
+
   /** La risposta sta arrivando: la riga si toglie di mezzo. */
   answering() {
     this._clear();

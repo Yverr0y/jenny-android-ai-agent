@@ -158,7 +158,7 @@ The channel the WebUI talks over. On-device, the runtime forces `host` and `port
 | `websocket.allowFrom` | string[] | `["*"]` | Client-ID allowlist for connections. This is the real key — there is no `channels.*.allowFrom` anywhere in the codebase. |
 | `websocket.streaming` | bool | `true` | Stream assistant text as it is generated. |
 | `websocket.sendProgress` | bool | `true` | Send progress events to the WebUI. |
-| `websocket.sendToolHints` | bool | `false` | Send the short `tool(args…)` hints as progress events. |
+| `websocket.sendToolHints` | bool | `false` | Send the short `tool(args…)` hints as progress events. Off, the hint text is dropped but the list of tools that are starting still arrives. |
 | `websocket.showReasoning` | bool | `true` | Config-only. Delivers the model's reasoning stream to the WebUI. **Turning it off also stops it being recorded**: the transcript append happens inside the same send path the dispatcher gates on this flag, so with it off the reasoning is absent from replay and history too, not just from the live view. Telegram never receives reasoning regardless. |
 | `websocket.sendMaxRetries` | int 0–10 | `3` | Delivery attempts per outbound message, including the first send. Backoff 1 s, 2 s, 4 s, then capped at 4 s. |
 | `websocket.maxMessageBytes` | int 1024–41943040 | `37748736` | Max inbound frame size (36 MiB), sized for four ~6 MB images after client-side normalization plus base64 overhead. |

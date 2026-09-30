@@ -19,6 +19,7 @@ from jenny.agent.hook import AgentHook, CompositeHook
 from jenny.agent.loop_provider import ProviderPresetMixin
 from jenny.agent.loop_tasks import LoopTasksMixin
 from jenny.agent.memory import Consolidator
+from jenny.agent.progress_events import on_progress_accepts_subagent_wait
 from jenny.agent.progress_hook import AgentProgressHook
 from jenny.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from jenny.agent.session_locks import SessionLocks
@@ -1413,10 +1414,21 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # Block if nothing drained but sub-agents spawned in this dispatch
             # are still running.  Keeps the runner loop alive so subsequent
             # completions are injected in-order rather than dispatched separately.
-            if (not items
-                    and session is not None
-                    and frozenset(self.subagents.get_running_ids_by_session(session.key))
-                    - subagents_before):
+            waiting_for = (
+                frozenset(self.subagents.get_running_ids_by_session(session.key))
+                - subagents_before
+                if not items and session is not None else frozenset()
+            )
+            if waiting_for:
+                # Fino a 300 secondi in cui il turno e' vivo e non manda niente:
+                # la risposta di stato e' gia' uscita, e il suo testo ha spento
+                # la riga di lavoro della casa, che restava spenta finche' un
+                # subagent non tornava (sette minuti, il 30/09/2026). Lo si dice
+                # una volta per attesa, prima di cominciarla: i frame che la
+                # seguono (ragionamento, strumenti, testo) prendono il posto di
+                # questo da soli.
+                if on_progress is not None and on_progress_accepts_subagent_wait(on_progress):
+                    await on_progress("", waiting_for_subagents=len(waiting_for))
                 try:
                     msg = await asyncio.wait_for(pending_queue.get(), timeout=300)
                 except asyncio.TimeoutError:

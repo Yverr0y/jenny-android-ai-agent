@@ -21,6 +21,10 @@ def on_progress_accepts_reasoning(cb: Callable[..., Any]) -> bool:
     return _on_progress_accepts(cb, "reasoning")
 
 
+def on_progress_accepts_subagent_wait(cb: Callable[..., Any]) -> bool:
+    return _on_progress_accepts(cb, "waiting_for_subagents")
+
+
 def _on_progress_accepts(cb: Callable[..., Any], name: str) -> bool:
     try:
         sig = inspect.signature(cb)

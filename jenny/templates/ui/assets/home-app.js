@@ -1928,8 +1928,14 @@ class HomeApp {
         this.activity.reasoning();
         break;
       case 'message':
-        // Un `tool_hint` porta i nomi degli strumenti che stanno partendo.
+        /* I nomi degli strumenti che partono. Con `sendToolHints` spento, cioe'
+           di default, arrivano senza il testo del suggerimento, come un
+           `progress` (v. `WebSocketDispatcher._tool_start_without_hint`). */
         if (msg.tool_events) this.activity.tools(msg.tool_events);
+        break;
+      case 'turn_waiting':
+        // Il turno e' fermo ad aspettare i subagent che ha lanciato.
+        this.activity.waiting();
         break;
       case 'delta':
         // La risposta sta arrivando: la riga si toglie di mezzo.
