@@ -6,6 +6,8 @@ Jenny is a personal AI agent that runs entirely inside an Android app on your ow
 
 Jenny is not a chat client that talks to a hosted service. It is an Android APK with an embedded Python runtime (Chaquopy) that runs a real agent loop, a small HTTP/WebSocket gateway, and a mobile web UI, all on the device itself. When you open the app, the UI you see is served from `127.0.0.1` on the phone and talks to a gateway process that also lives on the phone. There is no Jenny server anywhere — the phone is the whole stack.
 
+<p align="center"><img src="../img/hero-chat.png" alt="Jenny logging a meal in a mini-app she wrote, reading back the day, and setting a reminder, in the home chat" width="300"></p>
+
 That has a few direct consequences worth knowing before you install it:
 
 - **Bring your own key (BYOK).** Jenny does not ship a model. You configure an API key for a provider you already have — Anthropic, OpenAI, OpenRouter, Groq, DeepSeek, or a self-hosted runtime like Ollama or LM Studio — during onboarding. Every request the agent makes to a model goes out with your key, so usage costs are yours, billed directly by your provider. There is no subscription to Jenny itself.

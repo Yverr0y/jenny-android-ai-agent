@@ -21,18 +21,19 @@ hardware and keep the whole loop offline.
 
 </div>
 
-<!-- Captured on a Unihertz Titan 2 (1440x1440 square display) with
-     `scripts/capture_screenshots.sh`. Unretouched framebuffer grabs.
+<!-- Captured on the Android emulator at 1080x1920 (a 16:9 phone) with
+     `scripts/capture_screenshots.sh`. Unretouched framebuffer grabs; only the status bar is
+     in Android's demo mode (fixed clock, full battery, no notification icons).
 
      Width 200 is not arbitrary: GitHub's README column is 838px and does not grow with the
-     window (`container-lg` caps it). Four squares at 200px plus the inter-tag whitespace come
+     window (`container-lg` caps it). Four images at 200px plus the inter-tag whitespace come
      to ~814px, so the row holds on desktop and stacks on mobile instead of wrapping into a
      ragged 3+1. At 215px it no longer fits. -->
 
 <p align="center">
   <img src="docs/img/hero-chat.png"  alt="Jenny reading back data from a mini-app she wrote herself, in chat" width="200">
-  <img src="docs/img/apps.png"       alt="Mini-apps written by the AI agent, in its app grid"                 width="200">
-  <img src="docs/img/themes.png"     alt="Theme picker with live previews of the built-in themes"             width="200">
+  <img src="docs/img/apps.png"       alt="A mini-app the AI agent wrote on request: a meal log for a cat"   width="200">
+  <img src="docs/img/themes.png"     alt="Settings, with the theme picker and Synthwave '84 selected"         width="200">
   <img src="docs/img/wiki-graph.png" alt="Graph view of a wiki the agent wrote and cross-linked itself"       width="200">
 </p>
 

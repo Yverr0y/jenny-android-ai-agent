@@ -15,6 +15,8 @@ An app can still talk to Jenny (see [Directionality](#jenny-and-the-app-talk-in-
 
 Apps are created only through chat — there is no dedicated app editor or "new app" button in the WebUI. Just ask, in your own words: "make me an app for tracking my plants."
 
+<p align="center"><img src="../img/apps.png" alt="A mini-app Jenny wrote on request: a meal log for a cat, with today's total and the meals" width="300"></p>
+
 Jenny then walks you through the design conversation (what the app tracks, what actions it needs) using the built-in `app-creator` skill, confirms with you, and writes the files. Editing an existing app works the same way: long-press the app's row in the app drawer and choose **Edit** — this takes you to the chat and writes `I want to edit the Jenny App "{name}" (slug: {slug}). Can you help me?` into the message box, ready for you to add what you want changed and send, rather than opening any in-app editor.
 
 In the home, the same card also has **Add as a page**, which puts the app in the row of pages along the top, next to the chat: see [Tour of the WebUI](webui-tour.md#the-pages).

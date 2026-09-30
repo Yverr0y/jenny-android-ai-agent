@@ -23,6 +23,8 @@ Every page can be moved, the four fixed ones included: press and hold a name at 
 
 The **Jenny** page is the chat, kept deliberately plain: your messages, her answers, and a composer with a paperclip for [attachments](attachments.md), the text box and a send button. There is no Commands chip, no scope chip and no Writes/Read-only switch here — those belong to the workshop's Console. Slash commands are typed by hand (see [Slash commands](slash-commands.md)), and a message from the home always goes out with writes on.
 
+<p align="center"><img src="../img/hero-chat.png" alt="The home chat page: the page names along the top, the conversation, and the composer" width="300"></p>
+
 - **While she works**, a single line under the conversation says what she is doing, in a word from the family of the tools actually running (reading, searching, writing, going out, running code, delegating), or that she is thinking before the first tool starts. It appears only if the turn lasts more than half a second and steps aside while her answer is being written. **Press and hold that line** to open the same turn in the workshop, with every thought and tool call.
 - **While a turn is running**, the send button becomes **Stop**, which sends `/stop` — see [Slash commands](slash-commands.md).
 - **If the connection to the gateway drops** for more than a couple of seconds, a line says *Connection lost, retrying*; it goes away on its own when the socket is back. It is about the link between the WebUI and the gateway inside the same app, not about your internet connection.
@@ -66,6 +68,8 @@ On the chat page with nothing on top, back does **nothing**: there is no home sc
 ## The workshop
 
 The workshop is the full interface: the console with everything under a turn on show, and every setting the home leaves out. Open it from **Settings → Workshop**, or from the work line in the chat with a long press. The Console and each drawer carry a **Jenny** pill in their header that takes you back home.
+
+<p align="center"><img src="../img/workshop-console.png" alt="The workshop Console: tool pills and Show thinking above a reply, the scope, Writes and Commands chips, and the tab dock" width="300"></p>
 
 ### The tab dock
 

@@ -60,6 +60,8 @@ where you put it** across openings, kept per notebook in
 physics from the position you gave it, so the rest of the map still settles
 around it. Tap a node to open its page.
 
+<p align="center"><img src="../img/wiki-graph.png" alt="The Map tab of a notebook about cats: breed pages as nodes, links as edges" width="300"></p>
+
 Names are drawn for up to forty nodes, chosen by how connected they are —
 because the one question a map answers better than a list is where the notebook
 knots together. Below that cap every name is drawn.
@@ -104,6 +106,8 @@ Leaving the editor with unsaved changes asks first.
 Editing is for things you can fix. When a page is wrong on the substance — and
 the fix means going back to the source, not rewording a line — select the passage
 and use **Report**.
+
+<p align="center"><img src="../img/wiki-reader.png" alt="A wiki page in the reader with a passage selected and the Report bar at the bottom" width="300"></p>
 
 1. Select a stretch of text in a page. A **Report** bar appears at the bottom.
 2. Tap it, and write what is wrong in your own words.

@@ -6,6 +6,8 @@ Jenny's look (the color theme and the on-screen mascot) is personal to the phone
 
 Open the home's **Settings** page and the first card, **Theme**, holds a row of pills: each one is a three-colour swatch (background, surface, accent) with the theme's short name. Tap a pill to switch instantly; the app doesn't ask for confirmation and there's nothing to save. The card shows the full name of the active theme and a one-line description of it.
 
+<p align="center"><img src="../img/themes.png" alt="The Settings page with the theme card, Synthwave '84 selected" width="300"></p>
+
 There are seven named themes:
 
 | Theme | Scheme | Feel |

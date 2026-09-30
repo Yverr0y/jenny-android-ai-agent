@@ -29,8 +29,6 @@ While this happens Android asks for two permissions, one after the other: first 
 
 Because no provider is configured yet, the app opens a 4-step wizard. It is a page of its own: until a provider exists, both the home and the workshop send you back to it. A row of four progress dots at the top of each step shows how far you are.
 
-<!-- TODO: screenshots (O-1) -->
-
 ### Step 1 — Choose your provider format
 
 Two cards:
@@ -42,7 +40,7 @@ Two cards:
 
 Pick whichever matches the service you have an API key for, then tap **Next**. Below the Next button there's also a **Restore from backup** button — see [Restoring from a backup instead](#restoring-from-a-backup-instead) below.
 
-<!-- TODO: screenshots (O-1) -->
+<p align="center"><img src="../img/onboarding-format.png" alt="The first-run wizard, step 1: choosing between the OpenAI-compatible and the Anthropic-compatible format" width="300"></p>
 
 ### Step 2 — Connect your provider
 
@@ -54,8 +52,6 @@ Three fields:
 
 The Next button only enables once both the provider name and the API key are non-empty. If you come back to this step with **Back**, what you typed is still there and Next is already on.
 
-<!-- TODO: screenshots (O-1) -->
-
 ### Step 3 — Choose a model
 
 This step tries to fetch the live list of models straight from the provider's `/models` endpoint (a 10-second timeout applies) so you can pick from what's actually available rather than typing an ID from memory.
@@ -66,7 +62,7 @@ This step tries to fetch the live list of models straight from the provider's `/
 
 Once a model is selected (from the list or typed manually), the **Launch** button enables. The choice belongs to the provider you entered: if you go back and change the format, the key or the base URL, the model is cleared and you pick it again from the new list.
 
-<!-- TODO: screenshots (O-1) -->
+<p align="center"><img src="../img/onboarding-model.png" alt="The first-run wizard, step 3: the live model list with one model selected, and the assistant name" width="300"></p>
 
 ### Step 4 — Connect Telegram (optional)
 
@@ -75,8 +71,6 @@ After Launch succeeds, a final, skippable step offers to pair a Telegram bot so 
 If Android is still optimizing Jenny's battery use, the same step shows a card with **Exempt from battery**: without the exemption, scheduled work, reminders and proactive checks arrive late or not at all while the screen is off. The card disappears once the exemption is granted.
 
 Either button takes you to the home, on Jenny's page, with her welcome message.
-
-<!-- TODO: screenshots (O-1) -->
 
 ## What "Launch" actually does
 
