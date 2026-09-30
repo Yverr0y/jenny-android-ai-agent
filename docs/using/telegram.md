@@ -87,8 +87,8 @@ Telegram is a much narrower surface than the WebUI. Be clear-eyed about the gap:
 | Photos (and static stickers, and images sent as files) in | Yes — Jenny sees them | Yes |
 | Voice notes, audio, video, documents in | Yes, as files — saved and referenced by path, but not transcribed or watched | Yes |
 | Live streaming of the reply | **No** — only the finished message | Yes |
-| Tool-use / progress indicators | **No** | Yes (expandable tool pills) |
-| "Show reasoning" block | **No** | Yes, model-dependent |
+| Tool-use / progress indicators | **No** | Yes: a line saying what she is doing in the home, expandable tool pills in the workshop's Console |
+| "Show thinking" block | **No** | Only in the workshop's Console, model-dependent |
 | Typing indicator while Jenny works | Yes — "typing…" while the turn runs (it gives up by itself after 5 minutes) | N/A |
 
 ### Attachments you send

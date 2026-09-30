@@ -25,6 +25,8 @@ This is disaster recovery: a single file containing your whole workspace — mem
 
 ### Exporting
 
+The **Backup** row on the Settings page says when you last exported one ("never" until you do), and the page it opens says it in full: "Last backup: …" or "You haven't exported a backup yet."
+
 1. Open **Settings → Backup** and tap **Export a backup**.
 2. Choose a passphrase and type it twice to confirm.
 3. Jenny takes a `pre-export` snapshot, encrypts everything, and hands the file to Android's Storage Access Framework (SAF) "save as" picker — you can save it to Google Drive, an SD card, or any location the picker offers. No storage permission is requested; SAF handles it.

@@ -138,7 +138,7 @@ The budgets and the review cadence used to be arguments of `/dream`. They are se
 |---------|--------------|
 | Periodic consolidation | Whether Dream runs on its own, and how many hours between runs. Turning it on or off applies immediately — no restart. |
 | Review pass every N runs | How often the shrinking pass runs. Below **12** the screen asks for an explicit confirmation before writing it, with the measured reason in the dialog. [Why there is a floor.](#the-review-cadence-has-a-floor-of-12-and-it-is-enforced) |
-| File budgets | One field per file — `MEMORY.md`, `USER.md`, `SOUL.md` — each shown with **what that file currently measures**, so the budget is chosen from the real number rather than guessed. `0` means measure and never refuse. |
+| File budgets | The group shows each file — `MEMORY.md`, `USER.md`, `SOUL.md` — with **what it currently measures** against its budget, so the budget is chosen from the real number rather than guessed. The three fields themselves sit behind **Change the budgets**. `0` means measure and never refuse. |
 
 Every change goes through the config write funnel and takes effect on the next run. That surface exists because raising a default in a new version of the app does **not** reach a `config.json` that has already been written: the file wins, so there has to be a way to change it that is not a root shell.
 

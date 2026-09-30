@@ -6,7 +6,7 @@ Jenny's interface is a mobile web app (a "WebUI") running inside the Android app
 
 ### The pages
 
-The home is a row of pages, and their names run along the top of the screen: the page you are on is written large, the others small. Tap a name to jump to it, or swipe sideways anywhere on the page. Four pages are always there:
+The home is a row of pages, and their names run along the top of the screen: the page you are on is brighter, and underlined in the theme's accent colour. Tap a name to jump to it, or swipe sideways anywhere on the page. Four pages are always there:
 
 | Page | What it is |
 |---|---|
@@ -23,7 +23,7 @@ Every page can be moved, the four fixed ones included: press and hold a name at 
 
 The **Jenny** page is the chat, kept deliberately plain: your messages, her answers, and a composer with a paperclip for [attachments](attachments.md), the text box and a send button. There is no Commands chip, no scope chip and no Writes/Read-only switch here — those belong to the workshop's Console. Slash commands are typed by hand (see [Slash commands](slash-commands.md)), and a message from the home always goes out with writes on.
 
-- **While she works**, a single line under the conversation says what she is doing, in a word from the family of the tools actually running (reading, searching, writing, going out, running code, delegating). It appears only if the turn lasts more than half a second and steps aside while her answer is being written. **Press and hold that line** to open the same turn in the workshop, with every thought and tool call.
+- **While she works**, a single line under the conversation says what she is doing, in a word from the family of the tools actually running (reading, searching, writing, going out, running code, delegating), or that she is thinking before the first tool starts. It appears only if the turn lasts more than half a second and steps aside while her answer is being written. **Press and hold that line** to open the same turn in the workshop, with every thought and tool call.
 - **While a turn is running**, the send button becomes **Stop**, which sends `/stop` — see [Slash commands](slash-commands.md).
 - **If the connection to the gateway drops** for more than a couple of seconds, a line says *Connection lost, retrying*; it goes away on its own when the socket is back. It is about the link between the WebUI and the gateway inside the same app, not about your internet connection.
 - **Messages that came from elsewhere** — Telegram, a notification you answered from the shade, the floating bubble — carry a small label saying where they came from. You can answer from the shade too: the notification has a **Reply** field, and if that reply cannot be delivered it offers **Send again**. The floating mascot's bubble has a **Continue in the app** button that opens the app on the conversation.
@@ -56,7 +56,7 @@ The `updates.enabled` setting in `config.json` switches off only the periodic ch
 
 Jenny is also set up as an Android launcher (see [Set it as your launcher](../start/launcher-setup.md)), so back never closes the app. One press undoes one thing, from the top:
 
-1. an open sheet (the one a long press opens), a mini-app opened from the drawer — which first goes back inside itself if it has its own screens — the page-ordering mode, a search typed in the drawer, the Report sheet, an enlarged image;
+1. an open dialog (a confirmation, the backup passphrase), an open sheet (the one a long press opens), the mascot's minichat, a mini-app opened from the drawer — which first goes back inside itself if it has its own screens — the page-ordering mode, a search typed in the drawer, the Report sheet, an enlarged image;
 2. then the rooms, one per press: the page reader goes back to the pages, the pages go back to the chat, a room opened from Settings goes back to Settings;
 3. then, on the Notebooks page with a notebook open, back closes the notebook and returns to the list of notebooks;
 4. then, from any page other than the chat, back returns to the chat, wherever it sits in the row.
@@ -69,7 +69,7 @@ The workshop is the full interface: the console with everything under a turn on 
 
 ### The tab dock
 
-A row of four icons pinned to the bottom of the screen switches between the workshop's views, in this order:
+A row of four icons, each with its name under it, pinned to the bottom of the screen switches between the workshop's views, in this order:
 
 | Icon | Tab | What it is |
 |---|---|---|
@@ -98,7 +98,7 @@ Back in the workshop follows the same rule as at home — one press, one thing: 
 
 ### The identity row and connection status
 
-Above the Console there's an identity row, "✿" followed by her name ("Jenny" unless you renamed her), with a small status dot next to it. This row is **not a fixed header** — it's the first item in the scrollable message list, so once you scroll up into your conversation history it scrolls away with everything else.
+The Console has a title bar of its own, **Console** with the **Jenny** pill that takes you home. Under it there's an identity row, "✿" followed by her name ("Jenny" unless you renamed her), with a small status dot next to it. This row is **not a fixed header** — it's the first item in the scrollable message list, so once you scroll up into your conversation history it scrolls away with everything else.
 
 The dot reflects only the state of the WebSocket connection between the WebUI and the local gateway — it says nothing about your phone's internet connection:
 
@@ -128,7 +128,7 @@ Close it with the X in its corner, by tapping anywhere outside it, or with back 
 
 **Access.** The badge reflects the `security.restrictToWorkspace` config setting (default `true`): **Restricted** means the file tools are confined inside the Notebook folder, **Full access** that they can also reach outside it. **Default** is a transient placeholder shown only until the chat history has loaded. There is no toggle for this in the app — it is set only in `config.json` — and the restriction is enforced by Jenny's own code, not by an Android sandbox. See [Security model](../internals/security-model.md). Notebook and Access are read when the chat history loads, so a config change shows after a reload.
 
-**Status.** While a turn runs, Status shows **Running** with a spinner and an elapsed-time counter. The timer is backed by the turn's start time on the gateway, so it survives reloading the page mid-turn. It only reflects turns from the WebUI: a turn started from Telegram does not turn it on, even though its messages appear in the same unified chat.
+**Status.** While a turn runs, Status shows **Running** with a spinner and an elapsed-time counter. The timer is backed by the turn's start time on the gateway, so it survives reloading the page mid-turn. It reflects every turn of the personal conversation, a turn started from Telegram included, since its messages appear in the same unified chat. Internal work (a reminder, Dream, the heartbeat) does not turn it on.
 
 ### The Subagents strip
 

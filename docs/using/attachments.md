@@ -6,7 +6,7 @@ You can attach photos, camera shots, and any other file to a chat message; this 
 
 Tap the paperclip button in the composer (in the home and in the workshop's Console alike). It opens the Android system chooser — the same picker any app uses — so you get your file manager, your gallery, and a "take a photo" option all in one place. Jenny does not request the `CAMERA` permission for this: taking a photo is delegated entirely to your phone's own camera app, which hands the finished picture back to Jenny.
 
-In the workshop's Console the paperclip hides itself once you start typing text, and reappears when the input is empty again; in the home it stays where it is.
+In the workshop's Console the paperclip (together with the **New chat** button beside it) hides itself once you start typing text, and reappears when the input is empty again; in the home it stays where it is.
 
 You can send a message that is attachments only, with no text at all — an empty message is only rejected if it has neither text nor attachments.
 
@@ -44,7 +44,7 @@ If the active model doesn't support vision, Jenny drops the attached images and 
 
 ## Opening files back out of the chat
 
-- **Non-image attachments** show up in the chat as a chip: `📄 filename`. Tapping it opens the file in your phone's system viewer (the same "open with" mechanism Android uses everywhere), falling back to opening the file's URL in a new browser tab if the native bridge isn't available (this fallback only matters when debugging the WebUI from a desktop browser, not on the phone).
+- **Non-image attachments** show up in the chat as a chip with the file's name (`📄 filename` in the Console, just the name in the home). Tapping it opens the file in your phone's system viewer (the same "open with" mechanism Android uses everywhere), falling back to opening the file's URL in a new browser tab if the native bridge isn't available (this fallback only matters when debugging the WebUI from a desktop browser, not on the phone).
 - **Images** — both attached and any inline in a message — open in an in-app lightbox with pinch-to-zoom, since normal browser/page pinch-zoom is disabled across the whole app. Close with the "×", by tapping the background, or with Esc on a physical keyboard.
 - **From the file browser** (workshop: Memory drawer → **The real files**), long-pressing (about 600 ms) any file opens a context sheet with: **Open with system app**, **Share** (the normal Android share sheet), **Save to Downloads** (copies the file into your phone's public Downloads folder), **Rename**, **Clone**, and **Delete**. Images opened directly (not long-pressed) go to the same in-app lightbox, with the same three actions available from its action bar.
 

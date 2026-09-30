@@ -47,7 +47,7 @@ The public key is kept so you can read it again later; the private key is never 
 
 ### Password instead of a key
 
-If you set **Authentication** to **Password**, Jenny logs in with the account password instead of a key pair. The "Generate key" button and the public-key block disappear from that host's card — there is nothing to install on the server — and the card shows whether a password is set rather than whether a key exists.
+If you set **Authentication** to **Password**, Jenny logs in with the account password instead of a key pair. The "Generate key" button and the public-key block disappear from that host's panel — there is nothing to install on the server — and its row shows whether a password is set rather than whether a key exists.
 
 This is genuinely more convenient: nothing to paste into `authorized_keys`, nothing to install on a machine you can't easily reach, and it works on a server where you can't edit `authorized_keys` at all. It is also weaker, in three concrete ways, and none of them are hypothetical:
 
@@ -96,7 +96,7 @@ Anything you'd type in a terminal, described in words:
 - "Update the packages on the VPS and tell me when it's done."
 - "Fetch `/etc/nginx/sites-enabled/default` from the VPS so we can go through it together."
 
-Jenny hands the job to a `sysadmin` subagent, and while that agent works you can keep talking to her about something else. The subagent's activity is visible live in the UI, you can send it a correction mid-run ("no, restart the container instead of rebuilding it"), and you can cancel it outright.
+Jenny hands the job to a `sysadmin` subagent, and while that agent works you can keep talking to her about something else. The subagent's activity is visible live in the workshop's Console, you can send it a correction mid-run ("no, restart the container instead of rebuilding it"), and you can cancel it outright.
 
 Ask which machine it worked on if you have more than one — the agent is instructed to name the alias in what it reports back, but the habit is worth checking.
 
@@ -133,7 +133,7 @@ Read this section before you rely on any of it.
 
 The private key and `known_hosts` live **outside** the workspace, and snapshots and encrypted backups only ever walk the workspace. That's deliberate — a key that could be read by the agent's own file tools, or that travelled inside an exported backup file, would be a much worse problem.
 
-The price is real and you should plan for it: **restoring a `.jbk` backup, or restoring a snapshot, brings back your host list but not the keys.** After a restore (or a phone swap, or a reinstall) each host will show "No key", and for each one you'll need to generate a fresh key, paste the new public line into `authorized_keys` on the server, and remove the old one. The accepted fingerprints are gone with it, so you'll verify each host again too.
+The price is real and you should plan for it: **restoring a `.jbk` backup, or restoring a snapshot, brings back your host list but not the keys.** After a restore (or a phone swap, or a reinstall) each host's row will show "key" next to an empty circle (no key), and for each one you'll need to generate a fresh key, paste the new public line into `authorized_keys` on the server, and remove the old one. The accepted fingerprints are gone with it, so you'll verify each host again too.
 
 This is the one genuinely unpleasant part of the design. Nothing warns you at restore time; afterwards, **Hands → SSH** shows one notice naming the hosts that have to be set up again — those whose fingerprint was recorded in `config.json` but is no longer in `known_hosts`. A host you never verified is not flagged.
 

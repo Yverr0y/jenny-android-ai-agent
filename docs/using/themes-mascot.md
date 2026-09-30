@@ -29,7 +29,7 @@ Your theme choice lives in the WebView's local storage on this specific device, 
 
 ## Mascot
 
-A small companion (Jenny, styled as "✿") follows the conversation from the corner of the screen. In the home the chat *is* the screen, so there she is simply present, and a tap sends her to the edge or brings her back out. In the workshop she lives docked at the edge of every view except the Console: tap her, or swipe her inward from the edge, and she pops out with a one-turn minichat, a text field ("Ask here…") and a speech bubble for the reply.
+A small companion (Jenny, styled as "✿") follows the conversation from the corner of the screen. On the home's chat page she is simply present beside the conversation, and a tap sends her to the edge or brings her back out; she comes back the way you left her. Everywhere else — the home's other pages (Apps, Notebooks, Settings) and the rooms opened from them, and every view of the workshop except the Console — she lives docked at the edge: tap her, or swipe her inward from the edge, and she pops out with a one-turn minichat, a text field ("Ask here…") and a speech bubble for the reply.
 
 A few things about that minichat are worth knowing before you rely on it:
 
@@ -41,7 +41,7 @@ While waiting for a reply she switches between a "thinking" pose and, once text 
 
 Once a reply is done she reacts to it for 12 seconds: **happy, sad or angry**. The reaction comes from the emoji she wrote in that reply — her own signature four, 😏 😈 💅 🤭 (the ones her character sheet gives her), or any of the smiles and hearts, make her happy, a 😔 or a 💔 sad, a 😤 or a 😒 angry. When a reply mixes them, the most frequent wins, and on a tie the last one: the tone of a reply is at its end. Emoji inside code or in quoted lines don't count, and neither do ambiguous ones (🤔, 😅, or her own 🙄 and 😭, which are tone rather than mood) or things that aren't feelings (☀️, 🍝) — a reply without an emotional emoji shows no face at all. Nothing is asked of the model, so it costs nothing and works with any model and in any language. Errors make her sad on their own. She reacts *after* speaking, never while. `agents.defaults.mascotMood` in `config.json` turns it off — see [Configuration](../reference/configuration.md).
 
-Her face and her body are two separate drawings stacked on each other, which is why an expression can ride on top of any pose rather than being a pose of its own. It only works when she's out in the open: from the docked edge only one eye is visible, so there she wears the single drawn-in face she has always had.
+Her face and her body are two separate drawings stacked on each other, which is why an expression can ride on top of any pose rather than being a pose of its own. It works at the docked edge too, where she is seen from the side: the same happy, sad and angry faces are drawn in profile, over her side pose.
 
 Drag her instead of tapping and she takes flight: she hangs from your finger with a bit of pendulum physics, and on release falls, bounces, gets up, and walks back home to her docked position. It's a pure fidget interaction with no functional effect — dragging her doesn't send anything or change any setting.
 
@@ -53,7 +53,7 @@ Her preferences are on the home's **Settings** page, in the row named after her 
 | Mascot size | Small / Medium / Large | Small |
 | Floating mascot | on / off (Android only) | Off |
 
-The same screen holds **Her name** (up to 40 characters). The Settings row, the chat page and the other places that name her follow it, and changing it erases nothing she remembers.
+The same screen holds **Her name** (up to 40 characters). The Settings row, the chat page and the other places that name her follow it, and changing it erases nothing she remembers. Under the mascot settings sits **The rules you gave her**: a text of yours, up to 2,000 characters, that she reads every turn and never rewrites — Dream included. Both have their own **Save** button.
 
 **Floating mascot** puts her in a window above other apps: tap her there to talk, and the answer comes in a bubble, in the same conversation as the app. It needs Android's "Display over other apps" permission, and the page tells you when that is missing.
 

@@ -12,11 +12,12 @@ Keep in mind:
 - You can ask Jenny to filter by a keyword (e.g. "check the logs for `android_web`") and how many lines to show (up to 200 at a time).
 - Log lines can contain URLs visited and file names — worth keeping in mind before you paste a log excerpt somewhere or share a screenshot.
 
-## The status dot is gray / "WebSocket not connected. Waiting for reconnection..."
+## "Connection lost, retrying" / the status dot is gray
 
-The dot next to the "✿" line with her name at the top of the chat reflects the WebSocket connection between the WebUI and the gateway running on your phone — it says nothing about your internet connection.
+Both say the same thing: the WebSocket connection between the WebUI and the gateway running on your phone is down. Neither says anything about your internet connection.
 
-If you see it turn gray/offline, or you try to send a message and get:
+- In the home, a line under the conversation reads **Connection lost, retrying** once the link has been down for more than a couple of seconds, and goes away on its own when it is back.
+- In the workshop's Console, the dot next to the "✿" line with her name turns gray, and if you try to send a message you get:
 
 ```text
 WebSocket not connected. Waiting for reconnection...

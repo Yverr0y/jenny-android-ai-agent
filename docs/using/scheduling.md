@@ -182,7 +182,7 @@ Full tool lists and sampling defaults are in the [Tool reference](../reference/t
 
 ### Watching and steering the work
 
-Because a subagent can run for minutes, the chat gives you a **Subagents panel** just above the message box: one card per running job with its type, elapsed time, idle time and current step, plus **Stop** and **Relaunch** buttons and a tap-through detail sheet showing what it actually did. It appears when work starts and disappears when the turn ends. See [Chat basics](chat.md#the-subagents-panel).
+Because a subagent can run for minutes, the workshop's Console gives you a **Subagents panel** just above the message box (the home's chat shows only the line saying what she is doing): one card per running job with its type, elapsed time, idle time and current step, plus **Stop** and **Relaunch** buttons and a tap-through detail sheet showing what it actually did. It appears when work starts and disappears when the turn ends. See [Chat basics](chat.md#the-subagents-panel).
 
 Jenny has the same controls from her side: she can check on a subagent's status, send it a correction mid-run ("no, use the other table") without restarting it, relaunch a failed one, and cancel one that's going nowhere. Those tools exist only in orchestrator mode and are never given to a subagent — a subagent cannot drive its siblings.
 

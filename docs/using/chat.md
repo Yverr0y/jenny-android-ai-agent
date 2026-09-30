@@ -6,11 +6,17 @@ The Console is where you talk to Jenny at full detail; this page covers how a me
 
 ## Sending a message
 
-Type in the box at the bottom (placeholder "Ask something…") and either:
+Type in the box at the bottom (placeholder "Ask something…"; inside a notebook it reads "Ask something about *name*...", and in read-only "Ask something (read-only)…") and either:
 
 - Press **Enter** to send.
 - Press **Shift+Enter** to insert a line break without sending.
-- Tap the send (arrow) button — it stays disabled until there is text in the box; as soon as you type something, the **Attach** button hides to make room for it.
+- Tap the send (arrow) button — it stays disabled until there is text in the box; as soon as you type something, the **New chat** and **Attach** buttons hide to make room for it.
+
+Around the box sit the Console's other controls:
+
+- **At the left of the box**, the grid button opens the [app drawer](app-launcher.md) as a sheet over the chat.
+- **Inside the box**, before you type: **New chat**, which asks for confirmation and then sends `/new` (see [Slash commands](slash-commands.md#new--start-a-fresh-conversation)), and the paperclip for [attachments](attachments.md).
+- **In the row above the box**, three chips: the **scope chip** (✿ and her name, or the notebook you are in), which switches conversation — see [Notebooks](projects.md); the **Writes / Read-only** switch, which decides whether the message you are about to send may change anything on the device — see [Notebooks](projects.md#the-switch-beside-the-chip-writes-or-read-only); and **Commands**, the list of slash commands this conversation accepts, one tap each.
 
 If you have a hardware keyboard (for example on a Unihertz Titan-style device), you don't have to tap the input first: typing any single printable character while the Console is active moves focus into the message box automatically ("type-ahead focus"). This does not trigger on Enter, Escape, arrow keys, spacebar, key combinations with a modifier held down, or while another input/textarea/select/dialog already has focus.
 
@@ -28,7 +34,7 @@ Tapping the identity row opens a "Session Info" popover with details such as the
 
 ### There is no stop button in the Console
 
-The Console has no visible stop/cancel control (in the home, the send button turns into **Stop** while a turn runs and sends `/stop` for you). To interrupt a turn that is in progress here, send **`/stop`** as a chat message. `/stop` is processed with priority even while the agent is mid-turn — it doesn't wait in line behind whatever the model is doing — and it always ends the turn cleanly (you'll see something like "Stopped 1 task(s)." or "No active task to stop."). See [Slash commands](slash-commands.md) for the rest of the command list.
+The Console has no dedicated stop/cancel button (in the home, the send button turns into **Stop** while a turn runs and sends `/stop` for you). To interrupt a turn that is in progress here, pick **`/stop`** from the Commands chip, or send it as a chat message. `/stop` is processed with priority even while the agent is mid-turn — it doesn't wait in line behind whatever the model is doing — and it always ends the turn cleanly (you'll see something like "Stopped 1 task(s)." or "No active task to stop."). See [Slash commands](slash-commands.md) for the rest of the command list.
 
 ## Anatomy of a response
 
@@ -39,12 +45,12 @@ A reply is built incrementally, not delivered all at once:
 - **"Show thinking" block.** If the model produces reasoning, it appears above the reply text as a collapsible block with a brain icon and the label **"Show thinking"**. A few things are worth knowing about it:
   - It is always collapsed by default — expand it by tapping its header.
   - Whether it shows up at all depends entirely on the model, not on a switch you flip: some models (reasoning-oriented ones) return reasoning natively and the block always appears; ordinary models never produce one. Setting "Reasoning Effort" (in the workshop, **Brain → Parameters**) can request more or less thinking from a model that supports it, but it cannot make a non-reasoning model show this block — see [Settings](../reference/settings.md#parameters).
-  - The block's content is plain markdown only — no KaTeX math rendering and no Mermaid diagrams inside it, even though the final reply text supports both.
-  - In a turn that goes through several phases (for example: reasoning → tool call → more reasoning → final answer), what you see live is only the *last* reasoning segment; if you later reload the app, the replayed history instead shows all the segments from that turn concatenated together. Live and replayed can legitimately look different for the same turn.
+  - The block's content is rendered like a reply: markdown, math and Mermaid diagrams included.
+  - In a turn that goes through several phases (for example: reasoning → tool call → more reasoning → final answer), the block collects every reasoning segment of the turn, one after the other, joined the same way the history joins them — so reloading the app does not change what you read.
   - Reasoning is **never shown on Telegram** — it only ever appears in the WebUI, by design.
   - It is controlled by the config key `websocket.showReasoning` (default `true`), which has no toggle in the home's Settings or in the workshop — you can only change it by editing `config.json`. Turning it off doesn't just hide the block: it stops the reasoning from being recorded in history at all, so there is nothing to look back at later. See [Configuration reference](../reference/configuration.md).
-- **Final latency.** Once a turn completes, the response time in seconds is shown under the bubble.
-- **"Agent running" banner.** While a long-running goal is active (see [Scheduling and proactivity](scheduling.md)), a banner reading **"Agent running"** appears with a live timer counting seconds.
+- **Final latency and Copy.** Once a turn completes, the response time in seconds is shown under the bubble, next to a **Copy** button that copies the reply's text. A turn made only of tool calls has nothing to copy and gets no button.
+- **"Agent running" banner.** While a turn of the conversation runs — an ordinary message, a turn started from Telegram, or a long-running goal (see [Scheduling and proactivity](scheduling.md)) — a banner reading **"Agent running"** appears with a live timer counting seconds.
 
 ## The Subagents panel
 
@@ -97,9 +103,9 @@ The preview has a hardcoded cap: it reads at most **384 KB** of the file. If the
 Assistant replies are rendered as GitHub-flavored markdown (tables, links, inline images, single newlines becoming line breaks) and sanitized before being inserted into the page. A few specifics:
 
 - **Code blocks** get a header with the detected language and a **"Copy"** button that turns into **"Copied!"** for a couple of seconds after you tap it.
-- **Math (KaTeX)** is supported with the delimiters `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` — but only in the final render, once the stream has finished (or when replaying history). While a reply is still streaming, you'll see the raw `$$...$$` source instead of rendered math.
+- **Math (KaTeX)** is supported with the delimiters `$$...$$`, `\(...\)`, and `\[...\]`. A single `$...$` is deliberately *not* math in chat, where "it costs $5, maybe $10" would otherwise turn into a formula; it is on a [wiki](wiki.md) page. Math appears only in the final render, once the stream has finished (or when replaying history). While a reply is still streaming, you'll see the raw `$$...$$` source instead of rendered math.
 - **Inline video** (`.mp4`, `.mov`, `.webm`) plays inline in the chat.
-- **Mermaid diagrams are NOT rendered in chat.** A ` ```mermaid ` code block just stays a plain code block here — Mermaid diagrams only render on a [wiki](wiki.md) page. This is easy to be surprised by if you've seen a diagram render elsewhere in the app.
+- **Mermaid diagrams** are drawn: a ` ```mermaid ` code block becomes the diagram, in the chat as on a [wiki](wiki.md) page.
 - **Your own messages are never rendered as markdown.** What you type is shown back to you as plain text, even if it contains markdown syntax.
 - All of the rendering libraries are bundled with the app and work fully offline.
 
@@ -109,7 +115,7 @@ Chat uses a "sticky bottom" behavior, similar to WhatsApp or Telegram: as long a
 
 While detached, a floating round button ("Jump to bottom") appears with a badge counting how many new messages have completed since you scrolled away; tapping it jumps back down and clears the badge. Sending a message of your own, or hitting an error, always scrolls you back to the bottom regardless of where you were.
 
-Scrolling to the very top of the chat automatically loads older history (infinite scroll upward).
+Scrolling to the very top of the chat automatically loads older history (infinite scroll upward). When the conversation on screen is too short to scroll — right after `/new`, for instance — a **Show the previous conversation** button at the top does the same.
 
 ## Common errors
 

@@ -15,7 +15,9 @@ An app can still talk to Jenny (see [Directionality](#jenny-and-the-app-talk-in-
 
 Apps are created only through chat — there is no dedicated app editor or "new app" button in the WebUI. Just ask, in your own words: "make me an app for tracking my plants."
 
-Jenny then walks you through the design conversation (what the app tracks, what actions it needs) using the built-in `app-creator` skill, confirms with you, and writes the files. Editing an existing app works the same way: long-press the app's row in the app drawer and choose **Edit** — this sends the chat prompt `I want to edit the Jenny App "{name}" (slug: {slug}). Can you help me?` rather than opening any in-app editor.
+Jenny then walks you through the design conversation (what the app tracks, what actions it needs) using the built-in `app-creator` skill, confirms with you, and writes the files. Editing an existing app works the same way: long-press the app's row in the app drawer and choose **Edit** — this takes you to the chat and writes `I want to edit the Jenny App "{name}" (slug: {slug}). Can you help me?` into the message box, ready for you to add what you want changed and send, rather than opening any in-app editor.
+
+In the home, the same card also has **Add as a page**, which puts the app in the row of pages along the top, next to the chat: see [Tour of the WebUI](webui-tour.md#the-pages).
 
 ## Where an app lives
 
@@ -84,11 +86,11 @@ What you notice as a user:
 
 ## When an app is broken
 
-If a manifest fails to load — malformed JSON, an invalid action definition — the gateway never crashes. The app simply shows up in the app drawer with an alert glyph and the readable error in red on the second line of its row, where the description would be. Tapping it prompts: `The app "{name}" is broken: {error}. Ask Jenny to fix it?` — confirming sends the error straight to chat so Jenny can look at the files and repair them. Since the app generator is itself an LLM, occasionally getting a manifest wrong is expected, and this is the recovery path.
+If a manifest fails to load — malformed JSON, an invalid action definition — the gateway never crashes. The app simply shows up in the app drawer with an alert glyph and the readable error in red on the second line of its row, where the description would be. Tapping it prompts: `The app "{name}" is broken: {error}. Ask Jenny to fix it?` — confirming writes the error into the chat's message box, ready to send, so Jenny can look at the files and repair them. Since the app generator is itself an LLM, occasionally getting a manifest wrong is expected, and this is the recovery path.
 
 ## Deleting an app
 
-Long-press an app's row in the app drawer and choose **Delete**. The confirmation reads `Delete app "{name}"? It will be removed permanently.` — and it means it: this deletes the whole `workspace/apps/<slug>/` folder, including its `data/`. There is no trash or undo from the UI. Your only safety net is the automatic workspace [snapshot](backup.md) history, which is not something you can browse per-app — restoring one means restoring the entire workspace to an earlier point in time.
+Long-press an app's row in the app drawer and choose **Delete**. If you had pinned the app as a page of the home, the page goes with it. The confirmation reads `Delete app "{name}"? It will be removed permanently.` — and it means it: this deletes the whole `workspace/apps/<slug>/` folder, including its `data/`. There is no trash or undo from the UI. Your only safety net is the automatic workspace [snapshot](backup.md) history, which is not something you can browse per-app — restoring one means restoring the entire workspace to an earlier point in time.
 
 ## See also
 

@@ -39,15 +39,15 @@ right that carries the notebook's page count. Tap **Pages** to open its pages,
 and **Chat** to come back. A notebook you pinned as a page of its own has the
 same way in as a pill at the left of its composer, with the name and the count.
 
-There are two tabs over the same data — **Pages** and **Map** — and one search
-box shared by both.
+There are two tabs over the same data — **Pages** and **Map** — and a search
+box on the Pages tab.
 
 ### Pages
 
-A list, grouped by kind (Concepts, Entities, Other) and alphabetical inside each
-group. The grouping only appears when it separates something: a notebook whose
-pages are all of one kind gets a plain list instead of one heading over
-everything.
+A list ordered by kind — entities first, then concepts, then the rest — and
+alphabetical inside each kind. Each row carries a coloured dot and its kind's
+name at the right. That marking only appears when it separates something: a
+notebook whose pages are all of one kind gets a plain list.
 
 Tapping a page opens it. Back returns to the list.
 
@@ -58,7 +58,7 @@ pan, pinch to zoom, drag a node to move it — and a node you have moved **stays
 where you put it** across openings, kept per notebook in
 `workspace/.jenny/map-layout.json`. It is not frozen: it keeps following the
 physics from the position you gave it, so the rest of the map still settles
-around it.
+around it. Tap a node to open its page.
 
 Names are drawn for up to forty nodes, chosen by how connected they are —
 because the one question a map answers better than a list is where the notebook
@@ -66,9 +66,9 @@ knots together. Below that cap every name is drawn.
 
 ### Searching
 
-The search box searches **page contents**, not just titles: as you type, matching
-pages stay and the rest fall away, and on the map the matches stay lit while the
-others dim. The last word matches by prefix, so results narrow letter by letter.
+The search box, on the Pages tab, searches **page contents**, not just titles:
+as you type, matching pages stay and the rest fall away. The Map tab has no
+search. The last word matches by prefix, so results narrow letter by letter.
 
 - Accents are optional — typing `citta` finds "Città".
 - Page titles, file paths, headings and frontmatter tags all count, and a hit in

@@ -11,7 +11,7 @@ There is no global Save button. Most controls save as soon as you change them an
 
 ## How saving works
 
-In the workshop, text and number fields (the model parameters, the web search fields) save when the field reports a change, which on a phone means when you confirm or leave the field, and then after a **600 ms** debounce. They do not save on every keystroke. The Dream and gardener numbers save on the same change event, without the debounce. Toggles, segmented controls and the theme save on tap. A successful write shows **"Saved!"** (or a more specific toast). A failed write shows the error instead, and toggles roll back to their previous state.
+In the workshop, text and number fields (the model parameters, the web search fields) save when the field reports a change, which on a phone means when you confirm or leave the field, and then after a **600 ms** debounce. They do not save on every keystroke. The Dream and gardener numbers save on the same change event, without the debounce. Toggles, segmented controls and the theme save on tap. A successful write shows **"Saved!"** (or a more specific toast). A failed write shows the error instead (the Location toggle only says "Couldn't save"), and toggles roll back to their previous state.
 
 On the home's **Jenny** page, **Her name** and **The rules you gave her** are different: each has its own **Save** button, which appears only when there is something new to save.
 
@@ -33,7 +33,7 @@ Most controls take effect the moment you use them. These ask you to confirm firs
 
 | Control | Effect | Default |
 |---|---|---|
-| **Theme** | A row of theme pills, each a three-colour swatch with the theme's short name. Tap one to switch instantly, with no confirmation. The full name and a one-line description sit under the row. See [Themes and mascot](../using/themes-mascot.md). | Synthwave '84 |
+| **Theme** | A row of theme pills, each a three-colour swatch with the theme's short name. Tap one to switch instantly, with no confirmation. The full name sits beside **Theme** at the top of the card, and a one-line description under the row. See [Themes and mascot](../using/themes-mascot.md). | Synthwave '84 |
 | **Who answers** | Opens the page where you choose the model. The row shows the provider that answers now. | — |
 | **Jenny** (her name, if you renamed her) | Opens her page: name, mascot and rules (below). The page's title is her name too. The row shows how she is now, for example "small · floating". | — |
 | **Updates** | Opens the update check and install page. The row shows the installed version, and the new one when an update is waiting. | — |
@@ -65,6 +65,16 @@ There is no field for typing a model ID by hand on this page. You pick an ID fro
 | **The rules you gave her** | Free text (up to 2,000 characters) that she reads every turn and never rewrites. Saved with its own **Save** button. | empty |
 
 She always docks on the right edge. That is not a setting.
+
+### Updates
+
+| Control | Effect |
+|---|---|
+| **Check now** | Asks the update server right away, whatever `updates.enabled` says. While it runs the button reads "Checking…", and the answer comes as a line under it: no update, the new version, or that the server could not be reached. |
+| **What changed** | A link to the release notes, shown only when a newer version exists. It opens outside the app. |
+| **Install now** | Shown only when a newer version exists. Downloads it and hands it to Android, which asks you to confirm before replacing the app. A progress line says which phase it is in (downloading, installing, waiting for your confirmation). |
+
+Under the buttons, a line says when the last successful check happened. When the checks keep starting but never reach the server, it says so in words, because otherwise you would never hear about a new version. The whole flow, including what to do if Android's prompt does not appear: [Updates in the WebUI tour](../using/webui-tour.md#updates).
 
 ### Backup
 
@@ -158,7 +168,7 @@ The Search engine dropdown looks like a choice but has exactly one working optio
 
 ### Location
 
-A single toggle, **"Share my location"**, default **on**. Its hint explains the model: a recent last-known position is injected into the conversation context on every message (free, no GPS fix), and a precise fix is only requested on demand. It applies immediately on toggle, with a toast confirming "Location enabled"/"Location disabled" and a rollback if the request fails.
+A single toggle, **"Share my location"**, default **on**. Its hint explains the model: a recent last-known position is injected into the conversation context on every message (free, no GPS fix), and a precise fix is only requested on demand. It applies immediately on toggle, with a toast confirming "Location enabled"/"Location disabled" and a rollback if the request fails. Switching it on also asks Android for the permission, in the same tap.
 
 The toggle records your preference; it does not grant the Android permission, and both have to be satisfied for location to reach the agent. When the toggle is on and Android has not allowed Jenny to use the location, the group says so with a warning notice and an **Allow location** button. The button asks Android for the permission, and if Android will no longer ask (it was denied for good), it opens Jenny's page in the system app settings instead. The notice disappears as soon as the permission is granted, and it only appears in the Android app — a browser has no permission to ask for.
 
@@ -190,7 +200,7 @@ Tapping a host opens its panel:
 
 Five behaviours worth knowing before you use this screen:
 
-- **Enabling is not symmetric with disabling.** Switching SSH *off* applies immediately, even to a subagent already working on a server: that is the emergency stop. Switching it *on*, or adding your first host, needs an **app restart** before the agent actually has the tools, because they are built at startup. Adding a second host to an install that already worked is live, no restart.
+- **No restart, in either direction.** Switching SSH *on*, or adding your first host, takes effect on the next job: the `sysadmin` subagent builds its tools from the current configuration each time one starts. Switching it *off* applies immediately, even to a subagent already working on a server: that is the emergency stop. See [SSH](../using/ssh.md#no-restart-needed).
 - **There is no trust-on-first-use.** Until you have accepted a fingerprint, every SSH call for that alias fails and tells the agent to ask you. A fingerprint reading older than 10 minutes is refused and has to be taken again.
 - **Pinning is required in both authentication modes, and matters more with a password.** With a key, an unverified host gets a signature it can't reuse; with a password, it gets your password. The fingerprint dialog says so explicitly on a password host. There is no way to skip the step in either mode.
 - **A changed host key is treated as an attack, not an update.** If a host presents a key different from the one you accepted, Jenny shows both fingerprints side by side and requires a second explicit confirmation to replace it.
@@ -214,7 +224,7 @@ Your own scheduled jobs and the heartbeat, with what each one did last time and 
 |---|---|
 | **One row per job**, with its name, how the last run ended and when it runs next | The outcomes are not coloured alike: "looked, nothing to report" means a monitor looked and had nothing to say, which is success, not a warning. "could not check" is its own state (it ran, but the check did not happen) and stays distinct from "error". |
 | **Tags on the row** | *system*, *speaks only if it has something to report*, *once only*, *paused*, *off*, *does nothing*. They change what the row means: a job that is off with "in 4 minutes" beside it would be a lie. |
-| **Overdue instead of a past date** | Next-run times are stored, not computed on the fly: they are recalculated at startup and after each run. With the scheduler stopped, or right after the phone comes back from a long doze, the stored time is in the past, so the row says it is late instead of showing a date that has passed. |
+| **Overdue instead of a past date** | Next-run times are stored, not computed on the fly: they are recalculated at startup and after each run. With the scheduler stopped, or right after the phone comes back from a long doze, the stored time is in the past, so the row shows how long ago it was due ("5 min ago"), in the warning colour, instead of a date that looks like the future. |
 | **Armed but does nothing** | A system job survives the setting behind it: switch the heartbeat off, or leave `HEARTBEAT.md` with no active tasks, and its job stays scheduled and records `ok`. A notice above the list tells you. |
 | **A rebuilt list** | If `cron/jobs.json` was recovered at startup, the group says so above the list, not just in the notice at the top of the screen: a short list looks like a correct list. |
 | **Times in the job's own timezone** | A job created with an explicit timezone is shown in it, named only when it differs from the phone's, so the panel and what Jenny says in chat never disagree. |

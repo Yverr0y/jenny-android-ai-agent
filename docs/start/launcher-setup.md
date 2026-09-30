@@ -39,16 +39,16 @@ Used that way, Jenny sits in the app switcher like any other app, so swiping thr
 
 ## A note on screen shape
 
-The screenshots in this documentation, and the device the project is developed and tested against day to day, is a Unihertz Titan 2 with a square 1440×1440 display and a physical scroll wheel. Jenny's UI is built mobile-first and works on ordinary tall rectangular phone screens too, but if something in a screenshot looks unusually square, that's why — it isn't a fixed aspect ratio the app requires.
+Jenny grew up on a Unihertz Titan 2, a phone with a square 1440×1440 display and a physical keyboard, and the UI still works there: it is built mobile-first and does not assume an aspect ratio. The screenshots in this documentation come from an ordinary tall phone screen (1080×1920), which is what most people will see.
 
 ## The honest assessment: as a launcher, it's not a good one
 
-Judged purely as a home-screen replacement, Jenny is a weak launcher. There are no widgets, no folders, no icon packs, and no wallpaper management — none of the things a dedicated launcher app is judged on. What it has instead is a search drawer that opens over the conversation and lists your installed Android apps alongside Jenny's own mini-apps and skills (see [Phone app launcher](../using/app-launcher.md) for what it can and can't do), plus a theme picker and a mascot.
+Judged purely as a home-screen replacement, Jenny is a weak launcher. There are no widgets, no folders, no icon packs, and no wallpaper management — none of the things a dedicated launcher app is judged on. What it has instead is a search drawer, the **Apps** page beside the conversation, that lists your installed Android apps alongside Jenny's own mini-apps (see [Phone app launcher](../using/app-launcher.md) for what it can and can't do), plus a theme picker and a mascot.
 
 The launcher role is the *how*, not the *what*: it exists to make the agent the thing you land on, not to compete with Nova or Niagara on features. If you want both — Jenny's presence and a fully-featured launcher — treat this as an either/or per device rather than expecting Jenny to cover both jobs on your primary phone.
 
 ## Related pages
 
-- [Phone app launcher](../using/app-launcher.md) — the drawer that opens your apps, and the tab where you hide and uninstall them
+- [Phone app launcher](../using/app-launcher.md) — the drawer that opens your apps, and the card (a long press) where you uninstall an Android app or pin a mini-app as a page
 - [Install the APK](install.md) — permissions declared, including why there's no `CAMERA` or storage permission
 - [Introduction](introduction.md) — the "daily launcher vs. dedicated device" framing in full

@@ -6,7 +6,7 @@ Jenny can open the other apps installed on your phone, from a **drawer**. It is 
 
 There is one drawer, and two ways in, one per shell:
 
-- **In the home**, the drawer is the **Apps** page — the first of the four fixed pages, so it is a swipe away from the conversation, and it is a page of its own rather than something laid over it.
+- **In the home**, the drawer is the **Apps** page — by default the first of the four fixed pages (you can reorder them), so it is a swipe away from the conversation, and it is a page of its own rather than something laid over it.
 - **In the workshop**, tap the **grid button at the left of the Console's message box** and a sheet slides up over the chat. The dock has no grid icon: its four items are Console, Brain, Hands and Memory.
 
 Either way it is a search field with a list under it — not a grid of icons — and it holds the two kinds of thing that can actually be *launched*, mixed together:
@@ -16,7 +16,7 @@ Either way it is a search field with a list under it — not a grid of icons —
 
 Skills are not in the drawer. They are not launchable — you don't open a skill, Jenny uses one — so they live in the workshop's Hands drawer instead (see [Skills](skills.md)).
 
-Each row shows a name and, under it, a second line: the description for a Jenny App, the package name for an Android app. If a Jenny App is broken — an invalid manifest, for instance — the problem takes the second line instead, in red, so you can see what's wrong without opening anything.
+Each row shows a name and, under it, a second line: the description for a Jenny App, the package name for an Android app. At the right, a label says which of the two it is: **Jenny App** or **Android App**. If a Jenny App is broken — an invalid manifest, for instance — its icon becomes a warning triangle and the problem takes the second line instead, in red, so you can see what's wrong without opening anything.
 
 The Android apps are the ones that have a launcher icon of their own — anything Android's `MAIN`/`LAUNCHER` intent filter would resolve to, the same set you'd see on a normal home screen. Background services and other UI-less packages never appear.
 
@@ -26,7 +26,7 @@ The Android apps are the ones that have a launcher icon of their own — anythin
 - **Tap a row** to open it.
 - **Long-press a row** for its card — see [The card](#the-card-where-you-manage-things) below.
 - **↑ / ↓** move the highlighted row without moving the cursor out of the search field, so you can keep typing. **Enter** opens the highlighted row; **Shift+Enter** opens its card instead, the same one a long press gives you.
-- **Esc** — and the hardware Back button, which does the same thing — clears the search first, and closes the sheet on the second press. With a card open, Back closes the card first.
+- **Back** clears the search first. On the second press it takes you back to the chat in the home, and closes the sheet in the workshop, where **Esc** on a physical keyboard does the same. With a card open, Back closes the card first.
 - **In the workshop's sheet, drag the handle or the title row down** to dismiss it. Dragging inside the list scrolls the list and never moves the sheet.
 - On a phone with a scroll wheel, the wheel is wired to move the highlighted row as well — though that has only been exercised with synthetic wheel events so far, not on a real wheel.
 
@@ -36,7 +36,7 @@ Opening an Android app closes the drawer, because the app takes over the screen.
 
 ### Where it can't go
 
-The drawer's list deliberately stops short of the very bottom of the screen. On a phone in gesture navigation, the last strip above the screen edge belongs to the system's home gesture, and an app cannot claim it back. Since Jenny is often the device's own home screen, a swipe up that started in that strip would not just close the drawer — it would tear down every overlay in the UI. So the list keeps clear of it. The size of that strip is read from Android at runtime, so it is right for your phone and shrinks to nothing when you switch to three-button navigation.
+In the workshop, the sheet's list deliberately stops short of the very bottom of the screen. On a phone in gesture navigation, the last strip above the screen edge belongs to the system's home gesture, and an app cannot claim it back. Since Jenny is often the device's own home screen, a swipe up that started in that strip would not just close the drawer — it would tear down every overlay in the UI. So the list keeps clear of it. The size of that strip is read from Android at runtime, so it is right for your phone and shrinks to nothing when you switch to three-button navigation.
 
 ## The card: where you manage things
 
@@ -73,7 +73,7 @@ There used to be an **Apps tab** for this, with a grid of every app, and a **Hid
 ## What it still doesn't do well
 
 - **A disabled app leaves a stale row.** Installing or uninstalling an app updates Jenny's list on its own, because Android broadcasts those. *Disabling* one doesn't broadcast the same thing, so the row stays until the list is reloaded — tapping it gets you the error message above rather than the app.
-- **The incomplete-list strip disappears when the software keyboard is up** on a short screen. There is only room for so much, and while you are typing the results matter more. It comes back when the keyboard goes down.
+- **In the workshop's sheet, the incomplete-list strip disappears when the software keyboard is up** on a short screen. There is only room for so much, and while you are typing the results matter more. It comes back when the keyboard goes down.
 - **The ranking is frequency-first.** An app you opened fifty times last month and never since keeps its place near the top. Whether that needs a recency decay is an open question that only real use can answer.
 
 ## See also
