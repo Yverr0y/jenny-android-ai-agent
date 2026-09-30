@@ -14,9 +14,6 @@ description: >-
   (6) processing human feedback from the audit/ directory and applying
   corrections. Not for general note-taking or daily journals.
 locked: true
-user_summary:
-  it: "La wiki è il tuo secondo cervello: usala per fare ingest di articoli, note e ricerche. Jenny compila e collega le pagine per te, e puoi farle domande sui contenuti raccolti."
-  en: "The wiki is your second brain: use it to ingest articles, notes and research. Jenny compiles and links the pages for you, and you can ask her questions about what's inside."
 ---
 
 # LLM Wiki — Karpathy Knowledge Base Pattern

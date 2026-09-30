@@ -2,14 +2,11 @@
 name: skill-creator
 description: >
   Create or update AgentSkills. Use when:
-  - User says "voglio creare una nuova skill", "crea una skill", "create a skill"
+  - User asks, in any language, to create or teach Jenny a new skill ("create a skill", "I want a new skill")
   - User wants to design, structure, or package skills with scripts, references, and assets
   - User asks for help with skill creation or improvement
   Do NOT use for editing existing skill content directly — guide the user through the conversation flow first.
 locked: true
-user_summary:
-  it: "Se Jenny non sa ancora fare qualcosa che ti serve spesso, puoi chiederle di imparare una nuova skill: le spieghi cosa vuoi e lei si costruisce da sola le istruzioni per farlo la prossima volta."
-  en: "If Jenny doesn't yet know how to do something you need often, you can ask her to learn a new skill: explain what you want and she'll build the instructions herself to do it next time."
 ---
 
 # Skill Creator
@@ -63,34 +60,34 @@ python_exec(
 
 ## Guided Conversation Flow
 
-When a user initiates skill creation with a generic request (e.g., "voglio creare una nuova skill"), follow this structured flow. Ask ONE question at a time. Do NOT overwhelm the user.
+When a user initiates skill creation with a generic request (e.g., "I want to create a new skill"), follow this structured flow. Ask ONE question at a time. Do NOT overwhelm the user. The quoted lines show what to ask, not the words to use: ask in the user's language.
 
 ### Phase 1: Understand Purpose
 
-**User says:** "Voglio creare una nuova skill" (or similar)
+**User says:** "I want to create a new skill" (or similar)
 
 **Agent responds:**
-> Certo! Dimmi: cosa dovrebbe fare questa skill? Dammi una breve descrizione dello scopo principale.
+> Sure! Tell me: what should this skill do? Give me a short description of its main purpose.
 
 Wait for the user's answer. If the answer is vague, ask ONE clarifying question:
-> Ok, quindi [riassunto]. Puoi farmi un esempio concreto di come la useresti?
+> Ok, so [summary]. Can you give me a concrete example of how you would use it?
 
 ### Phase 2: Understand Triggers
 
 Once the purpose is clear, ask about when the skill should activate:
-> Perfetto! Ora dimmi: quando dovrebbe attivarsi questa skill? Cosa dovrebbe chiedere o dire l'utente per usarla?
+> Great! Now tell me: when should this skill kick in? What would you ask or say to use it?
 
 If the user gives a broad answer, suggest specific triggers:
-> Quindi direi che si attiva quando l'utente dice [esempio1], [esempio2], o chiede [esempio3]. Corretto?
+> So I'd say it kicks in when you say [example1], [example2], or ask [example3]. Right?
 
 ### Phase 3: Propose Name and Description
 
 Based on the conversation, propose a skill name and description:
-> Ok, ho capito! Propongo:
-> - **Nome:** `skill-name` (lowercase, con trattini)
-> - **Descrizione:** [description that includes what it does + when to use it]
+> Got it! Here is my proposal:
+> - **Name:** `skill-name` (lowercase, with hyphens)
+> - **Description:** [description that includes what it does + when to use it]
 >
-> Ti va bene o vuoi modificare qualcosa?
+> Does that work, or would you like to change something?
 
 **Name rules:**
 - Lowercase alphanumeric, single hyphens as separators
@@ -115,24 +112,24 @@ Only after the user confirms the name and description:
    ```
 
 2. Read the created SKILL.md and show the body to the user:
-   > Ho creato la skill! Ora scriviamo insieme le istruzioni per l'agente. Ecco la struttura:
+   > I've created the skill! Now let's write the agent's instructions together. Here is the structure:
    >
-   > [mostra il body template]
+   > [show the body template]
    >
-   > Vuoi che ti guidi nella compilazione o preferisci scrivere tu?
+   > Shall I guide you through filling it in, or would you rather write it yourself?
 
 ### Phase 5: Guide Body Writing
 
 If the user wants guidance, ask ONE section at a time:
-> Iniziamo dalla sezione "What I do". Quali sono le 3-5 cose principali che questa skill dovrebbe fare?
+> Let's start with the "What I do" section. What are the 3-5 main things this skill should do?
 
 After each section, move to the next:
-> Ora la sezione "When to use me". Quali situazioni dovrebbero attivare questa skill?
+> Now the "When to use me" section. Which situations should trigger this skill?
 
 ### Phase 6: Validate and Test
 
 After the body is complete:
-> Perfetto! La skill è pronta. Vuoi che la validi con `quick_validate.py`?
+> Great! The skill is ready. Shall I validate it with `quick_validate.py`?
 
 ```
 python_exec(
@@ -142,17 +139,17 @@ python_exec(
 ```
 
 If validation passes:
-> La skill è valida! Per testarla, riavvia Jenny e prova a dire [trigger example].
+> The skill is valid! To test it, restart Jenny and try saying [trigger example].
 
 If validation fails:
-> Ho trovato alcuni problemi: [lista errori]. Vuoi che li corregga?
+> I found a few problems: [list of errors]. Shall I fix them?
 
 ### Handling Edge Cases
 
-- **User changes their mind mid-flow:** Acknowledge and adapt. "Ok, cambiamo direzione. Cosa vorresti invece?"
-- **User wants to skip questions:** Allow it. "Ok, procedo con quello che ho. Creo la skill con queste info?"
-- **User provides too much info:** Summarize and confirm. "Quindi riassumendo: [breve riassunto]. Corretto?"
-- **User is unsure:** Offer examples. "Posso suggerirti: [esempio1], [esempio2], [esempio3]. Qualcosa ti convince?"
+- **User changes their mind mid-flow:** Acknowledge and adapt. "Ok, let's change direction. What would you like instead?"
+- **User wants to skip questions:** Allow it. "Ok, I'll go with what I have. Shall I create the skill with this?"
+- **User provides too much info:** Summarize and confirm. "So, to sum up: [short summary]. Right?"
+- **User is unsure:** Offer examples. "I can suggest: [example1], [example2], [example3]. Does any of these work for you?"
 
 ## About Skills
 

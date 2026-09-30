@@ -2692,7 +2692,7 @@ export class SettingsController {
     const name = escapeHtml(sk.name);
     const under = sk.available === false
       ? `<span class="skill-row-broken"><span class="skill-row-dot" aria-hidden="true"></span>${escapeHtml(sk.unavailable_reason || '')}</span>`
-      : escapeHtml(skillBlurb(sk, i18n.locale));
+      : escapeHtml(skillBlurb(sk, i18n.locale, (k) => i18n.t(k)));
     const command = controllable(sk)
       ? `<label class="toggle-switch">
           <input type="checkbox" data-skill-toggle="${name}" ${sk.disabled ? '' : 'checked'}

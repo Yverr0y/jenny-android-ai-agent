@@ -1158,6 +1158,13 @@
     "builtInLocked": "Comes with the app: it can't be turned off here.",
     "yoursLocked": "Locked by its own file: it can't be turned off here.",
     "readError": "The skill list couldn't be read.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "userSummary": {
+      "app-creator": "Jenny Apps are small apps with their own interface that Jenny builds on request (a shopping list, a counter, a custom tool). Just ask for it in chat.",
+      "cron": "Reminders, recurring checks and conditional alerts: ask Jenny to remind you of something at a specific time, to repeat an action over time, or to warn you only when a condition is met.",
+      "llm-wiki": "The wiki is your second brain: use it to ingest articles, notes and research. Jenny compiles and links the pages for you, and you can ask her questions about what's inside.",
+      "skill-creator": "If Jenny doesn't yet know how to do something you need often, you can ask her to learn a new skill: explain what you want and she'll build the instructions herself to do it next time.",
+      "ssh": "Commands on the remote machines you registered in Settings → Workshop → Hands → SSH: Jenny can check a service, read a log, update a server or move a file. She can only reach hosts you declared yourself, and long commands keep running even with the phone asleep."
+    }
   }
 }

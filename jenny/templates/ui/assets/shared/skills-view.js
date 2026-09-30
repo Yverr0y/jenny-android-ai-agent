@@ -47,8 +47,20 @@ export function splitSkill(skills) {
 /** La riga sotto il nome. Il riassunto per l'utente nella sua lingua, poi
  *  l'altra, poi la descrizione per il modello — e **niente** se la descrizione
  *  è il nome stesso: è il ripiego di `_description()` lato server, e ripeterlo
- *  sotto il nome non dice nulla. */
-export function skillBlurb(skill, locale) {
+ *  sotto il nome non dice nulla.
+ *
+ *  Per le integrate il riassunto sta nei file i18n (`skills.userSummary.<nome>`)
+ *  e non nel frontmatter: il modello legge il `SKILL.md` intero con
+ *  `read_file`, e una riga italiana lì dentro lo tira verso l'italiano anche
+ *  quando l'utente scrive in inglese. `t` è `i18n.t`, come in `skillsSummary`;
+ *  una chiave che manca torna uguale a sé stessa, e allora vale il frontmatter
+ *  (le skill scritte dall'utente possono ancora portare `user_summary`). */
+export function skillBlurb(skill, locale, t) {
+  if (skill.bundled && t) {
+    const key = `skills.userSummary.${skill.name}`;
+    const own = t(key);
+    if (own && own !== key) return own;
+  }
   const s = skill.user_summary;
   const perUser = s && (s[locale] || s.it || s.en);
   if (perUser) return perUser;

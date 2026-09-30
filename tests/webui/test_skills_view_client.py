@@ -87,6 +87,27 @@ def test_the_summary_speaks_the_interface_language_then_falls_back() -> None:
     )
 
 
+def test_a_bundled_skill_takes_its_summary_from_i18n() -> None:
+    """Le integrate non portano più ``user_summary``: il modello leggeva l'italiano
+    nel frontmatter. Il riassunto viene da ``skills.userSummary.<nome>``, e una
+    chiave mancante (``t`` la restituisce uguale) ripiega sul resto."""
+    _run_js(
+        """
+        const dict = { 'skills.userSummary.cron': 'Promemoria' };
+        const t = (k) => dict[k] ?? k;
+        const cron = { name: 'cron', bundled: true, description: 'Schedule reminders.' };
+        assert.equal(skillBlurb(cron, 'it', t), 'Promemoria');
+        assert.equal(skillBlurb({ ...cron, name: 'memory' }, 'it', t), 'Schedule reminders.');
+        assert.equal(skillBlurb(cron, 'it'), 'Schedule reminders.',
+          'senza t si comporta come prima');
+        const mine = { name: 'cron', bundled: false, description: 'Mine.',
+                       user_summary: { it: 'La mia' } };
+        assert.equal(skillBlurb(mine, 'it', t), 'La mia',
+          'una skill tua con lo stesso nome non prende il riassunto della integrata');
+        """
+    )
+
+
 def test_the_summary_never_repeats_the_name() -> None:
     """Senza descrizione il server ripiega sul nome: sotto il nome non va."""
     _run_js(

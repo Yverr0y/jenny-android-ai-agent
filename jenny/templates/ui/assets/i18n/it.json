@@ -1158,6 +1158,13 @@
     "builtInLocked": "Viene con l'app: non si spegne da qui.",
     "yoursLocked": "Bloccata dal suo file: non si spegne da qui.",
     "readError": "L'elenco delle skill non si è potuto leggere.",
-    "retry": "Riprova"
+    "retry": "Riprova",
+    "userSummary": {
+      "app-creator": "Le Jenny Apps sono piccole app con una loro interfaccia che Jenny costruisce su richiesta (una lista della spesa, un contatore, uno strumento su misura). Basta chiederglielo in chat.",
+      "cron": "Promemoria, controlli ricorrenti e avvisi condizionati: chiedi a Jenny di ricordarti qualcosa a un'ora precisa, di ripetere un'azione nel tempo, o di avvertirti solo se una certa condizione si verifica.",
+      "llm-wiki": "La wiki è il tuo secondo cervello: usala per fare ingest di articoli, note e ricerche. Jenny compila e collega le pagine per te, e puoi farle domande sui contenuti raccolti.",
+      "skill-creator": "Se Jenny non sa ancora fare qualcosa che ti serve spesso, puoi chiederle di imparare una nuova skill: le spieghi cosa vuoi e lei si costruisce da sola le istruzioni per farlo la prossima volta.",
+      "ssh": "Comandi sulle macchine remote che hai registrato in Impostazioni → Officina → Mani → SSH: Jenny può controllare un servizio, leggere un log, aggiornare un server o scambiare un file. Raggiunge solo gli host che hai dichiarato tu, e i comandi lunghi restano in corso anche a telefono spento."
+    }
   }
 }
