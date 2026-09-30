@@ -863,7 +863,7 @@
     "createFailed": "Creazione fallita: {error}",
     "createRejected": "Non ho potuto creare “{name}”: o esiste già, o una cartella con quel nome è di mezzo e non è un quaderno.",
     "createSeedTooLong": "La riga di presentazione è troppo lunga: accorciala e riprova.",
-    "createWikiOff": "Le wiki sono spente nelle impostazioni, e un quaderno è una wiki: riaccendile e riprova.",
+    "createWikiOff": "Le wiki sono spente in config.json (wiki.enabled), e un quaderno è una wiki: riaccendile lì e riprova.",
     "createInternal": "Creazione non riuscita per un errore del gateway. Riprova.",
     "created": "Quaderno “{name}” creato",
     "askAbout": "Chiedi qualcosa su {name}...",

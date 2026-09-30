@@ -863,7 +863,7 @@
     "createFailed": "Could not create: {error}",
     "createRejected": "I could not create “{name}”: either it already exists, or a folder with that name is in the way and is not a notebook.",
     "createSeedTooLong": "The intro line is too long: shorten it and try again.",
-    "createWikiOff": "Wikis are switched off in the settings, and a notebook is a wiki: turn them back on and try again.",
+    "createWikiOff": "Wikis are switched off in config.json (wiki.enabled), and a notebook is a wiki: turn them back on there and try again.",
     "createInternal": "Creation failed on a gateway error. Try again.",
     "created": "Notebook “{name}” created",
     "askAbout": "Ask something about {name}...",

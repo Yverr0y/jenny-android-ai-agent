@@ -238,7 +238,11 @@ export class ChatController {
     this._loadingInitialHistory = false;
 
     this.imageHandler = new ImageHandler();
-    this.imageHandler.onChange = (images) => this._renderAttachPreview(images);
+    this.imageHandler.onChange = (images) => {
+      this._renderAttachPreview(images);
+      // Un allegato da solo e' gia' un messaggio: il tasto manda lo deve sapere.
+      this._updateSendState();
+    };
     /* Un allegato che sfora i tetti: un toast e non una riga nel filo, perche'
        non e' un fatto della conversazione — e' una risposta a quel che stai
        facendo adesso nel composer, e se ne va da sola come il gesto. Le
@@ -600,9 +604,12 @@ export class ChatController {
   }
 
   _updateSendState() {
-    const hasText = this.input.value.trim().length > 0;
-    this.sendBtn.disabled = !hasText;
-    if (hasText) {
+    /* Testo o allegati, come `sendMessage` e la casa: col solo testo una foto
+       senza didascalia partiva con Invio e non col tocco sul tasto. */
+    const canSend = this.input.value.trim().length > 0
+      || this.imageHandler.getImages().length > 0;
+    this.sendBtn.disabled = !canSend;
+    if (canSend) {
       this.sendBtn.classList.add('enabled');
     } else {
       this.sendBtn.classList.remove('enabled');

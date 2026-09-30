@@ -1507,7 +1507,8 @@ class HomeApp {
     });
   }
 
-  /** Porta una richiesta gia' scritta dentro la conversazione e la manda.
+  /** Porta una richiesta gia' scritta dentro la conversazione, nel campo e
+   *  **senza mandarla**: chi la legge ci aggiunge cosa vuole, poi la manda lui.
    *  Serve a «modifica questa app», che non apre un editor: chiede a Jenny. */
   _sendInChat(text) {
     this.goHome();
