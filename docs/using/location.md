@@ -30,7 +30,7 @@ If you ask Jenny for your location while either gate is off, the `get_location` 
 
 > "Location unavailable — the toggle may be off, the Android location permission not granted, or no GPS fix is currently known."
 
-The passive context line, on the other hand, fails silently by design: it is just omitted, with no error and nothing shown in the chat. <!-- TODO: verify on-device (O-10): the get_location error text when the Android permission has been denied. The notice, the re-prompt and the fallback to Android's settings were checked on the emulator on 29/09/2026. -->
+The passive context line, on the other hand, fails silently by design: it is just omitted, with no error and nothing shown in the chat.
 
 Jenny never requests background location access (`ACCESS_BACKGROUND_LOCATION`) — reads only happen while the app's foreground service is alive, which on Android is the same lifetime as the gateway itself (see [Android permissions](../reference/android-permissions.md)).
 

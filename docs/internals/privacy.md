@@ -42,8 +42,6 @@ Everything else lives in the app's private storage (`<filesDir>/workspace` and n
 
 Android's manifest declares `android:allowBackup="true"` with no exclusion rules. In practice this means Google's automatic cloud backup for this app **can** include app data — potentially `config.json`, with your provider API keys in plaintext, and your chat history — as part of a normal Android device backup to Google's servers. This is the one real exception to "everything stays local": it's not something Jenny does deliberately, it's a consequence of a manifest flag not yet paired with backup exclusion rules.
 
-<!-- TODO: verify on-device (O-9): confirm exactly what Google's auto-backup captures under allowBackup=true on targetSdk 34 (quota, whether config.json is actually included, device-to-device transfer behavior) -->
-
 Until this is tightened, if you care about your API keys not potentially ending up in a Google Account backup, check your device's backup settings for this app, or disable Android's app data backup for Jenny specifically.
 
 ## The workspace-to-provider chain

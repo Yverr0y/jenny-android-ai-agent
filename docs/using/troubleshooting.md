@@ -46,8 +46,6 @@ Exact errors you might see appended after "Error: " in the chat, and what they m
 
 Changing the model or provider in Settings applies immediately — there's no restart required to try again.
 
-<!-- TODO: verify on-device (O-10): does the location toggle in Settings show a consistent state when the Android permission is denied? -->
-
 ## An attachment is refused
 
 Attachments are checked twice, and both checks tell you why in plain words rather than dropping the file silently:
@@ -112,8 +110,6 @@ Messages sent while the app was closed are **not** all answered when it comes ba
 ## Web search shows a CAPTCHA / verification page
 
 `web_search` runs through a hidden Chrome WebView using Bing (it's the only supported search engine), which occasionally shows a CAPTCHA or "verify you're human" page instead of results. When that happens Jenny reports it plainly rather than working around it — there's no bypass. Just try again after a bit, or ask a differently-worded question so the underlying request looks less automated.
-
-<!-- TODO: verify on-device (O-7): how often does the hidden WebView actually hit Bing's CAPTCHA page in normal use? -->
 
 ## "URL blocked" errors
 

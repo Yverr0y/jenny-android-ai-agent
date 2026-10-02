@@ -14,8 +14,6 @@ It is also what makes the "dedicated device" use case work: a spare Android phon
 2. Press the Home button on your device.
 3. Android detects more than one app registered to handle Home and shows you a chooser. Pick Jenny, and choose "Always" (rather than "Just once") if you want it to stick without asking again every time.
 
-<!-- TODO: verify on-device (O-3): exact wording and timing of the Android HOME-app chooser, and whether it appears immediately after onboarding or only on the next Home press. Behavior can vary by Android version and OEM launcher. -->
-
 If you don't want the chooser to appear at all yet, just don't press Home after installing — Jenny only takes over the role once you actively pick it.
 
 ## Where the Home button lands

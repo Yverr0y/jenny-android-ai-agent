@@ -54,7 +54,6 @@ with open("backup.zip", "wb") as out:
         out.write(key.decrypt(seg_nonce, seg, aad))
 ```
 
-<!-- TODO: verify on-device (O-2, incl. Google Drive SAF) -->
 The export/import picker uses Android's standard document APIs, so Drive should work like any other SAF target, but a full save-to-Drive round trip hasn't been confirmed on-device yet.
 
 **The passphrase cannot be recovered or reset.** There is no "forgot passphrase" flow. If you lose it, the backup file is permanently unreadable — Jenny warns you about this in the passphrase dialog. Write it down somewhere safe, not just in your head.

@@ -101,8 +101,6 @@ A few notes specific to self-hosted servers:
 
 ## Honest end-to-end status
 
-<!-- TODO: verify on-device (O-6): confirm actual reachability of a LAN/Tailscale self-hosted openai_compat endpoint from the phone, including the HTTPS requirement in practice, before promising this flow works out of the box. -->
-
 The pieces above — network security config behavior, the SSRF/provider-path separation, and `10.0.2.2` being emulator-only — are all verified against the current code. What hasn't been verified end-to-end on a real device is the full loop of a phone reaching a self-hosted server over LAN or Tailscale with a real TLS certificate in place and getting a working chat response back. Treat this page as "how it's built to work," and expect to troubleshoot certificate trust on first setup.
 
 ## See also

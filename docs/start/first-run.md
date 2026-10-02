@@ -6,8 +6,6 @@ The first time you open Jenny after installing the APK, you go through a slow bo
 
 Jenny bundles its own Python 3.11 runtime (via Chaquopy) inside the APK — there's nothing else to install, but on the very first launch that runtime has to be unpacked onto the device before the app can do anything. You'll see a loading screen while this happens. The app polls the local gateway for up to **90 seconds** before giving up, so if the loading screen sits there for a while, it's usually still working, not frozen.
 
-<!-- TODO: verify on-device (O-1): real elapsed time for first-boot extraction on a reference device -->
-
 Subsequent launches are fast: the Python runtime is already extracted, and the app only has to start the gateway process.
 
 If the 90-second timeout is reached and the app never connects, see [Troubleshooting](../using/troubleshooting.md).
@@ -89,8 +87,6 @@ Pressing **Launch** does the following, in order:
 ## Restoring from a backup instead
 
 If you've used Jenny before and have an encrypted `.jbk` backup file, tap **Restore from backup** on step 1 instead of going through the wizard. This opens the same import flow used from the home's **Settings → Backup → Restore from a file**: pick the file via the Android system picker, enter the backup passphrase, and confirm. The restore is staged, not applied immediately — the app then prompts you to restart, and the actual restore happens at that restart, before anything else touches the workspace. Once restored, the app boots straight into the home, on Jenny's page, with your old provider, history, and memory already in place — the wizard is skipped because a provider is already configured. See [Backup and restore](../using/backup.md) for the full mechanics.
-
-<!-- TODO: verify on-device (O-2): full restore-from-onboarding flow, including SAF picker behavior with Google Drive -->
 
 ## Things to know that aren't obvious
 

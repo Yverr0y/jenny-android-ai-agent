@@ -37,8 +37,6 @@ If reminders matter to you, the practical measures are unchanged:
 - Keep the phone charged and connected when a reminder is close to due.
 - Treat "at" reminders as best-effort, not guaranteed alarms — for anything truly time-critical, use your phone's own alarm clock as a backup.
 
-<!-- TODO: verify on-device (O-5): the granted-everything case was measured on the Titan 2 on 2026-08-09 and is written up above. Still unmeasured: the drift of the same job with neither permission granted, whether the watchdog really recovers a gateway that was killed (nothing killed it during the run), and how often the recorded-outage panel finds a gap in normal use. -->
-
 ## Reminders (the `cron` tool)
 
 You don't create these from a screen — you just ask, in plain language, and Jenny translates it into a scheduled job:
@@ -209,7 +207,7 @@ None of the proactive messages above are guaranteed to make a sound — whether 
 - Two notifications from the same source (e.g. the same reminder firing twice in a row) replace each other rather than stacking — you'll only ever see the latest one for that job.
 - Tapping a notification opens the home on Jenny's page, in the personal conversation — where the message is — even if the workshop was the last thing you had open. Pending Jenny alerts are cleared when that conversation is actually on screen: tapping one, or coming back to the app while the personal chat is showing. Opening the app on another page, or on a notebook, leaves them in place.
 - **The chat message is always there regardless.** Whether or not a notification actually rang, the reply from a reminder, Heartbeat, or a completed subagent is written into the chat exactly the same way — the notification is only ever an added ping layered on top of a delivery that already happened.
-- On Android 13 and newer, posting notifications requires the runtime `POST_NOTIFICATIONS` permission, which the app requests automatically the first time it starts. If you deny it, everything above still happens in chat — you simply never get the ringing/vibrating notification for it. <!-- TODO: verify on-device (O-4): confirm exactly when/how the POST_NOTIFICATIONS prompt appears on a real Android 13+ device and what the app does if it's denied and later revisited. -->
+- On Android 13 and newer, posting notifications requires the runtime `POST_NOTIFICATIONS` permission, which the app requests automatically the first time it starts. If you deny it, everything above still happens in chat — you simply never get the ringing/vibrating notification for it.
 
 ## Related pages
 

@@ -207,8 +207,6 @@ Searches the web through the hidden WebView. **Bing is the only supported engine
 
 Config toggle: `tools.androidWeb.enable` (default `true`, config-only — there is no switch for it in the app). The other fields are also editable in the workshop's Hands drawer → Web Search: `tools.androidWeb.search.searchEngine` (default `"bing"`, no alternative), `tools.androidWeb.search.maxResults` (default 5), `tools.androidWeb.search.timeout` (default 30s).
 
-<!-- TODO: verify on-device (O-7): real-world frequency of Bing CAPTCHA pages with the hidden WebView -->
-
 ### web_fetch
 
 Fetches one URL in full and extracts readable content — `markdown` (default) or `text` extraction mode. This is the complement to `web_search` (many snippets) and a text-only alternative to `download_file` (which saves the raw binary instead).
