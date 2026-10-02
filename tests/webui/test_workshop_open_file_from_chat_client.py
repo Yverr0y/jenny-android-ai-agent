@@ -67,7 +67,8 @@ globalThis.window = {{
   location: 'http://x/workshop.html',
   history: {{ back() {{ setTimeout(() => {{ cursor -= 1; shell._onPop(stack[cursor]); }}, 0); }} }},
 }};
-globalThis.URL = class {{ constructor() {{ this.searchParams = {{ set() {{}}, delete() {{}} }}; }} }};
+// `hash` perche' `_navUrl` toglie dal frammento l'istruzione `chat=` del boot.
+globalThis.URL = class {{ constructor() {{ this.searchParams = {{ set() {{}}, delete() {{}} }}; this.hash = ''; }} }};
 
 class Shell {{
 {member(APP_SRC, "ensureController")}

@@ -327,7 +327,10 @@ def test_a_gap_triggers_an_http_resync_from_the_pre_gap_cursor() -> None:
     assert "_resyncSubagentStream(applied.resyncFrom)" in handler.group(1)
     resync = re.search(r"_resyncSubagentStream\(since\)\s*\{(.*?)\n  \}", source, re.S)
     assert resync, "_resyncSubagentStream non trovato"
-    assert "getSubagentActivity(stream.taskId, since)" in resync.group(1)
+    assert "getSubagentActivity(stream.taskId, since, {" in resync.group(1)
+    # La lettura dichiara la conversazione: il gateway rifiuta l'attività di un
+    # subagent che non è suo.
+    assert "sessionKey: sessionManager.currentKey" in resync.group(1)
 
 
 def test_watch_limit_freezes_the_view_instead_of_pretending() -> None:
@@ -352,7 +355,8 @@ def test_the_digest_is_fetched_only_when_the_block_is_expanded() -> None:
     toggle = re.search(r"_toggleSubagentDigest\(block\)\s*\{(.*?)\n  \}", source, re.S)
     assert toggle, "_toggleSubagentDigest non trovato"
     body = toggle.group(1)
-    assert "getSubagentDigest(block.dataset.taskId)" in body
+    assert "getSubagentDigest(block.dataset.taskId, {" in body
+    assert "sessionKey: sessionManager.currentKey" in body
     # Solo all'apertura, e una volta sola.
     assert "if (!opening || block.dataset.loaded) return;" in body
     # `source: "none"` = niente blocco, non un blocco vuoto.

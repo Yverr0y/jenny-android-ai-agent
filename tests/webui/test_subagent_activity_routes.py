@@ -301,3 +301,54 @@ async def test_without_an_agent_the_digest_is_empty() -> None:
     response = await _dispatch(handler, f"/api/subagents/{_TASK}/digest")
     assert response.status_code == 200
     assert _json(response)["source"] == "none"
+
+
+# -- appartenenza alla conversazione -----------------------------------------
+
+
+class ScopedManager(FakeManager):
+    """``_TASK`` è un subagent del quaderno ``piante``, e di nessun altro."""
+
+    def status_snapshot(self, session_key: Any = None) -> dict:
+        running = [{"task_id": _TASK, "lineage_id": "aa94c60b"}]
+        return {"running": running if session_key == "project:piante" else [], "recent": []}
+
+    def list_records(self, session_key: Any = None) -> list:
+        return []
+
+
+@pytest.fixture()
+def scoped():
+    log = _log("reading a.py")
+    digests = FakeDigestStore()
+    manager = ScopedManager(activity=log, digests=digests)
+    return SimpleNamespace(handler=_make_handler(lambda: manager), digests=digests)
+
+
+@pytest.mark.parametrize("resource", ["activity", "digest"])
+async def test_a_read_of_another_conversations_subagent_is_refused(scoped, resource) -> None:
+    response = await _dispatch(
+        scoped.handler, f"/api/subagents/{_TASK}/{resource}?session_key=websocket%3Adefault"
+    )
+    assert response.status_code == 404
+    assert scoped.digests.calls == []
+
+
+@pytest.mark.parametrize("resource", ["activity", "digest"])
+async def test_a_read_of_this_conversations_subagent_is_served(scoped, resource) -> None:
+    response = await _dispatch(
+        scoped.handler, f"/api/subagents/{_TASK}/{resource}?session_key=project%3Apiante&since=0"
+    )
+    assert response.status_code == 200
+    assert _json(response)["task_id"] == _TASK
+
+
+async def test_without_an_agent_a_keyed_read_still_degrades_to_empty() -> None:
+    # Niente manager vuol dire niente subagent di nessuno: la lettura resta un
+    # 200 vuoto, come senza chiave, invece di diventare un 404.
+    handler = _make_handler(lambda: None)
+    response = await _dispatch(
+        handler, f"/api/subagents/{_TASK}/digest?session_key=project%3Apiante"
+    )
+    assert response.status_code == 200
+    assert _json(response)["source"] == "none"

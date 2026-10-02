@@ -706,14 +706,14 @@ class ApiClient {
   // Serve al pannello per ripartire dopo un reload di pagina (su Android il
   // processo della WebView muore spesso), non solo alla prossima transizione.
 
-  // `sessionKey` (`websocket:default`, `project:<nome>`) limita lo snapshot a
-  // una conversazione, come il frame che il gateway le manda: la casa lo
-  // passa, l'officina no e riceve tutto.
+  // `sessionKey` (`websocket:default`, `project:<nome>`) è la conversazione da
+  // cui arriva la domanda, ed è un argomento di tutte e cinque le chiamate.
+  // Sullo snapshot la limita a quella conversazione, come il frame che il
+  // gateway le manda. Sulle azioni e sulle letture fa rifiutare (404) un
+  // subagent che non è suo. Senza chiave il server non filtra e non controlla
+  // niente: entrambi i gusci la passano sempre.
   async getSubagents({ sessionKey } = {}) {
-    const url = sessionKey
-      ? `/api/subagents?session_key=${encodeURIComponent(sessionKey)}`
-      : '/api/subagents';
-    const res = await this._fetch(url);
+    const res = await this._fetch(subagentUrl('', { sessionKey }));
     if (!res.ok) throw new Error(`Subagents failed: ${res.status}`);
     return res.json();
   }
@@ -721,14 +721,14 @@ class ApiClient {
   // Il corpo di errore di queste route è testo semplice, non JSON: il messaggio
   // del manager è già scritto per essere mostrato all'utente, quindi lo si
   // propaga così com'è (409 = rilancio impossibile, 429 = niente slot liberi).
-  async restartSubagent(taskId) {
-    const res = await this._fetch(`/api/subagents/${encodeURIComponent(taskId)}/restart`);
+  async restartSubagent(taskId, { sessionKey } = {}) {
+    const res = await this._fetch(subagentUrl(`/${encodeURIComponent(taskId)}/restart`, { sessionKey }));
     if (!res.ok) throw new Error((await res.text().catch(() => '')) || `Restart failed: ${res.status}`);
     return res.json();
   }
 
-  async cancelSubagent(taskId) {
-    const res = await this._fetch(`/api/subagents/${encodeURIComponent(taskId)}/cancel`);
+  async cancelSubagent(taskId, { sessionKey } = {}) {
+    const res = await this._fetch(subagentUrl(`/${encodeURIComponent(taskId)}/cancel`, { sessionKey }));
     if (!res.ok) throw new Error((await res.text().catch(() => '')) || `Cancel failed: ${res.status}`);
     return res.json();
   }
@@ -739,11 +739,11 @@ class ApiClient {
   // client ha un solo parser. Il tetto lato server è più alto di quello del
   // frame (200 contro 40), che è ciò che rende la risync capace di tappare
   // davvero il buco invece di aprirne un altro.
-  async getSubagentActivity(taskId, since = 0) {
-    const qs = new URLSearchParams({ since: String(Number(since) || 0) });
-    const res = await this._fetch(
-      `/api/subagents/${encodeURIComponent(taskId)}/activity?${qs}`
-    );
+  async getSubagentActivity(taskId, since = 0, { sessionKey } = {}) {
+    const res = await this._fetch(subagentUrl(`/${encodeURIComponent(taskId)}/activity`, {
+      since: String(Number(since) || 0),
+      sessionKey,
+    }));
     if (!res.ok) throw new Error(`Subagent activity failed: ${res.status}`);
     return res.json();
   }
@@ -751,11 +751,25 @@ class ApiClient {
   // Condensa "cosa ha fatto davvero" di un subagent. Chiamata SOLO all'espansione
   // del blocco in chat: la maggior parte dei messaggi non viene mai espansa, e
   // farla in anticipo sarebbe una lettura da disco per riga di trace.
-  async getSubagentDigest(taskId) {
-    const res = await this._fetch(`/api/subagents/${encodeURIComponent(taskId)}/digest`);
+  async getSubagentDigest(taskId, { sessionKey } = {}) {
+    const res = await this._fetch(subagentUrl(`/${encodeURIComponent(taskId)}/digest`, { sessionKey }));
     if (!res.ok) throw new Error(`Subagent digest failed: ${res.status}`);
     return res.json();
   }
+}
+
+/* L'indirizzo di una route `/api/subagents*`. `tail` è il pezzo dopo
+   `/api/subagents` (vuoto per lo snapshot), già codificato; `sessionKey`
+   diventa `session_key`, e un valore assente o vuoto non entra nella query —
+   così la chiamata senza chiave resta byte per byte quella di prima. */
+function subagentUrl(tail, { sessionKey, ...params } = {}) {
+  const qs = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') qs.set(name, value);
+  }
+  if (sessionKey) qs.set('session_key', sessionKey);
+  const query = qs.toString();
+  return `/api/subagents${tail}${query ? `?${query}` : ''}`;
 }
 
 export const api = new ApiClient();
