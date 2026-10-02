@@ -7,6 +7,7 @@ import pytest
 
 from jenny.agent.context import ContextBuilder
 from jenny.agent.loop import AgentLoop
+from jenny.agent.turn_persistence import FollowupState
 from jenny.bus.events import InboundMessage
 from jenny.bus.queue import MessageBus
 from jenny.cron.session_turns import CRON_HISTORY_META, CRON_TRIGGER_META
@@ -1213,6 +1214,10 @@ async def test_system_subagent_followup_is_persisted_before_prompt_assembly(tmp_
     # ``[Message Time: ...]`` (which then leaks back to the user).
     assert "[Message Time:" in non_system[0]["content"]
     assert "[Message Time:" not in non_system[1]["content"]
+    # Il rientro e' l'ultimo messaggio, ``user``, una volta sola, con il
+    # contesto runtime: e' la notizia che il modello deve leggere adesso.
+    assert len(non_system) == 3
+    assert non_system[2]["role"] == "user"
     assert non_system[2]["content"].count("subagent result") == 1
     assert "Current Time:" in non_system[2]["content"]
 
@@ -1225,7 +1230,7 @@ async def test_system_subagent_followup_is_persisted_before_prompt_assembly(tmp_
         {"role": "user", "content": "question"},
         {"role": "assistant", "content": "working"},
         {
-            "role": "assistant",
+            "role": "user",
             "content": "subagent result",
             "injected_event": "subagent_result",
             "subagent_task_id": "sub-1",
@@ -1307,54 +1312,69 @@ async def test_multiple_subagent_followups_all_persist_as_standalone_history(tmp
     ]
 
 
-def test_prompt_merge_does_not_replace_standalone_subagent_history_entry(tmp_path: Path) -> None:
+def _announce(content: str = "subagent result", task_id: str = "sub-1") -> InboundMessage:
+    return InboundMessage(
+        channel="system",
+        sender_id="subagent",
+        chat_id="internal:dedupe",
+        content=content,
+        metadata={"subagent_task_id": task_id},
+    )
+
+
+def test_subagent_followup_is_persisted_as_a_user_row() -> None:
     loop = _mk_loop()
     session = Session(key="internal:merge")
     session.add_message("assistant", "previous assistant")
 
-    inserted = loop._persist_subagent_followup(
-        session,
-        InboundMessage(
-            channel="system",
-            sender_id="subagent",
-            chat_id="internal:merge",
-            content="subagent result",
-            metadata={"subagent_task_id": "sub-1"},
-        ),
-    )
+    assert loop._subagent_followup_state(session, _announce()) is FollowupState.NEW
+    loop._persist_subagent_followup(session, _announce())
 
-    assert inserted is True
-
-    builder = ContextBuilder(tmp_path)
-    projected = builder.build_messages(
-        history=session.get_history(max_messages=0),
-        current_message="",
-        current_role="assistant",
-        channel="internal",
-        chat_id="merge",
-    )
-
-    non_system = [m for m in projected if m.get("role") != "system"]
-    assert len(non_system) == 2
-    assert "subagent result" in non_system[-1]["content"]
+    assert session.messages[-1]["role"] == "user"
     assert session.messages[-1]["content"] == "subagent result"
     assert session.messages[-1]["injected_event"] == "subagent_result"
+    assert session.messages[-1]["subagent_task_id"] == "sub-1"
 
 
-def test_subagent_followup_dedupes_by_task_id() -> None:
+def test_subagent_followup_state_follows_the_reply() -> None:
+    """Scritto e senza risposta = in sospeso; con una risposta = consegnato."""
     loop = _mk_loop()
     session = Session(key="internal:dedupe")
-    msg = InboundMessage(
-        channel="system",
-        sender_id="subagent",
-        chat_id="internal:dedupe",
-        content="subagent result",
-        metadata={"subagent_task_id": "sub-1"},
+    loop._persist_subagent_followup(session, _announce())
+
+    assert loop._subagent_followup_state(session, _announce()) is FollowupState.PENDING
+    assert len(session.messages) == 1
+
+    session.add_message("assistant", "here is the summary")
+    assert loop._subagent_followup_state(session, _announce()) is FollowupState.DELIVERED
+    # Un altro task e' un'altra notizia.
+    assert loop._subagent_followup_state(session, _announce(task_id="sub-2")) is FollowupState.NEW
+
+
+def test_a_synthetic_assistant_row_is_not_a_reply() -> None:
+    """Un rientro legacy (``assistant``) dopo il rientro non vale come risposta."""
+    loop = _mk_loop()
+    session = Session(key="internal:dedupe")
+    loop._persist_subagent_followup(session, _announce())
+    session.add_message(
+        "assistant", "other result", injected_event="subagent_result", subagent_task_id="sub-9",
     )
 
-    assert loop._persist_subagent_followup(session, msg) is True
-    assert loop._persist_subagent_followup(session, msg) is False
-    assert len(session.messages) == 1
+    assert loop._subagent_followup_state(session, _announce()) is FollowupState.PENDING
+
+
+def test_a_pending_legacy_assistant_announce_becomes_user() -> None:
+    """Le versioni precedenti scrivevano il rientro come ``assistant``: in coda
+    al prompt i provider lo toglievano. Se e' ancora in sospeso torna ``user``."""
+    loop = _mk_loop()
+    session = Session(key="internal:dedupe")
+    session.add_message("user", "question")
+    session.add_message(
+        "assistant", "subagent result", injected_event="subagent_result", subagent_task_id="sub-1",
+    )
+
+    assert loop._subagent_followup_state(session, _announce()) is FollowupState.PENDING
+    assert session.messages[-1]["role"] == "user"
 
 
 def test_subagent_followup_skips_empty_content() -> None:
@@ -1368,7 +1388,7 @@ def test_subagent_followup_skips_empty_content() -> None:
         metadata={"subagent_task_id": "sub-empty"},
     )
 
-    assert loop._persist_subagent_followup(session, msg) is False
+    assert loop._subagent_followup_state(session, msg) is FollowupState.EMPTY
     assert session.messages == []
 
 

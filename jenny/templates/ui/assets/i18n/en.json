@@ -899,6 +899,15 @@
     "wire": {
       "offline": "Connection lost, retrying"
     },
+    "subagents": {
+      "one": "Working · {label}",
+      "oneUnnamed": "An agent is working",
+      "oneStalled": "Stuck · {label}",
+      "stalled": "An agent is stuck",
+      "many": "{count} agents working",
+      "manyStalled": "{count} agents, one is stuck",
+      "openInWorkshop": "Press and hold to see them in the workshop"
+    },
     "threadError": "I can't read the conversation.\nTry again shortly.",
     "origin": {
       "telegram": "from Telegram",

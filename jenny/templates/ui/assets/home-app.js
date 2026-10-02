@@ -25,6 +25,7 @@
  */
 
 import { ActivityLine } from './home-activity.js';
+import { SubagentChip } from './home-subagents.js';
 import { HomeChat } from './home-chat.js';
 import { NotebookPages } from './home-notebook-pages.js';
 import { HomeReader } from './home-reader.js';
@@ -150,6 +151,13 @@ class HomeApp {
     this.chat.gap = new JennyGap(this.thread, this.jenny.el);
     this.activity = new ActivityLine(document.getElementById('home-activity'), {
       onOpenInWorkshop: (turnId) => this._openInWorkshop(turnId),
+    });
+    /* Gli agenti che lavorano per questa conversazione oltre la fine del turno:
+       la riga di lavoro si spegne col `turn_end`, il lavoro no. */
+    this.subagents = new SubagentChip(document.getElementById('home-subagents'), {
+      fetchSnapshot: (sessionKey) => api.getSubagents({ sessionKey }),
+      currentKey: () => sessionManager.currentKey,
+      onOpenInWorkshop: () => this._openInWorkshop(),
     });
     this.empty = document.getElementById('home-empty');
     this.emptyText = document.getElementById('home-empty-text');
@@ -399,12 +407,19 @@ class HomeApp {
        Quaderni si puo' saltare in un altro, e restare li' vorrebbe dire leggere
        l'elenco di una stanza in cui non sei piu'. */
     sessionManager.addEventListener('chat:switch', () => this._setView('chat'));
+    /* Gli agenti sono della conversazione: quelli della vecchia spariscono, e
+       quelli della nuova si leggono, perche' l'attach non rimanda lo snapshot. */
+    sessionManager.addEventListener('chat:switch', () => {
+      this.subagents.clear();
+      this.subagents.load();
+    });
 
     wsManager.addEventListener('chat:open', () => this._onWireOpen());
     wsManager.addEventListener('chat:close', () => this._setWire(false));
     wsManager.addEventListener('chat:message', (e) => {
       this._readRunStatus(e.detail);
       this._readActivity(e.detail);
+      this._readSubagents(e.detail);
       this.chat.handleFrame(e.detail);
     });
 
@@ -1933,10 +1948,6 @@ class HomeApp {
            `progress` (v. `WebSocketDispatcher._tool_start_without_hint`). */
         if (msg.tool_events) this.activity.tools(msg.tool_events);
         break;
-      case 'turn_waiting':
-        // Il turno e' fermo ad aspettare i subagent che ha lanciato.
-        this.activity.waiting();
-        break;
       case 'delta':
         // La risposta sta arrivando: la riga si toglie di mezzo.
         this.activity.answering();
@@ -1970,6 +1981,12 @@ class HomeApp {
     const target = turnId ? `/html-mobile/workshop.html#turn=${encodeURIComponent(turnId)}`
                           : '/html-mobile/workshop.html';
     api.navigate(target);
+  }
+
+  /* Lo snapshot dei subagent, se e' della conversazione a schermo. */
+  _readSubagents(msg) {
+    if (msg?.event !== 'subagent_status' || !this._frameIsHere(msg)) return;
+    this.subagents.ingest(msg);
   }
 
   /* `goal_status` dice se un turno sta girando: e' quel che trasforma il
@@ -2007,6 +2024,9 @@ class HomeApp {
    *  schermo puo' essere rimasto indietro. */
   _onWireOpen() {
     this._setWire(true);
+    /* Gli agenti si rileggono a ogni apertura, la prima compresa: le
+       transizioni avvenute a socket chiuso non le ridice nessuno. */
+    this.subagents.load();
     /* Al boot le impostazioni non si leggevano, quindi non si sa se questo e'
        il primo avvio: il socket aperto dice che il gateway adesso c'e', e si
        richiede. Una volta sola — un secondo «non lo so» resta nella casa. */
@@ -2110,6 +2130,7 @@ class HomeApp {
     this.strip?.draw();
     if (this.files?.count) this._renderPending();
     if (this.wire && !this.wire.hidden) this.wire.textContent = i18n.t('home.wire.offline');
+    this.subagents?.applyTranslations();
   }
 
 }

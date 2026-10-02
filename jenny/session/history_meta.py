@@ -5,9 +5,10 @@ Una riga ``role: "user"`` nel JSONL di sessione è l'unico segno che Jenny ha di
 
 - un turno di cron, che si persiste come un messaggio qualsiasi
   (``jenny/cron/session_turns.py::cron_history_overrides``);
-- il rientro di un subagent iniettato a metà turno, che
+- il rientro di un subagent: iniettato a metà turno, che
   ``AgentLoop._drain_pending`` normalizza a ``{"role": "user", ...}`` per darlo
-  al modello, e che finisce in storia con quel ruolo;
+  al modello, o arrivato a turno chiuso, che il turno d'annuncio scrive con lo
+  stesso ruolo (``TurnPersistenceMixin._persist_subagent_followup``);
 - la continuazione sintetica di un sustained goal
   (``jenny/utils/runtime.py::build_goal_continue_message``).
 
@@ -53,10 +54,10 @@ _INJECTED_EVENTS = frozenset({
 def is_synthetic_history_row(message: Mapping[str, Any] | None) -> bool:
     """True per una riga di storia che l'utente non ha scritto.
 
-    Vale anche su una riga ``role: "assistant"`` — è la forma con cui il turno
-    d'annuncio autonomo persiste lo stesso rientro di subagent — e i chiamanti
-    la vogliono saltare comunque: nessuna delle tre domande di cui sopra la
-    riguarda.
+    Vale anche su una riga ``role: "assistant"`` — la forma con cui il turno
+    d'annuncio autonomo persisteva il rientro di subagent fino al 02/10/2026, e
+    che le sessioni esistenti portano ancora — e i chiamanti la vogliono saltare
+    comunque: nessuna delle tre domande di cui sopra la riguarda.
     """
     if not message:
         return False

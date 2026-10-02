@@ -188,7 +188,7 @@ Reasoning frames only flow when the channel's `showReasoning` is `true` (default
 
 `model_preset` is omitted when no named preset is active. The frame can also carry a `provider` field (the name of the active provider entry), present only when the gateway knows it. WebUI clients use this event to keep the displayed model badge in sync across slash commands, config reloads, and settings changes.
 
-**`subagent_status`** — snapshot of the background subagents, pushed on every state transition:
+**`subagent_status`** — snapshot of the background subagents, pushed on every state transition to the chat that spawned them, and scoped to that chat's session (a project chat sees its own subagents, the personal chat its own; work started by silent internal turns publishes nothing):
 
 ```json
 {
@@ -211,7 +211,7 @@ Reasoning frames only flow when the channel's `showReasoning` is `true` (default
 
 `state` is one of `running`, `done`, `failed`, `cancelled`, `stalled`; `recent` is newest-first and capped at 10 entries. `idle_s` is seconds since the last observed sign of progress — it is what distinguishes a subagent stuck for four minutes from one working for four minutes. `can_restart` reflects the cap on *automatic* restarts only: a human pressing Relaunch is never refused.
 
-The frame is a recomputable refresh hint — it is never persisted to the transcript and never retried, since the next snapshot replaces it. The same payload is served verbatim by `GET /api/subagents`, which is how the WebUI panel comes back after a page reload instead of waiting for the next transition. `POST`-style actions ride on GET like every other gateway route (see the transport constraint in [Write a mini-app](../contribute/write-a-mini-app.md)): `GET /api/subagents/<task_id>/restart` (always a manual relaunch) and `GET /api/subagents/<task_id>/cancel`.
+The frame is a recomputable refresh hint — it is never persisted to the transcript and never retried, since the next snapshot replaces it. The same payload is served verbatim by `GET /api/subagents`, which is how the WebUI panel comes back after a page reload instead of waiting for the next transition; pass `?session_key=` (`websocket:default` or `project:<name>`) for the same per-chat scope the frame has. `POST`-style actions ride on GET like every other gateway route (see the transport constraint in [Write a mini-app](../contribute/write-a-mini-app.md)): `GET /api/subagents/<task_id>/restart` (always a manual relaunch) and `GET /api/subagents/<task_id>/cancel`.
 
 `GET /api/subagents/<task_id>/digest` serves the condensed "what did it do" of one subagent, for the block the chat shows under its result: `{"task_id", "events", "count", "source"}`, up to 300 events. `source` says how complete it is — `"digest"` is the persisted, immutable one written when the subagent finished, `"live"` is a preview built from the running subagent's activity (it will change), and `"none"` means there is nothing to show (empty `events`, never a 404). Unlike `/activity`, it has no cursor.
 
@@ -279,16 +279,6 @@ status simply replaces a pending one. `started_at` appears only with `"running"`
 
 ```json
 {"event": "goal_status", "chat_id": "default", "status": "running", "started_at": 1756640000.0}
-```
-
-**`turn_waiting`** — the turn is still running but has stopped to wait for the subagents it
-spawned (up to 300 seconds), so no other frame will arrive until one of them reports back. Sent
-once per wait, only to subscribers of that chat, never retried and never persisted. There is no
-matching "done" frame: whatever the turn sends next (reasoning, tools, text, `turn_end`) ends
-the wait. `subagents` is how many it is waiting for; `turn_id` is present when the turn had one:
-
-```json
-{"event": "turn_waiting", "chat_id": "project:garden", "reason": "subagents", "subagents": 2, "turn_id": "webui:A"}
 ```
 
 **`mascot_mood`** — how Jenny feels about the reply she just gave, for the on-screen mascot,
@@ -485,7 +475,7 @@ All fields go under the top-level `websocket` object in `config.json`. These are
 | `sendProgress` | bool | `true` | Send interim progress text while a turn runs. With it off the client sees nothing until the turn produces its answer. |
 | `sendToolHints` | bool | `false` | Include one-line tool hints in that progress stream ("reading SOUL.md", "searching…"). Off by default: it is the noisiest of the four. With it off the hint text is dropped but the `tool_events` it carried (the tools that are starting) still arrive, as a `progress` message with no text, wherever `sendProgress` is on. |
 | `showReasoning` | bool | `true` | Forward `reasoning_delta` / `reasoning_end` frames when the provider exposes incremental reasoning. |
-| `sendMaxRetries` | int | `3` | Attempts the dispatcher makes for one outbound frame before dropping it. Refresh-hint frames (`goal_status`, `turn_waiting`, `mascot_mood`, `subagent_status`, `runtime_model_updated`, `app_data_changed`, `apps_list_changed`) are exempt by design: the next one replaces a pending one, so retrying them is pointless. `subagent_activity` is not retried as a frame either — the watcher's cursor simply does not move, so the next tick resends the same events. |
+| `sendMaxRetries` | int | `3` | Attempts the dispatcher makes for one outbound frame before dropping it. Refresh-hint frames (`goal_status`, `mascot_mood`, `subagent_status`, `runtime_model_updated`, `app_data_changed`, `apps_list_changed`) are exempt by design: the next one replaces a pending one, so retrying them is pointless. `subagent_activity` is not retried as a frame either — the watcher's cursor simply does not move, so the next tick resends the same events. |
 
 ### Keep-alive
 
@@ -569,7 +559,7 @@ After a reconnect the connection is back on the personal chat only, so a client 
 
 ### Rules
 
-- A chat's frames (`message`, `user`, `delta`, `stream_end`, `reasoning_*`, `turn_end`, `goal_status`, `turn_waiting`, `mascot_mood`, `file_edit`, `subagent_status`) carry the `chat_id` they belong to and go only to the connections subscribed to it.
+- A chat's frames (`message`, `user`, `delta`, `stream_end`, `reasoning_*`, `turn_end`, `goal_status`, `mascot_mood`, `file_edit`, `subagent_status`) carry the `chat_id` they belong to and go only to the connections subscribed to it.
 - Some frames carry no `chat_id`: `runtime_model_updated`, `app_data_changed` and `apps_list_changed` go to every connection; `error`, `rpc_result`, `ui_query` and `subagent_unwatched` go to one.
 - The personal chat cannot be left: proactive messages and the mascot's frames reach a connection there even while it is showing a project.
 - Errors (invalid envelope, unknown `type`, missing `content`, an impossible project name) are soft: the server replies with `{"event":"error","detail":"...","reason":"..."}` and keeps the connection open.

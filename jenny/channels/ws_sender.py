@@ -268,19 +268,6 @@ class OutboundSenderMixin:
                 return []
             await self.send_subagent_activity(task_id, subagent_activity)
             return []
-        # Il turno aspetta i subagent che ha lanciato: frame dedicato, mai una
-        # bolla, mai nel transcript — dice cosa succede adesso, e un reload a
-        # attesa finita non deve ridirlo.
-        waiting = msg.metadata.get("_waiting_for_subagents")
-        if waiting:
-            if conns and isinstance(waiting, int):
-                turn_id = msg.metadata.get(WEBUI_TURN_METADATA_KEY)
-                await self.send_turn_waiting(
-                    msg.chat_id,
-                    subagents=waiting,
-                    turn_id=turn_id if isinstance(turn_id, str) and turn_id else None,
-                )
-            return []
         # L'umore della mascotte: frame dedicato, mai una bolla, mai nel
         # transcript (un reload riparte da ``idle``: l'umore e' del momento).
         if msg.metadata.get("_mascot_mood"):
@@ -735,33 +722,6 @@ class OutboundSenderMixin:
         raw = json.dumps(body, ensure_ascii=False)
         # Idempotent refresh-hint: discard pending, no retry (next status replaces it).
         await self._fanout(conns, raw, label=" goal_status ")
-
-    async def send_turn_waiting(
-        self,
-        chat_id: str,
-        *,
-        subagents: int,
-        turn_id: str | None = None,
-    ) -> None:
-        """Il turno e' vivo ma fermo ad aspettare ``subagents`` subagent.
-
-        Stessa disciplina di ``goal_status``: nessun retry e nessuna
-        persistenza. Non ha un frame di fine: l'attesa la chiude il primo frame
-        del turno che viene dopo, o il suo ``turn_end``.
-        """
-        conns = list(self._subs.get(chat_id, ()))
-        if not conns:
-            return
-        body: dict[str, Any] = {
-            "event": "turn_waiting",
-            "chat_id": chat_id,
-            "reason": "subagents",
-            "subagents": subagents,
-        }
-        if turn_id:
-            body["turn_id"] = turn_id
-        raw = json.dumps(body, ensure_ascii=False)
-        await self._fanout(conns, raw, label=" turn_waiting ")
 
     async def send_mascot_mood(
         self,

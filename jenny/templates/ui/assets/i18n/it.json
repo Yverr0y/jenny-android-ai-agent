@@ -899,6 +899,15 @@
     "wire": {
       "offline": "Filo interrotto, sto riprovando"
     },
+    "subagents": {
+      "one": "Al lavoro · {label}",
+      "oneUnnamed": "Un agente al lavoro",
+      "oneStalled": "Fermo · {label}",
+      "stalled": "Un agente è fermo",
+      "many": "{count} agenti al lavoro",
+      "manyStalled": "{count} agenti, uno è fermo",
+      "openInWorkshop": "Tieni premuto per vederli in officina"
+    },
     "threadError": "Non riesco a leggere la conversazione.\nRiprova fra poco.",
     "origin": {
       "telegram": "da Telegram",

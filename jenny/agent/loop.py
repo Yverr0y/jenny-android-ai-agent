@@ -19,7 +19,6 @@ from jenny.agent.hook import AgentHook, CompositeHook
 from jenny.agent.loop_provider import ProviderPresetMixin
 from jenny.agent.loop_tasks import LoopTasksMixin
 from jenny.agent.memory import Consolidator
-from jenny.agent.progress_events import on_progress_accepts_subagent_wait
 from jenny.agent.progress_hook import AgentProgressHook
 from jenny.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from jenny.agent.session_locks import SessionLocks
@@ -38,7 +37,7 @@ from jenny.agent.tools.nothing_to_report import declared_marker_lines
 from jenny.agent.tools.registry import ToolRegistry
 from jenny.agent.tools.self import MyTool
 from jenny.agent.turn_epochs import TurnEpochs, TurnToken
-from jenny.agent.turn_persistence import TurnPersistenceMixin
+from jenny.agent.turn_persistence import FollowupState, TurnPersistenceMixin
 from jenny.agent.turn_states import StateHandlersMixin
 from jenny.agent.turn_types import (
     StateTraceEntry as StateTraceEntry,
@@ -1349,28 +1348,21 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 return
             self._set_runtime_checkpoint(session, payload)
 
-        # I subagent gia' vivi quando il turno comincia: sono di un turno
-        # precedente, e ``_drain_pending`` non li aspetta.
-        # Prima l'attesa scattava per **qualunque** subagent vivo della
-        # sessione, e un «ciao» con un subagent di prima in giro teneva il turno
-        # aperto fino a 300 secondi. Il loro risultato non si perde: rientra dalla
-        # coda quando arriva, nel turno in corso se ne sta drenando, o come
-        # messaggio suo.
-        subagents_before = (
-            frozenset(self.subagents.get_running_ids_by_session(session.key))
-            if session is not None else frozenset()
-        )
-
         async def _drain_pending(*, limit: int = _MAX_INJECTIONS_PER_TURN) -> list[dict[str, Any]]:
-            """Drain follow-up messages from the pending queue.
+            """Drain follow-up messages already waiting in the pending queue.
 
-            When no messages are immediately available but sub-agents
-            spawned in this dispatch are still running, blocks until at
-            least one result arrives (or timeout).  This keeps the runner
-            loop alive so subsequent sub-agent completions are consumed
-            in-order rather than dispatched separately.  Sub-agents that
-            were already running when the dispatch began are not waited for.
+            Never blocks. A message the user typed, or a subagent result that
+            arrived while this turn was running, is injected here; a subagent
+            still running when the turn ends is not waited for — its result
+            opens a turn of its own (``_process_system_message``).
             """
+            # Fino al 02/10/2026 qui il turno restava fermo fino a 300 secondi a
+            # ogni chiamata (dopo gli strumenti E dopo la risposta) se un
+            # subagent lanciato in questo turno era vivo: il riscontro all'utente
+            # arrivava dopo cinque minuti, la chat restava occupata — lock di
+            # sessione, slot di concorrenza, wakelock — e Ferma uccideva anche la
+            # ricerca. Il prompt dell'orchestratore dice gia' «non aspettare»: il
+            # risultato arriva da se', e il chip della casa dice che il lavoro va.
             if pending_queue is None:
                 return []
 
@@ -1410,39 +1402,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                     items.append(_to_user_message(pending_queue.get_nowait()))
                 except asyncio.QueueEmpty:
                     break
-
-            # Block if nothing drained but sub-agents spawned in this dispatch
-            # are still running.  Keeps the runner loop alive so subsequent
-            # completions are injected in-order rather than dispatched separately.
-            waiting_for = (
-                frozenset(self.subagents.get_running_ids_by_session(session.key))
-                - subagents_before
-                if not items and session is not None else frozenset()
-            )
-            if waiting_for:
-                # Fino a 300 secondi in cui il turno e' vivo e non manda niente:
-                # la risposta di stato e' gia' uscita, e il suo testo ha spento
-                # la riga di lavoro della casa, che restava spenta finche' un
-                # subagent non tornava (sette minuti, il 30/09/2026). Lo si dice
-                # una volta per attesa, prima di cominciarla: i frame che la
-                # seguono (ragionamento, strumenti, testo) prendono il posto di
-                # questo da soli.
-                if on_progress is not None and on_progress_accepts_subagent_wait(on_progress):
-                    await on_progress("", waiting_for_subagents=len(waiting_for))
-                try:
-                    msg = await asyncio.wait_for(pending_queue.get(), timeout=300)
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "Timeout waiting for sub-agent completion in session {}",
-                        session.key,
-                    )
-                    return items
-                items.append(_to_user_message(msg))
-                while len(items) < limit:
-                    try:
-                        items.append(_to_user_message(pending_queue.get_nowait()))
-                    except asyncio.QueueEmpty:
-                        break
 
             return items
 
@@ -1567,6 +1526,10 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                     and not goal_awaiting_input(session.metadata)
                 ),
                 goal_continue_message=_goal_continue,
+                delegated_work_pending=lambda: (
+                    session is not None
+                    and bool(self.subagents.get_running_ids_by_session(session.key))
+                ),
                 finalize_on_max_iterations=turn_continuation.should_finalize_on_max_iterations(
                     pending_queue_available=pending_queue is not None and session is not None,
                     session_metadata=session_metadata,
@@ -2033,9 +1996,14 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             replay_max_messages=self._max_messages,
         )
         is_subagent = msg.sender_id == "subagent"
-        if is_subagent and self._persist_subagent_followup(session, msg):
-            logger.debug("Subagent result persisted for session {}", key)
-            self.sessions.save(session)
+        followup_state = self._subagent_followup_state(session, msg) if is_subagent else None
+        if followup_state in (FollowupState.DELIVERED, FollowupState.EMPTY):
+            # Gia' risposto (un annuncio consegnato due volte) o vuoto: un turno
+            # qui farebbe solo ripetere la sintesi, o parlare di niente.
+            logger.debug(
+                "Subagent announce skipped for session {}: {}", key, followup_state.value,
+            )
+            return TurnOutcome.silent()
         # Prelude di tooling condiviso con lo stato BUILD della FSM: sincronizza i
         # tool delle app, imposta il contesto tool e azzera lo stato per-turno del
         # MessageTool. Prima veniva fatto solo _set_tool_context, divergendo dalla
@@ -2043,22 +2011,42 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         await self._begin_turn_tooling(
             channel, chat_id, msg.metadata.get("message_id"), msg.metadata, key,
         )
-        current_role = "assistant" if is_subagent else "user"
         _hist_kwargs: dict[str, Any] = {
             "max_messages": self._max_messages,
             "max_tokens": self._replay_token_budget(),
             "include_timestamps": True,
             "extend_to_user": is_subagent,
         }
+        # La storia si legge PRIMA di scrivere il rientro, come fa la FSM con un
+        # messaggio dell'utente (``_state_build``): la finestra resta ancorata
+        # alla domanda vera che ha messo al lavoro il subagent. Letta dopo, la
+        # riga sintetica sarebbe la prima ``user`` della coda e la finestra si
+        # fermerebbe su di lei, perdendo il turno che l'ha generata.
         history = session.get_history(**_hist_kwargs)
+        if followup_state is FollowupState.NEW:
+            self._persist_subagent_followup(session, msg)
+            logger.debug("Subagent result persisted for session {}", key)
+            self.sessions.save(session)
+        elif followup_state is FollowupState.PENDING:
+            # Scritto da un turno d'annuncio interrotto: e' gia' in ``history``,
+            # come ultima riga ``user``, e il contesto runtime ci si unisce sopra.
+            self.sessions.save(session)
         workspace_scope = self.workspace_scopes.for_message(msg, session.metadata)
 
+        # Il rientro arriva al modello come messaggio ``user``, la stessa forma
+        # dell'iniezione a meta' turno: e' una notizia, non una cosa che ha detto
+        # lui. Come ``assistant`` in coda al prompt lo toglievano i provider
+        # (``enforce_role_alternation``) e il modello rispondeva alla domanda
+        # precedente con i dati vecchi — il 02/10/2026 «ancora in corso» due
+        # volte, e la sintesi mai consegnata.
         messages = self.context.build_messages(
             history=history,
-            current_message="" if is_subagent else msg.content,
+            current_message=(
+                msg.content if followup_state in (None, FollowupState.NEW) else ""
+            ),
             channel=channel,
             chat_id=chat_id,
-            current_role=current_role,
+            current_role="user",
             sender_id=msg.sender_id,
             session_summary=pending,
             session_metadata=session.metadata,
@@ -2084,7 +2072,11 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 logger.exception("Heartbeat follow-up: could not build the prompt block")
         if followup_block:
             messages.append({"role": "user", "content": followup_block})
-        save_skip = 1 + len(history) + (1 if followup_block else 0)
+        # Il rientro di un subagent e' gia' in storia (scritto qui sopra, o dal
+        # turno interrotto): si salta tutto il prompt, che sia finito in un
+        # messaggio suo o unito a una coda ``user``. Un altro messaggio di
+        # sistema invece va salvato, e salta solo cio' che lo precede.
+        save_skip = len(messages) if is_subagent else 1 + len(history)
         t_wall = time.time()
         # Differenza deliberata dallo stato RUN della FSM: il path di sistema NON
         # emette run_status_changed("running"). Un turno subagent/announce è di

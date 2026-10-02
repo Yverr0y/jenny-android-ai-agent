@@ -57,12 +57,12 @@ def test_the_three_synthetic_rows() -> None:
     )
 
 
-def test_the_announce_persisted_as_assistant_counts_too() -> None:
-    """Il ramo d'annuncio autonomo scrive ``role: "assistant"`` con lo stesso marcatore.
+def test_a_legacy_announce_persisted_as_assistant_counts_too() -> None:
+    """Fino al 02/10/2026 il ramo d'annuncio autonomo scriveva ``role: "assistant"``.
 
-    ``TurnPersistenceMixin._persist_subagent_followup`` lo usa quando il subagent
-    rientra *dopo* la fine del turno che lo ha lanciato. È lo stesso fatto, e i
-    lettori lo saltano allo stesso modo.
+    Oggi ``TurnPersistenceMixin._persist_subagent_followup`` scrive ``user``, ma le
+    sessioni esistenti portano ancora le righe vecchie: è lo stesso fatto, e i
+    lettori le saltano allo stesso modo.
     """
     row = {"role": "assistant", INJECTED_EVENT_META: SUBAGENT_RESULT_EVENT}
     assert is_synthetic_history_row(row) is True

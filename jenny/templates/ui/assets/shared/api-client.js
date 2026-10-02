@@ -706,8 +706,14 @@ class ApiClient {
   // Serve al pannello per ripartire dopo un reload di pagina (su Android il
   // processo della WebView muore spesso), non solo alla prossima transizione.
 
-  async getSubagents() {
-    const res = await this._fetch('/api/subagents');
+  // `sessionKey` (`websocket:default`, `project:<nome>`) limita lo snapshot a
+  // una conversazione, come il frame che il gateway le manda: la casa lo
+  // passa, l'officina no e riceve tutto.
+  async getSubagents({ sessionKey } = {}) {
+    const url = sessionKey
+      ? `/api/subagents?session_key=${encodeURIComponent(sessionKey)}`
+      : '/api/subagents';
+    const res = await this._fetch(url);
     if (!res.ok) throw new Error(`Subagents failed: ${res.status}`);
     return res.json();
   }

@@ -180,6 +180,11 @@
            aprire lo stesso turno in officina, con pensieri, strumenti e tempi. -->
       <div class="home-activity" id="home-activity" hidden></div>
 
+      <!-- Gli agenti che lavorano per questa conversazione dopo che il turno e'
+           finito (`home-subagents.js`). Dice solo che lavorano: tocco lungo per
+           vederli in officina. Senza agenti non occupa spazio. -->
+      <div class="home-subagents" id="home-subagents" role="status" aria-live="polite" hidden></div>
+
       <!-- Lo stato del filo: compare solo quando c'e' qualcosa da dire (rete giu',
            riconnessione). A filo funzionante non occupa spazio. -->
       <div class="home-wire" id="home-wire" hidden></div>

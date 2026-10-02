@@ -180,14 +180,14 @@ Full tool lists and sampling defaults are in the [Tool reference](../reference/t
 
 ### Watching and steering the work
 
-Because a subagent can run for minutes, the workshop's Console gives you a **Subagents panel** just above the message box (the home's chat shows only the line saying what she is doing): one card per running job with its type, elapsed time, idle time and current step, plus **Stop** and **Relaunch** buttons and a tap-through detail sheet showing what it actually did. It appears when work starts and disappears when the turn ends. See [Chat basics](chat.md#the-subagents-panel).
+Because a subagent can run for minutes, the workshop's Console gives you a **Subagents panel** just above the message box: one card per running job with its type, elapsed time, idle time and current step, plus **Stop** and **Relaunch** buttons and a tap-through detail sheet showing what it actually did. It appears when work starts and disappears when the work is done. The home's chat shows the short version, a chip saying how many agents are working for that conversation; pressing and holding it opens the workshop. See [Chat basics](chat.md#the-subagents-panel).
 
 Jenny has the same controls from her side: she can check on a subagent's status, send it a correction mid-run ("no, use the other table") without restarting it, relaunch a failed one, and cancel one that's going nowhere. Those tools exist only in orchestrator mode and are never given to a subagent — a subagent cannot drive its siblings.
 
 ### How a delegation behaves
 
-- You'll see this happen as a short confirmation in chat, something like *"Subagent [research] started (id: xxxxxxxx). I'll notify you when it completes."* — after that the chat is free for you to keep talking about anything else.
-- When the subagent finishes, its result is fed back in as a fresh turn of the main conversation: Jenny reads the outcome and summarizes it for you naturally (the announcement is explicitly told not to mention "subagent" or task IDs in the final reply, so it may just read like an ordinary answer).
+- You'll see this happen as a short confirmation in chat, in Jenny's words — she tells you the job started, and her turn ends there: it does not wait for the subagent, so the chat is free for you to keep talking about anything else. On Telegram that means two messages, the confirmation now and the result later.
+- When the subagent finishes, its result is fed back in as a fresh turn of the main conversation (or folded into the turn already running, if you are talking to her at that moment): Jenny reads the outcome and summarizes it for you naturally (the announcement is explicitly told not to mention "subagent" or task IDs in the final reply, so it may just read like an ordinary answer).
 - By default up to **3** subagents can run at a time (`agents.defaults.maxConcurrentSubagents`, default `3`), and one slot is always kept free for a short job — so an ordinary delegation is refused once two are already running. Asking for one past the limit gets a plain "concurrency limit reached" reply instead of being queued.
 - A subagent is **blind to your conversation** — it only knows what task text it was handed. If a delegated task comes back disappointing, the usual cause is that the task description didn't carry enough context, not that the subagent "misunderstood."
 - Subagents use the same model/provider as your main agent and consume tokens like a full turn — delegating is not free.

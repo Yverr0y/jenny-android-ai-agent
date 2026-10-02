@@ -16,7 +16,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from jenny.providers.base import tool_arguments_object_for_replay
-from jenny.providers.message_repair import SYNTHETIC_USER_CONTENT
+from jenny.providers.message_repair import (
+    SYNTHETIC_USER_CONTENT,
+    warn_dropped_trailing_assistant,
+)
 
 _ALNUM = string.ascii_letters + string.digits
 
@@ -271,8 +274,10 @@ class AnthropicConversionMixin:
 
         # Rule 2: strip trailing assistant turns — Anthropic rejects prefill.
         last_popped: dict[str, Any] | None = None
+        popped: list[dict[str, Any]] = []
         while merged and merged[-1].get("role") == "assistant":
             last_popped = merged.pop()
+            popped.append(last_popped)
 
         # Recovery for rule 2: if stripping removed every turn, reroute the
         # last popped assistant as a user turn so upstream code still gets a
@@ -284,6 +289,8 @@ class AnthropicConversionMixin:
             and not AnthropicConversionMixin._has_tool_use(last_popped)
         ):
             merged.append({"role": "user", "content": last_popped.get("content")})
+            popped.remove(last_popped)
+        warn_dropped_trailing_assistant(popped)
 
         # Rule 3: prepend a synthetic opener if the first surviving turn is an
         # assistant (e.g. upstream history truncation dropped the original

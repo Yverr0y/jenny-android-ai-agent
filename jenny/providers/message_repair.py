@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 SYNTHETIC_USER_CONTENT = "(conversation continued)"
 
 
@@ -97,6 +99,36 @@ def _as_content_blocks(content: Any) -> list[Any]:
     return [{"type": "text", "text": str(content)}]
 
 
+def _has_text(content: Any) -> bool:
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, list):
+        return any(
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and str(block.get("text") or "").strip()
+            for block in content
+        )
+    return False
+
+
+def warn_dropped_trailing_assistant(popped: list[dict[str, Any]]) -> None:
+    """Dice nel log che un assistant in coda con del testo non arriva al modello.
+
+    Toglierlo e' obbligatorio (prefill non supportato), ma un testo in coda al
+    prompt e' quasi sempre qualcosa che il chiamante voleva far leggere: il
+    02/10/2026 era il risultato di un subagent, scartato qui in silenzio, e il
+    modello ha risposto con i dati vecchi senza che il log ne dicesse niente.
+    """
+    dropped = sum(1 for message in popped if _has_text(message.get("content")))
+    if dropped:
+        logger.warning(
+            "Dropped {} trailing assistant message(s) with text before the request: "
+            "the model will not see them",
+            dropped,
+        )
+
+
 def enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Merge consecutive same-role messages and drop trailing assistant messages.
 
@@ -143,8 +175,10 @@ def enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, A
             merged.append(dict(msg))
 
     last_popped = None
+    popped: list[dict[str, Any]] = []
     while merged and merged[-1].get("role") == "assistant":
         last_popped = merged.pop()
+        popped.append(last_popped)
 
     # If removing trailing assistant messages left only system messages, the
     # request would be invalid for most providers (e.g. Zhipu/GLM error 1214).
@@ -155,6 +189,8 @@ def enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, A
         and not any(m.get("role") in ("user", "tool") for m in merged)
     ):
         merged.append(_as_user_turn(last_popped))
+        popped.remove(last_popped)
+    warn_dropped_trailing_assistant(popped)
 
     # Safety net: ensure the first non-system message is not a bare assistant
     # message (GLM rejects system→assistant with 1214). Can happen when upstream

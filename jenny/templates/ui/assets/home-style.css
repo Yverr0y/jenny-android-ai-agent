@@ -614,6 +614,43 @@ body.home {
   .home-activity { transition: none; }
 }
 
+/* ── Gli agenti al lavoro ── */
+
+/* Una pastiglia piccola sopra il composer, a sinistra come la riga di lavoro:
+   l'angolo di destra e' di Jenny. Nel colore del fiore, perche' e' lavoro suo
+   affidato ad altri; fermo, nel colore dell'avviso. Il tocco lungo apre
+   l'officina, quindi il testo non si seleziona. */
+.home-subagents {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 32px - var(--jenny-gap, 39px));
+  margin: 0 16px 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--overlay);
+  color: var(--flower);
+  font-size: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.home-subagents[hidden] { display: none; }
+
+.home-subagents.is-stalled { color: var(--warning); }
+
+.home-subagents .ti { flex: none; font-size: 14px; }
+
+.home-subagents-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Lo stato del filo ── */
 
 /* Compare solo quando c'e' qualcosa da dire, e quando compare non sposta la

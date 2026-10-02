@@ -304,3 +304,49 @@ class TestEnforceRoleAlternation:
         result = LLMProvider._enforce_role_alternation(msgs)
         assert result[1]["role"] == "user"
         assert result[1]["content"] == "hello"
+
+
+def _warnings_while(fn):
+    from loguru import logger as loguru_logger
+
+    records: list[str] = []
+    handler = loguru_logger.add(lambda m: records.append(str(m)), level="WARNING")
+    try:
+        result = fn()
+    finally:
+        loguru_logger.remove(handler)
+    return result, records
+
+
+def test_dropping_a_trailing_assistant_with_text_is_logged():
+    """Il 02/10/2026 il risultato di un subagent e' sparito qui in silenzio: un
+    testo tolto dalla coda del prompt deve almeno lasciare una riga nel log."""
+    msgs = [
+        {"role": "user", "content": "is it done?"},
+        {"role": "assistant", "content": "[Subagent 'x' completed successfully]"},
+    ]
+    result, records = _warnings_while(lambda: LLMProvider._enforce_role_alternation(msgs))
+    assert result[-1]["role"] == "user"
+    assert any("trailing assistant" in r for r in records)
+
+
+def test_recovering_the_only_turn_is_not_logged_as_a_drop():
+    msgs = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "assistant", "content": "kept as user"},
+    ]
+    result, records = _warnings_while(lambda: LLMProvider._enforce_role_alternation(msgs))
+    assert result[-1]["role"] == "user"
+    assert not records
+
+
+def test_anthropic_logs_the_same_drop():
+    from jenny.providers.anthropic_conversion import AnthropicConversionMixin
+
+    msgs = [
+        {"role": "user", "content": "is it done?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "a result"}]},
+    ]
+    result, records = _warnings_while(lambda: AnthropicConversionMixin._merge_consecutive(msgs))
+    assert result[-1]["role"] == "user"
+    assert any("trailing assistant" in r for r in records)
