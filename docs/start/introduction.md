@@ -41,4 +41,4 @@ Jenny does not require an account, a sign-up, or any Jenny-operated service to f
 
 ## Honest framing
 
-Jenny is a pre-release, sideloaded prototype, not a polished consumer product. It works day to day, but onboarding has rough edges, some settings can currently only be changed by editing `config.json` directly (see [Configuration](../reference/configuration.md)), and a handful of behaviors fail silently rather than with a clear error — these are called out explicitly throughout this documentation rather than glossed over.
+Jenny is a sideloaded app built by one person, not a polished consumer product. It works day to day, but onboarding still has rough edges, some settings can currently only be changed by editing `config.json` directly (see [Configuration](../reference/configuration.md)), and a handful of behaviors fail silently rather than with a clear error — these are called out explicitly throughout this documentation rather than glossed over.

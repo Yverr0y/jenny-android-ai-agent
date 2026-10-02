@@ -1,0 +1,95 @@
+<!doctype html>
+<!--
+  Sorgente del banner del README (docs/img/banner.png): pagina 1280x640, resa a
+  densita' 2 e poi ridotta a 1640x820, il doppio della larghezza del README.
+  Colori e caratteri sono quelli di Synthwave '84, il tema di default
+  (mobile-style.css, [data-theme="synthwave"]); la mascotte e' l'arte dell'app.
+  Per rigenerarlo, dalla radice del repo:
+
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+      --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+      --window-size=1280,640 --screenshot=banner-2x.png scripts/banner.html
+
+  e poi la riduzione, a colori pieni: 256 colori spezzano i bagliori.
+
+    python3 -c "from PIL import Image; Image.open('banner-2x.png').convert('RGB')\
+      .resize((1640, 820), Image.LANCZOS).save('docs/img/banner.png', optimize=True)"
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jenny banner</title>
+<link rel="stylesheet" href="../jenny/templates/ui/assets/vendor/fonts/google-fonts.css">
+<link rel="stylesheet" href="../jenny/templates/ui/assets/vendor/fonts/theme-fonts.css">
+<style>
+  :root {
+    --bg: #111013;
+    --text: #f2ecff;
+    --text-muted: #a39daa;
+    --accent: #f92aad;
+    --flower: #03edf9;
+  }
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: var(--bg); }
+  .banner {
+    position: relative; width: 1280px; height: 640px; overflow: hidden;
+    background:
+      radial-gradient(520px 420px at 1010px 300px, rgba(249, 42, 173, 0.22), transparent 70%),
+      radial-gradient(640px 360px at 200px 620px, rgba(3, 237, 249, 0.10), transparent 70%),
+      var(--bg);
+    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--text);
+  }
+  /* La griglia dell'orizzonte: righe in prospettiva che svaniscono verso l'alto. */
+  .grid {
+    position: absolute; left: -400px; right: -400px; top: 523px; height: 280px;
+    background-image:
+      linear-gradient(rgba(249, 42, 173, 0.75) 2px, transparent 2px),
+      linear-gradient(90deg, rgba(249, 42, 173, 0.75) 2px, transparent 2px);
+    background-size: 72px 36px;
+    transform: perspective(300px) rotateX(58deg);
+    transform-origin: top center;
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,1) 70%);
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,1) 70%);
+  }
+  .horizon {
+    position: absolute; left: 0; right: 0; top: 522px; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(3, 237, 249, 0.85) 18%, rgba(249, 42, 173, 0.95) 72%, transparent);
+    box-shadow: 0 0 18px rgba(3, 237, 249, 0.6);
+  }
+  .copy { position: absolute; left: 80px; top: 96px; width: 720px; }
+  h1 {
+    margin: 0; font-family: 'Orbitron', sans-serif; font-weight: 700;
+    font-size: 132px; line-height: 1; letter-spacing: 0.06em; color: #ffffff;
+    text-shadow: 0 0 18px rgba(249, 42, 173, 0.85), 0 0 48px rgba(249, 42, 173, 0.45);
+  }
+  .rule {
+    width: 96px; height: 4px; margin: 34px 0 30px; border-radius: 2px;
+    background: var(--accent); box-shadow: 0 0 14px rgba(249, 42, 173, 0.9);
+  }
+  .tagline { margin: 0; font-size: 30px; line-height: 1.35; font-weight: 500; color: var(--text); }
+  .meta {
+    margin: 30px 0 0; font-family: 'Fira Code', monospace; font-size: 19px;
+    letter-spacing: 0.08em; color: var(--flower);
+    text-shadow: 0 0 10px rgba(3, 237, 249, 0.55);
+  }
+  .meta span { color: var(--text-muted); text-shadow: none; padding: 0 10px; }
+  .jenny {
+    position: absolute; right: 70px; top: 40px; width: 560px; height: 560px;
+    filter: drop-shadow(0 0 22px rgba(249, 42, 173, 0.55)) drop-shadow(0 0 4px rgba(3, 237, 249, 0.6));
+  }
+</style>
+</head>
+<body>
+  <div class="banner">
+    <div class="grid"></div>
+    <div class="horizon"></div>
+    <div class="copy">
+      <h1>Jenny</h1>
+      <div class="rule"></div>
+      <p class="tagline">A local-first personal AI agent that lives on your Android phone.</p>
+      <p class="meta">AGPL-3.0<span>·</span>ANDROID 8+<span>·</span>YOUR KEY, YOUR DEVICE</p>
+    </div>
+    <img class="jenny" src="../jenny/templates/ui/assets/jenny-hello2.webp" alt="">
+  </div>
+</body>
+</html>

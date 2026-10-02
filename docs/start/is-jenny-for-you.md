@@ -12,7 +12,7 @@ A short, honest checklist before you spend time installing it.
 
 ## Probably not, if
 
-- You want a polished one-tap install today. Jenny is a pre-release prototype: it works, but onboarding has rough edges and things are still being tightened.
+- You want a polished one-tap install from a store. Jenny is sideloaded and built by one person: it works, but onboarding still has rough edges and things are still being tightened.
 - You're on iOS. Android is the only supported runtime — this is not a temporary gap, the whole design assumes a device you own that stays powered on.
 - You want a feature-complete launcher. Jenny can act as your Android home screen, but it has no widgets, no folders, no icon packs, no wallpaper management. The launcher part is a means to being present, not an end in itself — see [Set it as your launcher](launcher-setup.md).
 - You need something audited and hardened before pointing it at models or content you don't trust. `python_exec` runs arbitrary Python in-process and is explicitly not a sandbox, prompt injection is not solved (nobody's is), and provider API keys are stored in plain text in the workspace. None of this is hidden — see the security model page — but if that's a dealbreaker for your use case, know it going in.

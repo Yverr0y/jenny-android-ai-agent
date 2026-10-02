@@ -21,6 +21,11 @@ lot.
 We aim to acknowledge reports within 72 hours. Jenny is maintained by one
 person, so please allow reasonable time for a fix before disclosing.
 
+## Supported versions
+
+Security fixes go into the latest 1.x release only. Releases before 1.0 get none: the update
+check inside the app offers the newest release, and that is the way to get a fix.
+
 ## Trust model
 
 Two sentences that matter more than the rest of this file:
