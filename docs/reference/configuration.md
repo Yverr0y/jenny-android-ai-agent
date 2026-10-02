@@ -2,13 +2,13 @@
 
 Every key Jenny reads from `config.json`, with the default value that actually ships in the code and what changing it does.
 
-Most people never need this page: the [Settings screen](./settings.md) covers the common choices, and everything it writes ends up here anyway. Come here for the settings that have no UI — Dream, heartbeat, timezone, tool toggles, snapshot retention, model presets — and for exact defaults and ranges.
+Most people never need this page: the [Settings screen](./settings.md) covers the common choices, and everything it writes ends up here anyway. Come here for the settings that have no UI — heartbeat, timezone, tool toggles, snapshot retention, model presets — and for exact defaults and ranges.
 
 ## Where the file lives
 
-On Android the file is `<data_dir>/workspace/config.json`, inside the app's private storage (`<filesDir>/workspace/`). It is created on first boot with a minimal skeleton — a `gateway.host` and a per-install `websocket.token_issue_secret` — and then filled in by the onboarding wizard.
+On Android the file is `<data_dir>/workspace/config.json`, inside the app's private storage (`<filesDir>/workspace/`). It is created on first boot with a minimal skeleton — a `gateway.host`, `websocket.enabled: true` and a per-install `websocket.token_issue_secret` — and then filled in by the onboarding wizard.
 
-The Workspace file browser **hides `config.json` by default**, along with its backup and any quarantined copy (see below) — they carry the same secrets. That is deliberate: the file holds your API keys and the WebUI bootstrap secret. Turn on **Developer mode** in Settings → System to see them.
+The in-app file browser **never lists `config.json`**, along with its backup and any quarantined copy (see below) — they carry the same secrets. That is deliberate: the file holds your API keys and the WebUI bootstrap secret. There is no switch to reveal them: the old developer-mode toggle was removed.
 
 Three things to know before you hand-edit it:
 
@@ -18,7 +18,7 @@ Three things to know before you hand-edit it:
 
 ## Key naming
 
-Jenny writes camelCase (`apiKey`, `maxTokens`, `intervalS`), and this page uses camelCase throughout. snake_case is accepted everywhere on read (`api_key`, `max_tokens`, `interval_s`), so a hand-written config in either style loads fine — but a save from the UI rewrites the whole file in camelCase.
+Jenny writes camelCase (`apiKey`, `maxTokens`, `intervalS`), and this page uses camelCase throughout. snake_case is accepted on read (`api_key`, `max_tokens`, `interval_s`), so a hand-written config in either style loads fine — but a save from the UI rewrites the whole file in camelCase. There is one exception: `agents.defaults.idleCompactAfterMinutes` is read under that name and under its legacy name (`sessionTtlMinutes` / `session_ttl_minutes`), but **not** as `idle_compact_after_minutes`, which is silently ignored — a typo-shaped key like any other unknown one.
 
 Two more parsing rules worth knowing:
 
@@ -47,7 +47,7 @@ The list of LLM endpoints you configured, plus which one is active. There is no 
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `providers.providers[]` | array | `[]` | The configured endpoints. Empty means no agent: the gateway still starts and serves the WebUI, but every turn fails with `No provider configured. Add one in settings or config.json.` |
+| `providers.providers[]` | array | `[]` | The configured endpoints. Empty means no agent: the gateway still starts and serves the WebUI, but every turn fails with `No provider configured. Add a provider in Settings or edit workspace/config.json to set providers.providers[0].` |
 | `providers.providers[].name` | string | required | Free-form identifier, referenced by `providers.default` and by `modelPresets.<preset>.provider`. |
 | `providers.providers[].format` | `"openai_compat"` \| `"anthropic"` | required | Selects the wire format. The only field that decides which client is built. |
 | `providers.providers[].apiKey` | string \| null | `null` | Credential, stored in clear text. Local servers that ignore auth still usually want a placeholder such as `"EMPTY"`. |
@@ -59,7 +59,7 @@ The list of LLM endpoints you configured, plus which one is active. There is no 
 | `providers.providers[].extraQuery` | object \| null | `null` | Query parameters merged into every request. |
 | `providers.default` | string \| null | `null` | Name of the active provider. When unset or unmatched, the **first** entry in the list is used. |
 
-The onboarding wizard **replaces the entire provider list** with the single provider you enter. Details, error strings, and prompt-caching behavior: [Providers and models](./providers.md).
+The onboarding wizard writes a provider list with just the single provider you enter — it only runs while no provider exists, and it can't be reopened from the interface afterwards. Every base URL saved from the interface (wizard or workshop) must be an `http://` or `https://` address; the scheme is stored in lower case, and a `${VAR}` placeholder is kept as it is. Details, error strings, and prompt-caching behavior: [Providers and models](./providers.md).
 
 ## agents.defaults
 
@@ -88,18 +88,18 @@ Everything about how the agent talks to the model and manages its own context.
 | `agents.defaults.consolidationRatio` | float 0.1–0.95 | `0.5` | Fraction of the live context consolidated when a consolidation runs. |
 | `agents.defaults.dream.enabled` | bool | `true` | Registers the periodic Dream memory-consolidation job at startup. |
 | `agents.defaults.dream.intervalH` | int ≥ 1 | `2` | Hours between Dream runs. The deadline survives an app restart; a run missed while the app was down happens at the next tick. |
-| `agents.defaults.gardener.enabled` | bool | `true` | Registers the periodic [gardener](../using/gardener.md) job, which turns a project's journal lines into wiki pages. With no projects, or with no unread journal lines, a tick exits before reaching the provider. The switch in Settings → Wiki and projects writes this. |
-| `agents.defaults.gardener.intervalMin` | int 1–1440 | `30` | Minutes between ticks — how often it *looks* for a project to garden. Past a day the pass has stopped being periodic; `enabled: false` is the way to say never. |
-| `agents.defaults.gardener.idleMin` | int 0–1440 | `30` | How long that project's conversation must have been silent before a pass starts. `0` lets a pass begin while you are talking in it (it can promote half a conversation, and rewrite the map while you read it). A project with a turn actually in flight is skipped regardless. |
-| `agents.defaults.gardener.minHoursBetweenPasses` | int 0–8760 | `6` | Minimum gap before returning to the *same* project, counted from the last **attempt** rather than the last success. `0` lets it come straight back, which is the measured Dream degradation written as a number. |
-| `agents.defaults.compactProjectsWhenIdle` | bool | `false` | Whether a project's conversation is archived once it goes idle, like the personal one. Off by default: a project can sit for three weeks and pick up where it was. Read when the agent starts, so a change needs a gateway restart. Even when on, a project is not compacted while journal lines are still unpromoted, or while it has no pages at all. |
+| `agents.defaults.gardener.enabled` | bool | `true` | Registers the periodic [gardener](../using/gardener.md) job, which turns a notebook's journal lines into wiki pages. With no notebooks, or with no unread journal lines, a tick exits before reaching the provider. The switch in the workshop's Memory drawer («Gardener — who fills the notebooks») writes this. |
+| `agents.defaults.gardener.intervalMin` | int 1–1440 | `30` | Minutes between ticks — how often it *looks* for a notebook to garden. Past a day the pass has stopped being periodic; `enabled: false` is the way to say never. |
+| `agents.defaults.gardener.idleMin` | int 0–1440 | `30` | How long that notebook's conversation must have been silent before a pass starts. `0` lets a pass begin while you are talking in it (it can promote half a conversation, and rewrite the map while you read it). A notebook with a turn actually in flight is skipped regardless. |
+| `agents.defaults.gardener.minHoursBetweenPasses` | int 0–8760 | `6` | Minimum gap before returning to the *same* notebook, counted from the last **attempt** rather than the last success. `0` lets it come straight back, which is the measured Dream degradation written as a number. |
+| `agents.defaults.compactProjectsWhenIdle` | bool | `false` | Whether a notebook's conversation is archived once it goes idle, like the personal one. Off by default: a notebook can sit for three weeks and pick up where it was. Read when the agent starts, so a change needs a gateway restart. Even when on, a notebook is not compacted while journal lines are still unpromoted, or while it has no pages at all. |
 | `agents.defaults.maxToolIterations` | int | `200` | Hard ceiling on tool calls in a single turn. |
 | `agents.defaults.maxToolResultChars` | int | `16000` | Tool output above this is truncated before it reaches the model. |
 | `agents.defaults.contextBlockLimit` | int \| null | `null` | Optional cap on context blocks; unset means no extra limit. |
 
-`dream` has **six** fields — `enabled`, `intervalH`, and the four budget/cadence knobs documented in [Memory and Dream](../using/memory.md): `memoryBudgetChars`, `userBudgetChars`, `soulBudgetChars`, `reviewEveryRuns`. All six are settable from Settings → Memory. Older docs mentioned `cron`, `modelOverride` and `maxBatchSize`; none of them exist. See [Memory and Dream](../using/memory.md).
+`dream` has **six** fields — `enabled`, `intervalH`, and the four budget/cadence knobs documented in [Memory and Dream](../using/memory.md): `memoryBudgetChars`, `userBudgetChars`, `soulBudgetChars`, `reviewEveryRuns`. All six are settable from the workshop's Memory drawer. Older docs mentioned `cron`, `modelOverride` and `maxBatchSize`; none of them exist. See [Memory and Dream](../using/memory.md).
 
-**Both periodic workers are settable from the app**, and this is the only block on this page where that is true: Dream and the memory budgets in **Settings → Memory**, the gardener — plus `compactProjectsWhenIdle` — in **Settings → Wiki and projects**. The ranges above are the ones those screens carry and the server enforces; a value outside one is refused with the range named.
+**Both periodic workers are settable from the app**, and this is the only block on this page where that is true: Dream and the memory budgets, and the gardener plus `compactProjectsWhenIdle`, all in the workshop's **Memory** drawer. The ranges above are the ones those screens carry and the server enforces; a value outside one is refused with the range named.
 
 What applies when: `enabled` and the intervals re-arm the periodic job immediately, so neither turning a worker off nor changing its schedule needs a restart — including turning one back on after the gateway started with it off, which is the case a plain config edit cannot fix. `idleMin`, `minHoursBetweenPasses` and the Dream budgets are read on each run. `compactProjectsWhenIdle` takes effect at the next gateway start, and the screen says so.
 
@@ -112,8 +112,7 @@ A number outside its range in a file written by an older version is **clamped to
 | `agents.defaults.timezone` | string | `""` | **Empty means auto**: the device timezone detected at startup, falling back to `UTC` only when detection fails. Resolved once per config load, and written back as `""` when it still matches the device — so it keeps following the phone. Set an IANA name (`"Europe/Rome"`) to pin it. Drives runtime time context, cron schedules without an explicit `tz`, and one-shot `at` times without an offset. |
 | `agents.defaults.botName` | string | `"Jenny"` | Assistant name in chat and in the welcome message. Requires a restart to fully apply. |
 | `agents.defaults.botIcon` | string | `"✿"` | Emoji shown next to the name. No UI field; restart to apply. |
-| `agents.defaults.mascotMood` | bool | `true` | After each WebUI turn, a small background request asks the model how Jenny feels about the reply she just gave (one letter, a few hundred input tokens), and the mascot wears the matching face for a few seconds — happy, sad or angry. Nothing is added to the conversation or to the agent's prompt; turns that end in an error, command turns and very short replies cost nothing. Off means no request at all. Read per turn: a change applies to the next turn without a restart. |
-| `agents.defaults.mascotMoodModelPreset` | string \| null | `null` | Name of a `modelPresets` entry whose `model` answers the mood request instead of the turn's own model — the place to point at a cheaper model. Only the preset's `model` is used; the provider stays the turn's. An unknown preset falls back to the turn's model with a warning in the log. |
+| `agents.defaults.mascotMood` | bool | `true` | After each WebUI turn the mascot wears a face for a few seconds — happy, sad or angry — read from the emoji in the reply Jenny just gave (😊 is happy, 😔 is sad, 😤 is angry; code and quoted lines don't count, and a reply with no emotional emoji shows no face). No request is made to the model, so it costs nothing. Off means no faces. Read per turn: a change applies to the next turn without a restart. `mascotMoodModelPreset`, which chose the model for the old mood request, is retired: a file that still has it loads fine and drops it on the next write. |
 | `agents.defaults.language` | string | `"it"` | Language for backend-generated text (welcome message and similar). Written once by onboarding from the UI locale. **Not** the UI language — that lives in the device's `localStorage`. |
 | `agents.defaults.orchestratorMode` | bool | `true` | The main agent runs as an orchestrator: it keeps `spawn`, the subagent-control tools, cron, `message`, `ui_view`, `long_task`, introspection, logs, location and **read-only** file access (`read_file`, `list_dir`), and loses the tools whose output bloats your conversation — `python_exec`, `write_file`/`edit_file`, `apply_patch`, `download_file`, the web tools, exec sessions and search. That work goes to subagents instead. Set it to `false` to give the main agent the full toolset back (the pre-0.5 behaviour); restart to apply. |
 | `agents.defaults.maxConcurrentSubagents` | int ≥ 1 | `3` | How many `spawn`ed subagents may run at once. One slot is reserved for short jobs: an ordinary spawn may take at most `limit - 1` slots (no reservation when the limit is `1`, which therefore serialises every fan-out). Beyond that, `spawn` returns an error so the agent can wait or reorder its work. Each slot is a live LLM request from a phone, so raising this hits your provider's rate limit and the battery well before it hits the CPU. Installations created before 0.5 carry the old default of `1` in their file and are moved to `3` once, with a warning in the log — see `configVersion` below. |
@@ -140,7 +139,7 @@ A number outside its range in a file written by an older version is **clamped to
 | `gateway.heartbeat.intervalS` | int ≥ 1 | `1800` | Seconds between heartbeat checks (30 minutes). Every cycle that finds a task costs an LLM call. |
 | `gateway.heartbeat.keepRecentMessages` | int | `8` | Messages retained in the internal heartbeat session after each run. |
 
-**On the phone, `host` and `port` are imposed by the Android runtime.** The service calls the gateway entry point with `127.0.0.1:18790` explicitly, which overwrites whatever the file says — both for the HTTP API and for the WebSocket, which share that single port. Editing them in `config.json` changes nothing on-device; they only matter when running the gateway yourself for local testing.
+**On the phone, `host` and `port` are imposed by the Android runtime.** The service calls the gateway entry point with `127.0.0.1:18790` explicitly, which overwrites whatever the file says — both for the HTTP API and for the WebSocket, which share that single port. Editing them in `config.json` changes nothing on-device. The same holds off-device: `run_gateway(data_dir, host="127.0.0.1", port=18790)` always passes both and they overwrite `gateway.host`/`gateway.port` and `websocket.host`/`websocket.port` alike, so to run the gateway yourself on another address pass `host=`/`port=` (see [WebSocket protocol](./websocket.md#quick-start-off-device--standalone-gateway)).
 
 The heartbeat job is stored like any other cron job (`<workspace>/cron/jobs.json`) and appears in `cron(action="list")` as `heartbeat`, but it is system-managed and cannot be removed with the `cron` tool — disable it here and restart. See [Scheduling and proactivity](../using/scheduling.md).
 
@@ -159,7 +158,7 @@ The channel the WebUI talks over. On-device, the runtime forces `host` and `port
 | `websocket.allowFrom` | string[] | `["*"]` | Client-ID allowlist for connections. This is the real key — there is no `channels.*.allowFrom` anywhere in the codebase. |
 | `websocket.streaming` | bool | `true` | Stream assistant text as it is generated. |
 | `websocket.sendProgress` | bool | `true` | Send progress events to the WebUI. |
-| `websocket.sendToolHints` | bool | `false` | Send the short `tool(args…)` hints as progress events. |
+| `websocket.sendToolHints` | bool | `false` | Send the short `tool(args…)` hints as progress events. Off, the hint text is dropped but the list of tools that are starting still arrives. |
 | `websocket.showReasoning` | bool | `true` | Config-only. Delivers the model's reasoning stream to the WebUI. **Turning it off also stops it being recorded**: the transcript append happens inside the same send path the dispatcher gates on this flag, so with it off the reasoning is absent from replay and history too, not just from the live view. Telegram never receives reasoning regardless. |
 | `websocket.sendMaxRetries` | int 0–10 | `3` | Delivery attempts per outbound message, including the first send. Backoff 1 s, 2 s, 4 s, then capped at 4 s. |
 | `websocket.maxMessageBytes` | int 1024–41943040 | `37748736` | Max inbound frame size (36 MiB), sized for four ~6 MB images after client-side normalization plus base64 overhead. |
@@ -185,7 +184,7 @@ Pairing, the throttle, and the asymmetric view between Telegram and the WebUI: [
 
 ## tools
 
-Toggles for the built-in tool groups. Only web search and location have UI controls; everything else here is config-only. Full behavior of each tool: [Tool reference](./tools.md).
+Toggles for the built-in tool groups. Only web search, location and SSH (`tools.ssh.enable` and `tools.ssh.hosts`, in the workshop's Hands drawer) have UI controls; everything else here is config-only. Full behavior of each tool: [Tool reference](./tools.md).
 
 ### tools.file
 
@@ -200,7 +199,7 @@ Toggles for the built-in tool groups. Only web search and location have UI contr
 |---|---|---|---|
 | `tools.pythonExec.enable` | bool | `true` | Registers `python_exec` and the exec-session tools. |
 | `tools.pythonExec.timeout` | int ≥ 0 | `60` | Seconds per execution. `0` means no limit. |
-| `tools.pythonExec.maxOutputChars` | int 1000–50000 | `10000` | Output truncation threshold. |
+| `tools.pythonExec.maxOutputChars` | int 1000–50000 | `10000` | Default output cap of `python_exec`, stated in the tool's description. A single call can ask for a different cap with its own `max_output_chars` (1000–50000). `write_stdin` polls use the same value as their default when they carry no `max_output_chars` of their own. |
 | `tools.pythonExec.allowedModules` | string[] | see below | Import allowlist. |
 | `tools.pythonExec.blockedModules` | string[] | see below | Import denylist. |
 
@@ -315,19 +314,19 @@ Full threat model: [Security model](../internals/security-model.md).
 
 ## power
 
-Anti-doze: the wake lock, the scheduled wake-ups, and the outage log behind **Settings → Background activity**.
+Anti-doze: the wake lock, the scheduled wake-ups, and the outage log behind **Background activity** in the workshop's Brain drawer.
 
 The problem this section exists for is worth stating plainly, because it is not obvious: **a foreground service keeps the *process* alive, not the *processor*.** With the screen off the phone suspends, the agent's own timers stop advancing, and anything waiting on one waits with them. A job that fires late isn't late because the code was slow — it's late because the clock it was sleeping on was frozen. Only a `PARTIAL_WAKE_LOCK` prevents the CPU suspending, and only an alarm registered with Android can wake it up again at a known moment. These keys decide how much of each Jenny asks for.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `power.keepAwake` | `"off"` \| `"turns"` \| `"always"` | **`"turns"`** | How much of the time Jenny holds a wake lock. `turns` takes one around real work — an agent turn, a cron/Dream/heartbeat job, an SSH command, a Telegram update being processed — and releases it immediately after. `always` holds one for the entire life of the gateway service: nothing drifts, and it costs real battery, so it's the setting for a phone that lives on a charger. `off` is the pre-0.6.6 behaviour, kept as an escape hatch if the lock misbehaves on some device. A value that isn't one of the three is a typo, not a reason to refuse to boot: it's logged and treated as `turns`. **This is the one key here with a UI control** (Settings → Background activity), and it takes effect at the next gateway restart — the service-lifetime lock is taken once, at startup. |
+| `power.keepAwake` | `"off"` \| `"turns"` \| `"always"` | **`"turns"`** | How much of the time Jenny holds a wake lock. `turns` takes one around real work — an agent turn, a cron/Dream/heartbeat job, an SSH command, a Telegram update being processed — and releases it immediately after. `always` holds one for the entire life of the gateway service: nothing drifts, and it costs real battery, so it's the setting for a phone that lives on a charger. `off` is the pre-0.6.6 behaviour, kept as an escape hatch if the lock misbehaves on some device. A value that isn't one of the three is a typo, not a reason to refuse to boot: it's logged and treated as `turns`. **This is the one key here with a UI control** (Background activity, in the workshop's Brain drawer), and it takes effect at the next gateway restart — the service-lifetime lock is taken once, at startup. |
 | `power.wakelockRotateMin` | int 0–240 | `50` | Minutes after which the service-lifetime lock (`keepAwake: "always"` only) is released and immediately re-acquired. `0` disables rotation. This is not hygiene for its own sake: PowerGenie, the battery manager on Honor/Huawei, kills an app that has held a wake lock for more than 60 minutes, so the default sits deliberately under that line. Per-turn locks are short-lived and never rotated. |
 | `power.watchdogEnabled` | bool | `true` | A self-chaining alarm that checks whether the gateway is still alive and starts it again if it isn't. It exists because the gateway can be killed without anything noticing — nothing in the app is in a position to report its own death. Setting this to `false` is also how you dismantle a chain armed by an earlier run: the alarms live in Android's `AlarmManager`, not in Jenny's process, so nothing disarms them on their own. |
 | `power.watchdogIntervalMin` | int 5–120 | `15` | Base interval between watchdog checks. The interval adapts rather than holding steady: ×2 with the screen off, ×4 in deep Doze. Spacing them out there is not battery thrift — an app that wakes the system on a fixed beat while it should be idle is exactly what OEM battery managers flag and then kill. The gateway is considered dead once its heartbeat is three (worst-case) periods stale; a false positive costs one no-op start, a false negative leaves the agent down until you notice. |
 | `power.alarmDrivenCron` | bool | `true` | Arms an OS alarm for the scheduler's next real deadline, alongside the ordinary in-process timer. The timer sleeps on a clock that stops while the SoC is suspended; the alarm doesn't. The alarm targets the true next deadline, not the scheduler's shorter internal poll, so an idle phone isn't woken every few minutes for nothing. |
 | `power.alarmClockFallback` | bool | `true` | An 8-hourly wake-up registered as an *alarm clock* — the one alarm category no ROM dares suppress. It is the last net under everything else, but only where it can actually register as one: measured on-device, `setAlarmClock` still needs the exact-alarm permission, and without it this net degrades to the same inexact alarm as the rest rather than outranking them. It has a flag of its own for a cosmetic reason that is nonetheless real: on many ROMs a pending alarm-clock lights the alarm icon in the status bar. Three wake-ups a day, rather than one every quarter hour, is what keeps it under any "this app wakes the system too much" heuristic. Switching it off *cancels* the queued alarm rather than merely not re-arming it — otherwise the icon you wanted gone would linger for up to eight hours. |
-| `power.gapWarningMin` | int ≥ 5 | `60` | How long a stretch of downtime has to be before it's recorded as an outage and shown in Settings → Background activity. The measurement is taken across the gateway's own death, on the wall clock, because that's the only clock that survives both the process and a reboot; implausible values (a clock that jumped, anything over a month) are discarded rather than reported as a ten-year outage. At most 20 outages are kept, in `<workspace>/state/power_gaps.json`. |
+| `power.gapWarningMin` | int ≥ 5 | `60` | How long a stretch of downtime has to be before it's recorded as an outage and shown under Background activity in the workshop's Brain drawer. The measurement is taken across the gateway's own death, on the wall clock, because that's the only clock that survives both the process and a reboot; implausible values (a clock that jumped, anything over a month) are discarded rather than reported as a ten-year outage. At most 20 outages are kept, in `<workspace>/state/power_gaps.json`. |
 
 Two things worth being clear about:
 
@@ -338,14 +337,14 @@ The defaults above are reasoned from Android's documented behaviour and from wha
 
 ## workspace
 
-These govern the **WebUI Workspace tab**, not the agent's file tools — the agent is bounded by `security.restrictToWorkspace` instead.
+These govern the **WebUI file browser** (and the WebUI's other workspace writes), not the agent's file tools — the agent is bounded by `security.restrictToWorkspace` instead.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `workspace.enabled` | bool | `true` | Off makes every `/api/workspace/*` route answer `503 workspace is disabled` — the Workspace tab stops working. |
+| `workspace.enabled` | bool | `true` | Off makes the `/api/workspace/*` HTTP routes (list, read, mkdir, download) answer `503 workspace is disabled`, and the WebSocket write commands (`workspace.write`, `workspace.delete`, `workspace.rename`, `workspace.copy`, `soul.rules.write`, `page.write`) fail as unavailable — the file browser stops working. |
 | `workspace.maxFileSize` | int | `1000000` | Max bytes the file viewer will read (1 MB). |
-| `workspace.allowWrite` | bool | `true` | Off makes write, mkdir, rename and copy answer `403 workspace writes are disabled`. |
-| `workspace.allowDelete` | bool | `true` | Off makes delete answer `403 workspace deletes are disabled`. |
+| `workspace.allowWrite` | bool | `true` | Off refuses every write — the `mkdir` route with `403`, and `workspace.write`, `workspace.rename`, `workspace.copy`, `soul.rules.write` and `page.write` over the WebSocket — with `workspace writes are disabled`. |
+| `workspace.allowDelete` | bool | `true` | Off makes the `workspace.delete` command fail with `workspace deletes are disabled`. |
 
 ## snapshots
 
@@ -360,6 +359,7 @@ Local versioning of the workspace, plus the key derivation used by encrypted bac
 | `snapshots.retentionRecent` | int ≥ 1 | `20` | The most recent N snapshots are always protected from pruning, including from the age horizon. |
 | `snapshots.retentionThinAfterDays` | int ≥ 1 | `30` | Beyond this age, history is thinned to roughly one snapshot per day. |
 | `snapshots.retentionMaxAgeDays` | int ≥ 0 | `0` | Age horizon in days; `0` means keep forever. The Settings selector maps to 7 / 30 / 365 / 0. **Changing retention prunes immediately.** |
+| `snapshots.lastExportAt` | float ≥ 0 | `0` | Unix time of the last encrypted backup export, stamped when the app confirms the file was really saved (not when it was prepared; `0` means never). Not a setting to edit: it is exposed to the UI as `backup.last_export_at`, and the Backup row in Settings shows it. |
 | `snapshots.pbkdf2Iterations` | int 100000–10000000 | `600000` | PBKDF2 iterations for the exported `.jbk` backup key. The ceiling mirrors the container format's own limit. |
 | `snapshots.excludeGlobs` | string[] | see below | Paths never captured. |
 
@@ -386,7 +386,7 @@ The in-app update check. It is the one outbound connection you did not switch on
 | `updates.checkIntervalH` | int 1–168 | `24` | Hours between checks. The default is not a network compromise — it is how often it makes sense to *interrupt*, since every positive result is an interruption. |
 | `updates.notifyInChat` | bool | `true` | Whether a newer version opens a chat message, or stays visible only where you go looking for it. |
 
-Turning `enabled` off stops the check; the `install_update` tool remains available for when you ask for it explicitly. See also [Android permissions](android-permissions.md) for the three permissions the install half needs.
+Turning `enabled` off stops the check; the `install_update` tool remains available for when you ask for it explicitly. See also [Android permissions](android-permissions.md) for what the install half needs: two manifest permissions (`REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION`) plus the per-app "Install unknown apps" switch.
 
 ## floating
 
@@ -394,10 +394,31 @@ The floating mascot: Jenny above your other apps. Tap her and a text field opens
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
-| `floating.enabled` | bool | `false` | Whether the window exists. Off by default because switching it on needs Android's `SYSTEM_ALERT_WINDOW`, granted on a system screen — a default of `true` would promise a window Android wouldn't open. The switch lives in **Settings → Personalisation** and applies immediately, without restarting the app. |
+| `floating.enabled` | bool | `false` | Whether the window exists. Off by default because switching it on needs Android's `SYSTEM_ALERT_WINDOW`, granted on a system screen — a default of `true` would promise a window Android wouldn't open. The switch is **Floating mascot**, on the home's **Settings → Jenny** page, and applies immediately, without restarting the app. |
 | `floating.replyHoldS` | int 5–120 | `20` | Seconds the bubble stays up after a reply before the mascot goes back to resting. Not a reading time — whoever just wrote the question is watching — but how long a forgotten reply may sit on top of someone else's app. Typing resets the countdown. |
 
 She hides herself whenever Jenny's own UI is in the foreground: this app is the phone's launcher, and the home screen already has a mascot in it. The window lives inside the gateway service and is destroyed with it, so it can never sit there with no agent behind it. See [Android permissions](android-permissions.md#requested-permissions) for what the overlay permission does and does not allow.
+
+## home
+
+The home screen's pages. The home is a row of pages you swipe between, the way any launcher works, and their names run along the top of the screen: the page you are on is written large, the others small. Tap a name to jump to it, or swipe sideways. Four pages are always there — **Apps** (the app drawer), **Jenny** (the conversation), **Notebooks** and **Settings** — and the home always opens on Jenny. Beside them you can keep pages of your own: press and hold a mini-app in the drawer or a notebook in Notebooks and choose *Add as a page* (a mini-app that opens outside Jenny, or a broken one, cannot be a page).
+
+Every page can be moved, the four fixed ones included: press and hold a name at the top and drag it where you want it. The pages you added can also be removed there; the four fixed ones cannot, or a home without its Settings page would have no way back to them. Back always returns to Jenny, wherever it sits in the row.
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `home.pages` | list | `[]` | The pages you added. Each entry is `{"id": "...", "kind": "...", "ref": "..."}`. `kind` is `app` (a Jenny App, `ref` is its slug) or `conversation` (a notebook's chat, `ref` is `project:<name>`). At most 8, the ids must differ, and none may be one of the fixed page ids below. Pages that were rooms of the home (kind `stanza` in the old `casa` block, see below) existed briefly and were retired: a file that still has one loads normally and simply loses that page, instead of failing validation. |
+| `home.order` | list | `[]` | Where each page sits, left to right: the fixed ids `app`, `chat`, `notebooks`, `settings` and the `id` of each page you added. Empty means you never moved anything, and reads as `app, chat, <your pages>, notebooks, settings`. |
+
+Up to version 0.11.0 this block was called `casa`, with Italian names inside (`schermate`, `ordine`, the kind `conversazione`, the fixed ids `quaderni` and `impostazioni`). A file that still has it loads with everything translated, and the old block is dropped the first time the file is written.
+
+`home.order` is **tidied on every read, never rejected**: ids that match nothing and repeats are dropped, a fixed page that is missing comes back at the end, and a page of yours that is missing goes right after the chat. A config file that fails validation falls back to the backup and then to the defaults — losing providers and keys over a page order would be the wrong trade. Writes from the app are stricter: an order that does not list every fixed page and every page of yours exactly once is refused.
+
+A **conversation page is a shortcut, not a second chat.** The home has exactly one chat — one thread, one composer, one connection. Landing on a notebook's page switches that chat to the notebook, and the swipe dresses the switch up as a page: while you drag, the page coming in shows the notebook as you last left it. A notebook you have not opened since the app started has nothing to show yet, so the first time it slides in empty and fills as you arrive. Only notebooks can be pinned — the personal conversation already has its page — and the name must be one the gateway would open.
+
+Rooms that depend on where you came from are not pinnable either: the notebook pages read their notebook from the current conversation, and the reader needs a specific page. Pinned to a fixed place they would show something different every time.
+
+These live in `config.json` and not in the browser's storage on purpose: they are the phone's home screen, and losing them to a restore or a reinstall would be the worst kind of surprise — browser storage is not part of the [encrypted backup](../using/backup.md). Deleting a mini-app or a notebook from its own sheet takes its page with it. A page whose `ref` stops resolving any other way — the folder removed without going through its sheet, or a deletion whose page cleanup failed (the deletion stands, and the failure is logged) — is kept, not silently dropped: it is drawn as missing, and removing it stays your decision.
 
 ## wiki
 
@@ -405,11 +426,10 @@ She hides herself whenever Jenny's own UI is in the foreground: this app is the 
 |---|---|---|---|
 | `wiki.enabled` | bool | `true` | Off makes every wiki route answer `503`. |
 | `wiki.wikisDir` | string | `"wikis"` | Directory holding the wikis, relative to the workspace. |
-| `wiki.extensions` | string[] | `["fenced_code", "tables", "toc", "wikilinks", "mermaid"]` | Python-Markdown extensions used to render wiki pages. Mermaid renders here and only here — not in chat. |
 
 See [Wiki](../using/wiki.md).
 
-`wiki.wikisDir` is also where [projects](../using/projects.md) live — a project is a wiki — so `wiki.enabled: false` disables project creation too, and the create dialog says so. Renaming this directory moves every project with it; the gardener and the project-scope resolver both read the configured name rather than a hardcoded `wikis`.
+`wiki.wikisDir` is also where [notebooks](../using/projects.md) live — a notebook is a wiki — so `wiki.enabled: false` disables notebook creation too, and the create dialog says so. Renaming this directory moves every project with it; the gardener and the project-scope resolver both read the configured name rather than a hardcoded `wikis`.
 
 ## modelPresets
 
@@ -463,6 +483,6 @@ How switching behaves:
 - [Tool reference](./tools.md) — what each tool actually does with these toggles
 - [Security model](../internals/security-model.md) — workspace policy, SSRF, and where the real boundaries are
 - [Android permissions](./android-permissions.md) — `WAKE_LOCK`, `SCHEDULE_EXACT_ALARM` and the battery exemption behind the `power.*` keys
-- [Projects](../using/projects.md) and [The gardener](../using/gardener.md) — the `gardener.*` keys and `compactProjectsWhenIdle` from the user's side
+- [Notebooks](../using/projects.md) and [The gardener](../using/gardener.md) — the `gardener.*` keys and `compactProjectsWhenIdle` from the user's side
 - [Memory and Dream](../using/memory.md), [Scheduling and proactivity](../using/scheduling.md), [SSH access](../using/ssh.md), [Telegram bridge](../using/telegram.md), [Backup and restore](../using/backup.md)
 - [Troubleshooting](../using/troubleshooting.md) — what to do when a config change breaks the boot

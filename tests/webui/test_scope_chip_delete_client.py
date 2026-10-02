@@ -19,43 +19,28 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import locale, member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHIP_JS = ASSETS / "shared" / "scope-chip.js"
+LIST_JS = ASSETS / "shared" / "conversation-list.js"
 I18N_JS = ASSETS / "shared" / "i18n.js"
-I18N_DIR = ASSETS / "i18n"
 CSS = ASSETS / "mobile-style.css"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _chip() -> str:
     return CHIP_JS.read_text(encoding="utf-8")
 
 
-def _member(source: str, name: str) -> str:
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
-def _locale(name: str) -> dict:
-    return json.loads((I18N_DIR / f"{name}.json").read_text(encoding="utf-8"))
-
-
 _HARNESS = """
 import assert from 'node:assert/strict';
+
+const { ConversationList } = await import('__LIST_URL__');
 
 const TRANSLATIONS = __TRANSLATIONS__;
 const i18n = {
@@ -98,18 +83,25 @@ function showToast(text) { toasts.push(text); }
 class Chip {
   constructor() {
     this.scope = { kind: 'personal', name: null };
-    this._projects = null;
+    /* La cache dell'elenco sta in `conversation-list.js`: qui si importa
+       quello, cosi' «l'elenco e' stato buttato» lo dice il codice vero. */
+    this._list = new ConversationList(() => Promise.resolve({}));
     this.closed = 0;
     this.left = [];
     this.reloaded = 0;
   }
   close() { this.closed++; }
-  leaveIfSelected(name) {
-    const mine = this.scope.kind === 'project' && this.scope.name === name;
-    if (mine) this.left.push(name);
-    return mine;
+  /* `leaveIfSelected` e' quello vero (qui era
+     riscritto, e la sua logica — chi e' «lo scope aperto», l'elenco da buttare —
+     non la misurava nessuno). Il cambio di conversazione che fa, `select`, e'
+     un doppio che si ricorda da dove si e' usciti. */
+  select(scope) {
+    if (this.scope.kind === 'project') this.left.push(this.scope.name);
+    this.scope = scope;
   }
   async _loadProjects() { this.reloaded++; }
+  __LEAVE_IF_SELECTED__
+  __PROJECTS__
   __PROJECT_ROW__
 }
 
@@ -125,31 +117,28 @@ function row(chip, name) {
 
 def _harness() -> str:
     return (
-        _HARNESS.replace("__TRANSLATIONS__", json.dumps({"it": _locale("it")}))
-        .replace("__T__", _member(I18N_JS.read_text(encoding="utf-8"), "t"))
-        .replace("__PROJECT_ROW__", _member(_chip(), "_projectRow"))
+        _HARNESS.replace("__TRANSLATIONS__", json.dumps({"it": locale("it")}))
+        .replace("__LIST_URL__", LIST_JS.as_uri())
+        .replace("__LEAVE_IF_SELECTED__", member(_chip(), "leaveIfSelected"))
+        .replace("__PROJECTS__", member(_chip(), "_projects"))
+        .replace("__T__", member(I18N_JS.read_text(encoding="utf-8"), "t"))
+        .replace("__PROJECT_ROW__", member(_chip(), "_projectRow"))
     )
 
 
 def _run_js(script: str) -> None:
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", _harness() + "\n" + script],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(_harness() + "\n" + script)
 
 
 # ── Il tasto c'è, e si vede ──────────────────────────────────────────────────
 
 
 def test_a_project_row_carries_a_delete_button() -> None:
-    it = _locale("it")
-    expected = it["scope"]["deleteProject"].replace("{name}", "patreon")
+    it = locale("it")
+    expected = it["scope"]["deleteProject"].replace("{name}", "palestra")
     _run_js(f"""
       const chip = new Chip();
-      const r = row(chip, 'patreon');
+      const r = row(chip, 'palestra');
       const del = byClass(r, 'scope-menu-del');
       assert.equal(del.length, 1, 'la riga non ha un tasto elimina');
       assert.equal(del[0].tag, 'button');
@@ -184,12 +173,12 @@ def test_the_click_does_not_reach_the_row_underneath() -> None:
     """Entrare nel progetto mentre si chiede se cancellarlo cambia chat sotto la finestra."""
     _run_js("""
       const chip = new Chip();
-      const r = row(chip, 'patreon');
+      const r = row(chip, 'palestra');
       const del = byClass(r, 'scope-menu-del')[0];
       let stopped = false;
       await del.handlers.click({ stopPropagation: () => { stopped = true; } });
       assert.equal(stopped, true, 'il click scende alla riga e apre il progetto');
-      assert.deepEqual(deleted, ['patreon']);
+      assert.deepEqual(deleted, ['palestra']);
     """)
 
 
@@ -198,7 +187,7 @@ def test_a_refusal_changes_nothing() -> None:
     _run_js("""
       const chip = new Chip();
       deleteAnswer = false;
-      const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
+      const del = byClass(row(chip, 'palestra'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
       assert.deepEqual(toasts, []);
       assert.equal(chip.reloaded, 0);
@@ -210,12 +199,15 @@ def test_deleting_the_open_project_leaves_its_scope() -> None:
     """Era la conversazione aperta: il chip deve smettere di nominarla."""
     _run_js("""
       const chip = new Chip();
-      chip.scope = { kind: 'project', name: 'patreon' };
-      const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
+      chip.scope = { kind: 'project', name: 'palestra' };
+      chip._list.projects = [{ name: 'palestra' }];   // l'elenco letto prima
+      const del = byClass(row(chip, 'palestra'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
-      assert.deepEqual(chip.left, ['patreon']);
+      assert.deepEqual(chip.left, ['palestra']);
+      assert.deepEqual(chip.scope, { kind: 'personal', name: null }, 'si torna nella personale');
       // Non serve ricaricare l'elenco: uscire dallo scope lo invalida già.
       assert.equal(chip.reloaded, 0);
+      assert.equal(chip._projects, null, "l'elenco con il progetto cancellato e' ancora in cache");
     """)
 
 
@@ -224,7 +216,7 @@ def test_deleting_another_project_reloads_the_list() -> None:
     _run_js("""
       const chip = new Chip();
       chip.scope = { kind: 'project', name: 'altro' };
-      const del = byClass(row(chip, 'patreon'), 'scope-menu-del')[0];
+      const del = byClass(row(chip, 'palestra'), 'scope-menu-del')[0];
       await del.handlers.click({ stopPropagation() {} });
       assert.deepEqual(chip.left, []);
       assert.equal(chip.reloaded, 1, 'l-elenco continua a nominare un progetto che non c-è più');

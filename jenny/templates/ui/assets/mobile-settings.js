@@ -1,44 +1,148 @@
-/** Mobile Settings Controller — accordion-based settings panel. */
+/** Mobile Settings Controller — i gruppi aperti dei tre cassetti dell'officina. */
 
 import { api } from './shared/api-client.js';
 import { copyToClipboard, escapeHtml, showToast } from './shared/utils.js';
 import { i18n } from './shared/i18n.js';
-import { AppState } from './shared/state.js';
 import { confirmDialog, detailDialog } from './shared/dialog.js';
-import { THEMES, DEFAULT_THEME, setTheme } from './shared/theme.js';
-import { advancedMode, setAdvancedMode } from './shared/advanced-mode.js';
-import { mascotVisible, setMascotVisible, mascotSize, setMascotSize,
-  MASCOT_SIZES } from './shared/mascot.js';
-import { homeView, setHomeView, HOME_VIEW_CHOICES } from './shared/home-view.js';
-import { TelegramPairingWidget } from './shared/telegram-pairing.js';
+import { TelegramPairingWidget, telegramSummary } from './shared/telegram-pairing.js';
+import { getProviderBrand } from './shared/provider-brand.js';
+import { botName } from './shared/bot-name.js';
+import { NO_AUTOCORRECT, normalizeApiBase } from './shared/api-base.js';
 import {
   BatteryExemptionCard,
   batteryExemptionSupported,
-  batteryExemptionNeeded,
 } from './shared/battery-exemption.js';
 import { buildCronView } from './shared/cron-view.js';
+import { whenText } from './shared/when.js';
 import {
-  runExportFlow,
-  runImportFlow,
-  runSnapshotRestore,
-} from './shared/backup-flow.js';
+  controllable, splitSkill, blockReason, skillBlurb, skillsSummary,
+} from './shared/skills-view.js';
+/* Solo `runSnapshotRestore`: esportare e ripristinare da file sono in casa,
+   e un import qui li rimetterebbe a portata di un bottone dimenticato. */
+import { runSnapshotRestore } from './shared/backup-flow.js';
 
 // Ripiego per `power.modes` quando il payload arriva da un gateway più vecchio
 // del client: stesso ordine di `KEEP_AWAKE_MODES` in config/schema.py, dal più
 // parsimonioso al più affamato.
 const KEEP_AWAKE_CHOICES = ['off', 'turns', 'always'];
 
-/* Distanza fra "ultimo tentativo" e "ultimo tentativo riuscito" oltre la quale
-   il controllo aggiornamenti va dichiarato rotto in pagina.
+/* I quattro cassetti dell'officina, e cosa contiene ognuno.
+ *
+ * **Una tabella e non undici `if`.** Prima le sezioni erano un elenco dentro
+ * `render()`; adesso sono un elenco per cassetto, e il controller ne disegna
+ * uno per volta. Il riordino dei cassetti sta
+ * tutto qui dentro: spostare una sezione da un cassetto all'altro e' spostare
+ * una stringa, e non c'e' nessun posto in cui possa restare scritta due volte.
+ *
+ * **Le porte non ci sono piu'.** Erano tre viste uscite dal dock che il
+ * cassetto doveva pur far raggiungere — il cassetto delle app, i file, la
+ * wiki — e una mappa `group -> porte` che le disegnava in fondo al gruppo
+ * giusto. Il 21/09/2026 sono finite tutte e tre: il cassetto delle app ha la
+ * sua maniglia accanto alla graffetta del composer, la wiki e' uscita
+ * dall'officina (elenco, mappa e lettore vivono in casa), e i file non hanno
+ * piu' una porta perche' **sono** la scheda — il gestore ci sta dentro, non
+ * dietro. Un cassetto che manda altrove e' un cassetto che non contiene, ed
+ * era la sola cosa che il meccanismo delle porte sapesse fare.
+ *
+ * **Dei due parcheggi ne resta uno.** `personalization` e' uscito il
+ * 21/09/2026: temi, mascotte e finestra flottante vivevano gia' in casa, il
+ * nome di Jenny e' andato nella stanza «Jenny» con loro. Resta `system` — la
+ * versione e il consumo di token — che nessuna tavola disegna e che non ha
+ * ancora un altro posto dove stare.
+ */
+/* Quali lavori periodici appartengono a Mani.
+ *
+ * «Programmazione» non era una famiglia: i quattro lavori di sistema finiscono
+ * in tre posti diversi. `dream` e `gardener` riempiono la memoria e stanno
+ * accanto a quel che riempiono (Memoria, passo 2); `update_check` e'
+ * dell'app, e il suo giro e' in casa. Qui resta cio' che Jenny fa **per te**
+ * quando non glielo stai chiedendo: i tuoi promemoria, e l'heartbeat, che
+ * legge le cose che le hai lasciato in `HEARTBEAT.md`.
+ *
+ * Il payload porta gia' `kind: system|user` per riga, quindi e' un filtro e
+ * non un giro di codice nuovo. */
+export const HANDS_JOBS = (job) => job.kind !== 'system' || job.id === 'heartbeat';
 
-   Sette giorni perché il job gira ogni ventiquattr'ore (`updates.checkInterval_h`,
-   default 24): una settimana di scarto vuol dire almeno sette tentativi andati
-   a vuoto di fila, che nessun disguido passeggero spiega — un'antenna che va e
-   viene, un riavvio, una notte senza rete rientrano tutti abbondantemente sotto
-   soglia e restano silenziosi, come devono. Più corta griderebbe al lupo; più
-   lunga lascerebbe un manifest pubblicato col nome sbagliato invisibile per
-   metà mese. */
-const UPDATE_STALE_MS = 7 * 86400000;
+/* I gruppi di ogni cassetto, nell'ordine in cui si scorrono.
+ *
+ * Erano undici **sezioni**, una per pezzo di codice. La tavola ne ha quindici,
+ * piu' piccole e nominate per la domanda a cui rispondono: «Modello» da sola
+ * conteneva chi risponde adesso, l'elenco delle marche e le manopole del
+ * motore — tre cose che si leggono, si amministrano e non si toccano quasi
+ * mai. Il taglio nuovo e' questo, non un rinominare.
+ *
+ * Una voce della tavola qui non c'e', e il motivo e' che **non esiste nel
+ * prodotto**: un gruppo vuoto e' peggio di un gruppo assente.
+ *   - «permessi di scrittura» (Mani): tre interruttori per ambito e `/ro`.
+ *     Nel config esiste solo `security.restrict_to_workspace`, che oggi
+ *     nessuna schermata espone.
+ * Ne restava una sola dal 21/09/2026, «permessi di scrittura»: «i file veri»
+ * adesso c'e' — e' il gruppo `file`, che legge davvero la radice del workspace
+ * invece di rimandare altrove.
+ *
+ * `system` (Cervello) invece **resta**, pur non stando in nessuna tavola: e' la
+ * versione e il consumo di token. Toglierlo senza dargli una casa lo farebbe
+ * sparire e basta.
+ */
+export const DRAWERS = {
+  brain: {
+    sections: ['whoThinks', 'parameters', 'battery', 'system'],
+  },
+  hands: {
+    sections: ['webSearch', 'position', 'ssh', 'telegram', 'skill', 'scheduling'],
+  },
+  /* In Memoria «file» e' l'**ultima**, e non e' un dettaglio d'ordine: da
+     quando quella scheda contiene l'esploratore vero la sua altezza dipende da
+     quanti file ci sono, e una cartella piena sotterrerebbe qualunque cosa le
+     stia sotto. In fondo non c'e' niente da sotterrare. */
+  memory: {
+    sections: ['howMuchItRemembers', 'dream', 'workers', 'backup', 'file'],
+  },
+};
+
+/* Quale `<div id="view-...">` — e quale `<div id="title-...">` — serve un modo,
+   quando non e' quello omonimo.
+ *
+ * Cervello, Mani e Memoria sono tre voci del dock e **una vista sola**: stesso
+ * controller, cambia solo il cassetto disegnato. La tabella sta qui accanto a
+ * `DRAWERS` perche' risponde alla stessa domanda, e perche' averla in due
+ * copie e' costato un'intestazione: `mobile-app.js` ne aveva una per scegliere
+ * la vista, `mobile-header.js` non ne aveva nessuna e cercava `title-cervello`,
+ * che non esiste — quindi `setMode` usciva subito e i tre cassetti restavano
+ * **senza titolo**, su uno schermo che comincia con una riga vuota (visto sul
+ * telefono il 20/09/2026). */
+export const VIEW_OF = { brain: 'settings', hands: 'settings', memory: 'settings' };
+
+/* Quanti modelli di una marca si vedono prima di «mostra tutti». Sei righe da
+   44 px stanno nel primo schermo del quadrato da 480 insieme all'intestazione;
+   il filtro compare dalla settima in su, dove serve. */
+const BRAND_MODELS_SHOWN = 6;
+
+/* E siccome averla in due copie e' costato un'intestazione, averla **senza una
+ * funzione** e' costato lo scorrimento.
+ *
+ * Il 22/09/2026 il carosello era morto su tre linguette su quattro, e il motivo
+ * era di nuovo questo: `setupSwipeNav` faceva `getElementById(\`view-${mode}\`)`,
+ * per `brain` trovava `null` e usciva in silenzio alla prima riga. Stessa
+ * forma della volta prima, terzo sito — `mobile-app.js` due volte,
+ * `mobile-header.js` una.
+ *
+ * Tre volte e' il punto in cui la tabella non basta piu': finche' resta una
+ * cosa da **ricordarsi** di consultare, qualcuno scrivera' di nuovo l'id a
+ * mano, e il difetto che ne esce non si vede — non in un file rotto, non in un
+ * banco rosso, solo col dito sul telefono. Da qui in poi l'elemento di un modo
+ * si chiede a queste due, e il banco
+ * `tests/webui/test_no_raw_view_lookup_contract.py` rifiuta chi se le salta. */
+
+/** Il `<div id="view-…">` di un modo. `null` se quel modo non ha una vista. */
+export function viewElement(mode) {
+  return document.getElementById(`view-${VIEW_OF[mode] || mode}`);
+}
+
+/** Il `<div id="title-…">` di un modo, dove si monta l'intestazione. */
+export function titleElement(mode) {
+  return document.getElementById(`title-${VIEW_OF[mode] || mode}`);
+}
 
 export class SettingsController {
   constructor() {
@@ -46,51 +150,66 @@ export class SettingsController {
     this.loadingEl = document.getElementById('settings-loading');
     this.data = null;
     this._debounceTimers = {};
-    // Sezioni aperte, per id: sopravvive ai re-render (che ricostruiscono
-    // tutto l'HTML), non alla navigazione — niente localStorage di proposito.
-    this._openSections = new Set();
+    /* I modelli di ogni marca, letti una volta e tenuti. La chiave e' fatta
+       di cio' da cui l'elenco dipende (v. `_brandCatalogKey`): una Modifica
+       che cambia chiave o indirizzo lo fa rileggere da se'. */
+    this._brandCatalogs = new Map();
+    /* Lo stato dei gruppi di «Chi pensa» per la visita in corso: quali sono
+       aperti, l'ordine dei modelli fissato all'ingresso, i filtri, chi mostra
+       tutto. Sopravvive ai ridisegni; si azzera uscendo (`deactivate`) e
+       cambiando cassetto (`setDrawer`), **prima** del disegno: `activate()`
+       arriva dopo, e se i dati non sono cambiati non ridisegna. */
+    this._resetBrandVisit();
+    // Vero mentre una scelta di modello e' in volo (v. `_pickBrandModel`).
+    this._picking = false;
     // Contatore di generazione: incrementato in deactivate(). Ogni
     // continuazione lo cattura prima del primo await ed esce se è cambiato —
     // altrimenti scrive nel DOM (o apre modali) di una sezione già lasciata.
     this._gen = 0;
-    /* Posizione di lettura e stato del catalogo modelli. Come `_openSections`
-       vivono nel controller: il contenitore che scorre è lo stesso che
-       `render()` riscrive per intero, quindi qualunque salvataggio — e
-       scegliere un modello *è* un salvataggio — riportava in cima una pagina
-       lunga, col catalogo richiuso e il filtro perso. */
-    this._scrollTop = 0;
-    this._catalogOpen = false;
-    this._catalogFilter = '';
+    /* Posizione di lettura. Vive nel controller e non in localStorage: il
+       contenitore che scorre è lo stesso che `render()` riscrive per intero,
+       quindi qualunque salvataggio riportava in cima una pagina lunga.
+       **Una per cassetto** (v. il getter `_scrollTop`). */
+    this._scrollTops = {};
     /* Vero mentre *noi* stiamo scrivendo `scrollTop`, e vero finché il
        contenuto asincrono di un `render()` non è ancora atterrato. Vedi
        `_restoreScrollTop()`. */
     this._restoringScroll = false;
     this._restorePending = false;
-    /* Installazione dell'aggiornamento: `null` finché non la si avvia, poi
-       {busy, noteKey, phase, progress, detail}. Vive nel controller e non nel
-       DOM perché ogni salvataggio riscrive tutta la pagina, e un'installazione
-       in corso non è una cosa che possa sparire da sotto gli occhi. */
-    this._update = null;
-    this._updateTimer = null;
-    this._updatePolls = 0;
-    /* Vero mentre un controllo manuale è in volo. Vive nel controller e non
-       nel DOM per lo stesso motivo di `_update`: un salvataggio qualsiasi
-       riscrive tutta la pagina, e il bottone deve restare disabilitato. */
-    this._checking = false;
+    /* Quale cassetto e' a schermo. Lo scrive il guscio prima di `activate()`;
+       `null` vuol dire «tutti», che e' cio' che serve a chi istanzia questo
+       controller da solo — i banchi, e la schermata finche' il dock non e'
+       passato a quattro voci. */
+    this._drawer = null;
+    /* Il JSON dell'ultima `/api/settings` letta, e se `setDrawer` ha appena
+       disegnato con quei dati: v. `loadSettings`. */
+    this._loadedJson = null;
+    this._paintedFromCache = false;
     /* La posizione va letta *mentre* la vista è visibile: `switchMode` mette il
        display:none sulla view prima di chiamare `deactivate()`, e un
        contenitore senza box legge scrollTop 0 — salvare lì avrebbe riportato in
-       cima a ogni rientro invece di evitarlo. */
+       cima a ogni rientro invece di evitarlo.
+       Finché un ripristino aspetta i blocchi in ritardo (`_restorePending`), uno
+       `scroll` non e' una lettura: un blocco che rimpiazza il suo segnaposto
+       accorcia la pagina per un istante, Blink clampa, e l'evento arriva a flag
+       gia' abbassato. Leggerlo come «ha scorso l'utente» annullava il ripristino
+       e salvava la quota clampata: in fondo a Mani, dietro la lista dei job che
+       atterra per ultima, si tornava a meta' pagina (Titan 2, 26/09/2026). Chi
+       scorre davvero lo dice il gesto: v. i listener subito sotto. */
     this.contentEl?.addEventListener('scroll', () => {
       // Un ripristino non è una lettura: la sua assegnazione torna clampata
       // dalla pagina ancora corta e qui riscriverebbe `_scrollTop` col valore
       // sbagliato, distruggendo proprio ciò che stava ripristinando.
       if (this._restoringScroll) return;
-      // Ha scorso l'utente: da qui in poi nessun contenuto in ritardo ha più il
-      // diritto di riportarlo dov'era prima del re-render.
-      this._restorePending = false;
+      if (this._restorePending) return;
       if (this.contentEl.clientHeight) this._scrollTop = this.contentEl.scrollTop;
     }, { passive: true });
+    /* Ha toccato l'utente: da qui in poi nessun contenuto in ritardo ha più il
+       diritto di riportarlo dov'era prima del re-render. Dito, rotella,
+       puntatore o tasto (il Titan ha la tastiera fisica). */
+    for (const type of ['touchstart', 'wheel', 'pointerdown', 'keydown']) {
+      this.contentEl?.addEventListener(type, () => { this._restorePending = false; }, { passive: true });
+    }
     /* Niente `loadSettings()` qui. Il costruttore gira dentro `switchMode`,
        che subito dopo chiama `activate()` — e `activate()` carica. Risultato:
        due GET /api/settings e due render completi alla prima apertura, con il
@@ -98,6 +217,13 @@ export class SettingsController {
        batteria compresi, ricreati da capo). `this.ready = this.loadSettings()`
        non risolverebbe: `switchMode` chiama `activate()` comunque. */
   }
+
+  /* La posizione di lettura del cassetto a schermo. Cervello, Mani e Memoria
+     condividono questo controller e lo stesso contenitore: con una posizione
+     sola, passare da Cervello (letto fino in fondo) a Mani apriva Mani a meta'
+     pagina, alla quota di Cervello. Visto sul Titan 2 in tutti e tre. */
+  get _scrollTop() { return this._scrollTops[this._drawer ?? ''] || 0; }
+  set _scrollTop(value) { this._scrollTops[this._drawer ?? ''] = value; }
 
   showLoading() { this.loadingEl?.classList.add('active'); }
   hideLoading() { this.loadingEl?.classList.remove('active'); }
@@ -110,9 +236,25 @@ export class SettingsController {
     this.showLoading();
     try {
       const settings = await api.getSettings();
+      botName.set(settings?.agent?.bot_name);
       if (this._stale(gen)) return;
+      /* Un render solo per ingresso. Passando da
+         un cassetto all'altro `setDrawer` ha gia' disegnato coi dati in cache,
+         e `activate()` rilegge comunque: se il server risponde con gli stessi
+         dati il secondo render butterebbe via un DOM identico, e con lui
+         ripartirebbero SSH, cron, Telegram e skill (le letture dei blocchi in
+         ritardo). Si ridisegna solo se qualcosa e' cambiato. */
+      const json = JSON.stringify(settings);
+      const painted = this._paintedFromCache && json === this._loadedJson;
+      this._paintedFromCache = false;
+      this._loadedJson = json;
       this.data = settings;
-      this.render();
+      if (!painted) this.render();
+      this._realignPanel(
+        'brand', this._brandOpen,
+        (this.data.providers || []).some(p => p.name === this._brandOpen),
+        name => this._openBrand(name),
+      );
     } catch (err) {
       if (this._stale(gen)) return;
       this.contentEl.innerHTML = `
@@ -126,11 +268,39 @@ export class SettingsController {
     }
   }
 
+  /** Quale dei cassetti disegnare. Lo dice il guscio, che sa quale voce del
+   *  dock e' stata toccata, **prima** di `activate()`. Ridisegna subito se i
+   *  dati ci sono gia', perche' il cassetto nuovo compaia senza aspettare la
+   *  rete: i tre cassetti condividono un controller solo e un contenitore
+   *  solo, e fino alla risposta si vedrebbe quello di prima. `/api/settings`
+   *  si rilegge lo stesso, in `activate()`; ma se non e' cambiato niente non
+   *  si ridisegna una seconda volta (v. `loadSettings`). */
+  setDrawer(name) {
+    if (this._drawer === name) return;
+    this._drawer = name;
+    this._resetBrandVisit();
+    if (this.data) {
+      this.render();
+      this._paintedFromCache = true;
+    }
+  }
+
   activate() { this.loadSettings(); }
+
+  _resetBrandVisit() {
+    this._brandsOpen = null;
+    this._brandsOpenFor = null;
+    this._modelOrder = new Map();
+    this._brandFilters = new Map();
+    this._brandShowAll = new Set();
+    this._brandTried = new Set();
+  }
   deactivate() {
     // Da qui in poi nessuna continuazione in volo tocca più niente: né il DOM
     // di questa sezione, né — soprattutto — una modale sopra un'altra.
     this._gen++;
+    // La prossima entrata e' una visita nuova: gruppi e ordine ripartono.
+    this._resetBrandVisit();
     this.hideLoading();
     if (this._tgWidget) {
       this._tgWidget.destroy();
@@ -148,28 +318,21 @@ export class SettingsController {
       document.removeEventListener('visibilitychange', this._onPowerVisible);
       this._onPowerVisible = null;
     }
-    // Il polling dell'installazione: il guard di generazione già ferma la
-    // continuazione, ma il timer va spento comunque per non tenere sveglia una
-    // sezione che non è più a schermo.
-    clearTimeout(this._updateTimer);
-    this._updateTimer = null;
-    /* L'apertura d'ufficio della sezione Programmazione vale una volta per
-       apertura di schermata: senza questo azzeramento, chi la chiude a mano e
-       torna dopo non la vedrebbe riaprirsi nemmeno con un guasto nuovo — e
-       riaprirla a ogni `render()` (cioè a ogni salvataggio) sarebbe una lotta
-       con l'utente. */
-    this._cronAutoOpened = false;
   }
 
-  /* Sotto-stato della sezione: il catalogo modelli aperto occupa la vista e per
-     l'utente *è* una schermata (ci si arriva da un pulsante, si scorre, si
-     sceglie). Senza questo il tasto Indietro saltava quel livello e usciva
-     direttamente dalle impostazioni: due schermate in una pressione sola. */
   handleBack() {
-    const el = this.contentEl?.querySelector('#model-catalog');
-    if (!el || el.style.display === 'none') return false;
-    this._toggleModelCatalog();
-    return true;
+    /* Una cosa sola, e sta in Memoria: il gestore file dentro la scheda «I
+       file veri». Dentro una sottocartella Indietro risale di un livello,
+       perche' uscire dal cassetto buttando via tre livelli di cammino in una
+       pressione e' il difetto che la catena di `handleHardwareBack` esiste
+       per evitare. Alla radice non consuma niente e si esce, come prima.
+
+       Solo se la scheda sta nel cassetto a schermo: in Cervello e in Mani il
+       gestore file non c'e', e girargli la pressione la faceva spendere a
+       risalire cartelle invisibili lasciate aperte in Memoria. */
+    const sections = DRAWERS[this._drawer]?.sections;
+    if (sections && !sections.includes('file')) return false;
+    return window.mobileApp?.controllers?.workspace?.handleCardBack?.() ?? false;
   }
 
   handleAction(action) {
@@ -185,27 +348,42 @@ export class SettingsController {
     // Sezioni tematiche, una per asse mentale: preferenze d'interfaccia, motore
     // LLM, capacità dell'agente, la sua memoria, i lavoratori periodici che la
     // curano, canali, dati, diagnostica.
+    /* Le undici sezioni, per id. Disegnarle tutte e poi nasconderne otto
+       vorrebbe dire costruire ogni volta anche l'anagrafica delle marche e la
+       storia degli snapshot: qui si costruisce **solo** quel che si vede. */
+    const sections = {
+      // Cervello
+      whoThinks: () => this._group('whoThinks', i18n.t('workshop.groups.whoThinks'), this._renderWhoThinks(d)),
+      parameters: () => this._group('parameters', i18n.t('workshop.groups.parameters'), this._renderParameters(d)),
+      battery: () => this._renderBatterySection(d),
+      system: () => this._group('system', i18n.t('settings.system'), this._renderSystem(d)),
+      // Mani
+      webSearch: () => this._group('webSearch', i18n.t('settings.webSearch'), this._renderWebSearch(d)),
+      position: () => this._group('position', i18n.t('settings.location.section'), this._renderLocation(d)),
+      ssh: () => this._group('ssh', i18n.t('settings.ssh.title'), this._renderSsh()),
+      telegram: () => this._group('telegram', i18n.t('settings.telegram.title'), this._renderTelegram()),
+      skill: () => this._group('skill', i18n.t('workshop.groups.skill'), this._renderSkill()),
+      scheduling: () => this._group('scheduling', i18n.t('cron.byHerself'), this._renderScheduling()),
+      // Memoria
+      howMuchItRemembers: () => this._group('howMuchItRemembers', i18n.t('workshop.groups.howMuchItRemembers'), this._renderHowMuchItRemembers(d)),
+      dream: () => this._group('dream', i18n.t('workshop.groups.dream'), this._renderDream(d)),
+      workers: () => this._group('workers', i18n.t('workshop.groups.gardener'), this._renderWorkers(d)),
+      file: () => this._group('file', i18n.t('workshop.groups.file'), this._renderFile()),
+      backup: () => this._group('backup', i18n.t('backup.snapshotHistory'), this._renderBackup()),
+    };
+    const drawer = DRAWERS[this._drawer];
+    const which = drawer ? drawer.sections : Object.keys(sections);
+
     this.contentEl.innerHTML = [
       this._renderConfigRecovery(d),
       this._renderCronRecovery(d),
-      this._section('personalization', 'ti-palette', i18n.t('settings.personalization'), this._renderPersonalization(d)),
-      this._section('models', 'ti-cpu', i18n.t('settings.model'), this._renderModelSettings(d)),
-      this._section('tools', 'ti-tool', i18n.t('settings.tools'), this._renderTools(d)),
-      this._section('memory', 'ti-sparkles', i18n.t('settings.memory.title'), this._renderMemory(d)),
-      this._section('workers', 'ti-map', i18n.t('settings.workers.title'), this._renderWorkers(d)),
-      this._section('scheduling', 'ti-alarm', i18n.t('cron.sectionTitle'), this._renderScheduling()),
-      this._renderBatterySection(d),
-      this._section('ssh', 'ti-terminal-2', i18n.t('settings.ssh.title'), this._renderSsh()),
-      this._section('telegram', 'ti-brand-telegram', i18n.t('settings.telegram.title'), this._renderTelegram()),
-      this._section('backup', 'ti-database-export', i18n.t('backup.sectionTitle'), this._renderBackup()),
-      this._section('system', 'ti-info-circle', i18n.t('settings.system'), this._renderSystem(d)),
+      ...which.map((id) => sections[id]()),
     ].join('');
 
     this._wireSections();
-    // L'innerHTML qui sopra ha appena riportato il catalogo chiuso e vuoto e lo
-    // scroll in cima: entrambi vanno rimessi come li aveva lasciati l'utente.
-    this._restoreCatalogState();
-    /* In questo istante catalogo, SSH, snapshot, widget Telegram e card
+    // L'innerHTML qui sopra ha appena riportato lo scroll in cima: va rimesso
+    // dove l'aveva lasciato l'utente.
+    /* In questo istante SSH, snapshot, widget Telegram e card
        batteria sono ancora segnaposto: la pagina è molto più corta di quando la
        posizione fu misurata. Si rimette ora *e* la si riapplica quando i pezzi
        atterrano — v. `_restoreScrollTop()`. */
@@ -231,27 +409,16 @@ export class SettingsController {
      `_restorePending` è la clausola di rispetto: se nel frattempo l'utente ha
      scorso di suo, un fetch in ritardo non lo strattona più. */
   _restoreScrollTop() {
-    if (!this.contentEl || !this._restorePending || !this._scrollTop) return;
+    /* Anche a zero: un cassetto mai scorso va aperto in cima, e il contenitore,
+       riscritto con `innerHTML`, terrebbe altrimenti la quota del cassetto di
+       prima quanto basta la pagina nuova. */
+    if (!this.contentEl || !this._restorePending) return;
     this._restoringScroll = true;
     this.contentEl.scrollTop = this._scrollTop;
     requestAnimationFrame(() => {
       if (this._restorePending) this.contentEl.scrollTop = this._scrollTop;
       requestAnimationFrame(() => { this._restoringScroll = false; });
     });
-  }
-
-  /* Riapre il catalogo modelli e rimette il testo del filtro dopo un
-     `render()`. Non è una comodità: il catalogo si richiude a ogni salvataggio,
-     e provare due modelli di fila significava riaprirlo e rifiltrarlo ogni
-     volta. */
-  _restoreCatalogState() {
-    if (!this._catalogOpen) return;
-    const el = this.contentEl.querySelector('#model-catalog');
-    if (!el) return;
-    el.style.display = '';
-    const search = this.contentEl.querySelector('#model-search');
-    if (search) search.value = this._catalogFilter;
-    this._loadModelCatalog();
   }
 
   /* Avviso di config recuperata all'avvio. Silenzioso nel caso normale: se
@@ -297,33 +464,28 @@ export class SettingsController {
     </div>`;
   }
 
-  _section(id, icon, title, body) {
-    const collapsed = this._openSections.has(id) ? '' : ' collapsed';
-    return `<div class="settings-section${collapsed}" data-section="${id}">
-      <div class="settings-section-header">
-        <i class="ti ${icon}"></i>
-        <span>${title}</span>
-        <i class="ti ti-chevron-down settings-chevron"></i>
-      </div>
-      <div class="settings-section-body">${body}</div>
+  /** Un gruppo: una soprascritta fuori, e sotto una scheda **aperta**.
+   *
+   *  Era una fisarmonica — testa cliccabile, chevron, corpo chiuso di
+   *  default — e la tavola non ne ha nessuna. Il motivo non e' estetico: un
+   *  cassetto di fisarmoniche chiuse si apre su quattro righe che non dicono
+   *  niente, e per sapere cosa c'e' dentro bisogna toccarle una per una. La
+   *  pagina della tavola si legge scorrendo.
+   *
+   *  **E porta via due pezze.** L'esenzione batteria mancante e il banner del
+   *  cron aprivano d'ufficio la loro sezione, ognuno con la stessa nota: «un
+   *  accordion chiuso e' esattamente il posto in cui il problema e' rimasto
+   *  invisibile». Senza accordion non c'e' piu' niente da forzare.
+   *
+   *  L'`id` resta come `data-group`: non serve piu' a ricordare chi e'
+   *  aperto, serve a chi cerca un gruppo nel DOM (il banco, e il cron che
+   *  scrive nel proprio segnaposto).
+   */
+  _group(id, label, body) {
+    return `<div class="settings-group" data-group="${id}">
+      <div class="settings-group-label">${label}</div>
+      <section class="settings-card">${body}</section>
     </div>`;
-  }
-
-  // ── Personalizzazione ──────────────────────────────────────────────
-
-  /* Tutte le preferenze "come appare e come parla l'interfaccia": temi,
-     mascotte, nome del bot e lingua vivono qui, sullo stesso asse. */
-  _renderPersonalization(d) {
-    const a = d.agent || {};
-    return `
-      ${this._renderTheme()}
-      ${this._renderHomeView()}
-      <div class="theme-strip-eyebrow">${i18n.t('settings.botName')}</div>
-      <div class="settings-field">
-        <input type="text" class="settings-input" data-key="bot_name" value="${escapeHtml(a.bot_name || '')}" />
-      </div>
-      <div class="theme-strip-eyebrow">${i18n.t('settings.language')}</div>
-      ${this._renderLanguage()}`;
   }
 
   // ── Attività in background (doze) ──────────────────────────────────
@@ -339,17 +501,17 @@ export class SettingsController {
      ma keepAwake vive nel config del gateway ed è modificabile da qualunque
      browser: la sezione resta, con il solo controllo che ha ancora senso. */
   _renderBatterySection(d) {
-    // Aperta d'ufficio quando l'esenzione manca: un accordion chiuso è
-    // esattamente il posto in cui il problema è rimasto invisibile finora.
-    if (batteryExemptionSupported() && batteryExemptionNeeded()) {
-      this._openSections.add('battery');
-    }
     const card = batteryExemptionSupported()
       ? `<div id="settings-battery-card"></div><div class="settings-divider"></div>`
       : '';
-    return this._section(
-      'battery', 'ti-battery-charging', i18n.t('settings.battery.title'),
-      `${card}${this._renderKeepAwake(d)}<div id="settings-power-diagnostics"></div>`,
+    return this._group('battery', i18n.t('settings.battery.title'),
+      `${card}${this._renderKeepAwake(d)}<div id="settings-power-diagnostics"></div>`
+      /* La riga che chiude il cassetto, come nella tavola: chi riempie la
+         memoria non sta qui, sta accanto a quel che riempie. Senza, un
+         cassetto che si chiama «Cervello» sembra il posto dove cercare
+         Dream — ed e' esattamente l'errore che il giro dei cassetti ha
+         fatto una volta. */
+      + `<p class="settings-link">${i18n.t('workshop.link.dreamInMemory')}</p>`,
     );
   }
 
@@ -369,16 +531,27 @@ export class SettingsController {
     const power = (d && d.power) || {};
     const current = power.keep_awake || 'turns';
     const modes = power.modes || KEEP_AWAKE_CHOICES;
-    const options = modes.map(id =>
-      `<option value="${escapeHtml(id)}"${id === current ? ' selected' : ''}>${escapeHtml(i18n.t(`settings.battery.keepAwake.${id}`))}</option>`
-    ).join('');
+    /* A segmenti e non a tendina. Il criterio: a segmenti quando le voci
+       stanno in riga, a tendina quando non ci stanno. Tre voci ci stanno — ma
+       solo accorciate: «Solo
+       mentre lavora (consigliato)» in un terzo di 590 px non entra. Il testo
+       lungo, «(consigliato)» compreso, resta nel `title` di ogni bottone,
+       quindi la raccomandazione non si perde: cambia dove si legge. */
+    const options = modes.map(id => {
+      const short = i18n.t(`settings.battery.keepAwakeShort.${id}`);
+      const long = i18n.t(`settings.battery.keepAwake.${id}`);
+      return `<button type="button" class="settings-seg-btn${id === current ? ' active' : ''}"
+        data-keep-awake="${escapeHtml(id)}" title="${escapeHtml(long)}"
+        role="radio" aria-checked="${id === current ? 'true' : 'false'}">${escapeHtml(short)}</button>`;
+    }).join('');
     return `
       <div class="settings-subheading">${i18n.t('settings.battery.keepAwakeTitle')}</div>
       <div class="settings-field">
-        <select class="settings-select" id="keep-awake-select">${options}</select>
+        <div class="settings-seg" id="keep-awake-seg" role="radiogroup"
+          aria-label="${escapeHtml(i18n.t('settings.battery.keepAwakeTitle'))}">${options}</div>
         <p class="settings-choice-cost" id="keep-awake-cost">${escapeHtml(this._keepAwakeCost(current))}</p>
         <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.battery.keepAwakeHint')}</p>
-        <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)"><i class="ti ti-refresh"></i> ${i18n.t('settings.battery.keepAwakeRestart')}</p>
+        <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)"><i class="ti ti-refresh" aria-hidden="true"></i> ${i18n.t('settings.battery.keepAwakeRestart')}</p>
       </div>`;
   }
 
@@ -439,7 +612,7 @@ export class SettingsController {
     ].map(([key, ok]) => `
       <div class="settings-field-row">
         <span class="settings-field-label">${i18n.t(`settings.battery.${key}`)}</span>
-        <span class="settings-field-value"><i class="ti ti-${ok ? 'check' : 'x'}"></i> ${i18n.t(ok ? 'settings.battery.diagYes' : 'settings.battery.diagNo')}</span>
+        <span class="settings-field-value"><i class="ti ti-${ok ? 'check' : 'x'}" aria-hidden="true"></i> ${i18n.t(ok ? 'settings.battery.diagYes' : 'settings.battery.diagNo')}</span>
       </div>`).join('');
     const gaps = Array.isArray(diag.gaps) ? diag.gaps : [];
     const gapRows = gaps.length
@@ -483,7 +656,7 @@ export class SettingsController {
         <i class="ti ti-alarm"></i>
         <div>
           <div>${i18n.t('settings.battery.exactAlarmsHint')}</div>
-          <div style="margin-top:6px"><i class="ti ti-refresh"></i> ${i18n.t('settings.battery.exactAlarmsRestart')}</div>
+          <div style="margin-top:6px"><i class="ti ti-refresh" aria-hidden="true"></i> ${i18n.t('settings.battery.exactAlarmsRestart')}</div>
         </div>
       </div>
       <div class="onboarding-nav">
@@ -540,12 +713,14 @@ export class SettingsController {
     // passa a "Sì" e la richiesta sparisce senza fare niente qui.
     const exactBtn = root.querySelector('#btn-exact-alarms');
     if (exactBtn) {
-      exactBtn.addEventListener('click', () => {
+      exactBtn.addEventListener('click', async () => {
         const native = window.JennyNative;
         if (!native || typeof native.requestExactAlarmPermission !== 'function') return;
+        // Asincrono: la richiesta sta sulla porta del nativo che solo la SPA
+        // raggiunge (v. `shared/native-bridge.js`).
         let opened = false;
         try {
-          opened = !!native.requestExactAlarmPermission();
+          opened = !!(await native.requestExactAlarmPermission());
         } catch (_) { opened = false; }
         // Sotto Android 12 il permesso non esiste e la schermata nemmeno:
         // dirlo, invece di lasciare il tap senza conseguenze visibili.
@@ -554,12 +729,12 @@ export class SettingsController {
     }
     const btn = root.querySelector('#btn-oem-battery');
     if (!btn) return;
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const native = window.JennyNative;
       if (!native || typeof native.openBatterySettings !== 'function') return;
       let opened = false;
       try {
-        opened = !!native.openBatterySettings();
+        opened = !!(await native.openBatterySettings());
       } catch (_) { opened = false; }
       // Nessuna schermata raggiungibile: dirlo, invece di lasciare il tap
       // senza conseguenze visibili. Restano le istruzioni del link.
@@ -602,10 +777,47 @@ export class SettingsController {
 
   // ── Telegram ───────────────────────────────────────────────────────
 
+  /** Telegram, in cassetto, e' una riga: «collegato a @nome», o spento.
+   *
+   *  Il widget di accoppiamento — interruttore, token, codice, disaccoppia —
+   *  e' un pannello di amministrazione, e sta dietro il tocco. E' lo stesso
+   *  condiviso con l'onboarding: cambia dove lo si monta, non cosa fa.
+   */
   _renderTelegram() {
-    // Il contenuto vero lo disegna il TelegramPairingWidget (condiviso con
-    // l'onboarding) dentro questo placeholder, in _wireSections.
-    return `<div id="settings-telegram-widget"></div>`;
+    return this._summary('telegram', i18n.t('settings.telegram.title'), i18n.t('settings.loading'));
+  }
+
+  /** Il widget, montato dentro il pannello all'apertura. */
+  _openTelegram() {
+    const body = document.getElementById('drawer-telegram-body');
+    if (!body) return;
+    if (this._tgWidget) this._tgWidget.destroy();
+    /* La riga in cassetto, sotto il pannello, segue il widget: si leggeva una
+       volta al disegno e dopo un accoppiamento restava su «non collegato». */
+    this._tgWidget = new TelegramPairingWidget(body, {
+      mode: 'settings',
+      onStatus: (state) => this._writeTelegramSummary(state),
+    });
+    this._tgWidget.refresh();
+  }
+
+  /** La riga in cassetto. Legge lo stato per conto suo: il widget non esiste
+   *  finche' il pannello non si apre, e la riga deve dire qualcosa prima. */
+  async _loadTelegramSummary() {
+    const gen = this._gen;
+    let state = null;
+    try {
+      state = await api.getTelegramStatus();
+    } catch {
+      state = null;
+    }
+    if (this._stale(gen)) return;
+    this._writeTelegramSummary(state);
+  }
+
+  _writeTelegramSummary(state) {
+    const el = this.contentEl?.querySelector('#summary-telegram');
+    if (el) el.textContent = telegramSummary(state);
   }
 
   // ── Models & Providers ─────────────────────────────────────────────
@@ -617,85 +829,491 @@ export class SettingsController {
     }[fmt] || fmt || i18n.t('provider.unknown');
   }
 
-  /* Gerarchia a decisione unica: la card "In uso" mostra modello e provider
-     correnti; il catalogo unificato (raggruppato per provider) salva
-     modello + default_provider insieme, in una chiamata sola. Le chiavi API
-     sono pura gestione credenziali (nessuno stato "attivo" da leggere lì);
-     i parametri di generazione stanno in una disclosure chiusa. */
-  _renderModelSettings(d) {
-    const a = d.agent || {};
-    const providers = d.providers || [];
-    const active = providers.find(p => p.name === d.default_provider);
-    const via = active
-      ? `${i18n.t('settings.via')} ${escapeHtml(active.name)} · ${escapeHtml(this._formatLabel(active.format))}`
-      : i18n.t('settings.noProviderConfigured');
-
+  /* «Chi pensa»: le marche, ciascuna coi suoi modelli, e un tocco su un
+   * modello lo fa rispondere.
+   *
+   * Erano due gruppi, e il 27/09/2026 sono diventati uno. Il primo era una
+   * scheda con il modello in uso, che si leggeva e basta; il secondo l'elenco
+   * delle marche, e per cambiare modello si passava da li'. Il comando stava
+   * dove non lo si cercava, e la stessa informazione compariva due volte.
+   *
+   * La forma e' quella dei dati: un modello esiste **dentro** una marca (e' il
+   * suo elenco, letto con la sua chiave), e chi risponde e' la coppia. Toccare
+   * un modello dentro la sua marca sceglie la coppia intera, quindi la coppia
+   * sbagliata — il modello di una marca con un'altra come provider — qui non
+   * si puo' nemmeno esprimere. In casa, da «Chi risponde», la stessa scelta
+   * fa la stessa scrittura: `model` e `default_provider` in una chiamata sola.
+   *
+   * Tre regole, ciascuna contro un modo preciso di sbagliare:
+   * - **L'ordine si fissa all'ingresso** (`_modelOrder`, v.
+   *   `_resetBrandVisit`): scegliere non riordina niente sotto il dito.
+   * - **Un gruppo chiuso dice con cosa risponde**, sulla seconda riga: e'
+   *   l'unica parte della vecchia scheda che valeva la pena tenere.
+   * - **L'intestazione apre e chiude, il cursore gestisce**: due bersagli, e
+   *   aprire una marca non porta mai in Modifica per errore.
+   */
+  _renderWhoThinks(d) {
     return `
-      <div class="settings-subheading">${i18n.t('settings.inUse')}</div>
-      <div class="model-inuse">
-        <span class="model-inuse-name">${escapeHtml(a.model || '—')}</span>
-        <span class="model-inuse-via">${via}</span>
-        <button class="settings-btn-save model-change-btn" id="btn-change-model">${i18n.t('settings.changeModel')}</button>
+      <p class="brand-groups-hint">${i18n.t('settings.whoThinksHint')}</p>
+      <div id="provider-list" class="brand-groups">
+        ${this._renderProviderListHtml(d.providers || [], d.default_provider)}
       </div>
-      <div class="model-catalog" id="model-catalog" style="display:none">
-        <input type="text" class="settings-input" id="model-search" placeholder="${i18n.t('settings.filterModels')}" autocomplete="off" />
-        <div id="model-catalog-groups"></div>
-      </div>
-      <div class="settings-divider"></div>
-      <div class="settings-subheading">${i18n.t('settings.apiKeys')}</div>
-      <div id="provider-list">
-        ${this._renderProviderListHtml(providers)}
-      </div>
-      <button class="settings-btn-add" id="btn-add-provider"><i class="ti ti-plus"></i> ${i18n.t('settings.addProvider')}</button>
-      <details class="settings-disclosure">
-        <summary>${i18n.t('settings.advancedParams')}</summary>
-        ${this._field(i18n.t('settings.maxTokens'), 'number', 'max_tokens', a.max_tokens || '', i18n.t('settings.maxTokensPlaceholder'))}
-        ${this._field(i18n.t('settings.temperature'), 'number', 'temperature', a.temperature ?? '', i18n.t('settings.temperaturePlaceholder'))}
-        ${this._select(i18n.t('settings.reasoningEffort'), 'reasoning_effort', a.reasoning_effort || '',
-          ['', 'low', 'medium', 'high'])}
-      </details>`;
+      <button class="settings-btn-add settings-btn-full" id="btn-add-provider"><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.addProvider')}</button>
+      <p class="settings-hint" style="margin:8px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.addProviderHint')}</p>`;
   }
 
-  _renderProviderListHtml(providers) {
+  /** Le manopole del motore.
+   *
+   *  Erano dentro un `<details>` chiuso — una fisarmonica dentro una
+   *  fisarmonica. Adesso che il gruppo e' suo e porta il proprio nome, il
+   *  secondo strato non serve: chi scorre fin qui sa gia' cosa sta guardando.
+   */
+  _renderParameters(d) {
+    const a = d.agent || {};
+    /* La finestra di contesto esisteva nello schema, nel payload e nella rotta
+       — con due soli valori accettati — e **nessuna schermata la mostrava**
+       (verificato il 21/09/2026, ne' officina ne' casa). Non era un dato
+       mancante: era un comando mancante.
+
+       Le voci arrivano dal server (`context_window_options`) e non da un
+       elenco ricopiato qui: la rotta ne rifiuta qualunque altro, e due copie
+       divergerebbero in silenzio alla prima aggiunta. */
+    const windows = a.context_window_options || [];
+    const win = windows.length
+      ? this._select(i18n.t('settings.contextWindow'), 'context_window_tokens',
+          String(a.context_window_tokens || ''),
+          windows.map((n) => ({ v: String(n), t: Number(n).toLocaleString(i18n.locale) })))
+      : '';
+    return `
+      ${win}
+      ${this._field(i18n.t('settings.maxTokens'), 'number', 'max_tokens', a.max_tokens || '', i18n.t('settings.maxTokensPlaceholder'))}
+      ${this._field(i18n.t('settings.temperature'), 'number', 'temperature', a.temperature ?? '', i18n.t('settings.temperaturePlaceholder'))}
+      ${this._select(i18n.t('settings.reasoningEffort'), 'reasoning_effort', a.reasoning_effort || '',
+        ['', 'low', 'medium', 'high'])}`;
+  }
+
+  /** Le marche, un gruppo ciascuna: un'intestazione da 52 px (pallino, nome,
+   *  la pastiglia «risponde», la seconda riga, il conto, la freccina) piu' il
+   *  cursore che apre la gestione, e sotto i modelli, che si riempiono dopo
+   *  (`_paintBrandGroup`). Il corpo c'e' anche chiuso, `hidden`: aprirlo e'
+   *  un attributo, non un ridisegno.
+   */
+  _renderProviderListHtml(providers, active) {
     if (!providers.length) return `<div class="settings-empty-state">${i18n.t('settings.noProviders')}</div>`;
-    return providers.map(p => {
-      return `<div class="provider-card" data-provider="${escapeHtml(p.name)}">
-        <div class="provider-card-header">
-          <span class="provider-name">${escapeHtml(p.name)}</span>
-          <span class="provider-badge format-badge">${escapeHtml(this._formatLabel(p.format))}</span>
-        </div>
-        <div class="provider-card-body">
-          <span class="provider-url">${escapeHtml(p.api_base || i18n.t('settings.defaultUrl'))}</span>
-          <span class="provider-key">${escapeHtml(p.api_key_hint || i18n.t('settings.noKey'))}</span>
-        </div>
-        <div class="provider-card-actions">
-          <button class="btn-icon provider-edit" data-provider="${escapeHtml(p.name)}" title="${i18n.t('settings.edit')}">
-            <i class="ti ti-edit"></i>
+    const model = this.data?.agent?.model || '';
+    return providers.map((p, i) => {
+      const name = escapeHtml(p.name);
+      const isActive = p.name === active;
+      const open = this._isBrandOpen(p.name, active);
+      const answers = isActive
+        ? `<span class="brand-answers">${i18n.t('settings.answersNow')}</span>`
+        : '';
+      return `<div class="brand-group${isActive ? ' is-active' : ''}" data-brand="${name}">
+        <div class="brand-group-head">
+          <button class="brand-row" type="button" data-brand-toggle aria-expanded="${open}" aria-controls="brand-body-${i}">
+            <span class="brand-dot" style="background:${this._brandColor(p.name)}" aria-hidden="true"></span>
+            <span class="brand-text">
+              <span class="brand-name">${name}${answers}</span>
+              <span class="brand-where">${this._brandSubline(p, isActive, open, model)}</span>
+            </span>
+            <span class="brand-count" data-brand-count></span>
+            <i class="ti ti-chevron-down brand-chevron" aria-hidden="true"></i>
           </button>
-          <button class="btn-icon btn-danger provider-delete" data-provider="${escapeHtml(p.name)}" title="${i18n.t('settings.delete')}">
-            <i class="ti ti-trash"></i>
+          <button class="brand-manage" type="button" data-brand-open="${name}"
+                  aria-label="${escapeHtml(i18n.t('settings.manageBrand', { name: p.name }))}">
+            <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
           </button>
+        </div>
+        <div class="brand-body" id="brand-body-${i}"${open ? '' : ' hidden'}>
+          <label class="brand-filter" hidden>
+            <i class="ti ti-search" aria-hidden="true"></i>
+            <input type="search" data-brand-filter autocomplete="off"
+                   aria-label="${escapeHtml(i18n.t('settings.brandFilterLabel', { name: p.name }))}">
+          </label>
+          <div class="brand-models" role="radiogroup" data-brand-models
+               aria-label="${escapeHtml(i18n.t('settings.brandModelsOf', { name: p.name }))}"></div>
+          <p class="brand-models-note" data-brand-note hidden></p>
+          <button class="brand-more" type="button" data-brand-more hidden></button>
+          <button class="brand-custom-open" type="button" data-brand-custom><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.customModel')}</button>
+          <form class="brand-custom" data-brand-custom-form hidden>
+            <input class="settings-input" type="text" data-brand-custom-input autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+                   placeholder="${escapeHtml(i18n.t('settings.customModelPlaceholder'))}"
+                   aria-label="${escapeHtml(i18n.t('settings.customModelLabel', { name: p.name }))}">
+            <button class="settings-btn-add" type="submit">${i18n.t('settings.customModelUse')}</button>
+          </form>
         </div>
       </div>`;
     }).join('');
+  }
+
+  /** La seconda riga di un'intestazione. Chiuso, il gruppo che risponde dice
+   *  con cosa; negli altri casi dove sta la marca: formato, indirizzo, chiave. */
+  _brandSubline(p, isActive, open, model) {
+    if (isActive && !open && model) {
+      return `<span class="brand-says">${escapeHtml(i18n.t('settings.answersWith', { model }))}</span>`;
+    }
+    return [
+      this._formatLabel(p.format),
+      p.api_base || i18n.t('settings.defaultUrl'),
+      p.api_key_hint || i18n.t('settings.noKey'),
+    ].map(escapeHtml).join(' · ');
+  }
+
+  /** Aperto o chiuso. All'ingresso e' aperto solo il gruppo che risponde;
+   *  poi decide chi tocca, fino alla prossima entrata (`_resetBrandVisit`).
+   *
+   *  Se chi risponde cambia a meta' visita — una marca aggiunta con «Usala
+   *  adesso» — il suo gruppo si apre. Gli altri restano come li hai lasciati:
+   *  chiuderne uno di tua iniziativa sarebbe spostare la pagina sotto il dito. */
+  _isBrandOpen(name, active) {
+    if (!this._brandsOpen) this._brandsOpen = new Set();
+    if (active && active !== this._brandsOpenFor) {
+      this._brandsOpen.add(active);
+      this._brandsOpenFor = active;
+    }
+    return this._brandsOpen.has(name);
+  }
+
+  /** Il colore del pallino di una marca: quello della casa, da
+   *  `getProviderBrand`. Qui c'era una seconda regola (una tinta dal nome per
+   *  tutte), e la stessa marca aveva un colore in officina e un altro in casa;
+   *  la tinta dal nome ora e' il ripiego di `getProviderBrand` per le marche
+   *  che la tabella non conosce. */
+  _brandColor(name) {
+    return getProviderBrand(name).color;
+  }
+
+  /** Il pannello di una marca: quel che si fa **a** una marca. Formato,
+   *  indirizzo, chiave e CA bundle si leggono; Modifica ed Elimina agiscono.
+   *  I modelli qui non ci sono: stanno nel gruppo, dove si sceglie. */
+  _openBrand(name) {
+    const body = document.getElementById('drawer-brand-body');
+    const title = document.getElementById('drawer-brand-title');
+    const p = (this.data?.providers || []).find(x => x.name === name);
+    if (!body || !p) return;
+    this._brandOpen = name;
+    if (title) title.textContent = p.name;
+    const rows = [
+      [i18n.t('settings.brandFormat'), this._formatLabel(p.format)],
+      [i18n.t('settings.brandAddress'), p.api_base || i18n.t('settings.defaultUrl')],
+      [i18n.t('settings.brandKey'), p.api_key_hint || i18n.t('settings.noKey')],
+      [i18n.t('settings.brandCaBundle'), p.ca_bundle || i18n.t('settings.brandCaBundleNone')],
+    ];
+    body.innerHTML = `
+      ${rows.map(([label, value]) => `<div class="settings-row">
+        <span class="settings-label">${label}</span>
+        <span class="settings-summary-value">${escapeHtml(value)}</span>
+      </div>`).join('')}
+      <div class="provider-card-actions">
+        <button class="settings-btn-add provider-edit" data-provider="${escapeHtml(p.name)}">
+          <i class="ti ti-edit" aria-hidden="true"></i> ${i18n.t('settings.edit')}
+        </button>
+        <button class="settings-btn-add btn-danger provider-delete" data-provider="${escapeHtml(p.name)}">
+          <i class="ti ti-trash" aria-hidden="true"></i> ${i18n.t('settings.delete')}
+        </button>
+      </div>`;
+    document.querySelectorAll('#drawer-brand-body .provider-edit').forEach(b =>
+      b.addEventListener('click', () => this._editProvider(b.dataset.provider)));
+    document.querySelectorAll('#drawer-brand-body .provider-delete').forEach(b =>
+      b.addEventListener('click', () => this._deleteProvider(b.dataset.provider)));
+  }
+
+  /** Cio' da cui dipende l'elenco dei modelli di una marca. `api_key_hint`
+   *  sta per la chiave, che al client non arriva: una chiave nuova ha un
+   *  suggerimento nuovo, e l'elenco si rilegge. */
+  _brandCatalogKey(p) {
+    return [p.name, p.format, p.api_base, p.api_key_hint].join('\n');
+  }
+
+  /** Il provider di un gruppo, dal nome che il gruppo porta. */
+  _groupProvider(group) {
+    return (this.data?.providers || []).find(x => x.name === group?.dataset.brand) || null;
+  }
+
+  /** Collega i gruppi e chiede i loro elenchi. Tutti, non solo quello aperto:
+   *  le marche sono poche, l'elenco arrivato resta in cache, e un gruppo
+   *  chiuso ha comunque il conto da dire — o l'errore. */
+  _wireBrands() {
+    const groups = this.contentEl?.querySelectorAll('.brand-group') || [];
+    groups.forEach((group) => {
+      group.querySelector('[data-brand-toggle]')?.addEventListener('click', () => this._toggleBrand(group));
+      group.querySelector('[data-brand-open]')?.addEventListener('click', (e) => {
+        window.mobileApp?.drawer?.open('brand');
+        this._openBrand(e.currentTarget.dataset.brandOpen);
+      });
+      const filter = group.querySelector('[data-brand-filter]');
+      filter?.addEventListener('input', () => {
+        this._brandFilters.set(group.dataset.brand, filter.value);
+        this._paintBrandGroup(group);
+      });
+      group.querySelector('[data-brand-more]')?.addEventListener('click', () => {
+        this._brandShowAll.add(group.dataset.brand);
+        this._paintBrandGroup(group);
+      });
+      const form = group.querySelector('[data-brand-custom-form]');
+      const input = group.querySelector('[data-brand-custom-input]');
+      group.querySelector('[data-brand-custom]')?.addEventListener('click', (e) => {
+        e.currentTarget.hidden = true;
+        form.hidden = false;
+        input?.focus();
+      });
+      form?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this._pickTypedModel(group, (input?.value || '').trim());
+      });
+      const p = this._groupProvider(group);
+      if (p) this._loadBrandModels(p, group);
+    });
+  }
+
+  /** Apre o chiude un gruppo: un attributo e la seconda riga, niente altro.
+   *  Un ridisegno riporterebbe in cima il filtro e chiuderebbe il campo
+   *  dell'id a mano. */
+  _toggleBrand(group) {
+    const p = this._groupProvider(group);
+    if (!p) return;
+    const open = !this._brandsOpen?.has(p.name);
+    if (!this._brandsOpen) this._brandsOpen = new Set();
+    if (open) this._brandsOpen.add(p.name); else this._brandsOpen.delete(p.name);
+    group.querySelector('[data-brand-toggle]')?.setAttribute('aria-expanded', String(open));
+    const body = group.querySelector('.brand-body');
+    if (body) body.hidden = !open;
+    const where = group.querySelector('.brand-where');
+    if (where) {
+      where.innerHTML = this._brandSubline(
+        p, p.name === this.data?.default_provider, open, this.data?.agent?.model || '');
+    }
+    this._paintBrandGroup(group);
+  }
+
+  /** Legge i modelli di una marca. Un elenco arrivato si tiene finche' non
+   *  cambiano chiave o indirizzo (`_brandCatalogKey`). Un elenco che non e'
+   *  arrivato si riprova **alla visita dopo** (`_brandTried`), non a ogni
+   *  ridisegno: altrimenti ogni scelta in un'altra marca rifaceva la richiesta
+   *  a quella rotta, magari lenta fino al suo timeout. Una lettura in volo non
+   *  se ne fa partire una seconda. */
+  async _loadBrandModels(p, group) {
+    const key = this._brandCatalogKey(p);
+    const known = this._brandCatalogs.get(key);
+    if (known && (known.status === 'available' || known.status === 'loading'
+        || this._brandTried.has(key))) {
+      this._paintBrandGroup(group);
+      return;
+    }
+    const gen = this._gen;
+    this._brandTried.add(key);
+    this._brandCatalogs.set(key, { status: 'loading', models: [] });
+    this._paintBrandGroup(group);
+    let outcome;
+    try {
+      const res = await api.getProviderModels(p.name);
+      outcome = {
+        status: res?.status || 'available',
+        models: (res?.models || []).map((m) => m.id || m),
+        message: res?.message || '',
+      };
+    } catch (err) {
+      console.warn('settings: brand model list not read', err);
+      outcome = { status: 'error', models: [], message: '' };
+    }
+    this._brandCatalogs.set(key, outcome);
+    if (this._stale(gen)) return;
+    /* Il gruppo che c'e' adesso, non quello che ha chiesto: un ridisegno nel
+       frattempo lo ha sostituito, e quello vecchio non e' piu' nel DOM. */
+    const now = [...(this.contentEl?.querySelectorAll('.brand-group') || [])]
+      .find((g) => g.dataset.brand === p.name);
+    if (now) this._paintBrandGroup(now);
+    this._restoreScrollTop();
+  }
+
+  /** Le righe di una marca, nell'ordine fissato all'ingresso.
+   *
+   *  La prima volta che l'elenco c'e', quello che risponde va in cima — una
+   *  marca ha decine di modelli (36 per OpenCode Go, misurato il 27/09/2026) —
+   *  e da li' l'ordine non cambia piu' fino alla prossima entrata: se il segno
+   *  si sposta, si sposta il segno, non le righe. Un id che l'ordine non ha
+   *  (scritto a mano, o in uso ma non elencato) entra in cima, e ci resta. */
+  _brandRows(p, catalog) {
+    const current = this.data?.agent?.model || '';
+    const active = p.name === this.data?.default_provider;
+    const key = this._brandCatalogKey(p);
+    let order = this._modelOrder.get(key);
+    if (!order && catalog.status === 'available') {
+      order = catalog.models.filter((id) => !(active && id === current));
+      if (active && current) order.unshift(current);
+      this._modelOrder.set(key, order);
+    }
+    if (order) {
+      if (active && current && !order.includes(current)) order.unshift(current);
+      return order;
+    }
+    return active && current ? [current] : [];
+  }
+
+  /** Dipinge i modelli di un gruppo: il segno, il filtro, «mostra tutti»,
+   *  lo stato dell'elenco. */
+  _paintBrandGroup(group) {
+    const p = this._groupProvider(group);
+    const list = group?.querySelector('[data-brand-models]');
+    if (!p || !list) return;
+    const catalog = this._brandCatalogs.get(this._brandCatalogKey(p))
+      || { status: 'loading', models: [] };
+    const current = this.data?.agent?.model || '';
+    const active = p.name === this.data?.default_provider;
+    const all = this._brandRows(p, catalog);
+    const open = !!this._brandsOpen?.has(p.name);
+
+    const count = group.querySelector('[data-brand-count]');
+    if (count) {
+      /* Lo stesso numero del filtro e di «mostra tutti»: le righe fra cui si
+         sceglie, compreso un id in uso che l'elenco non ha. */
+      count.textContent = !open && catalog.status === 'available'
+        ? i18n.t('settings.modelsCount', { n: all.length }) : '';
+    }
+
+    const needle = (this._brandFilters.get(p.name) || '').trim().toLowerCase();
+    const filterBox = group.querySelector('.brand-filter');
+    const filter = group.querySelector('[data-brand-filter]');
+    if (filterBox) filterBox.hidden = all.length <= BRAND_MODELS_SHOWN;
+    if (filter) {
+      filter.placeholder = i18n.t('settings.brandFilter', { n: all.length });
+      if (filter.value !== (this._brandFilters.get(p.name) || '')) {
+        filter.value = this._brandFilters.get(p.name) || '';
+      }
+    }
+    const matching = needle ? all.filter((id) => id.toLowerCase().includes(needle)) : all;
+    const everything = needle || this._brandShowAll.has(p.name);
+    const rows = everything ? matching : matching.slice(0, BRAND_MODELS_SHOWN);
+
+    list.innerHTML = rows.map((id) => {
+      const on = active && id === current;
+      return `<button class="brand-model${on ? ' is-on' : ''}" type="button" role="radio"
+        aria-checked="${on}" data-brand-model="${escapeHtml(id)}"${this._picking ? ' disabled' : ''}>
+        <span class="brand-model-id">${escapeHtml(id)}</span>
+        <i class="ti${on ? ' ti-check' : ''}" aria-hidden="true"></i>
+      </button>`;
+    }).join('');
+    list.querySelectorAll('[data-brand-model]').forEach(b =>
+      b.addEventListener('click', () => this._pickBrandModel(p.name, b.dataset.brandModel)));
+
+    const more = group.querySelector('[data-brand-more]');
+    if (more) {
+      more.hidden = everything || matching.length <= BRAND_MODELS_SHOWN;
+      more.textContent = i18n.t('settings.brandShowAll', { n: matching.length });
+    }
+
+    const note = group.querySelector('[data-brand-note]');
+    if (note) {
+      const keys = {
+        loading: 'settings.brandModelsLoading',
+        not_configured: 'settings.brandModelsNeedKey',
+        missing_api_base: 'settings.brandModelsNeedBase',
+        error: 'settings.brandModelsFailed',
+      };
+      const key = keys[catalog.status];
+      /* Per un errore anche il messaggio del server, quando c'e': qui a un
+         tocco c'e' il pannello dove si ripara (un CA bundle, un indirizzo), e
+         «non e' arrivato» da solo non dice cosa. */
+      let text = key
+        ? i18n.t(key) + (catalog.status === 'error' && catalog.message ? ` ${catalog.message}` : '')
+        : '';
+      if (!text && needle && !matching.length) text = i18n.t('settings.brandFilterEmpty');
+      note.textContent = text;
+      note.hidden = !text;
+    }
+  }
+
+  /** Sceglie chi risponde: modello **e** marca, in una chiamata sola.
+   *
+   *  - **Una scelta alla volta.** Finche' il salvataggio e' in volo le righe
+   *    sono spente: due tocchi di fila facevano due scritture, e le risposte
+   *    potevano lasciare il segno su un modello e far rispondere l'altro.
+   *  - **I dati sono quelli del server.** La rotta restituisce le impostazioni
+   *    intere (`settings_payload`), come per la casa (`_apply` in
+   *    home-model.js): ricostruirle qui a memoria le lasciava indietro su
+   *    tutto cio' che il server cambia insieme.
+   *  - **La conferma arriva anche se sei uscito.** Il toast non appartiene a
+   *    questa pagina; il ridisegno si', e quello si salta.
+   *
+   *  Dopo non si ridisegna la pagina: si ridipinge l'elenco delle marche. Un
+   *  ridisegno intero rifarebbe partire SSH, cron, batteria e skill per
+   *  spostare un segno. */
+  async _pickBrandModel(provider, model) {
+    if (!provider || !model || this._picking) return;
+    if (provider === this.data?.default_provider && model === this.data?.agent?.model) return;
+    const gen = this._gen;
+    this._setBrandsBusy(true);
+    let payload;
+    try {
+      payload = await api.updateSettings({ model, default_provider: provider });
+    } catch (err) {
+      console.warn('settings: model not changed', err);
+      showToast(i18n.t('settings.brandModelFailed'), 'error');
+      return;
+    } finally {
+      this._setBrandsBusy(false);
+    }
+    this.data = payload?.agent ? payload : {
+      ...this.data,
+      default_provider: provider,
+      agent: { ...(this.data?.agent || {}), model },
+    };
+    showToast(i18n.t(payload?.requires_restart
+      ? 'settings.brandModelSavedRestart' : 'settings.brandModelSaved'), 'success');
+    if (!this._stale(gen)) this._repaintBrands();
+  }
+
+  /** Spegne o riaccende le righe dei modelli e il campo dell'id a mano. */
+  _setBrandsBusy(busy) {
+    this._picking = busy;
+    const list = this.contentEl?.querySelector('#provider-list');
+    if (!list) return;
+    list.toggleAttribute('aria-busy', busy);
+    list.querySelectorAll('[data-brand-model], [data-brand-custom-form] button').forEach((b) => {
+      b.disabled = busy;
+    });
+  }
+
+  /** L'id scritto a mano. Se l'elenco della marca non lo ha si chiede prima:
+   *  un errore di battitura diventerebbe il modello attivo, e te ne
+   *  accorgeresti solo dalla risposta successiva che non arriva. */
+  async _pickTypedModel(group, id) {
+    const p = this._groupProvider(group);
+    if (!p || !id) return;
+    const catalog = this._brandCatalogs.get(this._brandCatalogKey(p));
+    const listed = catalog?.status === 'available' && catalog.models.includes(id);
+    if (!listed) {
+      const ok = await confirmDialog(i18n.t('settings.customModelConfirm', { model: id, name: p.name }));
+      if (!ok) return;
+    }
+    await this._pickBrandModel(p.name, id);
+  }
+
+  /** Ridisegna solo l'elenco delle marche, coi loro stati di adesso. */
+  _repaintBrands() {
+    const list = this.contentEl?.querySelector('#provider-list');
+    if (!list) return;
+    list.innerHTML = this._renderProviderListHtml(this.data?.providers || [], this.data?.default_provider);
+    this._wireBrands();
   }
 
   // ── Strumenti ──────────────────────────────────────────────────────
 
   /* Le capacità dell'agente (ricerca web, posizione; i prossimi tool
      finiranno qui). I campi salvano da soli al cambio, come il resto. */
-  _renderTools(d) {
+  /* «Strumenti» teneva insieme la ricerca web e il GPS, separati da una riga.
+     Sono due cose che non si somigliano — una e' un motore di ricerca con i
+     suoi limiti, l'altra e' un permesso su un sensore del telefono — e la
+     tavola le tiene in due gruppi. `_renderLocation` era gia' un metodo suo:
+     qui resta solo da togliere la ricerca dal suo. */
+  _renderWebSearch(d) {
     const ws = d.web_search || {};
     const engines = ws.engines || ['bing'];
     return `
-      <div class="settings-subheading">${i18n.t('settings.webSearch')}</div>
       ${this._select(i18n.t('settings.searchEngine'), 'ws_engine', ws.search_engine || 'bing', engines)}
       ${this._field(i18n.t('settings.maxResults'), 'number', 'ws_max', ws.max_results ?? 5, i18n.t('settings.maxResultsPlaceholder'))}
       ${this._field(i18n.t('settings.timeoutSec'), 'number', 'ws_timeout', ws.timeout ?? 30, i18n.t('settings.timeoutPlaceholder'))}
-      ${this._field(i18n.t('settings.fetchMaxChars'), 'number', 'ws_fetch_max', ws.fetch_max_chars ?? 50000, i18n.t('settings.fetchMaxCharsPlaceholder'))}
-      <div class="settings-divider"></div>
-      <div class="settings-subheading">${i18n.t('settings.location.section')}</div>
-      ${this._renderLocation(d)}`;
+      ${this._field(i18n.t('settings.fetchMaxChars'), 'number', 'ws_fetch_max', ws.fetch_max_chars ?? 50000, i18n.t('settings.fetchMaxCharsPlaceholder'))}`;
   }
 
   _renderLocation(d) {
@@ -708,7 +1326,47 @@ export class SettingsController {
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.location.hint')}</p>`;
+      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.location.hint', { name: botName.get() })}</p>
+      <div class="settings-notice settings-notice-strong" id="location-permission" style="margin-top:10px" hidden>
+        <i class="ti ti-map-pin-off" aria-hidden="true"></i>
+        <div>${i18n.t('settings.location.denied')}</div>
+      </div>
+      <div class="onboarding-nav" id="location-permission-nav" style="margin-top:10px" hidden>
+        <button class="onboarding-btn onboarding-btn-secondary" id="btn-location-allow">
+          ${i18n.t('settings.location.allow')}
+        </button>
+      </div>`;
+  }
+
+  /* L'interruttore dice la preferenza, non se Android la concede: acceso con
+     il permesso negato, la posizione non arrivava e niente lo diceva
+     (collaudo del 27/09/2026). L'avviso compare in quel caso, e solo nel
+     guscio Android: fuori non c'e' un permesso da chiedere. */
+  _syncLocationPermission() {
+    const root = this.contentEl;
+    const toggle = root?.querySelector('#location-enabled-toggle');
+    const notice = root?.querySelector('#location-permission');
+    const nav = root?.querySelector('#location-permission-nav');
+    if (!toggle || !notice) return;
+    const native = window.JennyNative;
+    let missing = false;
+    if (native && typeof native.hasLocationPermission === 'function') {
+      try { missing = !native.hasLocationPermission(); } catch (_) { missing = false; }
+    }
+    const show = toggle.checked && missing;
+    notice.hidden = !show;
+    if (nav) nav.hidden = !show || typeof native?.requestLocationPermission !== 'function';
+  }
+
+  /* Chiede il permesso ad Android; se non puo' piu' chiederlo, il guscio apre
+     la scheda di Jenny nelle impostazioni. L'esito torna come evento
+     `jenny-location-permission` (v. `MainActivity`). */
+  _askLocationPermission() {
+    const native = window.JennyNative;
+    if (!native || typeof native.requestLocationPermission !== 'function') return;
+    let has = false;
+    try { has = !!native.hasLocationPermission?.(); } catch (_) { has = false; }
+    if (!has) native.requestLocationPermission();
   }
 
   // ── Memoria e lavoratori periodici ─────────────────────────────────
@@ -741,9 +1399,9 @@ export class SettingsController {
   _numberField(label, key, spec) {
     const min = spec?.min ?? '';
     const max = spec?.max ?? '';
-    return `<div class="settings-field">
-      <label class="settings-label">${label}</label>
-      <input type="number" class="settings-input" data-worker-key="${key}"
+    return `<div class="settings-row">
+      <label class="settings-label" for="settings-worker-${key}">${label}</label>
+      <input type="number" class="settings-input" id="settings-worker-${key}" data-worker-key="${key}"
         value="${escapeHtml(String(spec?.value ?? ''))}"
         ${min === '' ? '' : `min="${min}"`} ${max === '' ? '' : `max="${max}"`}>
     </div>`;
@@ -763,48 +1421,116 @@ export class SettingsController {
     return enabled ? (schedule || '') : '';
   }
 
-  _renderMemory(d) {
+  /* «Memoria» teneva insieme **cosa** ricorda e **chi** gliela riempie. La
+     tavola le separa, e l'ordine si rovescia: prima i tre file con le loro
+     barre — la risposta a «quanto ricorda», che e' la domanda per cui si apre
+     questo cassetto — e solo dopo le manopole di Dream, che e' il macchinario.
+
+     Le due funzioni tornano la stessa frase quando il payload non c'e': il
+     gruppo che non si puo' misurare lo dice al posto suo, invece di lasciare
+     una scheda vuota che sembra un guasto della pagina. */
+
+  /** I tre file e i loro tetti: la risposta a «quanto ricorda». */
+  _renderHowMuchItRemembers(d) {
     const m = d.memory;
     if (!m) return `<div class="settings-empty">${i18n.t('settings.memory.unavailable')}</div>`;
     return `
-      <div class="settings-subheading">${i18n.t('settings.memory.dream')}</div>
+      ${this._hint(i18n.t('settings.memory.budgetsHint'))}
+      ${this._measureCap(m, 'MEMORY.md', 'memory_budget_chars')}
+      ${this._measureCap(m, 'USER.md', 'user_budget_chars')}
+      ${this._measureCap(m, 'SOUL.md', 'soul_budget_chars')}
+      <button class="settings-btn-add" data-summary="caps" type="button">
+        <i class="ti ti-adjustments" aria-hidden="true"></i> ${i18n.t('settings.memory.changeBudgets')}
+      </button>`;
+  }
+
+  /** Un file: quanto misura, la barra, e **quanto ne resta**.
+   *
+   *  In sola lettura. Il campo per cambiare il tetto stava qui accanto alla
+   *  misura, e la tavola lo toglie: «quanto ricorda» e' una domanda con una
+   *  risposta da leggere, e cambiarla e' un'altra cosa — dietro «Cambia i
+   *  tetti».
+   *
+   *  La riga che resta e' quella che il cassetto non aveva: **i caratteri che
+   *  mancano al tetto**. «2.090 su 3.000» va letto e sottratto; «restano 910»
+   *  e' la risposta. Sopra il tetto la frase cambia del tutto, perche' cambia
+   *  la conseguenza: Dream smette di scrivere.
+   */
+  _measureCap(m, label, key) {
+    const { measured, rest, pct, beyond } = this._capState(m, label, key);
+    return `<div class="settings-budget">
+      <div class="settings-row">
+        <span class="settings-label">${escapeHtml(label)}</span>
+        <span class="settings-summary-value" data-measure-value="${label}">${escapeHtml(measured)}</span>
+      </div>
+      <div class="settings-meter${beyond ? ' is-over' : ''}" data-meter="${label}">
+        <span style="width:${pct}%"></span>
+      </div>
+      <div class="settings-budget-measure" data-measure="${label}">${escapeHtml(rest)}</div>
+    </div>`;
+  }
+
+  /** Quel che si dice di un tetto — la misura, quanto ne resta, la barra —
+   *  calcolato in un posto solo.
+   *
+   *  Lo leggono il disegno (`_measureCap`) e il ridisegno dopo un
+   *  salvataggio (`_repaintWorkerDerived`). Quando i conti erano due, il
+   *  secondo scriveva la misura nella riga di «quanto resta»: dopo un
+   *  salvataggio la misura compariva due volte e «restano N» spariva. */
+  _capState(m, label, key) {
+    const cap = m[key]?.value || 0;
+    const file = (m.files || []).find(f => f.label === label);
+    const chars = file && file.readable !== false && file.exists ? file.chars : null;
+    const pct = cap > 0 && chars != null ? Math.min(100, Math.round((chars / cap) * 100)) : 0;
+    const beyond = cap > 0 && chars != null && chars > cap;
+    const rest = beyond
+      ? i18n.t('settings.memory.headroomOver', { over: chars - cap })
+      : (cap > 0 && chars != null ? i18n.t('settings.memory.headroom', { left: cap - chars }) : '');
+    return { measured: this._budgetMeasure(m, label, key), rest, pct, beyond };
+  }
+
+  /** Il pannello dei tetti: i tre campi, con il loro range dal server. */
+  _openCaps() {
+    const m = this.data?.memory;
+    const body = document.getElementById('drawer-caps-body');
+    if (!m || !body) return;
+    body.innerHTML = `
+      ${this._hint(i18n.t('settings.memory.budgetsHint'))}
+      ${this._numberField('MEMORY.md', 'memory_budget_chars', m.memory_budget_chars)}
+      ${this._numberField('USER.md', 'user_budget_chars', m.user_budget_chars)}
+      ${this._numberField('SOUL.md', 'soul_budget_chars', m.soul_budget_chars)}`;
+    this._wireCaps();
+  }
+
+  /** I tre campi dentro il pannello. Stesso `change` del resto — su una
+   *  tastiera mobile `input` salverebbe a ogni cifra. */
+  _wireCaps() {
+    document.querySelectorAll('#drawer-caps-body [data-worker-key]').forEach(el => {
+      el.addEventListener('change', async () => {
+        try {
+          await this._saveWorkerParams('memory', { [el.dataset.workerKey]: el.value });
+          showToast(i18n.t('settings.saved'));
+          this.loadSettings();
+        } catch (e) { showToast(e.message, 'error'); }
+      });
+    });
+  }
+
+  /** Dream: chi riempie quei tre file, e ogni quanto. */
+  _renderDream(d) {
+    const m = d.memory;
+    if (!m) return `<div class="settings-empty">${i18n.t('settings.memory.unavailable')}</div>`;
+    return `
       ${this._toggleRow(i18n.t('settings.memory.dreamEnabled'), 'dream-enabled-toggle', m.enabled)}
       ${this._hint(`<span id="dream-schedule">${escapeHtml(this._scheduleText(m.enabled, m.schedule))}</span>`)}
       ${this._numberField(i18n.t('settings.memory.dreamInterval'), 'dream_interval_h', m.interval_h)}
       ${this._numberField(i18n.t('settings.memory.reviewCadence'), 'review_every_runs', m.review_every_runs)}
       ${this._hint(i18n.t('settings.memory.reviewHint', { floor: m.review_floor }))}
-      ${this._renderReviewState(m.review_state)}
-      <div class="settings-divider"></div>
-      <div class="settings-subheading">${i18n.t('settings.memory.budgets')}</div>
-      ${this._hint(i18n.t('settings.memory.budgetsHint'))}
-      ${this._renderBudget(m, 'MEMORY.md', 'memory_budget_chars')}
-      ${this._renderBudget(m, 'USER.md', 'user_budget_chars')}
-      ${this._renderBudget(m, 'SOUL.md', 'soul_budget_chars')}`;
+      ${this._renderReviewState(m.review_state)}`;
   }
 
-  /* Una riga di tetto: il nome del file, quanto misura adesso, la barra, e il
-     campo. La misura sta accanto al campo e non in un pannello a parte perché è
-     il numero su cui si decide il tetto — separarli era quel che rendeva
-     `/dream budget` due comandi invece di uno. */
-  _renderBudget(m, label, key) {
-    const spec = m[key] || {};
-    const file = (m.files || []).find(f => f.label === label);
-    const budget = spec.value || 0;
-    const chars = file ? file.chars : null;
-    const measure = this._budgetMeasure(m, label, key);
-    const pct = budget > 0 && chars != null ? Math.min(100, Math.round((chars / budget) * 100)) : 0;
-    const over = budget > 0 && chars != null && chars > budget;
-    return `<div class="settings-budget">
-      ${this._numberField(label, key, spec)}
-      <div class="settings-meter${over ? ' is-over' : ''}" data-meter="${label}">
-        <span style="width:${pct}%"></span>
-      </div>
-      <div class="settings-budget-measure" data-measure="${label}">${measure}</div>
-    </div>`;
-  }
-
-  /* La frase sotto la barra. In un metodo suo perché la scrive anche
-     `_repaintWorkerDerived`, e due copie divergerebbero al primo cambio. */
+  /* La misura accanto al nome del file. In un metodo suo perché passa da
+     `_capState`, che serve sia il disegno sia il ridisegno. */
   _budgetMeasure(m, label, key) {
     const budget = m[key]?.value || 0;
     const file = (m.files || []).find(f => f.label === label);
@@ -823,11 +1549,13 @@ export class SettingsController {
      che Dream sta girando senza consolidare niente. */
   _renderReviewState(state) {
     if (!state) return '';
-    const lines = [i18n.t('settings.memory.sinceReview', { runs: state.runs_since_review })];
-    if (state.stuck_runs) lines.push(i18n.t('settings.memory.stuckRuns', { runs: state.stuck_runs }));
-    if (state.nothing_new_runs) {
-      lines.push(i18n.t('settings.memory.nothingNewRuns', { runs: state.nothing_new_runs }));
-    }
+    /* Con un run solo la frase ha la sua chiave (`…One`): «1 runs since the
+       last review pass» si leggeva cosi', sul telefono. Stessa forma di
+       `countOne` / `countMany`. */
+    const runs = (key, n) => i18n.t(`settings.memory.${key}${n === 1 ? 'One' : ''}`, { runs: n });
+    const lines = [runs('sinceReview', state.runs_since_review)];
+    if (state.stuck_runs) lines.push(runs('stuckRuns', state.stuck_runs));
+    if (state.nothing_new_runs) lines.push(runs('nothingNewRuns', state.nothing_new_runs));
     return this._hint(lines.map(escapeHtml).join('<br>'));
   }
 
@@ -960,19 +1688,17 @@ export class SettingsController {
       ['USER.md', 'user_budget_chars'],
       ['SOUL.md', 'soul_budget_chars'],
     ]) {
-      const budget = memory[key]?.value || 0;
-      const file = (memory.files || []).find(f => f.label === label);
-      const chars = file ? file.chars : null;
+      const { measured, rest, pct, beyond } = this._capState(memory, label, key);
       const meter = this.contentEl.querySelector(`[data-meter="${label}"]`);
       if (meter) {
-        const pct = budget > 0 && chars != null
-          ? Math.min(100, Math.round((chars / budget) * 100)) : 0;
-        meter.classList.toggle('is-over', budget > 0 && chars != null && chars > budget);
+        meter.classList.toggle('is-over', beyond);
         const fill = meter.querySelector('span');
         if (fill) fill.style.width = `${pct}%`;
       }
+      const value = this.contentEl.querySelector(`[data-measure-value="${label}"]`);
+      if (value) value.textContent = measured;
       const measure = this.contentEl.querySelector(`[data-measure="${label}"]`);
-      if (measure) measure.textContent = this._budgetMeasure(memory, label, key);
+      if (measure) measure.textContent = rest;
     }
   }
 
@@ -1009,6 +1735,11 @@ export class SettingsController {
     this._ssh = ssh;
     blockEl.innerHTML = this._renderSshBlock(this._ssh);
     this._wireSshBlock();
+    this._realignPanel(
+      'ssh-host', this._sshOpen,
+      (ssh.hosts || []).some(h => h.alias === this._sshOpen),
+      alias => this._openSshHost(alias),
+    );
     // Anche questo blocco era un segnaposto quando la posizione è stata rimessa.
     this._restoreScrollTop();
   }
@@ -1029,7 +1760,7 @@ export class SettingsController {
       <p class="settings-hint" style="margin:6px 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('settings.ssh.hint')}</p>
       ${this._renderSshCredentialsLost(d)}
       ${list}
-      <button class="settings-btn-add" id="btn-ssh-add"><i class="ti ti-plus"></i> ${i18n.t('settings.ssh.addHost')}</button>`;
+      <button class="settings-btn-add" id="btn-ssh-add"><i class="ti ti-plus" aria-hidden="true"></i> ${i18n.t('settings.ssh.addHost')}</button>`;
   }
 
   /* Credenziali sparite da host che erano già stati verificati: quasi sempre
@@ -1052,37 +1783,73 @@ export class SettingsController {
      accettata — stanno in chiaro sulla card: sono i due passi che l'utente deve
      fare, e nasconderli dietro un tap lascerebbe host mezzi configurati che
      falliscono solo al primo comando. */
+  /** Un host, in una riga.
+   *
+   *  Era una scheda alta: alias, indirizzo, stato della credenziale, la chiave
+   *  pubblica per intero, e quattro bottoni. La tavola ne fa una riga da 52 px.
+   *
+   *  **Ma la riga della tavola perde i due stati, e quelli restano.** Il
+   *  commento che stava qui lo diceva gia', ed e' una misura e non un'opinione:
+   *  credenziale pronta e impronta accettata sono i due passi che l'utente deve
+   *  fare, e nasconderli dietro un tocco lascia host mezzi configurati che
+   *  falliscono solo al primo comando. Qui diventano due segni brevi — un
+   *  pallino e una parola — invece di due targhette larghe: stessa
+   *  informazione, un decimo dello spazio, e il testo lungo resta nel `title`.
+   *
+   *  Tutto il resto — genera, copia, verifica, modifica, elimina — e' quel che
+   *  si fa **a** un host, e si apre col tocco.
+   */
   _renderSshHost(h) {
     const alias = escapeHtml(h.alias);
     const byPassword = h.auth === 'password';
-    const pinned = h.pinned
-      ? `<span class="provider-badge format-badge">${i18n.t('settings.ssh.statusPinned')}</span>`
-      : `<span class="provider-badge format-badge">${i18n.t('settings.ssh.statusUnpinned')}</span>`;
-    /* Lo stato della credenziale segue il modo scelto: su un host a password
-       "Nessuna chiave" sarebbe un allarme per qualcosa che non serve, e
-       nasconderebbe l'unica cosa che conta lì, cioè se la password c'è. */
-    const credentialState = byPassword
-      ? (h.has_password
-        ? i18n.t('settings.ssh.statusPasswordSet')
-        : i18n.t('settings.ssh.statusPasswordMissing'))
-      : (h.has_key
-        ? i18n.t('settings.ssh.statusKeyReady')
-        : i18n.t('settings.ssh.statusKeyMissing'));
+    const credOk = byPassword ? !!h.has_password : !!h.has_key;
+    const credLong = byPassword
+      ? i18n.t(h.has_password ? 'settings.ssh.statusPasswordSet' : 'settings.ssh.statusPasswordMissing')
+      : i18n.t(h.has_key ? 'settings.ssh.statusKeyReady' : 'settings.ssh.statusKeyMissing');
+    const credShort = i18n.t(byPassword ? 'settings.ssh.markPassword' : 'settings.ssh.markKey');
+    const impLong = i18n.t(h.pinned ? 'settings.ssh.statusPinned' : 'settings.ssh.statusUnpinned');
+    return `<button class="ssh-row" type="button" data-ssh-open="${alias}">
+      <span class="ssh-row-text">
+        <span class="ssh-row-name">${alias}</span>
+        <span class="ssh-row-where">${escapeHtml(`${h.username}@${h.host}:${h.port}`)}</span>
+      </span>
+      <span class="ssh-row-states">
+        ${this._sshMark(credShort, credOk, credLong)}
+        ${this._sshMark(i18n.t('settings.ssh.markFingerprint'), !!h.pinned, impLong)}
+      </span>
+      <i class="ti ti-chevron-right" aria-hidden="true"></i>
+    </button>`;
+  }
+
+  /** Un pallino e una parola. Il colore da solo non basta — su un tema in cui
+   *  l'accento e' il testo due pallini si somiglierebbero — quindi la
+   *  differenza vera e' pieno contro vuoto, e il colore la rinforza. */
+  _sshMark(word, ok, title) {
+    return `<span class="ssh-mark${ok ? ' is-ok' : ' is-missing'}" title="${escapeHtml(title)}">
+      <i class="ti ${ok ? 'ti-circle-check-filled' : 'ti-circle'}" aria-hidden="true"></i>${escapeHtml(word)}
+    </span>`;
+  }
+
+  /** Il pannello di un host: tutto quel che gli si fa. */
+  _openSshHost(alias) {
+    const h = (this._ssh?.hosts || []).find(x => x.alias === alias);
+    const body = document.getElementById('drawer-ssh-host-body');
+    const title = document.getElementById('drawer-ssh-host-title');
+    if (!h || !body) return;
+    this._sshOpen = alias;
+    if (title) title.textContent = h.alias;
+    const byPassword = h.auth === 'password';
     const desc = h.description
-      ? `<div style="font-size:12px;color:var(--text-faint)">${escapeHtml(h.description)}</div>`
+      ? `<p class="settings-hint" style="margin:0 0 8px">${escapeHtml(h.description)}</p>`
       : '';
-    return `<div class="provider-card" data-ssh-alias="${alias}">
-      <div class="provider-card-header">
-        <span class="provider-name">${alias}</span>
-        ${pinned}
-      </div>
-      <div class="provider-card-body">
-        <span class="provider-url">${escapeHtml(`${h.username}@${h.host}:${h.port}`)}</span>
-        <span class="provider-key">${escapeHtml(credentialState)}</span>
-      </div>
+    body.innerHTML = `
       ${desc}
+      <div class="settings-row">
+        <span class="settings-label">${i18n.t('settings.ssh.where')}</span>
+        <span class="settings-summary-value">${escapeHtml(`${h.username}@${h.host}:${h.port}`)}</span>
+      </div>
       ${this._renderSshPublicKey(h)}
-      <div class="provider-card-actions">
+      <div class="provider-card-actions" style="margin-top:10px">
         ${byPassword ? '' : `<button class="settings-btn-add ssh-generate" data-ssh-alias="${alias}" data-has-key="${h.has_key ? '1' : ''}">
           ${h.has_key ? i18n.t('settings.ssh.regenerateKey') : i18n.t('settings.ssh.generateKey')}
         </button>`}
@@ -1093,8 +1860,36 @@ export class SettingsController {
         <button class="btn-icon btn-danger ssh-delete" data-ssh-alias="${alias}" title="${i18n.t('settings.delete')}">
           <i class="ti ti-trash"></i>
         </button>
-      </div>
-    </div>`;
+      </div>`;
+    this._wireHostSsh();
+  }
+
+  /** Un pannello aperto su un oggetto appena cambiato si ridisegna — o si
+   *  chiude, se l'oggetto non c'e' piu'.
+   *
+   *  I pannelli (host SSH, marca) si disegnano all'apertura con i dati di
+   *  quel momento. Dopo «Genera chiave» il pannello restava su «nessuna
+   *  chiave ancora»; dopo «Elimina» restava aperto su un host o una marca che
+   *  non esistevano piu', coi bottoni ancora attivi. Lo chiamano i due
+   *  caricamenti, cosi' qualunque azione che ricarica lo ottiene gratis. */
+  _realignPanel(id, name, exists, reopen) {
+    const drawer = window.mobileApp?.drawer;
+    if (!name || drawer?.activeDrawer !== id) return;
+    if (exists) reopen(name);
+    else drawer.close(id);
+  }
+
+  /** I comandi dentro il pannello. All'apertura, non al caricamento. */
+  _wireHostSsh() {
+    const each = (sel, fn) =>
+      document.querySelectorAll(`#drawer-ssh-host-body ${sel}`).forEach(btn =>
+        btn.addEventListener('click', () => fn(btn.dataset.sshAlias, btn)));
+    each('.ssh-generate', (alias, btn) => this._sshGenerateKey(alias, !!btn.dataset.hasKey));
+    each('.ssh-verify', alias => this._sshVerify(alias));
+    each('.ssh-edit', alias => this._showSshHostDialog(
+      (this._ssh?.hosts || []).find(h => h.alias === alias)));
+    each('.ssh-delete', alias => this._sshDelete(alias));
+    each('.ssh-copy', alias => this._sshCopyPublicKey(alias));
   }
 
   /* La pubblica resta a schermo finché l'host esiste: il passo "incollala in
@@ -1116,7 +1911,7 @@ export class SettingsController {
       <code style="display:block;margin:4px 0;padding:6px 8px;font-size:11px;word-break:break-all;
         background:var(--bg-elevated,rgba(128,128,128,.12));border-radius:6px">${escapeHtml(h.public_key)}</code>
       <button class="settings-btn-add ssh-copy" data-ssh-alias="${escapeHtml(h.alias)}">
-        <i class="ti ti-copy"></i> ${i18n.t('settings.ssh.copy')}
+        <i class="ti ti-copy" aria-hidden="true"></i> ${i18n.t('settings.ssh.copy')}
       </button>
     </div>`;
   }
@@ -1135,15 +1930,14 @@ export class SettingsController {
       });
     }
     this._wireBtn('btn-ssh-add', () => this._showSshHostDialog());
-    const each = (selector, fn) =>
-      this.contentEl.querySelectorAll(selector).forEach(btn =>
-        btn.addEventListener('click', () => fn(btn.dataset.sshAlias, btn)));
-    each('.ssh-generate', (alias, btn) => this._sshGenerateKey(alias, !!btn.dataset.hasKey));
-    each('.ssh-verify', alias => this._sshVerify(alias));
-    each('.ssh-edit', alias => this._showSshHostDialog(
-      (this._ssh?.hosts || []).find(h => h.alias === alias)));
-    each('.ssh-delete', alias => this._sshDelete(alias));
-    each('.ssh-copy', alias => this._sshCopyPublicKey(alias));
+    /* In cassetto ogni host e' una riga: il tocco apre il suo pannello. I
+       comandi (genera, verifica, modifica, elimina, copia) li aggancia
+       `_wireHostSsh` la' dentro — qui non esistono ancora nel DOM. */
+    this.contentEl.querySelectorAll('[data-ssh-open]').forEach(row =>
+      row.addEventListener('click', () => {
+        window.mobileApp?.drawer?.open('ssh-host');
+        this._openSshHost(row.dataset.sshOpen);
+      }));
   }
 
   /* Le route SSH rispondono con un corpo di errore in testo semplice, e quel
@@ -1179,7 +1973,10 @@ export class SettingsController {
      andato perso, preme Indietro, e la modale dell'impronta gli si apre sopra
      un'altra sezione. */
   _setSshVerifyBusy(alias, busy) {
-    const btn = this.contentEl?.querySelector(`.ssh-verify[data-ssh-alias="${CSS.escape(alias)}"]`);
+    /* Il bottone vive nel pannello dell'host, non nella schermata: cercato in
+       `contentEl` non si trovava mai, e il segno di attesa non compariva. */
+    const btn = document.querySelector(
+      `#drawer-ssh-host-body .ssh-verify[data-ssh-alias="${CSS.escape(alias)}"]`);
     if (!btn) return;
     btn.disabled = busy;
     btn.textContent = i18n.t(busy ? 'settings.ssh.verifying' : 'settings.ssh.verify');
@@ -1294,6 +2091,7 @@ export class SettingsController {
     try {
       await api.deleteSshHost(alias);
       showToast(i18n.t('settings.ssh.deleted'));
+      this._realignPanel('ssh-host', alias, false, null);
       this._loadSsh();
     } catch (e) { showToast(e.message, 'error'); }
   }
@@ -1423,154 +2221,137 @@ export class SettingsController {
     dialog.addEventListener('close', () => dialog.remove());
   }
 
-  // ── Theme ──────────────────────────────────────────────────────────
+  // ── I file veri ────────────────────────────────────────────────────
 
-  _renderTheme() {
-    const current = AppState.theme || localStorage.getItem('tc-theme') || DEFAULT_THEME;
-    // Each card is dressed in its own theme (self-contained `.tk-<id>` styles)
-    // and *is* the preview — a mini-conversation + input, not just a swatch.
-    const cards = THEMES.map(t => {
-      const sel = t.id === current;
-      return `<button class="tcard tk-${t.id}${sel ? ' sel' : ''}" data-theme-choice="${t.id}" title="${escapeHtml(t.label)}">
-        ${sel ? '<span class="tsel">✓</span>' : ''}
-        <div class="thead"><span class="tnm">${escapeHtml(t.label)}</span><span class="tfl">✿</span></div>
-        <div class="tconv">
-          <div class="tblo">${escapeHtml(i18n.t('themes.' + t.id + '.desc'))}</div>
-          <div class="trep">${escapeHtml(i18n.t('themes.' + t.id + '.reply'))}</div>
-          <div class="tmeta">0.8s</div>
+  /** Il gestore file, dentro la scheda.
+   *
+   *  **La tavola la chiamava «i file veri», e fino al 21/09/2026 non
+   *  esisteva.** Al suo posto c'era una riga in fondo al giardiniere che
+   *  portava al gestore file: un collegamento, non un contenuto.
+   *
+   *  Il primo tentativo fu un riassunto — le prime otto voci della radice, poi
+   *  una porta verso il gestore vero. Durato un giorno: un elenco troncato che
+   *  non si tocca non risponde a nessuna domanda, e il bottone sotto rendeva
+   *  due gesti quel che ne vale uno. **Adesso la scheda contiene il gestore.**
+   *  Le cartelle si aprono qui dentro, senza mai lasciare Memoria; Indietro
+   *  risale di una cartella (`handleCardBack`) prima di uscire dal cassetto.
+   *
+   *  L'unica uscita e' **aprire** un file, che e' una schermata sua come in
+   *  qualunque gestore file, e da cui Indietro riporta esattamente in questa
+   *  cartella (`_enterEditorView`).
+   *
+   *  Qui c'e' solo il contenitore: i nodi li riempie `WorkspaceController`,
+   *  che e' anche l'unico posto dove sta il come — icone, miniature, tieni
+   *  premuto, «nuovo». Riscriverne una seconda copia per la scheda avrebbe
+   *  voluto dire due elenchi degli stessi file che col tempo si raccontano
+   *  diversi, ed e' esattamente il difetto che la scheda riassunto aveva.
+   *
+   *  **E i file di servizio non ci sono**: il flag `internal` lo mette il
+   *  server file per file, e a filtrarli e' `renderGrid`.
+   */
+  _renderFile() {
+    return `
+      <p class="settings-hint" style="margin:0 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('workshop.file.desc')}</p>
+      <div class="ws-explorer" id="settings-file-explorer">
+        <div class="ws-bar">
+          <div class="ws-breadcrumb" data-ws-crumb></div>
+          <button class="ws-new" data-ws-new type="button"
+                  title="${escapeHtml(i18n.t('workspace.new'))}"
+                  aria-label="${escapeHtml(i18n.t('workspace.new'))}">
+            <i class="ti ti-plus"></i>
+          </button>
         </div>
-        <div class="tfoot"><span class="tin">${i18n.t('themes.placeholder')}</span><span class="tsend">↑</span></div>
-      </button>`;
-    }).join('');
-    return `<div class="theme-strip-eyebrow">${i18n.t('settings.themeLabel')}</div>
-      <div class="tstrip">${cards}</div>
-      ${this._renderMascot()}`;
-  }
-
-  // ── Mascotte ───────────────────────────────────────────────────────
-
-  /* Blocco della sezione "Personalizzazione", sotto la passerella dei temi:
-     mini-label, toggle di visibilità e taglia.
-     Le opzioni restano SEMPRE a schermo: nasconderle a mascotte spenta faceva
-     sembrare che l'unica scelta fosse tenerla o buttarla via — chi la spegneva
-     subito non scopriva mai che era personalizzabile. Da spenta si vedono
-     inerti (attributo `disabled`), come promessa di cosa si ottiene
-     riaccendendola.
-     Il lato NON si sceglie qui: lo decide il lancio (v. mobile-jenny.js), e
-     un'impostazione che cambia da sola al primo lancio sarebbe una bugia. */
-  _renderMascot() {
-    const visible = mascotVisible();
-    const size = mascotSize();
-    const off = visible ? '' : ' disabled';
-    const sizeLabels = {
-      sm: i18n.t('settings.mascotSizeSmall'),
-      md: i18n.t('settings.mascotSizeMedium'),
-      lg: i18n.t('settings.mascotSizeLarge'),
-    };
-    const sizeButtons = Object.keys(MASCOT_SIZES).map(id =>
-      `<button class="settings-seg-btn${id === size ? ' active' : ''}" data-mascot-size="${id}"${off}>
-        ${escapeHtml(sizeLabels[id])}
-        ${id === size ? '<i class="ti ti-check"></i>' : ''}
-      </button>`
-    ).join('');
-    return `
-      <div class="theme-strip-eyebrow">${i18n.t('settings.mascotSection')}</div>
-      <div class="settings-field settings-toggle-row">
-        <label class="settings-label">${i18n.t('settings.mascotVisible')}</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="mascot-visible-toggle" ${visible ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="settings-field"${visible ? '' : ' data-settings-off'}>
-        <label class="settings-label">${i18n.t('settings.mascotSize')}</label>
-        <div class="settings-seg">${sizeButtons}</div>
-      </div>
-      ${this._renderFloating()}`;
-  }
-
-  /* Mascotte flottante: sopra le altre app, un tap e le si parla.
-     Sta qui sotto la mascotte perché è la stessa Jenny, ma è l'unica voce di
-     questa sezione che NON è una preferenza di client: vive in config.json,
-     perché a montare la finestra è il service all'avvio e un service non ha un
-     localStorage da leggere.
-     Fuori da Android la voce non si disegna affatto (`available` falso): un
-     interruttore che non può accendere niente è peggio di una voce assente.
-     E l'interruttore non mente sul permesso — `active` falso a `enabled` vero
-     vuol dire che Android non lascia aprire la finestra, e la riga sotto lo
-     dice invece di far rimbalzare il toggle su off senza spiegazioni. */
-  _renderFloating() {
-    const floating = this.data?.floating;
-    if (!floating || !floating.available) return '';
-    const on = !!floating.enabled;
-    const blocked = on && floating.active === false;
-    const note = blocked
-      ? `<div class="settings-hint settings-hint-warn">${i18n.t('settings.floatingBlocked')}</div>`
-      : `<div class="settings-hint">${i18n.t('settings.floatingHint')}</div>`;
-    return `
-      <div class="settings-field settings-toggle-row">
-        <label class="settings-label">${i18n.t('settings.floatingEnabled')}</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="floating-enabled-toggle" ${on ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      ${note}`;
-  }
-
-  // ── Tasto Home ─────────────────────────────────────────────────────
-
-  /* Da launcher, Home significa "torna alla schermata iniziale": qui si sceglie
-     quale sia. Select e non segmented: quattro voci non stanno in riga su un
-     telefono. Le etichette delle viste sono quelle del dock (nav.*), così
-     restano allineate a quello che si vede nella barra. */
-  _renderHomeView() {
-    const current = homeView();
-    const labels = {
-      chat: i18n.t('nav.chat'),
-      apps: i18n.t('nav.apps'),
-      workspace: i18n.t('nav.workspace'),
-      last: i18n.t('settings.homeLast'),
-    };
-    const options = HOME_VIEW_CHOICES.map(id =>
-      `<option value="${id}"${id === current ? ' selected' : ''}>${escapeHtml(labels[id])}</option>`
-    ).join('');
-    return `
-      <div class="theme-strip-eyebrow">${i18n.t('settings.homeSection')}</div>
-      <div class="settings-field">
-        <select class="settings-select" id="home-view-select">${options}</select>
-        <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.homeHint')}</p>
+        <div class="ws-grid" data-ws-grid></div>
+        <div class="ws-empty" data-ws-empty style="display:none">
+          <div class="ws-empty-icon"><i class="ti ti-folder-off"></i></div>
+          <div class="ws-empty-title">${escapeHtml(i18n.t('workspace.noFiles'))}</div>
+          <div class="ws-empty-sub">${escapeHtml(i18n.t('workspace.folderEmpty'))}</div>
+        </div>
       </div>`;
   }
 
-  // ── Language ───────────────────────────────────────────────────────
-
-  _renderLanguage() {
-    const current = i18n.locale;
-    let html = '<div class="settings-language-list">';
-    for (const locale of i18n.availableLocales) {
-      const isActive = locale === current;
-      html += `<button class="settings-seg-btn${isActive ? ' active' : ''}" data-locale="${locale}">
-        ${i18n.getLocaleName(locale)}
-        ${isActive ? '<i class="ti ti-check"></i>' : ''}
-      </button>`;
-    }
-    html += '</div>';
-    return html;
+  /** Consegna il contenitore appena disegnato al gestore file.
+   *
+   *  Il controller puo' non esistere ancora: fino a ieri nasceva alla prima
+   *  apertura della sua vista, e quella vista adesso e' solo il file aperto —
+   *  cioe' arriva **dopo**. `ensureController` lo costruisce senza portarcisi.
+   */
+  _mountFile() {
+    const host = this.contentEl?.querySelector('#settings-file-explorer');
+    if (!host) return;
+    window.mobileApp?.ensureController('workspace')?.mount(host);
   }
 
   // ── Backup e ripristino ──────────────────────────────────────────────
 
+  /* La storia locale, e **non** il backup cifrato.
+   *
+   * Esportare e ripristinare vivono in casa, da «Backup», dove sono arrivati
+   * col giro di «Tu e Jenny» — e la frase che la casa gia' scrive di suo dice
+   * anche perche' questa meta' sta qui: la storia locale «serve a rimettere a
+   * posto una cosa cancellata per sbaglio, e si sfoglia in officina. Vive pero'
+   * su questo telefono — di un telefono perso non salva niente».
+   *
+   * Due schermate che sanno esportare vorrebbero dire due posti da tenere
+   * allineati per un gesto che si fa una volta al mese; e sarebbero anche due
+   * posti in cui puo' comparire una passphrase.
+   */
+  /** La storia locale, in cassetto, e' **una riga**.
+   *
+   *  L'elenco disteso costava due terzi dei 6.467 px di Memoria (misurato sul
+   *  telefono il 21/09/2026, foto intera): una riga per istantanea, e ce ne
+   *  sono venti. Nessuna di quelle righe risponde alla domanda per cui si apre
+   *  il gruppo — «ce l'ho una storia, e quanto va indietro?» — a cui invece
+   *  rispondono due numeri.
+   *
+   *  Il resto (l'elenco, per quanto si conserva, «crea adesso») non sparisce:
+   *  si apre nel pannello `drawer-history`. E' il criterio della tavola, ed e'
+   *  lo stesso ovunque: **in cassetto quel che si legge, l'amministrazione
+   *  dietro un tocco.**
+   */
+  /* Chi disegna il corpo di ogni pannello, per id. Tabella e non `if`: le
+     righe di riepilogo sono destinate a diventare tre (storia, Telegram, SSH)
+     e un elenco di condizioni le farebbe divergere una per volta. */
+  get _OPEN_PANEL() {
+    return {
+      history: this._openHistory,
+      telegram: this._openTelegram,
+      skill: this._openSkill,
+      caps: this._openCaps,
+    };
+  }
+
   _renderBackup() {
     return `
-      <p class="settings-hint" style="margin:0 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('backup.exportDesc')}</p>
-      <button class="settings-btn-save settings-btn-block" id="btn-backup-export"><i class="ti ti-file-export"></i> ${i18n.t('backup.exportButton')}</button>
-      <div class="settings-divider"></div>
-      <p class="settings-hint" style="margin:0 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('backup.importDesc')}</p>
-      <button class="settings-btn-add" id="btn-backup-import"><i class="ti ti-file-import"></i> ${i18n.t('backup.importButton')}</button>
-      <div class="settings-divider"></div>
-      <div class="settings-subheading">${i18n.t('backup.snapshotHistory')}</div>
-      <div class="settings-field">
+      <p class="settings-hint" style="margin:0 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('backup.snapshotDesc')}</p>
+      ${this._summary('history', i18n.t('backup.snapshotHistory'), i18n.t('settings.loading'))}`;
+  }
+
+  /** Una riga di riepilogo: cosa c'e', in due numeri, e una freccina.
+   *
+   *  `value` e' la risposta breve; il tocco apre `drawer-<id>`. Il bottone e'
+   *  un `<button>` vero e non una riga cliccabile: da tastiera ci si arriva, e
+   *  chi legge lo schermo sente che e' un comando.
+   */
+  _summary(id, label, value) {
+    return `<button class="settings-summary" data-summary="${id}" type="button">
+      <span class="settings-summary-name">${label}</span>
+      <span class="settings-summary-value" id="summary-${id}">${value}</span>
+      <i class="ti ti-chevron-right" aria-hidden="true"></i>
+    </button>`;
+  }
+
+  /** Il corpo del pannello della storia: quel che stava disteso nel cassetto.
+   *
+   *  Si disegna **all'apertura** e non al caricamento: un pannello chiuso non
+   *  ha i suoi nodi nel DOM, e `_loadSnapshotList` scriverebbe nel vuoto senza
+   *  dire niente.
+   */
+  _openHistory() {
+    const body = document.getElementById('drawer-history-body');
+    if (!body) return;
+    body.innerHTML = `
+      <div class="settings-row">
         <label class="settings-label">${i18n.t('backup.retentionLabel')}</label>
         <select class="settings-select" id="snapshot-retention">
           <option value="7">${i18n.t('backup.retentionWeek')}</option>
@@ -1579,471 +2360,118 @@ export class SettingsController {
           <option value="0">${i18n.t('backup.retentionForever')}</option>
         </select>
       </div>
-      <button class="settings-btn-add" id="btn-snapshot-create"><i class="ti ti-camera"></i> ${i18n.t('backup.snapshotCreate')}</button>
+      <button class="settings-btn-add" id="btn-snapshot-create"><i class="ti ti-camera" aria-hidden="true"></i> ${i18n.t('backup.snapshotCreate')}</button>
       <div id="snapshot-list" style="margin-top:8px">
         <div class="settings-empty-state">${i18n.t('settings.loading')}</div>
       </div>`;
+    this._wireHistory();
+    this._loadSnapshotList();
   }
 
   // ── Sistema ────────────────────────────────────────────────────────
 
-  /* Diagnostica e opzioni da power user: versione, modalità avanzata,
-     statistiche di utilizzo token. */
+  /* Diagnostica e opzioni da power user.
+   *
+   * **Il giro degli aggiornamenti non c'e' piu'**: controllo, riquadro,
+   * installazione e diagnostica del meccanismo sono in casa, da
+   * «Aggiornamenti», dove sono arrivati col giro di «Tu e Jenny». Qui resta il
+   * numero di versione, che e' un dato e non un giro.
+   *
+   * **E nemmeno «riesegui la configurazione»**: `save_onboarding` fa
+   * `config.providers.providers = [one]` — **sostituisce** l'elenco invece di
+   * aggiungere. In una schermata da operatore quel bottone puo' solo toglierti
+   * marche che hai configurato, e tutto cio' che il wizard imposta si fa
+   * meglio di qua (la marca col suo `+`, il modello dalla casa). Resta vivo
+   * dove serve: al primo avvio, quando non c'e' ancora niente da cancellare.
+   */
   _renderSystem(d) {
     const v = d.version || {};
     return `
       <div class="settings-field-row">
         <span class="settings-field-label">${i18n.t('settings.version')}</span>
-        <span class="settings-field-value">${escapeHtml(v.current || '—')}${this._renderUpdateBadge(v)}</span>
+        <span class="settings-field-value">${escapeHtml(v.current || '—')}</span>
       </div>
-      ${this._renderUpdateCard(v)}
-      ${this._renderUpdateCheck(v)}
-      <div class="settings-divider"></div>
-      <div class="settings-field settings-toggle-row">
-        <label class="settings-label">${i18n.t('settings.advancedMode')}</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="advanced-mode-toggle" ${advancedMode() ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <p class="settings-hint" style="margin-top:6px;font-size:12px;color:var(--text-faint)">${i18n.t('settings.advancedModeHint')}</p>
-      <div class="settings-divider"></div>
-      ${this._renderRerunOnboarding()}
+      <p class="settings-hint" style="margin:6px 0 0;font-size:12px;color:var(--text-faint)">${i18n.t('settings.updatesLiveInHome')}</p>
       <div class="settings-divider"></div>
       <div class="settings-subheading">${i18n.t('settings.tokenUsage')}</div>
       ${this._renderUsage(d)}`;
   }
 
-  /* ── Aggiornamento dell'app ──────────────────────────────────────────
 
-     Il backend calcola già tutto (`version.update_available` viene dallo stato
-     dell'updater, non da un giro di rete fatto qui): questa parte si limita a
-     dirlo e a offrire il bottone. Senza, una release nuova esisteva solo nei
-     log del job periodico. */
-
-  /* Pastiglia accanto al numero di versione. Un aggiornamento critico non è
-     "una versione nuova con più cose": è una fix che conviene installare
-     subito, e deve leggersi diversamente già da qui. */
-  _renderUpdateBadge(v) {
-    if (!v.update_available) return '';
-    const critical = !!v.critical;
-    const label = i18n.t(critical ? 'settings.update.badgeCritical' : 'settings.update.badge');
-    const icon = critical ? 'shield-exclamation' : 'arrow-up';
-    return ` <span class="update-badge${critical ? ' critical' : ''}"><i class="ti ti-${icon}"></i>${escapeHtml(label)}</span>`;
-  }
-
-  _renderUpdateCard(v) {
-    if (!v.update_available) return '';
-    const critical = !!v.critical;
-    const headline = i18n.t(
-      critical ? 'settings.update.availableCritical' : 'settings.update.available',
-      { version: v.latest || '' },
-    );
-    const summary = v.summary
-      ? `<div style="margin-top:4px;color:var(--text-muted)">${escapeHtml(v.summary)}</div>`
-      : '';
-    // Link normale: la WebView devia le navigazioni fuori dal gateway locale su
-    // una Custom Tab (v. _renderOemGuidance), aprirlo dentro la SPA la
-    // sostituirebbe senza ritorno.
-    const notes = v.notes_url
-      ? `<div style="margin-top:6px"><a href="${escapeHtml(v.notes_url)}" target="_blank" rel="noopener">${escapeHtml(i18n.t('settings.update.notes'))}</a></div>`
-      : '';
-    const busy = !!this._update?.busy;
-    return `
-      <div class="settings-notice${critical ? ' settings-notice-strong' : ''}">
-        <i class="ti ti-${critical ? 'shield-exclamation' : 'download'}"></i>
-        <div style="flex:1;min-width:0">
-          <div>${escapeHtml(headline)}</div>
-          ${summary}
-          ${notes}
-        </div>
-      </div>
-      <div id="update-progress">${this._updateProgressHtml()}</div>
-      <div class="onboarding-nav">
-        <button class="onboarding-btn ${critical ? 'onboarding-btn-primary' : 'onboarding-btn-secondary'}" id="btn-update-install" ${busy ? 'disabled' : ''}>
-          ${escapeHtml(i18n.t('settings.update.install'))}
-        </button>
-      </div>`;
-  }
-
-  /* ── Il controllo degli aggiornamenti, visto dall'utente ─────────────
-
-     Il riquadro sopra racconta un aggiornamento *trovato*. Questo racconta il
-     meccanismo che dovrebbe trovarlo, e c'è sempre — anche, soprattutto, quando
-     non c'è niente da installare: senza, un manifest irraggiungibile da mesi
-     mostra esattamente la stessa schermata di "sei aggiornato", e su un
-     telefono headless nessuno va a leggere i log per accorgersene. */
-
-  _renderUpdateCheck(v) {
-    const busy = !!this._checking;
-    const label = i18n.t(busy ? 'settings.update.checking' : 'settings.update.checkNow');
-    return `
-      <div class="update-check" id="update-check">
-        ${this._updateCheckLinesHtml(v)}
-        <button class="settings-btn-add" id="btn-update-check" ${busy ? 'disabled' : ''}>
-          <i class="ti ti-refresh"></i> ${escapeHtml(label)}
-        </button>
-      </div>`;
-  }
-
-  /* Quando il controllo è riuscito l'ultima volta, e se il caso l'avviso che
-     non riesce più. Il confronto è fra i due timestamp dell'updater, non con
-     l'ora corrente: `last_check` è scritto a ogni tentativo, `last_success`
-     solo quando il manifest è stato letto davvero, e un telefono spento per una
-     settimana li ha vecchi entrambi — nessun meccanismo rotto da segnalare. */
-  _updateCheckLinesHtml(v) {
-    const success = Number(v.last_success) || 0;
-    const check = Number(v.last_check) || 0;
-    if (!success) {
-      /* Prima del primo tentativo in assoluto non c'è nessun guasto: c'è
-         un'installazione appena fatta, e darle l'aria dell'allarme sarebbe la
-         prima cosa falsa che Jenny dice. */
-      if (!check) {
-        return `<div class="update-check-line">${escapeHtml(i18n.t('settings.update.neverChecked'))}</div>`;
-      }
-      /* Tentativi sì, esiti positivi no. Vale anche per uno stato scritto prima
-         che `last_success` esistesse, ed è per questo che la stringa manda a
-         premere "Controlla ora" invece di sentenziare: un tap distingue i due
-         casi meglio di qualunque euristica. */
-      return `<div class="update-check-line warn">${escapeHtml(i18n.t('settings.update.staleNever'))}</div>`;
-    }
-    const when = this._formatUpdateWhen(success);
-    const rows = [
-      `<div class="update-check-line">${escapeHtml(i18n.t('settings.update.lastSuccess', { when }))}</div>`,
-    ];
-    if (check - success > UPDATE_STALE_MS) {
-      rows.push(`<div class="update-check-line warn">${escapeHtml(i18n.t('settings.update.stale', { when }))}</div>`);
-    }
-    return rows.join('');
-  }
-
-  /* "oggi alle 14:22", "3 giorni fa", "27 giu 2025". Relativo finché resta
-     leggibile, datato dopo: a novanta giorni "90 giorni fa" non dice più
-     niente, una data sì. "Ieri" ha un ramo suo perché "1 giorni fa" si legge
-     male in entrambe le lingue. Le date passano da `toLocaleDateString`, che le
-     localizza da sé: non sono stringhe scritte a mano. */
-  _formatUpdateWhen(ms) {
-    const at = new Date(Number(ms) || 0);
-    const dayMs = 86400000;
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const time = at.toLocaleTimeString(i18n.locale, { hour: '2-digit', minute: '2-digit' });
-    if (at.getTime() >= midnight.getTime()) return i18n.t('settings.update.whenToday', { time });
-    if (at.getTime() >= midnight.getTime() - dayMs) return i18n.t('settings.update.whenYesterday', { time });
-    // Arrotondato per eccesso: il ramo "ieri" qui sopra garantisce già >= 2, e
-    // troncando, un controllo di tre giorni fa alle 23:00 diventerebbe "2".
-    const days = Math.ceil((midnight.getTime() - at.getTime()) / dayMs);
-    if (days <= 30) return i18n.t('settings.update.whenDays', { days });
-    return at.toLocaleDateString(i18n.locale, { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
-  /* Ridipinge solo questo blocco: come `_paintUpdate`, un render() completo
-     ricostruirebbe tutta la pagina per accendere l'etichetta di un bottone. Il
-     rewire è obbligatorio, `outerHTML` butta via il nodo con il suo listener. */
-  _paintUpdateCheck() {
-    const host = this.contentEl?.querySelector('#update-check');
-    if (!host) return;
-    host.outerHTML = this._renderUpdateCheck(this.data?.version || {});
-    this._wireBtn('btn-update-check', () => this._runUpdateCheck());
-  }
-
-  /* Controllo forzato. Esiste perché senza di esso non c'è alcun modo di
-     chiedere "sei ancora viva?": si aspetta il cron, ventiquattr'ore, e se
-     fallisce non lo dice nessuno. È l'affordance che rende diagnosticabili le
-     righe qui sopra, e `check_for_update` ignora `updates.enabled` proprio per
-     poter essere chiamata così. Il doppio tap è fermato due volte: qui dal
-     flag, e lato server da un lock, perché la rotta fa rete. */
-  async _runUpdateCheck() {
-    if (this._checking) return;
-    const gen = this._gen;
-    this._checking = true;
-    this._paintUpdateCheck();
-
-    let payload = null;
-    try {
-      /* GET e non POST: v. `_startUpdate` per il motivo (il server HTTP di
-         `websockets` rifiuta ogni altro metodo prima del router). */
-      const res = await api._fetch('/api/updates/check');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      payload = await res.json();
-    } catch (_) {
-      payload = null;
-    }
-    /* Il flag si azzera anche se nel frattempo si è usciti dalla sezione: è
-       roba del controller, non del DOM, e lasciarlo acceso bloccherebbe il
-       bottone al rientro senza che nulla lo rimetta a posto. */
-    this._checking = false;
-    if (this._stale(gen)) return;
-
-    if (!payload) {
-      this._paintUpdateCheck();
-      showToast(i18n.t('settings.update.checkFailed'), 'error');
-      return;
-    }
-    if (payload.status === 'busy') {
-      this._paintUpdateCheck();
-      showToast(i18n.t('settings.update.checkBusy'));
-      return;
-    }
-    /* Il payload versione fresco entra in `this.data` e la pagina si ridisegna:
-       senza, una versione appena trovata comparirebbe solo alla prossima
-       apertura delle impostazioni — cioè proprio dopo il gesto con cui
-       l'utente l'ha chiesta. */
-    if (this.data && payload.version) this.data.version = payload.version;
-    this.render();
-    if (payload.status !== 'ok') {
-      showToast(i18n.t('settings.update.checkFailed'), 'error');
-      return;
-    }
-    const v = payload.version || {};
-    showToast(v.update_available
-      ? i18n.t('settings.update.available', { version: v.latest || '' })
-      : i18n.t('settings.update.checkUpToDate'));
-  }
-
-  /* Chiave della riga di fase. `idle` non ne ha una: prima di premere il
-     bottone non c'è niente da raccontare, e dopo un errore la fase torna a
-     essere l'ultima cosa detta, non "inattivo". */
-  _updatePhaseKey(phase) {
-    return {
-      downloading: 'settings.update.phaseDownloading',
-      installing: 'settings.update.phaseInstalling',
-      prompt: 'settings.update.phasePrompt',
-      error: 'settings.update.phaseError',
-      done: 'settings.update.phaseDone',
-    }[phase] || '';
-  }
-
-  _updateProgressHtml() {
-    const u = this._update;
-    if (!u) return '';
-    const rows = [];
-    // La nota sopravvive ai cambi di fase: dice che cosa ci si deve aspettare
-    // (riavvio in arrivo, conferma di sistema da dare), la fase dice solo a che
-    // punto è.
-    if (u.noteKey) rows.push(`<div class="update-note">${escapeHtml(i18n.t(u.noteKey))}</div>`);
-    const phaseKey = this._updatePhaseKey(u.phase);
-    if (phaseKey) rows.push(`<div class="update-phase">${escapeHtml(i18n.t(phaseKey))}</div>`);
-    if (u.detail) rows.push(`<div class="update-detail">${escapeHtml(u.detail)}</div>`);
-    if ((u.phase === 'downloading' || u.phase === 'installing') && u.progress > 0) {
-      rows.push(`
-        <div class="update-progress-track">
-          <span class="update-progress-bar" style="width:${Math.min(Math.max(u.progress, 0), 100)}%"></span>
-        </div>`);
-    }
-    return rows.length ? `<div class="update-status">${rows.join('')}</div>` : '';
-  }
-
-  /* Ridipinge solo il riquadro di stato: un render() completo qui
-     ricostruirebbe tutta la pagina a ogni giro di polling. */
-  _paintUpdate() {
-    const host = this.contentEl?.querySelector('#update-progress');
-    if (host) host.innerHTML = this._updateProgressHtml();
-    const btn = this.contentEl?.querySelector('#btn-update-install');
-    if (btn) btn.disabled = !!this._update?.busy;
-  }
-
-  async _startUpdate() {
-    const gen = this._gen;
-    this._update = { busy: true, noteKey: 'settings.update.starting', phase: 'idle', progress: 0, detail: '' };
-    this._updatePolls = 0;
-    this._paintUpdate();
-
-    /* Il polling parte *prima* di aspettare la risposta, non dopo: la richiesta
-       di installazione risponde solo a download+commit conclusi, e nel percorso
-       "silent" non risponde affatto — il sistema uccide il processo mentre la
-       risposta è ancora in volo. Lo stato vero arriva da qui. */
-    this._scheduleUpdatePoll(gen);
-
-    let result;
-    try {
-      /* GET e non POST, come ogni altra scrittura di questa WebUI: il server
-         HTTP è quello di `websockets`, e `Request.parse` rifiuta qualunque
-         metodo diverso da GET *prima* che la richiesta arrivi al router — un
-         POST qui non fallirebbe con un 405, fallirebbe con la connessione
-         chiusa. `api._fetch` e non un metodo di api-client: aggiungerlo lì è
-         fuori dal perimetro di questa modifica. */
-      const res = await api._fetch('/api/updates/install');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      result = await res.json();
-    } catch (err) {
-      if (this._stale(gen) || !this._update) return;
-      /* Connessione caduta a installazione già avviata: è il riavvio, non un
-         guasto — chiamarlo errore sarebbe una bugia proprio nel caso normale.
-         Solo se il polling non ha ancora visto muoversi niente si tratta di un
-         vero fallimento di partenza. */
-      if (this._update.phase !== 'idle') {
-        this._update.noteKey = 'settings.update.restarting';
-        this._paintUpdate();
-        return;
-      }
-      this._failUpdate(err.message);
-      return;
-    }
-    if (this._stale(gen) || !this._update) return;
-
-    if (!result.ok || result.state === 'error') {
-      // Un rifiuto (niente da installare, versione già applicata) non sporca la
-      // fase lato server: il motivo sta tutto nel `detail` della risposta, e il
-      // polling lo cancellerebbe rileggendo una fase ancora "idle".
-      this._failUpdate(result.detail || '');
-      return;
-    }
-
-    if (result.state === 'prompt') {
-      this._settleUpdateAtPrompt(result.detail || '');
-      return;
-    }
-
-    /* "silent" non vuol dire "finito": la sessione è committata, il sistema
-       ucciderà questo processo e Jenny ripartirà da sola. La WebSocket cadrà —
-       ws-manager riconnette da sé con backoff — e dirlo prima è l'unico modo
-       perché quella caduta non sembri un guasto. */
-    this._update.noteKey = 'settings.update.restarting';
-    this._paintUpdate();
-  }
-
-  /* `prompt` è terminale: la palla è passata ad Android e non torna indietro da
-     sola. La fase resta su questo valore finché l'utente non risponde, quindi
-     continuare a interrogarla non porta niente di nuovo — porta solo dieci
-     minuti di polling con il bottone disabilitato, e un'uscita-e-rientro dalle
-     impostazioni ne fa ripartire altri dieci.
-
-     Non è un caso di nicchia da cui difendersi per scrupolo: su Android 14+,
-     con l'update ownership, il ramo con conferma è *la* strada normale
-     (v. `UpdateBridge.kt`). Qui si ferma il polling, si sblocca il bottone e si
-     dice che cosa manca — la conferma può essere una schermata aperta davanti
-     agli occhi o, se l'app era in background, una notifica ancora in attesa. Se
-     l'utente la perde, "Installa ora" è di nuovo premibile. */
-  _settleUpdateAtPrompt(detail) {
-    this._stopUpdatePoll();
-    this._update = {
-      ...(this._update || {}),
-      busy: false,
-      noteKey: 'settings.update.promptNote',
-      phase: 'prompt',
-      progress: 0,
-      detail: detail || this._update?.detail || '',
-    };
-    this._paintUpdate();
-  }
-
-  /* Esito negativo definitivo: ferma il polling *prima* di scrivere lo stato,
-     altrimenti il giro successivo sovrascrive il motivo con la fase del
-     server, che dopo un rifiuto è ancora "inattivo". */
-  _failUpdate(detail) {
-    this._stopUpdatePoll();
-    this._update = { busy: false, noteKey: null, phase: 'error', progress: 0, detail };
-    this._paintUpdate();
-    showToast(i18n.t('settings.update.startFailed'), 'error');
-  }
-
-  _stopUpdatePoll() {
-    clearTimeout(this._updateTimer);
-    this._updateTimer = null;
-  }
-
-  _scheduleUpdatePoll(gen) {
-    clearTimeout(this._updateTimer);
-    this._updateTimer = setTimeout(() => this._pollUpdateStatus(gen), 1500);
-  }
-
-  async _pollUpdateStatus(gen) {
-    if (this._stale(gen)) return;
-    let status;
-    try {
-      const res = await api._fetch('/api/updates/status');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      status = await res.json();
-    } catch (_) {
-      /* Un polling che fallisce non è un'installazione fallita: durante
-         l'installazione il gateway *sparisce* (è il caso normale, non
-         l'eccezione). Si riprova senza cambiare quello che l'utente legge. */
-      if (!this._stale(gen) && this._updatePolls++ < 400) this._scheduleUpdatePoll(gen);
-      return;
-    }
-    if (this._stale(gen) || !this._update) return;
-
-    this._update = {
-      ...this._update,
-      phase: status.phase || 'idle',
-      progress: Number(status.progress) || 0,
-      detail: status.detail || '',
-    };
-    /* Terminale quanto `error` e `done`, ma per l'altro motivo: non è finita,
-       è ferma e aspetta una persona. Vedi `_settleUpdateAtPrompt`. */
-    if (status.phase === 'prompt') {
-      this._settleUpdateAtPrompt(status.detail || '');
-      return;
-    }
-    if (status.phase === 'error' || status.phase === 'done') {
-      this._stopUpdatePoll();
-      this._update.busy = false;
-      /* "done" lato server vuol dire "sessione committata", non "installato":
-         subito dopo Android sostituisce l'app e il processo muore. La nota sul
-         riavvio è quindi più vera adesso che mai — e la si rimette anche se la
-         risposta della richiesta non è mai arrivata. */
-      if (status.phase === 'done') this._update.noteKey = 'settings.update.restarting';
-      this._paintUpdate();
-      return;
-    }
-    this._paintUpdate();
-    // Tetto di sicurezza (~10 minuti): senza, una fase che non si muove più
-    // lascerebbe un timer vivo per tutta la vita della pagina.
-    if (this._updatePolls++ < 400) this._scheduleUpdatePoll(gen);
-  }
-
-  /* Strada permanente verso il wizard di configurazione. Finora l'onboarding
-     era raggiungibile solo al primo avvio, e solo perché il gateway rispondeva
-     `first_run: true`: chi voleva rifare la configurazione da capo — o chi al
-     boot ha incontrato un errore che ha lasciato indeterminato lo stato del
-     primo avvio — non aveva alcun modo di riaprirlo. La voce sta qui e non
-     accanto ai provider perché non è "cambia il modello": rifà tutto il giro. */
-  _renderRerunOnboarding() {
-    return `
-      <div class="settings-subheading">${i18n.t('settings.rerunOnboarding')}</div>
-      <p class="settings-hint" style="margin:0 0 10px;font-size:12px;color:var(--text-faint)">${i18n.t('settings.rerunOnboardingHint')}</p>
-      <button class="settings-btn-add" id="btn-rerun-onboarding"><i class="ti ti-rocket"></i> ${i18n.t('settings.rerunOnboardingAction')}</button>`;
-  }
-
-  async _rerunOnboarding() {
-    if (!await confirmDialog(i18n.t('settings.rerunOnboardingConfirm'))) return;
-    const app = window.mobileApp;
-    if (!app) return;
-    app.openOnboarding();
-  }
-
+  /** In cassetto c'e' solo la riga: qui si va a prendere di che riempirla.
+   *
+   *  I comandi del pannello (crea, conservazione) li aggancia `_wireHistory`
+   *  quando il pannello si apre: adesso non esistono nel DOM.
+   */
   _wireBackup() {
-    this._wireBtn('btn-backup-export', () => runExportFlow());
-    this._wireBtn('btn-backup-import', async () => {
-      if (await confirmDialog(i18n.t('backup.importConfirm'))) runImportFlow();
-    });
-    this._wireBtn('btn-snapshot-create', async () => {
-      try {
-        const res = await api.createSnapshot();
-        showToast(res.snapshot
-          ? i18n.t('backup.snapshotCreated')
-          : i18n.t('backup.snapshotNoChanges'));
-        this._loadSnapshotList();
-      } catch (e) { showToast(e.message, 'error'); }
-    });
-    const retentionEl = this.contentEl.querySelector('#snapshot-retention');
+    this._loadHistorySummary();
+  }
+
+  /** I comandi dentro il pannello. Girano all'apertura, non al caricamento. */
+  _wireHistory() {
+    const createBtn = document.getElementById('btn-snapshot-create');
+    if (createBtn) {
+      createBtn.addEventListener('click', async () => {
+        try {
+          const res = await api.createSnapshot();
+          showToast(res.snapshot
+            ? i18n.t('backup.snapshotCreated')
+            : i18n.t('backup.snapshotNoChanges'));
+          this._loadSnapshotList();
+          this._loadHistorySummary();
+        } catch (e) { showToast(e.message, 'error'); }
+      });
+    }
+    const retentionEl = document.getElementById('snapshot-retention');
     if (retentionEl) {
       retentionEl.addEventListener('change', async () => {
         try {
           await api.updateSnapshotRetention(parseInt(retentionEl.value, 10));
           showToast(i18n.t('settings.saved'));
           this._loadSnapshotList();
+          this._loadHistorySummary();
         } catch (e) { showToast(e.message, 'error'); }
       });
     }
-    this._loadSnapshotList();
+  }
+
+  /** Quante istantanee ci sono e quanto va indietro la piu' vecchia.
+   *
+   *  Due numeri al posto di venti righe. Un fallimento non lascia la riga a
+   *  «Caricamento...» per sempre: dice che non si e' potuto leggere, che e'
+   *  un'informazione, mentre un caricamento eterno e' un guasto travestito.
+   */
+  async _loadHistorySummary() {
+    const gen = this._gen;
+    const write = (text) => {
+      const el = this.contentEl?.querySelector('#summary-history');
+      if (el) el.textContent = text;
+    };
+    try {
+      const history = await api.getSnapshotHistory();
+      if (this._stale(gen)) return;
+      const snapshots = history.snapshots || [];
+      if (!snapshots.length) {
+        write(i18n.t('backup.snapshotSummaryEmpty'));
+        return;
+      }
+      /* La piu' vecchia, non la piu' recente: dice **quanto indietro si puo'
+         tornare**, che e' la cosa per cui una storia esiste. */
+      const oldest = Math.min(...snapshots.map(s => s.created_at_ms));
+      write(i18n.t('backup.snapshotSummary', {
+        count: snapshots.length,
+        when: whenText(oldest),
+      }));
+    } catch {
+      if (this._stale(gen)) return;
+      write(i18n.t('backup.snapshotHistoryUnavailable'));
+    }
   }
 
   /** Allinea la select al valore corrente; un valore fuori preset (config
    *  editata a mano) diventa un'opzione dedicata invece di mostrarne una falsa. */
   _syncRetentionSelect(days) {
-    const el = this.contentEl.querySelector('#snapshot-retention');
+    const el = document.getElementById('snapshot-retention');
     if (el == null || days == null) return;
     const value = String(days);
     if (![...el.options].some(o => o.value === value)) {
@@ -2058,7 +2486,7 @@ export class SettingsController {
   /* Stesso motivo di `_loadSsh`: il nodo si cerca dopo l'await. */
   async _loadSnapshotList() {
     const gen = this._gen;
-    if (!this.contentEl.querySelector('#snapshot-list')) return;
+    if (!document.getElementById('snapshot-list')) return;
     let snapshots = [];
     try {
       const history = await api.getSnapshotHistory();
@@ -2067,11 +2495,11 @@ export class SettingsController {
       this._syncRetentionSelect(history.retention_max_age_days);
     } catch {
       if (this._stale(gen)) return;
-      const failEl = this.contentEl.querySelector('#snapshot-list');
+      const failEl = document.getElementById('snapshot-list');
       if (failEl) failEl.innerHTML = `<div class="settings-empty-state">${i18n.t('backup.snapshotHistoryUnavailable')}</div>`;
       return;
     }
-    const listEl = this.contentEl.querySelector('#snapshot-list');
+    const listEl = document.getElementById('snapshot-list');
     if (!listEl) return;
     if (!snapshots.length) {
       listEl.innerHTML = `<div class="settings-empty-state">${i18n.t('backup.snapshotHistoryEmpty')}</div>`;
@@ -2148,25 +2576,180 @@ export class SettingsController {
 
   // ── Form Helpers ───────────────────────────────────────────────────
 
+  /* Le tre righe dell'officina — un numero, un menu', un numero col suo range —
+     hanno tutte la stessa forma: nome a sinistra, comando a destra. Era
+     impilata: etichetta sopra, campo a tutta larghezza sotto. Vedi
+     `.settings-row` nel foglio di stile per il motivo della classe nuova. */
   _field(label, type, key, value, placeholder = '') {
-    return `<div class="settings-field">
-      <label class="settings-label">${label}</label>
-      <input type="${type}" class="settings-input" data-key="${key}" value="${escapeHtml(String(value))}"
+    /* `for`/`id` legano l'etichetta al campo: senza, il lettore di schermo
+       annuncia un «campo di testo» senza dire quale. */
+    return `<div class="settings-row">
+      <label class="settings-label" for="settings-${key}">${label}</label>
+      <input type="${type}" class="settings-input" id="settings-${key}" data-key="${key}" value="${escapeHtml(String(value))}"
         placeholder="${escapeHtml(placeholder)}">
     </div>`;
   }
 
+  /** Un menu'. Le voci sono stringhe, oppure `{v, t}` quando quel che si
+   *  salva e quel che si legge non sono la stessa cosa — un numero di token si
+   *  salva «65536» e si legge «65 536», e senza i separatori nessuno conta le
+   *  cifre. */
   _select(label, key, value, options) {
-    const opts = options.map(o =>
-      `<option value="${escapeHtml(o)}" ${o === value ? 'selected' : ''}>${o || '—'}</option>`
-    ).join('');
-    return `<div class="settings-field">
-      <label class="settings-label">${label}</label>
-      <select class="settings-select" data-key="${key}">${opts}</select>
+    const opts = options.map(o => {
+      const v = typeof o === 'object' ? o.v : o;
+      const t = typeof o === 'object' ? o.t : o;
+      return `<option value="${escapeHtml(v)}" ${v === value ? 'selected' : ''}>${escapeHtml(t) || '—'}</option>`;
+    }).join('');
+    return `<div class="settings-row">
+      <label class="settings-label" for="settings-${key}">${label}</label>
+      <select class="settings-select" id="settings-${key}" data-key="${key}">${opts}</select>
     </div>`;
   }
 
   // ── Wire Events ────────────────────────────────────────────────────
+
+  // ── Skill ──────────────────────────────────────────────────────────
+
+  /** Le skill, in cassetto, sono una riga: quante vengono con l'app e quante
+   *  sono tue. L'elenco e l'interruttore stanno nel pannello.
+   *
+   *  Stavano nella schermata Apps, cancellata il 21/09/2026, e da allora non si
+   *  vedevano da nessuna parte. Qui e non altrove perche' Mani risponde a
+   *  *cosa sa fare* Jenny, e una skill e' una procedura che sa eseguire.
+   *  Crearle, cambiarle e cancellarle
+   *  restano fuori, per scelta: si chiede a lei, in chat.
+   */
+  _renderSkill() {
+    return this._summary('skill', i18n.t('skills.summaryName'), i18n.t('settings.loading'))
+      + `<p class="settings-link">${i18n.t('skills.howToTeach')}</p>`;
+  }
+
+  /** La riga in cassetto. Un errore lo dice invece di restare a caricare. */
+  async _loadSkillsSummary() {
+    const gen = this._gen;
+    const write = (text) => {
+      const el = this.contentEl?.querySelector('#summary-skill');
+      if (el) el.textContent = text;
+    };
+    try {
+      const { skills } = await api.listSkills();
+      if (this._stale(gen)) return;
+      write(skillsSummary(splitSkill(skills), (k, v) => i18n.t(k, v)));
+    } catch {
+      if (this._stale(gen)) return;
+      write(i18n.t('skills.summaryError'));
+    }
+  }
+
+  /** Il pannello. Rilegge **sempre** all'apertura, e non riusa la fetch della
+   *  riga: una skill che Jenny ha scritto un minuto fa deve esserci.
+   *
+   *  Il corpo si cerca in `document` e non in `contentEl`: il pannello vive
+   *  fuori dalla vista, ed e' la trappola in cui `_loadSnapshotList` e' gia'
+   *  caduta una volta. */
+  async _openSkill() {
+    const body = document.getElementById('drawer-skill-body');
+    if (!body) return;
+    const gen = this._gen;
+    body.innerHTML = `<div class="settings-empty-state">${i18n.t('settings.loading')}</div>`;
+    let skills;
+    try {
+      ({ skills } = await api.listSkills());
+    } catch {
+      if (this._stale(gen)) return;
+      body.innerHTML = `
+        <div class="settings-empty-state">${i18n.t('skills.readError')}</div>
+        <button class="settings-btn-add" type="button" data-skill-retry>${i18n.t('skills.retry')}</button>`;
+      body.querySelector('[data-skill-retry]')
+        ?.addEventListener('click', () => this._openSkill());
+      return;
+    }
+    if (this._stale(gen)) return;
+    const { yours, integrate, service } = splitSkill(skills);
+    body.innerHTML = `
+      <div class="settings-group">
+        <div class="settings-group-label">${i18n.t('skills.yours')}</div>
+        <section class="settings-card">${yours.length
+          ? yours.map((sk) => this._skillRow(sk)).join('')
+          : this._skillEmpty()}</section>
+      </div>
+      ${integrate.length ? `
+      <div class="settings-group">
+        <div class="settings-group-label">${i18n.t('skills.builtIn')}</div>
+        <section class="settings-card">${integrate.map((sk) => this._skillRow(sk)).join('')}</section>
+      </div>` : ''}
+      ${service ? `<p class="settings-link">${i18n.t('skills.service', { n: service })}</p>` : ''}`;
+    this._wireSkill(body);
+  }
+
+  /** Una skill: nome, una riga sotto, e a destra o l'interruttore o il
+   *  lucchetto. L'interruttore c'e' solo dove la scelta sopravvive al riavvio
+   *  (`controllable`): su una integrata l'avvio la cancellerebbe.
+   *
+   *  «Non disponibile» e «spenta» sono due cose: la prima e' un impedimento, e
+   *  prende la riga sotto col suo motivo — in testo, non solo in colore. */
+  _skillRow(sk) {
+    const name = escapeHtml(sk.name);
+    const under = sk.available === false
+      ? `<span class="skill-row-broken"><span class="skill-row-dot" aria-hidden="true"></span>${escapeHtml(sk.unavailable_reason || '')}</span>`
+      : escapeHtml(skillBlurb(sk, i18n.locale, (k) => i18n.t(k)));
+    const command = controllable(sk)
+      ? `<label class="toggle-switch">
+          <input type="checkbox" data-skill-toggle="${name}" ${sk.disabled ? '' : 'checked'}
+                 aria-label="${escapeHtml(i18n.t('skills.active', { name: sk.name }))}">
+          <span class="toggle-slider"></span>
+        </label>`
+      : `<i class="ti ti-lock skill-row-lock" role="img"
+            aria-label="${escapeHtml(i18n.t(blockReason(sk)))}"
+            title="${escapeHtml(i18n.t(blockReason(sk)))}"></i>`;
+    return `<div class="skill-row">
+      <button class="skill-row-text" type="button" aria-expanded="false">
+        <span class="skill-row-name">${name}</span>
+        ${under ? `<span class="skill-row-under">${under}</span>` : ''}
+      </button>
+      ${command}
+    </div>`;
+  }
+
+  /** «Le tue», vuota: un invito, non una scusa. Il bottone scrive nel composer
+   *  e **non manda**: la frase la finisce l'utente. */
+  _skillEmpty() {
+    return `<div class="skill-empty">
+      <i class="ti ti-sparkles" aria-hidden="true"></i>
+      <div class="skill-empty-title">${i18n.t('skills.emptyTitle')}</div>
+      <p class="settings-hint">${i18n.t('skills.emptyText')}</p>
+      <button class="settings-btn-add" type="button" data-skill-ask>${i18n.t('skills.ask')}</button>
+    </div>`;
+  }
+
+  _wireSkill(body) {
+    // Il tocco sul testo scioglie il troncamento a due righe: e' l'unica cosa
+    // in piu' che la riga ha da dire, e non vale un foglio.
+    body.querySelectorAll('.skill-row-text').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        btn.setAttribute('aria-expanded', String(btn.getAttribute('aria-expanded') !== 'true'));
+      });
+    });
+    body.querySelectorAll('[data-skill-toggle]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const active = input.checked;
+        input.disabled = true;  // una richiesta alla volta
+        try {
+          await api.setSkillDisabled(input.dataset.skillToggle, !active);
+        } catch {
+          input.checked = !active;  // rollback sull'errore
+          showToast(i18n.t('settings.saveError'), 'error');
+        } finally {
+          input.disabled = false;
+        }
+      });
+    });
+    body.querySelector('[data-skill-ask]')?.addEventListener('click', () => {
+      const app = window.mobileApp;
+      app?.drawer?.close('skill');
+      app?.sendInChat?.(i18n.t('skills.askPrompt'));
+    });
+  }
 
   // ── Programmazione ─────────────────────────────────────────────────────
 
@@ -2208,20 +2791,10 @@ export class SettingsController {
       nowMs: payload.now_ms,
       tr: (key, params) => i18n.t(key, params),
       locale: i18n.locale,
+      keep: HANDS_JOBS,
     });
     blockEl.innerHTML = this._renderCronBlock(this._cron);
     this._wireCronBlock();
-    /* Se c'è qualcosa da dire, la sezione si apre da sé. Stesso argomento della
-       card batteria: un accordion chiuso è esattamente il posto in cui il
-       problema è rimasto invisibile finora. Solo la prima volta per apertura di
-       schermata, perché richiudere una sezione che l'utente ha chiuso a mano
-       sarebbe una lotta. */
-    if (this._cron.banner && !this._cronAutoOpened) {
-      this._cronAutoOpened = true;
-      this._openSections.add('scheduling');
-      const sec = this.contentEl.querySelector('[data-section="scheduling"]');
-      if (sec) sec.classList.remove('collapsed');
-    }
     this._restoreScrollTop();
   }
 
@@ -2241,7 +2814,7 @@ export class SettingsController {
       <div class="cron-asof">
         <span>${escapeHtml(i18n.t('cron.asOf', { time: stamp }))}</span>
         <button class="cron-refresh" id="btn-cron-refresh">
-          <i class="ti ti-refresh"></i> ${i18n.t('cron.refresh')}
+          <i class="ti ti-refresh" aria-hidden="true"></i> ${i18n.t('cron.refresh')}
         </button>
       </div>`;
   }
@@ -2284,41 +2857,53 @@ export class SettingsController {
      schedulazione, prossima e ultima esecuzione — e il resto (storico, testo del
      promemoria, controlli dell'heartbeat) sta nel dettaglio: una riga d'elenco
      che porta tutto smette di essere un elenco. */
+  /** Un lavoro, in una riga.
+   *
+   *  Era una scheda alta: nome e schedule in testa, una fila di targhette, e
+   *  «Next: …» / «Last: … · esito» su due righe intere. Con cinque lavori
+   *  faceva oltre un terzo dell'altezza di Mani (misurato sul telefono il
+   *  21/09/2026, foto intera).
+   *
+   *  La tavola ne fa una riga: **nome** a sinistra con la sua natura, l'esito
+   *  dell'ultimo giro sotto, e **quando tocca di nuovo** a destra. Le due
+   *  parole «Next» e «Last» spariscono: la colonna di destra *e'* il prossimo
+   *  giro, e la riga sotto *e'* l'ultimo. Restano il pallino dell'esito e le
+   *  targhette che cambiano il significato della riga (spento, inerte), che non
+   *  sono decorazione: un lavoro spento con su scritto «fra 4 minuti» sarebbe
+   *  una bugia.
+   */
   _renderCronJob(row) {
     const badges = [];
     if (row.kind === 'system') badges.push(i18n.t('cron.job.protected'));
     if (row.monitor) badges.push(i18n.t('cron.job.monitor'));
     if (row.oneShot) badges.push(i18n.t('cron.job.oneShot'));
-    if (row.health === 'off') badges.push(i18n.t('cron.job.disabled'));
+    // In pausa e' uno «spento» che torna: si dice per quel che e'.
+    if (row.pausedAtMs) badges.push(i18n.t('cron.job.paused'));
+    else if (row.health === 'off') badges.push(i18n.t('cron.job.disabled'));
     if (row.health === 'inert') badges.push(i18n.t('cron.job.inert'));
-    const badgeHtml = badges.length
-      ? `<div class="cron-badges">${badges.map(b => `<span class="cron-badge">${escapeHtml(b)}</span>`).join('')}</div>`
-      : '';
-    const next = row.next
-      ? `<span class="cron-when${row.next.overdue ? ' cron-when-overdue' : ''}">
-           ${escapeHtml(row.next.overdue ? i18n.t('cron.job.nextOverdue') : i18n.t('cron.job.next'))}:
-           ${escapeHtml(row.next.relative)}${this._cronTz(row.next)}
-         </span>`
-      : `<span class="cron-when cron-when-muted">${escapeHtml(i18n.t('cron.job.noNext'))}</span>`;
+    const badgeHtml = badges
+      .map(b => `<span class="cron-badge">${escapeHtml(b)}</span>`).join('');
+    const when = row.next
+      ? `<span class="cron-row-when${row.next.overdue ? ' is-late' : ''}">${escapeHtml(row.next.relative)}${this._cronTz(row.next)}</span>`
+      : `<span class="cron-row-when is-mute">${escapeHtml(i18n.t('cron.job.noNext'))}</span>`;
     const last = row.last
-      ? `<span class="cron-when">
-           ${escapeHtml(i18n.t('cron.job.last'))}: ${escapeHtml(row.last.relative)}
-           <span class="cron-dot cron-dot-${row.lastTone}"></span>${escapeHtml(this._cronStatusText(row.lastStatus))}
-         </span>`
-      : `<span class="cron-when cron-when-muted">${escapeHtml(i18n.t('cron.job.neverRun'))}</span>`;
+      ? `<span class="cron-dot cron-dot-${row.lastTone}"></span>${escapeHtml(row.last.relative)} · ${escapeHtml(this._cronStatusText(row.lastStatus))}`
+      : escapeHtml(i18n.t('cron.job.neverRun'));
+    /* Il conteggio dei «non ho potuto controllare» resta su una riga sua: e' lo
+       stato che dice che un monitor sta girando a vuoto, e incastrarlo nella
+       riga dell'esito lo farebbe leggere come parte di quello. */
     const cnc = row.couldNotCheck?.consecutive_could_not_check
       ? `<div class="cron-health">${escapeHtml(this._cronHealthText(row.couldNotCheck))}</div>`
       : '';
     return `
-      <div class="cron-card cron-card-${row.health}" data-cron-job="${escapeHtml(row.id)}">
-        <div class="cron-card-head">
-          <span class="cron-name">${escapeHtml(row.name)}</span>
-          <span class="cron-schedule">${escapeHtml(row.schedule)}</span>
-        </div>
-        ${badgeHtml}
-        <div class="cron-lines">${next}${last}</div>
-        ${cnc}
-      </div>`;
+      <button class="cron-row cron-card-${row.health}" type="button" data-cron-job="${escapeHtml(row.id)}">
+        <span class="cron-row-text">
+          <span class="cron-row-name">${escapeHtml(row.name)}${badgeHtml}</span>
+          <span class="cron-row-under">${last}</span>
+          ${cnc}
+        </span>
+        ${when}
+      </button>`;
   }
 
   /* Il fuso si nomina solo quando diverge da quello del dispositivo: `09:00
@@ -2360,8 +2945,13 @@ export class SettingsController {
      la stessa modale. `detailDialog` ha una sola istanza (`#oc-detail-dialog`) e
      si rifiuta di aprirsi se è già aperta, quindi un secondo livello job→run non
      esisterebbe comunque — meglio progettarlo piatto che scoprirlo dopo. */
-  _showCronJobDialog(row) {
+  async _showCronJobDialog(row) {
     const parts = [];
+    if (row.pausedAtMs) {
+      parts.push(`<p class="oc-detail-lead">${escapeHtml(i18n.t('cron.job.pausedSince', {
+        when: new Date(row.pausedAtMs).toLocaleString(i18n.locale),
+      }))}</p>`);
+    }
     if (row.purpose) parts.push(`<p class="oc-detail-lead">${escapeHtml(row.purpose)}</p>`);
     if (row.message) {
       parts.push(`<div class="settings-subheading">${i18n.t('cron.job.text')}</div>
@@ -2380,7 +2970,45 @@ export class SettingsController {
     } else {
       parts.push(`<div class="settings-empty-state">${i18n.t('cron.job.noRuns')}</div>`);
     }
-    detailDialog({ title: row.name, bodyHtml: parts.join('') });
+    /* I gesti in fondo al dettaglio: quelli che il server ha detto possibili
+       (`row.actions`). «Riprendi» e' il principale; la modale e' una sola,
+       quindi la conferma di «Elimina» si apre dopo, quando questa e' chiusa. */
+    const actions = row.actions.map((id) => ({
+      id,
+      label: i18n.t(`cron.action.${id}`),
+      variant: id === 'resume' ? 'primary' : undefined,
+    }));
+    const choice = await detailDialog({ title: row.name, bodyHtml: parts.join(''), actions });
+    if (choice) await this._runCronAction(row, choice);
+  }
+
+  /** Pausa, ripresa, eliminazione. La pausa non chiede: si annulla con un
+   *  tocco. L'eliminazione si': un job tolto non torna, se non chiedendolo di
+   *  nuovo a Jenny. */
+  async _runCronAction(row, action) {
+    if (!['pause', 'resume', 'remove'].includes(action)) return;
+    if (action === 'remove') {
+      const ok = await confirmDialog(
+        i18n.t('cron.action.removeConfirm', { name: row.name }),
+        i18n.t('cron.action.remove'),
+      );
+      if (!ok) return;
+    }
+    try {
+      await api.cronJobAction(row.id, action);
+      showToast(i18n.t(`cron.action.done.${action}`), 'success');
+    } catch (err) {
+      console.warn('cron action failed', action, err);
+      /* 409 non e' solo «scaduto»: il gateway ci risponde anche `protected`
+         (un job di sistema), e il corpo dice quale dei due (`cron_routes.py`,
+         `http_error(status, result)`). «L'ora e' passata, si puo' solo
+         eliminare» detto a un rifiuto per protezione manda a cercare un
+         promemoria che non c'e'. */
+      const reason = String(err?.message || '').trim();
+      const expired = err?.status === 409 && reason !== 'protected';
+      showToast(i18n.t(expired ? 'cron.action.expired' : 'cron.action.failed'), 'error');
+    }
+    await this._loadCron();
   }
 
   /* I controlli di HEARTBEAT.md. Il blocco esiste solo per il job `heartbeat`, e
@@ -2428,19 +3056,8 @@ export class SettingsController {
   }
 
   _wireSections() {
-    // Accordion toggle (lo stato aperto va in _openSections così i
-    // re-render non richiudono la sezione in cui l'utente sta lavorando)
-    this.contentEl.querySelectorAll('.settings-section-header').forEach(h => {
-      h.addEventListener('click', () => {
-        const sec = h.closest('.settings-section');
-        const collapsed = sec.classList.toggle('collapsed');
-        if (collapsed) this._openSections.delete(sec.dataset.section);
-        else this._openSections.add(sec.dataset.section);
-      });
-    });
-
     // Active config fields → auto-save on change
-    for (const key of ['bot_name', 'max_tokens', 'temperature', 'reasoning_effort']) {
+    for (const key of ['max_tokens', 'temperature', 'reasoning_effort', 'context_window_tokens']) {
       const el = this.contentEl.querySelector(`[data-key="${key}"]`);
       if (!el) continue;
       el.addEventListener('change', () => this._debouncedSave(key, el.value));
@@ -2448,13 +3065,17 @@ export class SettingsController {
 
     this._wireWorkerSettings();
 
-    // Telegram: widget condiviso con lo step di onboarding
-    const tgContainer = this.contentEl.querySelector('#settings-telegram-widget');
-    if (tgContainer) {
-      if (this._tgWidget) this._tgWidget.destroy();
-      this._tgWidget = new TelegramPairingWidget(tgContainer, { mode: 'settings' });
-      this._tgWidget.refresh();
-    }
+    // I file veri: la scheda nasce vuota e il gestore file ci si aggancia
+    // sopra. Fuori da Memoria il contenitore non esiste e il metodo esce
+    // subito.
+    this._mountFile();
+
+    // Telegram: in cassetto solo la riga. Il widget lo monta `_openTelegram`
+    // quando il pannello si apre — prima, il suo contenitore non esiste.
+    this._loadTelegramSummary();
+
+    // Skill: stessa forma: la riga si riempie da sé, il pannello all'apertura.
+    this._loadSkillsSummary();
 
     // Attività in background: stessa card condivisa con onboarding e Telegram.
     // Qui `grantedKey` è d'obbligo — è l'unica superficie che l'utente apre
@@ -2481,20 +3102,9 @@ export class SettingsController {
     document.addEventListener('visibilitychange', this._onPowerVisible);
     this._loadPowerDiagnostics();
 
-    // Catalogo modelli unificato
-    this._wireBtn('btn-change-model', () => this._toggleModelCatalog());
-    const modelSearch = this.contentEl.querySelector('#model-search');
-    if (modelSearch) {
-      modelSearch.addEventListener('input', () => this._applyCatalogFilter());
-    }
-
-    // Provider edit/delete buttons
-    this.contentEl.querySelectorAll('.provider-edit').forEach(btn => {
-      btn.addEventListener('click', () => this._editProvider(btn.dataset.provider));
-    });
-    this.contentEl.querySelectorAll('.provider-delete').forEach(btn => {
-      btn.addEventListener('click', () => this._deleteProvider(btn.dataset.provider));
-    });
+    /* Ogni marca e' un gruppo: l'intestazione apre i suoi modelli, il
+       cursore il pannello dove vivono modifica ed elimina. */
+    this._wireBrands();
 
     // Ricerca web → auto-save con debounce (payload completo, come il
     // bottone Salva che sostituisce)
@@ -2510,8 +3120,22 @@ export class SettingsController {
     // Posizione: toggle auto-applicato al cambio (nessun bottone salva).
     const locToggle = this.contentEl.querySelector('#location-enabled-toggle');
     if (locToggle) {
+      /* Il permesso si concede fuori dalla WebView: al ritorno (o all'esito
+         della richiesta) l'avviso si ridisegna. Un listener per documento. */
+      if (!this._onLocationPermission) {
+        this._onLocationPermission = () => this._syncLocationPermission();
+        window.addEventListener('jenny-location-permission', this._onLocationPermission);
+        document.addEventListener('visibilitychange', this._onLocationPermission);
+      }
+      this._syncLocationPermission();
+      this.contentEl.querySelector('#btn-location-allow')
+        ?.addEventListener('click', () => this._askLocationPermission());
       locToggle.addEventListener('change', () => {
         const enabled = locToggle.checked;
+        this._syncLocationPermission();
+        // Accenderla senza il permesso vuol dire chiederlo: e' nello stesso
+        // tocco, che e' quel che Android vuole per mostrare il dialog.
+        if (enabled) this._askLocationPermission();
         api.updateLocation({ enabled: enabled ? '1' : '0' })
           .then(() => {
             if (this.data && this.data.location) this.data.location.enabled = enabled;
@@ -2519,6 +3143,7 @@ export class SettingsController {
           })
           .catch(() => {
             locToggle.checked = !enabled;  // rollback sull'errore
+            this._syncLocationPermission();
             showToast(i18n.t('settings.saveError'));
           });
       });
@@ -2526,23 +3151,29 @@ export class SettingsController {
 
     // Wakelock anti-doze: si salva al cambio, e il toast ripete che vale dal
     // prossimo riavvio — chi lo cambia dalla select non rilegge la riga sotto.
-    const keepAwakeSelect = this.contentEl.querySelector('#keep-awake-select');
-    if (keepAwakeSelect) {
+    const keepAwakeSeg = this.contentEl.querySelector('#keep-awake-seg');
+    if (keepAwakeSeg) {
+      const buttons = [...keepAwakeSeg.querySelectorAll('[data-keep-awake]')];
       // `previous` segue l'ultimo valore accettato dal server, non quello del
       // primo render: due cambi di fila con il secondo fallito riporterebbero
-      // altrimenti la select su un modo che non è più quello salvato.
-      let previous = keepAwakeSelect.value;
-      // Il costo della scelta sta fuori dalla select (una <option> non va a
-      // capo) e segue la selezione subito, prima ancora del salvataggio: è
-      // quello che l'utente sta valutando, non la conferma di quello che ha
-      // già scelto. `textContent`: la frase viene da i18n, non da HTML.
+      // altrimenti il comando su un modo che non è più quello salvato.
+      let previous = buttons.find(b => b.classList.contains('active'))?.dataset.keepAwake;
+      // Il costo della scelta sta sotto il comando e segue la selezione
+      // subito, prima ancora del salvataggio: è quello che l'utente sta
+      // valutando, non la conferma di quello che ha già scelto.
       const costEl = this.contentEl.querySelector('#keep-awake-cost');
-      const showCost = (mode) => {
+      const show = (mode) => {
         if (costEl) costEl.textContent = this._keepAwakeCost(mode);
+        buttons.forEach(b => {
+          const its = b.dataset.keepAwake === mode;
+          b.classList.toggle('active', its);
+          b.setAttribute('aria-checked', its ? 'true' : 'false');
+        });
       };
-      keepAwakeSelect.addEventListener('change', () => {
-        const mode = keepAwakeSelect.value;
-        showCost(mode);
+      buttons.forEach(btn => btn.addEventListener('click', () => {
+        const mode = btn.dataset.keepAwake;
+        if (mode === previous) return;
+        show(mode);
         api.updatePower({ keep_awake: mode })
           .then(() => {
             previous = mode;
@@ -2550,11 +3181,10 @@ export class SettingsController {
             showToast(i18n.t('settings.battery.keepAwakeSaved'));
           })
           .catch(() => {
-            keepAwakeSelect.value = previous;  // rollback sull'errore
-            showCost(previous);
+            show(previous);  // rollback sull'errore
             showToast(i18n.t('settings.saveError'));
           });
-      });
+      }));
     }
 
     // Add provider
@@ -2568,85 +3198,14 @@ export class SettingsController {
 
     // Backup e ripristino
     this._wireBackup();
-
-    // Modalità avanzata
-    const advToggle = this.contentEl.querySelector('#advanced-mode-toggle');
-    if (advToggle) advToggle.addEventListener('change', () => setAdvancedMode(advToggle.checked));
-
-    // Riesegui configurazione: strada permanente verso il wizard.
-    this._wireBtn('btn-rerun-onboarding', () => this._rerunOnboarding());
-
-    // Aggiornamento dell'app (il bottone c'è solo se il backend ne annuncia uno)
-    this._wireBtn('btn-update-install', () => this._startUpdate());
-    // Il controllo manuale invece c'è sempre: è la diagnostica del meccanismo.
-    this._wireBtn('btn-update-check', () => this._runUpdateCheck());
-    /* Rientro nella sezione con un'installazione già avviata: va avanti per
-       conto suo, ma `deactivate()` aveva spento il polling. Senza riagganciarlo
-       il bottone resterebbe disabilitato e lo stato congelato all'ultima cosa
-       vista. Il timer nullo è la prova che il polling non è già in corso. */
-    if (this._update?.busy && !this._updateTimer) this._scheduleUpdatePoll(this._gen);
-
-    // Mascotte: toggle visibilità (re-render per accendere/spegnere le
-    // opzioni sotto) + scelta della taglia
-    const mascotToggle = this.contentEl.querySelector('#mascot-visible-toggle');
-    if (mascotToggle) {
-      mascotToggle.addEventListener('change', () => {
-        setMascotVisible(mascotToggle.checked);
-        this.render();
-      });
-    }
-    this.contentEl.querySelectorAll('[data-mascot-size]').forEach(btn => {
+    /* Ogni riga di riepilogo apre `drawer-<id>`, e chiede al suo gruppo di
+       disegnarne il corpo. Una regola sola per tutte le righe: la prossima non
+       ha bisogno di cablaggio nuovo. */
+    this.contentEl.querySelectorAll('[data-summary]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        setMascotSize(btn.dataset.mascotSize);
-        this.render();
-      });
-    });
-    // Mascotte flottante: si salva al cambio come il toggle posizione. Il
-    // re-render serve: la risposta porta `active`, cioè se Android ha davvero
-    // lasciato aprire la finestra, e quella riga va ridisegnata.
-    const floatingToggle = this.contentEl.querySelector('#floating-enabled-toggle');
-    if (floatingToggle) {
-      floatingToggle.addEventListener('change', () => {
-        const enabled = floatingToggle.checked;
-        api.updateFloating({ enabled: enabled ? '1' : '0' })
-          .then(payload => {
-            if (payload && payload.floating) this.data.floating = payload.floating;
-            this.render();
-            if (enabled && payload?.floating?.active === false) {
-              showToast(i18n.t('settings.floatingBlocked'));
-            }
-          })
-          .catch(() => {
-            floatingToggle.checked = !enabled;  // rollback sull'errore
-            showToast(i18n.t('settings.saveError'));
-          });
-      });
-    }
-
-    // Tasto Home: nessun re-render, il valore serve solo a goHome()
-    const homeSelect = this.contentEl.querySelector('#home-view-select');
-    if (homeSelect) {
-      homeSelect.addEventListener('change', () => setHomeView(homeSelect.value));
-    }
-
-    // Theme selector — tap a card to switch theme
-    this.contentEl.querySelectorAll('.tcard[data-theme-choice]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const theme = setTheme(btn.dataset.themeChoice);
-        this.render();
-        showToast(theme.label);
-      });
-    });
-
-    // Language selector — solo i bottoni seg con data-locale (quelli della
-    // taglia mascotte condividono la classe ma hanno data-mascot-size).
-    this.contentEl.querySelectorAll('.settings-seg-btn[data-locale]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const locale = btn.dataset.locale;
-        i18n.setLocale(locale).then(() => {
-          this.render();
-          showToast(i18n.t('settings.saved'));
-        });
+        const id = btn.dataset.summary;
+        window.mobileApp?.drawer?.open(id);
+        this._OPEN_PANEL[id]?.call(this);
       });
     });
   }
@@ -2670,12 +3229,32 @@ export class SettingsController {
 
   /* keepStoredKey: il provider ha già una chiave salvata, quindi un campo
      vuoto significa "lasciala com'è" e non va segnalato come errore. */
+  /* Salva una marca. In aggiunta, la finisce.
+   *
+   * **Una marca senza un modello che funziona non e' una marca che c'e'.**
+   * Senza il primo modello, aggiungerne una vorrebbe dire uscire di qui,
+   * andare in casa e sceglierne uno: una cosa sola in due posti, che e' il
+   * difetto che questo giro esiste per togliere. Il giro iniziale la pensa
+   * gia' cosi' — `save_onboarding` pretende provider **e** modello insieme,
+   * perche' e' quella coppia a fare una configurazione valida.
+   *
+   * «Usala adesso» e' un interruttore e non un automatismo: acceso di suo,
+   * perche' nove volte su dieci la aggiungi per usarla; spegnibile, perche'
+   * la decima aggiungi una marca di scorta — e attivarla d'ufficio
+   * cambierebbe chi risponde senza dirlo, con la sorpresa alla risposta
+   * successiva.
+   */
   async _saveProvider(
     name, format, apiKey, apiBase,
-    { keepStoredKey = false, caBundle = '', clearCaBundle = false } = {},
+    { keepStoredKey = false, caBundle = '', clearCaBundle = false,
+      firstModel = '', useItNow = false } = {},
   ) {
     if (!name || (!apiKey && !keepStoredKey)) {
       showToast(i18n.t('settings.nameAndKeyRequired'), 'error');
+      return;
+    }
+    if (useItNow && !firstModel) {
+      showToast(i18n.t('settings.firstModelRequired'), 'error');
       return;
     }
 
@@ -2703,8 +3282,24 @@ export class SettingsController {
       buttons.forEach(b => { b.disabled = false; });
     }
 
+    /* La seconda scrittura, e solo se l'hai chiesto. Separata dalla prima
+       perche' sono due rotte diverse — la marca sta nel config dei provider,
+       chi risponde negli `agents.defaults` — e perche' se questa fallisce la
+       marca resta comunque salvata: quel che si perde e' l'attivazione, non
+       il lavoro di compilare cinque campi. */
+    if (useItNow && firstModel) {
+      try {
+        await api.updateSettings({ model: firstModel, default_provider: name });
+      } catch (e) {
+        this._closeProviderDialog();
+        showToast(i18n.t('settings.providerSavedNotActive', { error: e.message }), 'error');
+        this.loadSettings();
+        return;
+      }
+    }
+
     this._closeProviderDialog();
-    showToast(i18n.t('settings.providerSaved'));
+    showToast(useItNow ? i18n.t('settings.providerSavedAndActive') : i18n.t('settings.providerSaved'));
     this.loadSettings();
   }
 
@@ -2727,6 +3322,7 @@ export class SettingsController {
     api.deleteProvider({ name })
       .then(() => {
         showToast(i18n.t('settings.providerDeleted'));
+        this._realignPanel('brand', name, false, null);
         this.loadSettings();
       })
       .catch(e => showToast(e.message, 'error'));
@@ -2750,89 +3346,9 @@ export class SettingsController {
       .catch(e => showToast(e.message, 'error'));
   }
 
-  // ── Catalogo modelli ───────────────────────────────────────────────
 
-  _toggleModelCatalog() {
-    const el = this.contentEl.querySelector('#model-catalog');
-    if (!el) return;
-    const wasOpen = el.style.display !== 'none';
-    el.style.display = wasOpen ? 'none' : '';
-    this._catalogOpen = !wasOpen;
-    if (!wasOpen) this._loadModelCatalog();
-  }
 
-  /* Un gruppo per provider; i cataloghi arrivano in parallelo e ogni gruppo
-     si riempie appena il suo fetch risponde. In coda a ogni gruppo c'è
-     l'input per un ID manuale (il provider è implicito nel gruppo). */
-  _loadModelCatalog() {
-    const groupsEl = this.contentEl.querySelector('#model-catalog-groups');
-    if (!groupsEl) return;
-    const providers = this.data?.providers || [];
-    if (!providers.length) {
-      groupsEl.innerHTML = `<div class="settings-empty-state">${i18n.t('settings.noProviders')}</div>`;
-      return;
-    }
-    groupsEl.innerHTML = providers.map(p => `
-      <div class="model-group" data-group="${escapeHtml(p.name)}">
-        <div class="model-group-label">${escapeHtml(p.name)} <span>· ${escapeHtml(this._formatLabel(p.format))}</span></div>
-        <div class="model-group-items"><p class="model-group-msg">${i18n.t('settings.loading')}</p></div>
-      </div>`).join('');
-    for (const p of providers) {
-      api.getProviderModels(p.name)
-        .then(res => this._fillCatalogGroup(p, (res.models || []).map(m => m.id || m), res.message))
-        .catch(() => this._fillCatalogGroup(p, [], i18n.t('settings.couldNotFetch')));
-    }
-  }
 
-  _fillCatalogGroup(p, models, message) {
-    const group = this.contentEl.querySelector(
-      `.model-group[data-group="${CSS.escape(p.name)}"] .model-group-items`);
-    if (!group) return; // catalogo richiuso o re-render nel frattempo
-    const current = this.data?.agent?.model;
-    const isActive = this.data?.default_provider === p.name;
-    const rows = models.map(m =>
-      `<div class="onboarding-model-item${isActive && m === current ? ' selected' : ''}"
-        data-model="${escapeHtml(m)}" data-provider="${escapeHtml(p.name)}">${escapeHtml(m)}</div>`
-    ).join('');
-    const msg = !models.length && message
-      ? `<p class="model-group-msg">${escapeHtml(message)}</p>` : '';
-    group.innerHTML = `${rows}${msg}
-      <input type="text" class="settings-input model-custom-input"
-        placeholder="${i18n.t('settings.customModelId')}" autocomplete="off" />`;
-    group.querySelectorAll('[data-model]').forEach(el => {
-      el.addEventListener('click', () => this._selectModel(el.dataset.provider, el.dataset.model));
-    });
-    const custom = group.querySelector('.model-custom-input');
-    custom.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && custom.value.trim()) this._selectModel(p.name, custom.value.trim());
-    });
-    this._applyCatalogFilter();
-    // Il gruppo ha appena sostituito un «Caricamento…» con decine di righe: la
-    // pagina è più alta di quando `render()` ha rimesso la posizione, e quella
-    // andava clampata. Si riapplica ora che c'è spazio per contenerla.
-    this._restoreScrollTop();
-  }
-
-  /* Il punto dell'intero redesign: modello e provider si salvano insieme. */
-  _selectModel(providerName, model) {
-    api.updateSettings({ model, default_provider: providerName })
-      .then(() => {
-        showToast(i18n.t('settings.saved'));
-        this.loadSettings();
-      })
-      .catch(e => showToast(e.message, 'error'));
-  }
-
-  _applyCatalogFilter() {
-    // Il testo si memorizza grezzo: è quello che va rimesso nell'input dopo un
-    // re-render, e rimetterlo minuscolo sarebbe una riscrittura di ciò che
-    // l'utente ha battuto.
-    this._catalogFilter = this.contentEl.querySelector('#model-search')?.value || '';
-    const q = this._catalogFilter.toLowerCase();
-    this.contentEl.querySelectorAll('#model-catalog-groups [data-model]').forEach(el => {
-      el.style.display = el.dataset.model.toLowerCase().includes(q) ? '' : 'none';
-    });
-  }
 
   _showAddProviderDialog(existingProvider) {
     const isEdit = !!existingProvider;
@@ -2853,7 +3369,7 @@ export class SettingsController {
         </h3>
         <div class="settings-field">
           <label class="settings-label">${i18n.t('settings.name')}</label>
-          <input type="text" class="settings-input" id="dlg-provider-name" placeholder="${i18n.t('settings.namePlaceholder')}"
+          <input type="text" class="settings-input" id="dlg-provider-name" ${NO_AUTOCORRECT} placeholder="${i18n.t('settings.namePlaceholder')}"
             value="${isEdit ? escapeHtml(existingProvider.name) : ''}"
             ${isEdit ? 'readonly' : ''} />
         </div>
@@ -2868,20 +3384,35 @@ export class SettingsController {
           <label class="settings-label">${i18n.t('settings.apiKey')}</label>
           <input type="password" class="settings-input" id="dlg-api-key"
             placeholder="${escapeHtml(keyPlaceholder)}"
-            autocomplete="off" data-lpignore="true" value="" />
+            ${NO_AUTOCORRECT} data-lpignore="true" value="" />
           ${hasStoredKey ? `<span class="settings-field-hint">${i18n.t('settings.apiKeyKeepBlank')}</span>` : ''}
         </div>
         <div class="settings-field">
           <label class="settings-label">${i18n.t('settings.baseUrl')}</label>
-          <input type="text" class="settings-input" id="dlg-api-base" placeholder="https://api.openai.com/v1"
+          <input type="url" inputmode="url" class="settings-input" id="dlg-api-base" ${NO_AUTOCORRECT} placeholder="https://api.openai.com/v1"
             value="${isEdit ? escapeHtml(existingProvider.api_base || '') : ''}" />
         </div>
         <div class="settings-field">
           <label class="settings-label">${i18n.t('settings.caBundle')}</label>
           <input type="text" class="settings-input" id="dlg-ca-bundle" placeholder="${i18n.t('settings.caBundlePlaceholder')}"
-            autocomplete="off" value="${isEdit ? escapeHtml(existingProvider.ca_bundle || '') : ''}" />
+            ${NO_AUTOCORRECT} value="${isEdit ? escapeHtml(existingProvider.ca_bundle || '') : ''}" />
           <span class="settings-field-hint">${i18n.t('settings.caBundleHint')}</span>
         </div>
+        ${isEdit ? '' : `
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label" for="dlg-use-now">${i18n.t('settings.useNow')}</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="dlg-use-now" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-field" id="dlg-first-model-field">
+          <label class="settings-label">${i18n.t('settings.firstModel')}</label>
+          <input type="text" class="settings-input" id="dlg-first-model"
+            placeholder="${i18n.t('settings.firstModelPlaceholder')}" ${NO_AUTOCORRECT} value="" />
+          <span class="settings-field-hint">${i18n.t('settings.firstModelHint')}</span>
+        </div>
+        <p class="settings-field-hint" id="dlg-first-model-later" hidden>${i18n.t('settings.firstModelLater')}</p>`}
         <div class="oc-dialog-buttons" style="margin-top:16px">
           <button class="oc-btn oc-btn-cancel" id="dlg-provider-cancel">${i18n.t('common.cancel')}</button>
           <button class="oc-btn oc-btn-confirm" id="dlg-provider-save">${i18n.t('settings.save')}</button>
@@ -2892,6 +3423,20 @@ export class SettingsController {
 
     const formatSelect = dialog.querySelector('#dlg-provider-format');
     const baseInput = dialog.querySelector('#dlg-api-base');
+    /* «First model» vale solo con «Use it now»: spento, il modello scritto non
+       andava da nessuna parte (una marca non ha un modello suo) e spariva
+       senza dirlo. Spento, il campo si nasconde e una riga dice quando lo si
+       sceglie. */
+    const useNow = dialog.querySelector('#dlg-use-now');
+    const syncFirstModel = () => {
+      const on = !!useNow?.checked;
+      const field = dialog.querySelector('#dlg-first-model-field');
+      const later = dialog.querySelector('#dlg-first-model-later');
+      if (field) field.hidden = !on;
+      if (later) later.hidden = on;
+    };
+    useNow?.addEventListener('change', syncFirstModel);
+    syncFirstModel();
     formatSelect.addEventListener('change', () => {
       const defaults = {
         'openai_compat': 'https://api.openai.com/v1',
@@ -2910,7 +3455,15 @@ export class SettingsController {
       const name = dialog.querySelector('#dlg-provider-name').value.trim();
       const format = dialog.querySelector('#dlg-provider-format').value;
       const apiKey = dialog.querySelector('#dlg-api-key').value.trim();
-      const apiBase = dialog.querySelector('#dlg-api-base').value.trim();
+      // L'indirizzo si controlla qui per dirlo nella lingua di chi legge; il
+      // server lo ricontrolla (v. `shared/api-base.js`).
+      const base = normalizeApiBase(dialog.querySelector('#dlg-api-base').value);
+      if (base.error) {
+        showToast(i18n.t('settings.baseUrlInvalid'), 'error');
+        baseInput.focus();
+        return;
+      }
+      const apiBase = base.value;
       const caBundle = dialog.querySelector('#dlg-ca-bundle').value.trim();
       // In modifica il campo vuoto vale sempre "tieni la chiave salvata":
       // il provider esiste già, non serve ridigitarla per cambiare l'URL.
@@ -2920,6 +3473,11 @@ export class SettingsController {
         keepStoredKey: isEdit,
         caBundle,
         clearCaBundle: !caBundle && !!(isEdit && existingProvider.ca_bundle),
+        /* Solo in aggiunta, mai in modifica: cambiare l'endpoint di una marca
+           gia' in uso non deve poter cambiare anche chi risponde. */
+        firstModel: isEdit || !useNow?.checked
+          ? '' : (dialog.querySelector('#dlg-first-model')?.value.trim() || ''),
+        useItNow: !isEdit && !!useNow?.checked,
       });
     });
     // Il congedo (Indietro, Esc, catena della shell) passa da un `cancel`

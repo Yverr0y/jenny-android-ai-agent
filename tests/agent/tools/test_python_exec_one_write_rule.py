@@ -1,6 +1,6 @@
 """I due confini di scrittura di ``python_exec`` dicono la stessa cosa.
 
-Passo **T4.14** di ``roadmap/audit-taccuino-corrections.md``, trovato da T4.4.
+Passo **T4.14** delle correzioni al taccuino, trovato da T4.4.
 
 Dentro ``python_exec.py`` vivono due strade verso il filesystem, e ognuna aveva
 la sua idea di dove una scrittura potesse atterrare:

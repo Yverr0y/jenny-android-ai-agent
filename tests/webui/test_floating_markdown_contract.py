@@ -23,14 +23,17 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 ROOT = Path(__file__).resolve().parents[2]
 CONTROLLER = ROOT / "android/app/src/main/java/com/flagdizero/jenny/FloatingOverlayController.kt"
 GRADLE = ROOT / "android/app/build.gradle.kts"
 CHAT_JS = ROOT / "jenny/templates/ui/assets/mobile-chat.js"
+MARKDOWN_JS = ROOT / "jenny/templates/ui/assets/shared/markdown.js"
 
 
 def _read() -> str:
-    return CONTROLLER.read_text(encoding="utf-8")
+    return read_source(CONTROLLER)
 
 
 def _fun(source: str, signature: str) -> str:
@@ -45,8 +48,8 @@ def _fun(source: str, signature: str) -> str:
     return rest[: ends[0]] if ends else rest
 
 
-class TestLaLibreria:
-    def test_ci_sono_tutti_gli_artefatti(self):
+class TestTheLibrary:
+    def test_all_the_artifacts_are_there(self):
         """Il `core` da solo è CommonMark: barrato, tabelle e task list — cioè
         il pezzo che il modello scrive davvero — stanno negli `ext-*`."""
         gradle = GRADLE.read_text(encoding="utf-8")
@@ -61,8 +64,8 @@ class TestLaLibreria:
             assert artifact in gradle, f"{artifact} non è più fra le dipendenze"
 
 
-class TestIlMarkdownESoloSuo:
-    def test_la_bolla_utente_resta_testo(self):
+class TestTheMarkdownIsItsOwn:
+    def test_the_user_bubble_stays_text(self):
         """Se l'utente digita `*ciao*` intendeva gli asterischi. È anche quel
         che fa la SPA: `textContent` per la bolla utente, `renderMarkdown` per
         quella dell'assistente."""
@@ -73,7 +76,24 @@ class TestIlMarkdownESoloSuo:
         )
         assert "markdownRenderer(ctx).setMarkdown(this, line.text)" in body
 
-    def test_la_spa_fa_lo_stesso(self):
+    def test_a_render_that_throws_falls_back_to_the_text(self):
+        """La conversazione si ridisegna tutta a ogni risposta: un testo che fa
+        sollevare Markwon rompeva ogni render finché restava nella storia.
+        Ora ``setMarkdown`` sta in un ``try`` e il
+        ripiego è il testo com'è scritto; ``Throwable``, perché un annidamento
+        profondo è uno ``StackOverflowError``."""
+        body = _fun(_read(), "private fun bubbleView(ctx: Context, line: Line): TextView")
+        guarded = re.search(
+            r"try \{\s*markdownRenderer\(ctx\)\.setMarkdown\(this, line\.text\)\s*\}"
+            r"\s*catch \(e: Throwable\) \{(.*?)\n\s*\}",
+            body,
+            re.S,
+        )
+        assert guarded, "setMarkdown non è più protetto: un testo storto rompe ogni render"
+        assert "text = line.text" in guarded.group(1)
+        assert "movementMethod = null" in guarded.group(1)
+
+    def test_the_spa_does_the_same(self):
         """La cucitura fra i due lati: se un giorno la SPA renderizzasse anche
         le bolle utente, questa regola andrebbe rivista insieme."""
         js = CHAT_JS.read_text(encoding="utf-8")
@@ -83,12 +103,15 @@ class TestIlMarkdownESoloSuo:
         )
 
 
-class TestLeRigheSingole:
-    def test_il_soft_break_segue_la_chat(self):
+class TestSingleLines:
+    def test_the_soft_break_follows_the_chat(self):
         """`breaks: true` in chat e `SoftBreakAddsNewLinePlugin` qui sono la
         stessa decisione. Senza, le sue liste scritte a righe singole si fondono
-        in un paragrafo: è la differenza più visibile fra le due viste."""
-        js = CHAT_JS.read_text(encoding="utf-8")
+        in un paragrafo: è la differenza più visibile fra le due viste.
+
+        Dal 24/09/2026 l'opzione sta in `shared/markdown.js`, per casa e
+        officina insieme."""
+        js = MARKDOWN_JS.read_text(encoding="utf-8")
         breaks = re.search(r"breaks:\s*true", js)
         source = _read()
         if breaks:
@@ -101,7 +124,7 @@ class TestLeRigheSingole:
 
 
 class TestILink:
-    def test_non_si_linkifica_tutto(self):
+    def test_does_not_linkify_everything(self):
         """`Linkify.ALL` prende anche numeri e indirizzi: un promemoria con
         un'ora dentro diventerebbe un link al telefono."""
         source = _read()
@@ -110,7 +133,7 @@ class TestILink:
         # `Linkify.ALL` proprio per dire di non usarlo.
         assert "LinkifyPlugin.create(Linkify.ALL" not in source
 
-    def test_l_intent_parte_da_un_contesto_applicativo(self):
+    def test_the_intent_starts_from_an_application_context(self):
         """Il resolver di Markwon farebbe `startActivity` con il contesto che
         gli si dà, e qui è quello applicativo: senza il flag solleva."""
         body = _fun(_read(), "private fun openLink(ctx: Context, url: String)")
@@ -120,7 +143,7 @@ class TestILink:
         )
         assert "catch" in body, "un link storto fa cadere l'overlay"
 
-    def test_solo_gli_schemi_del_web(self):
+    def test_only_web_schemes(self):
         """Il testo delle bolle lo scrive il modello, e il modello legge pagine
         web: senza filtro, una pagina può indurlo a scrivere un link con uno
         schema d'app e il tocco lo consegna a chi lo dichiara. La WebUI quel
@@ -136,13 +159,13 @@ class TestILink:
         # la conversazione.
         assert body.index("scheme !in LINK_SCHEMES") < body.index("collapse()")
 
-    def test_il_resolver_e_agganciato(self):
+    def test_the_resolver_is_hooked(self):
         source = _read()
         assert "builder.linkResolver { _, link -> openLink(ctx, link) }" in source
 
 
-class TestIlTema:
-    def test_il_renderer_muore_col_tema(self):
+class TestTheTheme:
+    def test_the_renderer_dies_with_the_theme(self):
         """I colori di codice, citazioni e link sono cotti dentro l'istanza:
         riusarla dopo un cambio tema li lascia vecchi dentro una bolla nuova."""
         body = _fun(_read(), "private fun applyPalette()")
@@ -150,7 +173,7 @@ class TestIlTema:
         source = _read()
         assert "private var markdown: Markwon? = null" in source
 
-    def test_i_colori_vengono_dalla_palette(self):
+    def test_the_colors_come_from_the_palette(self):
         source = _read()
         for call in (
             "codeBlockBackgroundColor(",

@@ -1,6 +1,6 @@
 """Jenny Apps: workspace app folders with typed actions (storage/http).
 
-See ``.agent/jenny-apps.md`` for the design and the ``app-creator`` skill for
+See ``docs/contribute/write-a-mini-app.md`` for the design and the ``app-creator`` skill for
 the manifest contract.
 
 **Nessun re-export qui, ed è voluto.** Un ``from jenny.apps.executor import

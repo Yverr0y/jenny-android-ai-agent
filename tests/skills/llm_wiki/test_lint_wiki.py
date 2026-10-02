@@ -178,7 +178,7 @@ def test_lint_flags_isolated_pages(lint_wiki, tmp_path, capsys):
 
 # ── T5: le due strutture, e il diario che vale per entrambe ──────────────────
 #
-# Passo **T5** di ``roadmap/taccuino-passi.md``. Due layout esistono nel mondo e
+# Passo **T5** del piano del taccuino. Due layout esistono nel mondo e
 # **nessun flag li distingue**: la struttura su disco è la dichiarazione, e il
 # lint la legge come tutti gli altri consumatori.
 #
@@ -746,7 +746,7 @@ def test_normalising_the_target_does_not_mean_matching_anything(lint_wiki, tmp_p
 _BODY = "\n# Semine\n\nPomodori a fine aprile. Vedi [[terreno]].\n"
 
 
-def _semine(root: Path, text: str) -> Path:
+def _seed(root: Path, text: str) -> Path:
     """Sostituisce `wiki/semine.md` di un taccuino sano col testo dato."""
     (root / "wiki" / "semine.md").write_text(text, encoding="utf-8")
     _journal(root, "un fatto")
@@ -770,7 +770,7 @@ def test_a_frontmatter_a_person_would_write_declares_its_state(
     lint leggeva come «nessuno stato»: `FRONTMATTER_RE` era ancorata a `^---\\n`,
     il valore arrivava col commento attaccato, e il vocabolario era sensibile
     alle maiuscole a tre righe da un confronto sui nomi che non lo è."""
-    root = _semine(_notebook(tmp_path), page_text)
+    root = _seed(_notebook(tmp_path), page_text)
 
     out = _run(lint_wiki, root, capsys)
 
@@ -804,7 +804,7 @@ def test_a_page_that_really_has_no_state_is_still_reported(
     """Il controllo di tenuta dei cinque casi sopra: tollerare la forma non è
     tollerare l'assenza. Il valore riportato resta quello scritto sul file — chi
     legge deve poterlo cercare così com'è."""
-    root = _semine(_notebook(tmp_path), page_text)
+    root = _seed(_notebook(tmp_path), page_text)
 
     out = _run(lint_wiki, root, capsys)
 
@@ -1430,17 +1430,13 @@ def test_two_namesakes_do_not_share_their_outbound_links(lint_wiki, tmp_path, ca
 
 
 def test_the_builtin_returns_the_error_and_not_the_words_no_output(tmp_path, monkeypatch):
-    import shutil
     from typing import Any
 
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 
+    # Gli script veri: il builtin li legge dal pacchetto.
     workspace = tmp_path / "ws"
-    scripts = workspace / "skills" / "llm-wiki" / "scripts"
-    scripts.mkdir(parents=True)
-    for name in ("lint_wiki.py", "reindex_wikis.py"):
-        shutil.copy(_SCRIPTS_DIR / name, scripts / name)
-    monkeypatch.setattr(builtins_mod, "get_workspace_path", lambda: workspace)
+    workspace.mkdir()
 
     class _Recorder:
         def __init__(self) -> None:
@@ -1646,27 +1642,28 @@ def test_the_builtin_returns_the_findings_it_already_had(tmp_path, monkeypatch):
     difetto che T6.6 ha chiuso: un report senza riepilogo si legge come un
     report, perché nessuno conta i passi che si aspettava.
     """
-    import shutil
     from typing import Any
 
     from jenny.agent.tools import python_exec_builtins as builtins_mod
 
     workspace = tmp_path / "ws"
-    scripts = workspace / "skills" / "llm-wiki" / "scripts"
-    scripts.mkdir(parents=True)
-    for name in ("lint_wiki.py", "reindex_wikis.py"):
-        shutil.copy(_SCRIPTS_DIR / name, scripts / name)
+    workspace.mkdir()
     # Uno script che stampa dei risultati e **poi** scoppia: è la forma esatta
     # del difetto, e iniettarla è l'unico modo di non dipendere da quale bug
-    # sopravvive nello script vero.
-    (scripts / "lint_wiki.py").write_text(
+    # sopravvive nello script vero. Si inietta nella copia impacchettata, da cui
+    # il builtin legge (mai dal workspace, che il modello può scrivere).
+    exploding = (
         "def lint(root):\n"
         "    print('🔴 Dead wikilinks (2):')\n"
         "    print('   wiki/a.md → [[b]]')\n"
-        "    raise RuntimeError('boom')\n",
-        encoding="utf-8",
+        "    raise RuntimeError('boom')\n"
     )
-    monkeypatch.setattr(builtins_mod, "get_workspace_path", lambda: workspace)
+    real = builtins_mod._read_packaged_wiki_script
+    monkeypatch.setattr(
+        builtins_mod,
+        "_read_packaged_wiki_script",
+        lambda name: exploding.encode() if name == "lint_wiki.py" else real(name),
+    )
 
     class _Recorder:
         def __init__(self) -> None:
@@ -1894,16 +1891,16 @@ def test_the_lint_and_the_injector_agree_on_what_a_page_is(lint_wiki, tmp_path):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("# x\n", encoding="utf-8")
 
-    dal_lint = {
+    from_lint = {
         p.relative_to(pages_dir).as_posix()
         for p in pages_dir.rglob("*.md")
         if lint_wiki.is_injected_page(p.relative_to(pages_dir))
     }
 
-    assert dal_lint == set(iter_wiki_pages(pages_dir, titles=False))
+    assert from_lint == set(iter_wiki_pages(pages_dir, titles=False))
     # E non è vuoto per caso: se lo fosse, il confronto sarebbe verde per il
     # motivo sbagliato.
-    assert "concepts/Topic/index.md" in dal_lint
+    assert "concepts/Topic/index.md" in from_lint
 
 
 def test_a_page_in_a_hidden_folder_is_not_reported_as_too_long(
@@ -1972,8 +1969,8 @@ def test_the_page_list_finding_is_yellow_and_counts_once(lint_wiki, tmp_path, ca
 
     out = _run(lint_wiki, root, capsys)
 
-    riga = next(line for line in out.splitlines() if "carries a page list" in line)
-    assert riga.startswith("🟡"), riga
+    row = next(line for line in out.splitlines() if "carries a page list" in line)
+    assert row.startswith("🟡"), row
     assert "1 issue(s) found" in out
     # E questa è metà dell'argomento del messaggio, provata invece che
     # asserita: le venti voci puntano a pagine che non esistono, e **nessun
@@ -2358,7 +2355,7 @@ def test_a_mixed_minute_is_yellow_and_says_what_to_add(lint_wiki, tmp_path, caps
 # ── passo 19, il lato muto: chi non potrà mai dichiararsi deciso ──────────────
 #
 # Il passo 19 guarda chi *si dichiara* deciso. Il 25/08 il caso di campo era
-# l'opposto: `wikis/viaggio-pazzo/wiki/viaggio-pazzo.md`, a `open`, ancorata al
+# l'opposto: `wikis/viaggio-lento/wiki/viaggio-lento.md`, a `open`, ancorata al
 # **giorno intero** del 24/08 — e le righe di quel giorno sono anteriori ai
 # marcatori. Quella pagina non potrà mai essere marcata `decided`: la guardia in
 # scrittura la rifiuterebbe. Ma la guardia parla solo quando una passata *prova* a
@@ -2429,7 +2426,7 @@ def test_a_page_sourced_at_a_document_is_counted_apart_and_never_asked_for_a_tim
 ):
     """**Il difetto del 26/08, e la ragione del terzo conteggio.**
 
-    Misurato su ``wikis/salute`` vero: cinque pagine su cinque con
+    Misurato su un progetto reale: cinque pagine su cinque con
     ``source: raw/research/<documento>.md`` — la forma che ``project.md`` chiede
     per il materiale che arriva da fuori — e il lint le mandava tutte e cinque ad
     «aggiungi un ``#HH:MM``», *nominate fra le riparabili*. Su un documento quel

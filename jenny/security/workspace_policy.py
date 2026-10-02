@@ -6,6 +6,7 @@ consistent across tools, but they are not a replacement for an OS sandbox.
 
 from __future__ import annotations
 
+import errno
 import os
 from pathlib import Path
 from typing import Iterable
@@ -84,7 +85,22 @@ def _resolve_path(path: str | Path, workspace: str | Path | None = None, *, stri
     candidate = _safe_expanduser(path)
     if not candidate.is_absolute() and workspace is not None:
         candidate = _safe_expanduser(workspace) / candidate
-    return candidate.resolve(strict=strict)
+    try:
+        return candidate.resolve(strict=strict)
+    except RuntimeError:
+        # Loop di symlink su Python 3.11 (il telefono): ``pathlib`` trasforma
+        # l'``ELOOP`` in ``RuntimeError``, che nessun chiamante del gate si
+        # aspetta — le rotte del file manager rispondevano 500, il codice di
+        # ``python_exec`` riceveva un ``RuntimeError`` da un ``open``.
+        # Dal 3.13 ``resolve`` e' ``os.path.realpath``,
+        # che in modo non stretto lascia il loop irrisolto nel percorso: qui si
+        # fa lo stesso, cosi' 3.11 e 3.14 danno la stessa risposta. Il confine
+        # non si allarga: il percorso restituito passa comunque dal controllo di
+        # contenimento, e un loop non porta a nessun file. In modo stretto e'
+        # l'``OSError`` che il 3.13 solleverebbe.
+        if strict:
+            raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(candidate)) from None
+        return Path(os.path.realpath(candidate))
 
 
 def _resolve_logical_path(path: str | Path, workspace: str | Path | None = None) -> Path:
@@ -156,6 +172,36 @@ def _is_path_within(path: str | Path, root: str | Path, *, path_resolved: bool =
         else:
             resolved_path = _safe_expanduser(path).resolve(strict=False)
         resolved_root = _resolved_root(root)
+        resolved_path.relative_to(resolved_root)
+        return True
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def is_path_within(path: str | Path, root: str | Path, *, path_resolved: bool = False) -> bool:
+    """*path*, risolto, e' *root* o sta sotto *root* (anch'essa risolta)?
+
+    La versione pubblica di :func:`_is_path_within`, per chi controlla un
+    confine fuori dalla policy dei tool: le rotte della WebUI, la wiki, la
+    provenienza. Fino al 24/09/2026 ognuno scriveva a mano
+    ``x.resolve().relative_to(root.resolve())``, con eccezioni catturate a
+    caso — un ``OSError`` (un loop di symlink) usciva come 500 da una rotta e
+    come ``False`` da un'altra.
+
+    A differenza di quella privata **non** usa la cache delle radici: le radici
+    di chi la chiama (le cartelle di una wiki, di un progetto) si creano e
+    spariscono a runtime, e la cache si invalida solo all'ingresso di
+    ``python_exec``. ``path_resolved=True`` evita di risolvere due volte un
+    percorso gia' passato da ``resolve()``. Qualunque errore di risoluzione e'
+    un no: nel dubbio si sta fuori.
+    """
+    try:
+        resolved_path = (
+            (path if isinstance(path, Path) else Path(path))
+            if path_resolved
+            else _safe_expanduser(path).resolve(strict=False)
+        )
+        resolved_root = _safe_expanduser(root).resolve(strict=False)
         resolved_path.relative_to(resolved_root)
         return True
     except (OSError, RuntimeError, TypeError, ValueError):

@@ -16,6 +16,7 @@ scope a parte costringe a nominarlo esplicitamente per concederlo.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,11 @@ from jenny.agent.tools.ssh_transport import (
     resolve_target,
 )
 from jenny.runtime.power import keep_awake
+from jenny.security.workspace_access import (
+    READONLY_TOOL_REFUSAL,
+    current_turn_is_readonly,
+    current_workspace_scope,
+)
 from jenny.security.workspace_policy import (
     WorkspaceBoundaryError,
     _safe_expanduser,
@@ -86,11 +92,11 @@ def _describe(exc: BaseException) -> str:
     if isinstance(exc, SshHostKeyError):
         return (
             f"Error: {exc} The host key has to be checked and accepted by a person in "
-            "Settings > SSH — it cannot be bypassed from here, and you should not try. "
+            "Settings → Workshop → Hands → SSH — it cannot be bypassed from here, and you should not try. "
             "Tell the user what to open."
         )
     if isinstance(exc, SshHostUnknownError):
-        return f"Error: {exc}. Use one of those aliases, or ask the user to add the host in Settings > SSH."
+        return f"Error: {exc}. Use one of those aliases, or ask the user to add the host in Settings → Workshop → Hands → SSH."
     if isinstance(exc, SshKeyMissingError):
         return f"Error: {exc}."
     if isinstance(exc, SshHostBlockedError):
@@ -102,7 +108,7 @@ def _describe(exc: BaseException) -> str:
         return (
             f"Error: the server refused the key ({exc}). Either the username in Settings is "
             "wrong, or Jenny's public key is not in that user's ~/.ssh/authorized_keys. "
-            "Settings > SSH shows the public key to install."
+            "Settings → Workshop → Hands → SSH shows the public key to install."
         )
     if isinstance(exc, SshTimeoutError):
         return (
@@ -184,14 +190,20 @@ class _SshToolMixin:
         """
         ssh = getattr(getattr(ctx, "config", None), "ssh", None)
         if ssh is None or not ssh.enable:
-            return "SSH access is off (Settings > SSH)"
+            return "SSH access is off (Settings → Workshop → Hands → SSH)"
         if not ssh.hosts:
-            return "no SSH host is registered (Settings > SSH > Add host)"
+            return "no SSH host is registered (Settings → Workshop → Hands → SSH → Add host)"
         return None
 
     @classmethod
     def create(cls, ctx: Any) -> Any:
         return cls()
+
+    async def _resolve_off_loop(self, alias: str) -> tuple[Any, Any, Any]:
+        """:meth:`_resolve` in un thread: rilegge la config e risolve il nome
+        dell'host (``validate_ssh_target`` → ``getaddrinfo``), entrambi
+        bloccanti. Sul loop un DNS lento fermava tutto il gateway. """
+        return await asyncio.to_thread(self._resolve, alias)
 
     def _resolve(self, alias: str) -> tuple[Any, Any, Any]:
         """``alias`` → ``(config ssh, config host, target)``, da config **fresca**.
@@ -213,7 +225,7 @@ class _SshToolMixin:
         # server si aspetta che smetta, non che finisca il turno.
         if ssh_cfg is None or not ssh_cfg.enable:
             raise SshDisabledError(
-                "SSH is switched off in Settings > SSH. Turning it back on is the "
+                "SSH is switched off in Settings → Workshop → Hands → SSH. Turning it back on is the "
                 "user's call, and it is not something you can do from here."
             )
         host_cfg, target = resolve_target(alias, config=config, validate=self._validate)
@@ -254,11 +266,11 @@ class SshHostsTool(_SshToolMixin, Tool):
             ssh_cfg = _ssh_config(load_config())
             if ssh_cfg is not None and not ssh_cfg.enable:
                 return (
-                    "SSH is switched off in Settings > SSH. Turning it back on is the "
+                    "SSH is switched off in Settings → Workshop → Hands → SSH. Turning it back on is the "
                     "user's call, and it also needs a gateway restart to take effect."
                 )
             return (
-                "No SSH hosts are configured. The user has to add one in Settings > SSH "
+                "No SSH hosts are configured. The user has to add one in Settings → Workshop → Hands → SSH "
                 "(host, username, then accept the host key fingerprint)."
             )
         lines = [f"{len(hosts)} SSH host(s) registered:"]
@@ -316,7 +328,7 @@ class SshExecTool(_SshToolMixin, Tool):
         if not command:
             return "Error: command is empty."
         try:
-            ssh_cfg, _host_cfg, target = self._resolve(host)
+            ssh_cfg, _host_cfg, target = await self._resolve_off_loop(host)
         except SshError as exc:
             return _describe(exc)
 
@@ -450,7 +462,7 @@ class SshJobTool(_SshToolMixin, Tool):
             return f"Error: action={action} needs the job_id returned by action=start."
 
         try:
-            ssh_cfg, host_cfg, target = self._resolve(host)
+            ssh_cfg, host_cfg, target = await self._resolve_off_loop(host)
         except SshError as exc:
             return _describe(exc)
         backend = get_ssh_backend()
@@ -520,8 +532,9 @@ class SshTransferTool(_SshToolMixin, Tool):
         "Copy ONE file between the workspace on this phone and a registered remote machine "
         "(direction=up to send, direction=down to fetch). Transfers go over SFTP on the same "
         "SSH connection. The local side is always inside the workspace — a path outside it "
-        "is refused — and the transfer is capped by the configured size limit, checked "
-        "before anything is written."
+        "is refused, and in a project a download can only land in the project's folder — "
+        "and the transfer is capped by the configured size limit, checked before anything "
+        "is written."
     )
 
     def __init__(
@@ -536,6 +549,15 @@ class SshTransferTool(_SshToolMixin, Tool):
     def create(cls, ctx: Any) -> Tool:
         return cls(workspace=ctx.workspace)
 
+    def _turn_root(self) -> Path:
+        """La cartella del turno: ``write_root()`` dello scope legato, o il workspace.
+
+        Senza uno scope legato — sessioni interne, test — resta il workspace del
+        costruttore, che in quel caso è anche la radice del turno.
+        """
+        scope = current_workspace_scope()
+        return scope.write_root() if scope is not None else self._workspace
+
     async def execute(
         self,
         host: str,
@@ -547,22 +569,38 @@ class SshTransferTool(_SshToolMixin, Tool):
         direction = (direction or "").strip().lower()
         if direction not in ("up", "down"):
             return "Error: direction must be 'up' or 'down'."
+        # `down` scrive sul telefono, e la destinazione non passa dal cancello
+        # dei tool file: in sola lettura si rifiuta qui. `up` scrive sul
+        # remoto, come `ssh_exec`, e resta aperto.
+        if direction == "down" and current_turn_is_readonly():
+            return READONLY_TOOL_REFUSAL
         remote_path = (remote_path or "").strip()
         if not remote_path:
             return "Error: remote_path is empty."
 
         try:
-            # La radice è il workspace e basta: nessuna extra root. La directory
-            # SSH (chiave privata, known_hosts) vive fuori dal workspace proprio
-            # perché un tool come questo non possa esfiltrarla.
+            # Le radici sono quelle dei tool file, nessuna extra root. La
+            # directory SSH (chiave privata, known_hosts) vive fuori dal
+            # workspace proprio perché un tool come questo non possa esfiltrarla.
+            #
+            # `down` scrive sul telefono: il confine è quello di scrittura del
+            # turno (`WorkspaceScope.write_root()`, come `download_file` e i tool
+            # file), e un percorso relativo parte da lì. Con la radice
+            # dell'installazione, da dentro un progetto si sovrascriveva
+            # `SOUL.md`. `up` legge, e la lettura resta aperta
+            # sull'installazione come per `read_file`; il percorso relativo
+            # parte comunque dalla cartella del turno.
+            base = self._turn_root()
             local = resolve_allowed_path(
-                local_path, workspace=self._workspace, allowed_root=self._workspace
+                local_path,
+                workspace=base,
+                allowed_root=base if direction == "down" else self._workspace,
             )
         except WorkspaceBoundaryError as exc:
             return f"Error: {exc}"
 
         try:
-            ssh_cfg, _host_cfg, target = self._resolve(host)
+            ssh_cfg, _host_cfg, target = await self._resolve_off_loop(host)
         except SshError as exc:
             return _describe(exc)
         backend = get_ssh_backend()
@@ -583,9 +621,13 @@ class SshTransferTool(_SshToolMixin, Tool):
                 return f"Uploaded {local_path} to {host}:{remote_path} ({sent} bytes)."
 
             local.parent.mkdir(parents=True, exist_ok=True)
-            # Il cap sul download lo verifica il backend con uno stat PRIMA di
-            # aprire il file locale: applicarlo mentre si scrive lascerebbe sul
-            # telefono un file troncato indistinguibile da uno buono.
+            # Il cap sul download lo applica il backend, due volte: sulla
+            # dimensione dichiarata dal server, prima di cominciare, e sui byte
+            # che arrivano davvero, perché quella dimensione la dice il server.
+            # Scrive su un `.part` e rinomina solo a copia completa, così un
+            # download fermato dal tetto non lascia un file troncato (v.
+            # `SshBackend.get`). Applicarlo qui, a trasferimento finito, sarebbe
+            # troppo tardi per entrambe le cose.
             got = await backend.get(target, remote_path, local, max_bytes=cap)
             logger.info("ssh_transfer down {}:{} -> {}", host, remote_path, local_path)
             return f"Downloaded {host}:{remote_path} to {local_path} ({got} bytes)."

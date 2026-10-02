@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -62,6 +63,9 @@ def build_gateway_services(
     # Getter late-binding del ``CronService``, come quello sopra: il pannello
     # della programmazione lo risolve a ogni chiamata.
     get_cron_service: Callable[[], Any | None] | None = None,
+    # Le sessioni sotto cui qualcosa scrive adesso, late-binding come i due sopra:
+    # l'agente puo' nascere dopo il gateway. Senza agente non scrive nessuno.
+    get_busy_session_keys: Callable[[], Collection[str]] | None = None,
     logger: Any = default_logger,
     onboarding_event: Any | None = None,
     on_settings_changed: Callable[[], None] | None = None,
@@ -95,7 +99,6 @@ def build_gateway_services(
         get_subagent_manager=get_subagent_manager,
         get_cron_service=get_cron_service,
         log=logger,
-        onboarding_event=onboarding_event,
         on_settings_changed=on_settings_changed,
         on_telegram_changed=on_telegram_changed,
         on_jobs_changed=on_jobs_changed,
@@ -118,6 +121,16 @@ def build_gateway_services(
             invalidate_session=lambda key: (
                 session_manager.invalidate(key) if session_manager is not None else None
             ),
+            busy_session_keys=get_busy_session_keys or (lambda: ()),
+            # I comandi delle impostazioni (chiave del provider, token Telegram)
+            # rimettono in servizio a caldo quello che hanno salvato, come
+            # facevano le rotte GET che hanno sostituito.
+            on_settings_changed=on_settings_changed,
+            on_telegram_changed=on_telegram_changed,
+            # ``onboarding.save`` scrive il saluto nella sessione e sveglia
+            # l'agente differito, come faceva la rotta GET che ha sostituito.
+            session_manager=session_manager,
+            onboarding_event=onboarding_event,
         ),
         session_manager=session_manager,
         get_subagent_manager=get_subagent_manager,

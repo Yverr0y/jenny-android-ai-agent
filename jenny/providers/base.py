@@ -11,9 +11,11 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+import httpx
 import json_repair
 from loguru import logger
 
+from jenny.providers import retry_notice
 from jenny.providers.message_repair import (
     SYNTHETIC_USER_CONTENT,
     enforce_role_alternation,
@@ -45,7 +47,7 @@ class ProviderHTTPError(RuntimeError):
     """Errore HTTP di un provider, con addosso i metadati che lo classificano.
 
     Esiste perché un ``RuntimeError`` nudo li perde tutti. La catena a valle —
-    ``_extract_error_metadata`` → ``is_transient_response`` — legge lo status per
+    ``_error_metadata`` → ``is_transient_response`` — legge lo status per
     decidere se ritentare, e senza status ripiega sul testo, dove il marker
     ``"429"`` fa passare per transitorio anche un ``insufficient_quota`` che non
     lo è: quella richiesta veniva ritentata a vuoto fino a esaurire i tentativi.
@@ -213,6 +215,98 @@ class LLMResponse:
         return self.finish_reason in ("tool_calls", "function_call", "stop")
 
 
+def stream_timeout_response(waited_s: float, saw_output: bool) -> LLMResponse:
+    """L'errore di uno stream che si è fermato, uguale per ogni provider.
+
+    La frase dice se lo stream era già partito: «nessun output entro N secondi»
+    è il budget lungo del primo token (il modello sta ancora ragionando), «si è
+    fermato per più di N secondi» è il silenzio dopo che qualcosa era arrivato.
+    Era scritta in due copie, una per provider.
+    """
+    return LLMResponse(
+        content=(
+            f"Error calling LLM: stream stalled for more than {waited_s:g} seconds"
+            if saw_output
+            else f"Error calling LLM: no output from the model within {waited_s:g} seconds"
+        ),
+        finish_reason="error",
+        error_kind="timeout",
+    )
+
+
+# Tipo d'errore arrivato *dentro* uno stream → lo status HTTP che lo stesso
+# errore avrebbe avuto prima dello stream. Serve alla retry policy, che decide
+# sullo status: un ``overloaded_error`` è il 529 di Anthropic, un ``api_error``
+# il suo 500. I nomi OpenAI (``server_error``) stanno nella stessa tabella.
+_STREAM_ERROR_STATUS = {
+    "overloaded_error": 529,
+    "api_error": 500,
+    "server_error": 500,
+    "rate_limit_error": 429,
+    "rate_limit_exceeded": 429,
+    "invalid_request_error": 400,
+    "authentication_error": 401,
+    "permission_error": 403,
+    "not_found_error": 404,
+    "request_too_large": 413,
+}
+
+
+def stream_error_response(error: Any, *, partial_content: str | None = None) -> LLMResponse:
+    """L'errore che il server ha scritto dentro uno stream già aperto.
+
+    Lo status della risposta era 200, quindi i metadati si ricavano dal corpo
+    dell'errore: ``type``/``code`` come per un errore HTTP, e lo status dal
+    ``code`` numerico (OpenRouter manda ``{"error": {"code": 502, ...}}``) o, in
+    mancanza, dal tipo (``_STREAM_ERROR_STATUS``). Così un ``overloaded_error``
+    è transitorio come lo sarebbe stato il 529 prima dello stream, e un
+    ``invalid_request_error`` no.
+    """
+    detail: dict[str, Any] = error if isinstance(error, dict) else {"message": error}
+    error_type, error_code = extract_error_type_code({"error": detail})
+    message = str(detail.get("message") or "").strip() or str(error)[:500]
+
+    status: int | None = None
+    raw_code = detail.get("code")
+    with suppress(TypeError, ValueError):
+        numeric = int(raw_code) if not isinstance(raw_code, bool) else None
+        if numeric is not None and 400 <= numeric <= 599:
+            status = numeric
+    if status is None:
+        # L'API Responses mette il nome nel ``code`` (``server_error``), non nel
+        # ``type``: vale come l'uno o l'altro.
+        status = _STREAM_ERROR_STATUS.get(error_type or "") or _STREAM_ERROR_STATUS.get(
+            error_code or "",
+        )
+
+    label = error_type or error_code
+    return LLMResponse(
+        content=f"Error: {label}: {message}"[:600] if label else f"Error: {message}"[:600],
+        finish_reason="error",
+        partial_content=partial_content or None,
+        error_status_code=status,
+        error_kind="stream_error",
+        error_type=error_type,
+        error_code=error_code,
+    )
+
+
+def stream_truncated_response(partial_content: str | None = None) -> LLMResponse:
+    """Lo stream si è chiuso prima dell'evento che dice «la risposta è finita».
+
+    Non è una risposta completa: è una connessione caduta a metà, e va trattata
+    come tale (``error_kind="connection"``, transitorio). Prima diventava
+    ``finish_reason="stop"`` col testo arrivato fin lì — cioè una risposta
+    troncata salvata come buona, e un ``tool_use`` a metà eseguito.
+    """
+    return LLMResponse(
+        content="Error calling LLM: the stream ended before the response was complete",
+        finish_reason="error",
+        partial_content=partial_content or None,
+        error_kind="connection",
+    )
+
+
 @dataclass(frozen=True)
 class GenerationSettings:
     """Default generation settings."""
@@ -237,11 +331,19 @@ class LLMProvider(ABC):
 
     _CHAT_RETRY_DELAYS = (1, 2, 4)
     _PERSISTENT_MAX_DELAY = 60
+    # Tetto di una singola attesa in modalità standard (v. ``_run_with_retry``).
+    _STANDARD_MAX_DELAY = 60
     _PERSISTENT_IDENTICAL_ERROR_LIMIT = 10
     _RETRY_HEARTBEAT_CHUNK = 30
     # Classificazione retry estratta in ``providers/retry_policy.py``.
 
     _SENTINEL = object()
+
+    # Richieste in volo (retry compresi) e chiusura chiesta: v. ``aclose``.
+    # Attributi di classe come default, così anche una sottoclasse che non
+    # passa da ``__init__`` (i finti dei test) li ha.
+    _inflight = 0
+    _close_requested = False
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self.api_key = api_key
@@ -342,6 +444,98 @@ class LLMProvider(ABC):
     @classmethod
     def _extract_error_type_code(cls, payload: Any) -> tuple[str | None, str | None]:
         return extract_error_type_code(payload)
+
+    @staticmethod
+    def _error_headers(e: Exception) -> Any:
+        """Gli header di un errore: quelli dell'eccezione, se li porta, poi quelli
+        della risposta. ``ProviderHTTPError`` se li tiene addosso perché a quel
+        punto la risposta è già chiusa: è la fonte più vicina all'errore."""
+        headers = getattr(e, "headers", None)
+        if headers is None:
+            headers = getattr(getattr(e, "response", None), "headers", None)
+        return headers
+
+    @staticmethod
+    def _error_payload(e: Exception) -> Any:
+        """Il corpo dell'errore, nella forma in cui c'è: ``body``, ``doc``, il testo
+        della risposta, il suo JSON.
+
+        La lettura di ``.text`` è protetta: su una risposta in streaming non ancora
+        letta solleva ``ResponseNotRead``, e qui l'errore vero è *e*, non il
+        fallimento della lettura. Fino al 24/09/2026 la protezione c'era solo
+        dal lato Anthropic, e dal lato OpenAI-compat era il gestore d'errore a
+        sollevare.
+        """
+        response = getattr(e, "response", None)
+        try:
+            payload = (
+                getattr(e, "body", None)
+                or getattr(e, "doc", None)
+                or getattr(response, "text", None)
+            )
+        except Exception:
+            payload = None
+        if payload is None and response is not None:
+            response_json = getattr(response, "json", None)
+            if callable(response_json):
+                try:
+                    payload = response_json()
+                except Exception:
+                    payload = None
+        return payload
+
+    @classmethod
+    def _error_metadata(cls, e: Exception, *, payload: Any = None) -> dict[str, Any]:
+        """I campi ``error_*`` di un ``LLMResponse`` d'errore, uguali per ogni provider.
+
+        Erano copiati in ``AnthropicProvider._handle_error`` e in
+        ``OpenAICompatProvider._extract_error_metadata``, e già divergenti (la
+        lettura protetta del corpo, l'ordine degli header). *payload* si passa se
+        il chiamante l'ha già letto; ``error_retry_after_s`` viene dagli header e
+        basta — il ripiego sul testo del messaggio lo fa chi decide l'attesa.
+        """
+        response = getattr(e, "response", None)
+        headers = cls._error_headers(e)
+        if payload is None:
+            payload = cls._error_payload(e)
+        error_type, error_code = cls._extract_error_type_code(payload)
+
+        status_code = getattr(e, "status_code", None)
+        if status_code is None and response is not None:
+            status_code = getattr(response, "status_code", None)
+
+        should_retry: bool | None = None
+        if headers is not None:
+            raw = headers.get("x-should-retry")
+            if isinstance(raw, str):
+                lowered = raw.strip().lower()
+                if lowered == "true":
+                    should_retry = True
+                elif lowered == "false":
+                    should_retry = False
+
+        error_kind: str | None = None
+        error_name = e.__class__.__name__.lower()
+        if "timeout" in error_name:
+            error_kind = "timeout"
+        elif "connection" in error_name or isinstance(
+            e, (httpx.NetworkError, httpx.RemoteProtocolError),
+        ):
+            # ``RemoteProtocolError`` («Server disconnected without sending a
+            # response») è il keep-alive chiuso dal server, ``ReadError`` la
+            # connessione resettata: nessuno dei due nomi dice «connection», e
+            # il testo non porta marker, quindi finivano in chat come errori
+            # definitivi. Una connessione nuova, al tentativo dopo, passa.
+            error_kind = "connection"
+
+        return {
+            "error_status_code": int(status_code) if status_code is not None else None,
+            "error_kind": error_kind,
+            "error_type": error_type,
+            "error_code": error_code,
+            "error_retry_after_s": cls._extract_retry_after_from_headers(headers),
+            "error_should_retry": should_retry,
+        }
 
     @staticmethod
     def _enforce_role_alternation(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -459,16 +653,53 @@ class LLMProvider(ABC):
                 await on_stream_recover()
             has_streamed_content = False
 
+        # Ragionamento e frammenti di tool call non fermano il retry (un errore
+        # passeggero dopo un lungo ragionamento si ritenta), ma quello che un
+        # tentativo fallito ha già mostrato non si ripete: il ragionamento del
+        # tentativo dopo comparirebbe sotto il suo doppione, e i suoi frammenti
+        # di tool call si accoderebbero ai vecchi nello stesso ``index``
+        # dell'anteprima dei file. Il primo tentativo che ne manda uno di un
+        # tipo lo tiene; i successivi, di quel tipo, tacciono.
+        attempt_no = 0
+        thinking_attempt: int | None = None
+        tool_call_attempt: int | None = None
+
+        async def _attempt(**call_kw: Any) -> LLMResponse:
+            nonlocal attempt_no
+            attempt_no += 1
+            return await self._safe_chat_stream(**call_kw)
+
+        async def _first_attempt_thinking(text: str) -> None:
+            nonlocal thinking_attempt
+            if thinking_attempt not in (None, attempt_no):
+                return
+            if text:
+                thinking_attempt = attempt_no
+            assert on_thinking_delta is not None
+            await on_thinking_delta(text)
+
+        async def _first_attempt_tool_call(delta: dict[str, Any]) -> None:
+            nonlocal tool_call_attempt
+            if tool_call_attempt not in (None, attempt_no):
+                return
+            tool_call_attempt = attempt_no
+            assert on_tool_call_delta is not None
+            await on_tool_call_delta(delta)
+
         kw: dict[str, Any] = dict(
             messages=messages, tools=tools, model=model,
             max_tokens=max_tokens, temperature=temperature,
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
             on_content_delta=_tracking_delta if on_content_delta is not None else None,
-            on_thinking_delta=on_thinking_delta,
-            on_tool_call_delta=on_tool_call_delta,
+            on_thinking_delta=(
+                _first_attempt_thinking if on_thinking_delta is not None else None
+            ),
+            on_tool_call_delta=(
+                _first_attempt_tool_call if on_tool_call_delta is not None else None
+            ),
         )
         response = await self._run_with_retry(
-            self._safe_chat_stream,
+            _attempt,
             kw,
             messages,
             retry_mode=retry_mode,
@@ -476,6 +707,17 @@ class LLMProvider(ABC):
             should_retry_guard=lambda: not has_streamed_content,
             on_stream_recover=_recover_stream if on_stream_recover else None,
         )
+        if response.finish_reason == "error":
+            # A retry esauriti il contenuto resta il messaggio d'errore: col
+            # testo dei segmenti davanti, il runner lo pubblicava come finale e
+            # l'utente rivedeva tutto con l'errore in coda. Ciò che è stato
+            # mostrato va invece in ``partial_content`` — tutti i segmenti, anche
+            # quello dell'ultimo tentativo, che un timeout non si porta dietro —
+            # così la history combacia con lo schermo.
+            shown = "".join(prior_segments_text) + "".join(current_segment_parts)
+            if shown:
+                response = replace(response, partial_content=shown)
+            return response
         if prior_segments_text:
             # Concatenate text-only content from stalled-and-retried segments
             # ahead of the final attempt's content, in the order it was shown
@@ -611,16 +853,62 @@ class LLMProvider(ABC):
         remaining = max(0.0, delay)
         while remaining > 0:
             if on_retry_wait:
-                kind = "persistent retry" if persistent else "retry"
-                await on_retry_wait(
-                    f"Model request failed, {kind} in {max(1, int(round(remaining)))}s "
-                    f"(attempt {attempt})."
-                )
+                await on_retry_wait(retry_notice.waiting(
+                    max(1, int(round(remaining))), attempt, persistent=persistent,
+                ))
             chunk = min(remaining, self._RETRY_HEARTBEAT_CHUNK)
             await asyncio.sleep(chunk)
             remaining -= chunk
 
+    async def aclose(self) -> None:
+        """Chiude il client httpx del provider, quando nessuno lo usa più.
+
+        Si chiama sul provider *sostituito* dopo un cambio di impostazioni: il
+        nuovo ne ha un altro, e il vecchio teneva aperti connessioni e pool per
+        sempre, uno per salvataggio. Se una richiesta è ancora in volo (un
+        turno partito col provider vecchio) la chiusura aspetta che finisca,
+        retry compresi: troncarla vorrebbe dire rompere il turno dell'utente.
+        Idempotente.
+        """
+        self._close_requested = True
+        if self._inflight == 0:
+            await self._close_http_client()
+
+    async def _close_http_client(self) -> None:
+        client = getattr(self, "_http_client", None)
+        if client is None:
+            return
+        with suppress(Exception):
+            await client.aclose()
+
     async def _run_with_retry(
+        self,
+        call: Callable[..., Awaitable[LLMResponse]],
+        kw: dict[str, Any],
+        original_messages: list[dict[str, Any]],
+        *,
+        retry_mode: str,
+        on_retry_wait: Callable[[str], Awaitable[None]] | None,
+        should_retry_guard: Callable[[], bool] | None = None,
+        on_stream_recover: Callable[[], Awaitable[None]] | None = None,
+    ) -> LLMResponse:
+        # Il conteggio copre tutto il ciclo, attese comprese: un ``aclose``
+        # arrivato fra due tentativi non deve chiudere il client sotto al retry.
+        self._inflight += 1
+        try:
+            return await self._run_with_retry_loop(
+                call, kw, original_messages,
+                retry_mode=retry_mode,
+                on_retry_wait=on_retry_wait,
+                should_retry_guard=should_retry_guard,
+                on_stream_recover=on_stream_recover,
+            )
+        finally:
+            self._inflight -= 1
+            if self._close_requested and self._inflight == 0:
+                await self._close_http_client()
+
+    async def _run_with_retry_loop(
         self,
         call: Callable[..., Awaitable[LLMResponse]],
         kw: dict[str, Any],
@@ -697,27 +985,27 @@ class LLMProvider(ABC):
                     (response.content or "")[:120].lower(),
                 )
                 if on_retry_wait:
-                    await on_retry_wait(
-                        f"Persistent retry stopped after {identical_error_count} identical errors."
-                    )
+                    await on_retry_wait(retry_notice.stopped(identical_error_count))
                 return response
 
             if not persistent and attempt > len(delays):
                 logger.warning(
-                    "LLM request failed after {} retries, giving up: {}",
+                    "LLM request failed after {} attempts, giving up: {}",
                     attempt,
                     (response.content or "")[:120].lower(),
                 )
                 if on_retry_wait:
-                    await on_retry_wait(
-                        f"Model request failed after {attempt} retries, giving up."
-                    )
+                    await on_retry_wait(retry_notice.gave_up(attempt))
                 break
 
             base_delay = delays[min(attempt - 1, len(delays) - 1)]
             delay = self._extract_retry_after_from_response(response) or base_delay
-            if persistent:
-                delay = min(delay, self._PERSISTENT_MAX_DELAY)
+            # Il ``Retry-After`` del server ha un tetto in entrambe le modalità:
+            # in standard si prendeva alla lettera, e un ``3600`` teneva la
+            # sessione ferma tre ore (tre tentativi) prima dell'errore.
+            delay = min(
+                delay, self._PERSISTENT_MAX_DELAY if persistent else self._STANDARD_MAX_DELAY,
+            )
 
             logger.warning(
                 "LLM transient error (attempt {}{}), retrying in {}s: {}",

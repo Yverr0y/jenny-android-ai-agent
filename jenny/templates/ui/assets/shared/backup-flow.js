@@ -36,6 +36,57 @@ window.jennyBackup = {
   },
 };
 
+/* Quanto si aspetta la risposta del nativo **dopo** essere tornati alla
+   pagina. Il picker e' una schermata di sistema: finche' e' davanti la pagina
+   e' nascosta (`MainActivity.onPause` mette in pausa la WebView), e li' si puo'
+   restare quanto si vuole. Tornati, la risposta arriva subito o dopo la copia
+   del file (`copyImportFromUri`, un thread): un minuto basta a un backup
+   grande. */
+export const NATIVE_ANSWER_GRACE_MS = 60000;
+
+/** La risposta del nativo a *start()*, per lo slot *slot* di `_pending`.
+ *
+ *  **Con una cintura**, come i dialoghi di questo file:
+ *  se la risposta non arriva mai — il picker ucciso, un
+ *  `evaluateJavascript` perso — la Promise restava appesa, e con lei `_busy`:
+ *  export, import e restore morivano in silenzio fino al ricaricamento della
+ *  pagina. Ora, tornati visibili dopo il picker, se entro
+ *  `NATIVE_ANSWER_GRACE_MS` non ha risposto nessuno, e' un annullo. Una
+ *  risposta tardiva trova lo slot vuoto e non fa niente. */
+function _awaitNative(slot, start) {
+  return new Promise((resolve) => {
+    let timer = null;
+    let hidden = document.visibilityState === 'hidden';
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hidden = true;
+        clearTimeout(timer);
+        return;
+      }
+      if (!hidden) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => finish(false), NATIVE_ANSWER_GRACE_MS);
+    };
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      if (_pending[slot] === finish) _pending[slot] = null;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      resolve(!!ok);
+    };
+    _pending[slot] = finish;
+    document.addEventListener('visibilitychange', onVisibility);
+    try {
+      start();
+    } catch (err) {
+      console.error('Backup picker failed to start:', err);
+      finish(false);
+    }
+  });
+}
+
 export function backupNativeAvailable() {
   const n = window.JennyNative;
   return !!(n && n.exportBackup && n.importBackup && n.restartApp);
@@ -56,6 +107,9 @@ export function promptPassphrase({ confirm = false } = {}) {
   return new Promise((resolve) => {
     const dialog = document.createElement('dialog');
     dialog.className = 'oc-dialog';
+    // L'id lo legge la casa (`SHARED_DIALOGS` in home-app.js): senza, Indietro
+    // non lo vedeva e portava via la stanza sotto, lasciando la domanda aperta.
+    dialog.id = 'oc-backup-passphrase-dialog';
     dialog.innerHTML = `
       <div class="oc-dialog-inner">
         <h3 style="margin:0 0 8px;font-size:15px;font-weight:600">${i18n.t('backup.passphraseTitle')}</h3>
@@ -117,6 +171,9 @@ export function promptPassphrase({ confirm = false } = {}) {
 export function showRestartDialog() {
   const dialog = document.createElement('dialog');
   dialog.className = 'oc-dialog';
+  // Stesso id-contratto della passphrase: Indietro lo trova, `cancel` qui
+  // sotto lo rifiuta, e la pressione e' consumata senza chiudere niente.
+  dialog.id = 'oc-backup-restart-dialog';
   dialog.innerHTML = `
     <div class="oc-dialog-inner">
       <h3 style="margin:0 0 8px;font-size:15px;font-weight:600">${i18n.t('backup.restartTitle')}</h3>
@@ -152,14 +209,19 @@ export function runExportFlow() {
       showToast(e.message, 'error');
       return false;
     }
-    return await new Promise((resolve) => {
-      _pending.export = (ok) => {
-        showToast(ok ? i18n.t('backup.exportSuccess') : i18n.t('backup.exportCancelled'),
-                  ok ? undefined : 'error');
-        resolve(ok);
-      };
+    const ok = await _awaitNative('export', () => {
       window.JennyNative.exportBackup(staged.staged_path, staged.suggested_filename);
     });
+    showToast(ok ? i18n.t('backup.exportSuccess') : i18n.t('backup.exportCancelled'),
+              ok ? undefined : 'error');
+    /* Il momento in cui si sa che il file c'è davvero, e l'unico: fra
+       `exportBackup` e questa risposta c'è una schermata di sistema che
+       si può annullare. Segnarlo prima vorrebbe dire scrivere «ultimo
+       backup: adesso» su un backup che non è stato salvato.
+       Se la scrittura del record fallisce non si dice niente: il backup
+       è fatto, ed è quello che conta — a mancare sarebbe la data. */
+    if (ok) api.noteBackupExported().catch(() => {});
+    return ok;
   });
 }
 
@@ -172,10 +234,7 @@ export function runImportFlow() {
       showToast(i18n.t('backup.androidOnly'), 'error');
       return false;
     }
-    const picked = await new Promise((resolve) => {
-      _pending.import = resolve;
-      window.JennyNative.importBackup();
-    });
+    const picked = await _awaitNative('import', () => window.JennyNative.importBackup());
     if (!picked) return false; // annullato dal picker o copia fallita
 
     const passphrase = await promptPassphrase();

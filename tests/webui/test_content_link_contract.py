@@ -22,6 +22,13 @@ il guscio non poteva accorgersi di aver perso la SPA.
 
 Asserzioni sul sorgente, nello stile di ``test_back_navigation_contract.py``: la
 WebUI non ha un runner JS con DOM.
+
+**La meta' della wiki e' uscita di qui il 21/09/2026.** Tre banchi guardavano
+``_wireWikiLinks`` in ``mobile-wiki.js``: quella vista non e' piu' in officina.
+La stessa regola vale ora per il lettore della casa, e la' e' **misurata** e non
+grepata — ``test_home_reader_client.py`` la fa girare in node su un DOM finto:
+relativo, wikilink dello stesso quaderno, wikilink di un altro, web, ancora,
+link morto. Quel che resta qui e' la meta' della chat, che non ha un gemello.
 """
 
 from __future__ import annotations
@@ -29,6 +36,8 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+
+from support.kotlin_source import read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
@@ -88,8 +97,10 @@ def test_the_chat_intercepts_every_anchor_before_anything_else() -> None:
     )
     assert listener, "listener click della chatArea non trovato"
     body = _strip_comments(listener.group(1))
-    assert "closest('a[href]')" in body, "nessun ramo per gli <a href> del markdown"
-    assert body.index("closest('a[href]')") < body.index("closest('.chat-code-copy')"), (
+    # ``contentLinkOf`` e non ``closest('a[href]')``: anche ``<area href>`` e il
+    # ``<a xlink:href>`` di un ``<svg>`` sono link.
+    assert "contentLinkOf(e.target)" in body, "nessun ramo per i link del markdown"
+    assert body.index("contentLinkOf(e.target)") < body.index("closest('.chat-code-copy')"), (
         "il ramo dei link deve precedere gli altri handler della chat"
     )
     assert "_handleContentLink(e, link)" in body
@@ -148,62 +159,24 @@ def test_the_chat_anchors_skipped_by_that_guard_are_wired_elsewhere() -> None:
 
 
 def test_no_chat_link_branch_can_reach_a_navigation() -> None:
-    """Ancora interna → scroll, origine diversa → fuori dalla WebView, resto → inerte."""
+    """Ancora interna → scroll, origine diversa → fuori dalla WebView, resto → inerte.
+
+    La classificazione vive in ``shared/content-link.js`` dal 26/09/2026, e la
+    misura ``test_content_link_client.py`` in node; qui resta la forma del
+    ramo dell'officina che la usa."""
     body = _method(_chat(), "_handleContentLink")
     _assert_prevented_first(body, "_handleContentLink")
     code = _strip_comments(body)
-    assert "startsWith('#')" in code and "_scrollToChatAnchor" in code, (
+    assert "contentLinkTarget(" in code, "la regola dei link e' quella condivisa fra i due gusci"
+    assert "'hash'" in code and "_scrollToChatAnchor" in code, (
         "l'ancora interna deve diventare uno scroll, non una entry di history"
     )
-    assert "url.origin !== window.location.origin" in code, (
+    assert "openOutsideWebView(" in code
+    assert "common.linkNotOpenable" in code, "il ramo inerte deve dirlo, non tacere"
+    shared = _strip_comments((ASSETS / "shared" / "content-link.js").read_text(encoding="utf-8"))
+    assert "url.origin !== origin" in shared, (
         "senza il confronto di origine un href relativo passerebbe per link esterno e ricaricherebbe la SPA"
     )
-    assert "_openOutsideWebView" in code
-    assert "common.linkNotOpenable" in code, "il ramo inerte deve dirlo, non tacere"
-
-
-def test_the_wiki_wires_every_anchor_not_just_wikilinks() -> None:
-    """``a.wikilink`` copriva solo ``[[Target]]``: tutto il resto navigava."""
-    source = _wiki()
-    assert "querySelectorAll('a.wikilink')" not in source, (
-        "wiring per classe: un [testo](altra.md) resterebbe una navigazione vera"
-    )
-    body = _method(source, "_wireWikiLinks")
-    assert "querySelectorAll('a[href]')" in body
-    handler = re.search(r"addEventListener\('click', \(e\) => \{(.*)", body, re.S)
-    assert handler, "handler del click non trovato in _wireWikiLinks"
-    _assert_prevented_first(handler.group(1), "_wireWikiLinks")
-    code = _strip_comments(body)
-    assert "_scrollToHash" in code, "le ancore interne diventano scroll"
-    assert "url.origin !== window.location.origin" in code
-    assert "_openOutsideWebView" in code
-    assert "common.linkNotOpenable" in code
-
-
-def test_the_only_anchors_skipped_by_the_wiki_wiring_are_wired_elsewhere() -> None:
-    """L'unica esenzione è quella dei breadcrumb, che hanno già il loro handler:
-    e anche quello deve annullare il click, altrimenti il buco si riapre lì."""
-    source = _wiki()
-    body = _strip_comments(_method(source, "_wireWikiLinks"))
-    skipped = re.findall(r"hasAttribute\('([^']+)'\)", body)
-    assert set(skipped) == {"data-home", "data-wiki"}, (
-        "esenzione nuova nel wiring dei link: va wirata altrove o non va esentata"
-    )
-    crumbs = _strip_comments(_method(source, "_renderBreadcrumbs"))
-    for attr in skipped:
-        wiring = re.search(
-            rf"querySelectorAll\('a\[{attr}\]'\)\.forEach\(a => \{{(.*?)\n    \}}\);", crumbs, re.S
-        )
-        assert wiring, f"a[{attr}] non è wirato in _renderBreadcrumbs"
-        assert "e.preventDefault()" in wiring.group(1)
-
-
-def test_the_wiki_still_recognises_the_class_the_server_emits() -> None:
-    """Contratto cross-file: il ramo che carica una pagina è raggiungibile solo
-    se ``wiki.py`` continua a marcare i wikilink con quella classe."""
-    server = (ROOT / "jenny" / "webui" / "wiki.py").read_text(encoding="utf-8")
-    assert '<a class="wikilink"' in server
-    assert "classList.contains('wikilink')" in _method(_wiki(), "_wireWikiLinks")
 
 
 def test_both_locales_carry_the_inert_link_message() -> None:
@@ -212,21 +185,38 @@ def test_both_locales_carry_the_inert_link_message() -> None:
         assert data["common"].get("linkNotOpenable"), f"chiave mancante in {locale}.json"
 
 
-def test_the_shell_calls_the_spa_page_internal_only_by_exact_path() -> None:
-    """Il prefisso non basta: ``/html-mobile/www.google.com`` lo soddisferebbe."""
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
-    body = re.search(r"private fun isInternalGatewayUrl\(uri: Uri\): Boolean \{(.*?)\n    \}", kotlin, re.S)
-    assert body, "isInternalGatewayUrl non trovato"
+def test_the_shell_calls_the_spa_pages_internal_only_by_exact_path() -> None:
+    """Il prefisso non basta: ``/html-mobile/www.google.com`` lo soddisferebbe.
+
+    I documenti-guscio sono due — la casa (``index.html``) e l'officina
+    (``workshop.html``) — e l'elenco vive in ``isShellDocument``. Quel che non
+    deve cambiare e' **come** si confrontano: per uguaglianza, uno per uno. Un
+    ``startsWith`` sotto il gateway riaprirebbe il buco per intero.
+    """
+    kotlin = read_source(MAIN_ACTIVITY)
+    body = re.search(
+        r"private fun isShellDocument\(path: String\): Boolean \{(.*?)\n    \}", kotlin, re.S
+    )
+    assert body, "isShellDocument non trovato"
     code = body.group(1)
-    assert "path == GATEWAY_PATH" in code, "il path della SPA va confrontato per uguaglianza"
+    assert "path ==" in code, "i path dei gusci vanno confrontati per uguaglianza"
     assert "startsWith" not in code, "un confronto per prefisso riapre il buco"
+    assert "contains" not in code, "un confronto per sottostringa riapre il buco"
+    assert "endsWith" not in code, "un confronto per suffisso riapre il buco"
+    # I due gusci, per nome: se uno sparisce, la sua porta smette di aprirsi.
+    assert "index.html" in code and "workshop.html" in code
+    # E il predicato usato dal WebViewClient deve passare di qui, non altrove.
+    caller = re.search(
+        r"private fun isInternalGatewayUrl\(uri: Uri\): Boolean \{(.*?)\n    \}", kotlin, re.S
+    )
+    assert caller and "isShellDocument(path)" in caller.group(1)
     assert 'GATEWAY_PATH = "/html-mobile/"' in kotlin
 
 
 def test_a_gateway_url_that_is_not_the_spa_is_blocked_rather_than_handed_out() -> None:
     """``/api/…`` non è la SPA e non è nemmeno roba da Custom Tab: aprirlo fuori
     esporrebbe il gateway locale a un altro processo. Si blocca e basta."""
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     override = re.search(
         r"override fun shouldOverrideUrlLoading\((.*?)\n            \}", kotlin, re.S
     )
@@ -239,7 +229,7 @@ def test_a_gateway_url_that_is_not_the_spa_is_blocked_rather_than_handed_out() -
 def test_the_back_press_asks_a_question_that_can_be_answered_no() -> None:
     """``if (window.mobileApp) …`` valeva sempre ``"null"``: SPA viva e SPA
     sparita davano al nativo esattamente la stessa risposta."""
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     assert "if (window.mobileApp) window.mobileApp.handleHardwareBack()" not in kotlin
     probe = re.search(r"BACK_PRESS_JS = \"\"\"(.*?)\"\"\"", kotlin, re.S)
     assert probe, "BACK_PRESS_JS non trovato"
@@ -265,7 +255,7 @@ def test_losing_the_spa_is_recoverable_and_keeps_the_bootstrap_fragment() -> Non
     della WebView al posto della SPA per sempre — tasto Indietro morto, che è
     esattamente il difetto che questo recupero esiste per chiudere.
     """
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     body = re.search(r"private fun recoverLostSpa\(\) \{(.*?)\n    \}", kotlin, re.S)
     assert body, "recoverLostSpa non trovato"
     code = _strip_comments(body.group(1))

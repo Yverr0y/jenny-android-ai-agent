@@ -15,17 +15,17 @@ dei comandi sta in :mod:`jenny.webui.commands`, che non sa nulla di trasporti.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from loguru import logger
 
+from jenny.security.wire_ids import WIRE_ID_RE
 from jenny.webui.commands import CommandContext, CommandError, dispatch_command
 
 # Stesso charset dei correlation-id di ``ui_query``: il client genera
 # "rpc-<uuid4hex>", ma qualunque token opaco corto va bene. Nessun ':' e nessuno
 # spazio, così l'id non può confondersi con una session key nei log.
-_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_ID_RE = WIRE_ID_RE
 
 # Tetto sui nomi di metodo, prima di qualunque lookup: un client ostile non deve
 # poter far loggare (né confrontare) stringhe arbitrariamente lunghe.
@@ -70,17 +70,23 @@ def parse_rpc_frame(envelope: dict[str, Any]) -> tuple[str, str, dict[str, Any]]
 def authorize(*, secret: str, connection_authenticated: bool) -> None:
     """Autorizza un RPC sulla connessione corrente.
 
-    Il verdetto è quello dell'handshake, non del frame: se un secret è
-    configurato, solo una connessione che ha presentato il token può mutare
-    qualcosa. Senza questo controllo un setup con
-    ``websocket_requires_token = false`` avrebbe una scrittura file più debole
-    di ``/api/``, che invece fallisce chiuso quando il secret manca.
+    Il verdetto è quello dell'handshake, non del frame: solo una connessione
+    che ha presentato il token può mutare qualcosa. Senza questo controllo un
+    setup con ``websocket_requires_token = false`` avrebbe una scrittura file
+    più debole di ``/api/``.
+
+    **Senza secret non passa niente**, come ``/api/``, che in quel caso risponde
+    401 a chiunque (``http_utils.check_api_secret``). Prima un secret vuoto
+    voleva dire «nessun cancello», e le scritture stavano dietro una porta più
+    debole delle letture. Non rompe una WebUI vera: senza secret non potrebbe
+    leggere nemmeno le impostazioni, e il bootstrap lo genera al primo avvio.
 
     Raises:
-        CommandError: ``forbidden`` se la connessione non è autenticata.
+        CommandError: ``forbidden`` se manca il secret o la connessione non è
+            autenticata.
     """
     if not secret.strip():
-        return
+        raise CommandError("forbidden", "unauthorized: no secret is configured")
     if not connection_authenticated:
         raise CommandError("forbidden", "unauthorized")
 

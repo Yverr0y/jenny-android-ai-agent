@@ -3,7 +3,6 @@
 import json
 import os
 import re
-import shutil
 from pathlib import Path
 
 from jenny.utils.path import atomic_write
@@ -39,6 +38,30 @@ def _parse_frontmatter_simple(text: str) -> dict[str, str]:
     return result
 
 
+def _parse_skill_metadata(content: str) -> dict | None:
+    """Il frontmatter di un ``SKILL.md`` come dict, o ``None``."""
+    if not content or not content.startswith("---"):
+        return None
+    match = _STRIP_SKILL_FRONTMATTER.match(content)
+    if not match:
+        return None
+    if _has_yaml:
+        try:
+            parsed = yaml.safe_load(match.group(1))
+        except yaml.YAMLError:
+            return None
+    else:
+        parsed = _parse_frontmatter_simple(match.group(1))
+    if not isinstance(parsed, dict):
+        return None
+    # yaml.safe_load returns native types (int, bool, list, etc.);
+    # keep values as-is so downstream consumers get correct types.
+    metadata: dict[str, object] = {}
+    for key, value in parsed.items():
+        metadata[str(key)] = value
+    return metadata
+
+
 class SkillsLoader:
     """
     Loader for agent skills.
@@ -51,6 +74,35 @@ class SkillsLoader:
         self.workspace = workspace
         self.workspace_skills = workspace / "skills"
         self.disabled_skills = disabled_skills or set()
+        # ``SKILL.md`` letti e frontmatter gia' parsato, per percorso, validi
+        # finche' ``(mtime_ns, size)`` del file restano quelli.
+        # Senza, ogni costruzione del prompt rileggeva e riparsava in
+        # YAML ogni skill piu' volte — elenco, requisiti, descrizione, always —
+        # e sul telefono erano 56 letture per prompt, tre prompt a turno. La
+        # chiave include la dimensione perche' su alcuni filesystem ``mtime`` ha
+        # la risoluzione del secondo.
+        self._file_cache: dict[Path, tuple[tuple[int, int], str, dict | None]] = {}
+
+    def _read_skill(self, name: str) -> tuple[str, dict | None] | None:
+        """Testo e metadata del ``SKILL.md`` di *name*, dalla cache se il file non e' cambiato."""
+        path = self.workspace_skills / name / "SKILL.md"
+        try:
+            stat = path.stat()
+        except OSError:
+            self._file_cache.pop(path, None)
+            return None
+        stamp = (stat.st_mtime_ns, stat.st_size)
+        cached = self._file_cache.get(path)
+        if cached is not None and cached[0] == stamp:
+            return cached[1], cached[2]
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            self._file_cache.pop(path, None)
+            return None
+        metadata = _parse_skill_metadata(text)
+        self._file_cache[path] = (stamp, text, metadata)
+        return text, metadata
 
     def _skill_entries_from_dir(
         self,
@@ -118,10 +170,10 @@ class SkillsLoader:
         Returns:
             Skill content or None if not found.
         """
-        path = self.workspace_skills / name / "SKILL.md"
-        if path.exists():
-            return self._adapt_skill_for_platform(path.read_text(encoding="utf-8"))
-        return None
+        read = self._read_skill(name)
+        if read is None:
+            return None
+        return self._adapt_skill_for_platform(read[0])
 
     def load_skills_for_context(self, skill_names: list[str]) -> str:
         """
@@ -270,20 +322,6 @@ class SkillsLoader:
         # che non si carica più. Da qui l'helper unico invece di write_text.
         atomic_write(skill_path, f"---\n{frontmatter}---\n{body}")
 
-    def delete_skill(self, name: str) -> None:
-        """Delete a workspace skill directory.
-
-        Raises:
-            PermissionError: if the skill is builtin.
-            FileNotFoundError: if the skill doesn't exist.
-        """
-        if not self.is_workspace_skill(name):
-            raise PermissionError("cannot delete builtin skill")
-        skill_dir = self.workspace_skills / name
-        if not skill_dir.exists():
-            raise FileNotFoundError(f"skill '{name}' not found")
-        shutil.rmtree(skill_dir)
-
     # ── Metadata parsing ──
 
     def _parse_jenny_metadata(self, raw: object) -> dict:
@@ -342,24 +380,8 @@ class SkillsLoader:
         Returns:
             Metadata dict or None.
         """
-        content = self.load_skill(name)
-        if not content or not content.startswith("---"):
+        read = self._read_skill(name)
+        if read is None or read[1] is None:
             return None
-        match = _STRIP_SKILL_FRONTMATTER.match(content)
-        if not match:
-            return None
-        if _has_yaml:
-            try:
-                parsed = yaml.safe_load(match.group(1))
-            except yaml.YAMLError:
-                return None
-        else:
-            parsed = _parse_frontmatter_simple(match.group(1))
-        if not isinstance(parsed, dict):
-            return None
-        # yaml.safe_load returns native types (int, bool, list, etc.);
-        # keep values as-is so downstream consumers get correct types.
-        metadata: dict[str, object] = {}
-        for key, value in parsed.items():
-            metadata[str(key)] = value
-        return metadata
+        # Una copia: il dict in cache e' condiviso fra tutte le letture.
+        return dict(read[1])

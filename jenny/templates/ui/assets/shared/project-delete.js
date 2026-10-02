@@ -20,14 +20,28 @@ import { rpc } from './rpc-client.js';
 import { showToast } from './utils.js';
 import { confirmDialog } from './dialog.js';
 import { i18n } from './i18n.js';
+import { dropLayoutKey } from './map-layout.js';
+
+/** Le frasi del giro, come chiavi i18n: quel che si cancella è un **quaderno**,
+ *  in casa come in officina. Stessa forma di `NOTEBOOK_WORDS` in
+ *  `project-create.js`.
+ */
+export const NOTEBOOK_DELETE_WORDS = {
+  confirm: 'workspace.deleteProjectConfirm',
+  confirmWithChat: 'workspace.deleteProjectConfirmWithChat',
+  failed: 'workspace.deleteProjectFailed',
+  busy: 'workspace.deleteProjectBusy',
+};
 
 /** Chiede conferma e cancella *name*. Ritorna `true` solo se è sparito davvero.
  *
  *  `false` copre due casi che al chiamante interessano allo stesso modo — ha
  *  detto di no, oppure il server ha rifiutato — perché in entrambi il progetto
  *  c'è ancora e non va tolto da nessun elenco. L'errore lo dice il toast, qui.
+ *
+ *  @param words  le chiavi i18n da usare (v. `NOTEBOOK_DELETE_WORDS`).
  */
-export async function deleteProjectFlow(name) {
+export async function deleteProjectFlow(name, words = NOTEBOOK_DELETE_WORDS) {
   if (!name) return false;
 
   let described = null;
@@ -41,16 +55,25 @@ export async function deleteProjectFlow(name) {
   }
   const messages = described?.conversation?.messages;
   const question = messages
-    ? i18n.t('workspace.deleteProjectConfirmWithChat', { name, count: messages })
-    : i18n.t('workspace.deleteProjectConfirm', { name });
+    ? i18n.t(words.confirmWithChat, { name, count: messages })
+    : i18n.t(words.confirm, { name });
   if (!(await confirmDialog(question))) return false;
 
   try {
     await rpc.deleteProject(name);
   } catch (err) {
     console.warn('project.delete failed:', err?.code || '(no code)', err?.message);
-    showToast(i18n.t('workspace.deleteProjectFailed', { name }), 'error');
+    // `conflict` e' il rifiuto per chi ci sta ancora scrivendo (un turno, un
+    // subagent, una passata): una condizione attesa, da dire com'e', non un
+    // fallimento generico. Chi non ha la frase ricade su quella di sempre.
+    const key = err?.code === 'conflict' && words.busy ? words.busy : words.failed;
+    showToast(i18n.t(key, { name }), 'error');
     return false;
   }
+  /* La disposizione della sua mappa se ne va con lui, o un quaderno nuovo con
+     lo stesso nome la erediterebbe. Qui e non nei chiamanti: i chiamanti sono
+     tre (la casa, il chip, il gestore file) e la cancellazione e' una. Di
+     cortesia: non fallisce mai, e non cambia l'esito. */
+  await dropLayoutKey(name);
   return true;
 }

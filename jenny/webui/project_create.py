@@ -1,14 +1,14 @@
 """Creazione di un progetto dalla WebUI: una wiki nuova, completa e vuota.
 
-**Un progetto e' una wiki** (v. `roadmap/project-sessions.md`): non esiste una
+**Un progetto e' una wiki**: non esiste una
 `projects/` separata, quindi "nuovo progetto" vuol dire scaffoldare
 `wikis/<nome>/` e registrarlo in `wikis/_index.md`. Prima di questo modulo il
 chip creava una cartella nuda con `/api/workspace/mkdir`: nessun albero, nessun
 file di istruzioni, nessuna voce nel registro — una wiki rotta che sembrava un
 progetto.
 
-**Lo scaffolder e' `project_scaffold.py`, nel package** *(dal 22/08, passo T1 di
-`roadmap/taccuino-passi.md`)*. Fino a quel giorno era `scaffold.py` della skill,
+**Lo scaffolder e' `project_scaffold.py`, nel package** *(dal 22/08, passo T1 del
+piano del taccuino)*. Fino a quel giorno era `scaffold.py` della skill,
 per non avere due scaffolder che divergono; ora sono due di proposito, perche'
 costruiscono **due formati diversi**: la skill fa la biblioteca di ricerca
 (`raw/papers`, `concepts|entities|summaries`, le cinque operazioni), e resta la
@@ -66,7 +66,7 @@ class ProjectCreateError(Exception):
 
 
 def project_title(name: str) -> str:
-    """Titolo leggibile da un nome di cartella: ``patreon-creator`` -> ``Patreon Creator``.
+    """Titolo leggibile da un nome di cartella: ``diario-ricette`` -> ``Diario Ricette``.
 
     Il titolo finisce negli H1 del template e non e' un identificatore: l'utente
     lo puo' correggere nell'`AGENTS.md`, il nome della cartella no (e' l'indirizzo

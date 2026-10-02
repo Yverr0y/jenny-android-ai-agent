@@ -673,10 +673,13 @@ class TestRunningCounts:
         await sm.spawn("t2", session_key="s1")
         assert sm.get_running_count() == 2
         assert sm.get_running_count_by_session("s1") == 2
+        assert len(sm.get_running_ids_by_session("s1")) == 2
+        assert sm.get_running_ids_by_session("altra") == frozenset()
 
         block.set()
         await _drain_subagent_tasks(sm)
         assert sm.get_running_count() == 0
+        assert sm.get_running_ids_by_session("s1") == frozenset()
 
     @pytest.mark.asyncio
     async def test_running_count_by_session_nonexistent(self, tmp_path):

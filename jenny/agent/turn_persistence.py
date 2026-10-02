@@ -8,6 +8,7 @@ zero churn ai call-site. Nessuna logica di concorrenza vive qui.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -173,9 +174,144 @@ class TurnPersistenceMixin:
         return True
 
     def _set_runtime_checkpoint(self, session: Session, payload: dict[str, Any]) -> None:
-        """Persist the latest in-flight turn state into session metadata."""
+        """Persist the latest in-flight turn state into session metadata.
+
+        ``prior_messages`` (il turno prima dell'iterazione in corso, v.
+        ``AgentRunner._emit_checkpoint``) si alleggerisce qui delle immagini in
+        base64: il checkpoint si riscrive a ogni fase del turno, e una foto
+        iniettata a metà turno lo gonfierebbe di megabyte a ogni riscrittura. Il
+        segnaposto è lo stesso che la storia salvata porterebbe comunque.
+
+        **``prior_messages`` non sta nei metadati ma nel diario del turno**
+        (:meth:`_journal_prior_messages`). Il checkpoint si scrive due volte per
+        iterazione e ogni scrittura riscrive il file di sessione intero: con il
+        turno dentro i metadati, un turno di *n* iterazioni scriveva circa *n²*
+        volte i risultati dei tool — misurato, 11 MB in più su 30 iterazioni con
+        risultati da 8-16 kB, e il tetto è 200 iterazioni. Il diario riceve in
+        append solo i messaggi nuovi, e il checkpoint ne porta il conto. Se il
+        diario non si può scrivere, il turno torna in linea come prima.
+        """
+        prior = payload.get("prior_messages")
+        if isinstance(prior, list):
+            light: list[Any] = []
+            for message in prior:
+                if isinstance(message, dict) and isinstance(message.get("content"), list):
+                    message = {
+                        **message,
+                        "content": self._sanitize_persisted_blocks(message["content"]),
+                    }
+                light.append(message)
+            journal = self._journal_prior_messages(session.key, light)
+            if journal is not None:
+                payload = {k: v for k, v in payload.items() if k != "prior_messages"}
+                payload["prior_journal"] = journal
+            else:
+                payload = {**payload, "prior_messages": light}
         session.metadata[self._RUNTIME_CHECKPOINT_KEY] = payload
         self.sessions.save(session)
+
+    def _turn_journal_path(self, key: str) -> Path | None:
+        """Il file del diario del turno di *key*, o ``None`` se non c'è dove scriverlo."""
+        locate = getattr(getattr(self, "sessions", None), "turn_journal_path", None)
+        path = locate(key) if callable(locate) else None
+        return path if isinstance(path, Path) else None
+
+    def _journal_prior_messages(
+        self, key: str, prior: list[Any],
+    ) -> dict[str, Any] | None:
+        """Aggiunge al diario del turno i messaggi di *prior* che non ha ancora.
+
+        Il diario è un JSONL accanto al file di sessione: una riga di testa con il
+        ``stamp`` del turno, poi un messaggio per riga. ``prior`` cresce solo in
+        coda (il runner aggiunge e non riscrive), quindi basta ricordare quanti
+        messaggi sono già scritti, e di quale turno (``current_turn_id``). Il
+        primo checkpoint di un turno — o uno che non torna col conto, o uno
+        fuori da un turno legato — riscrive il diario da capo con un ``stamp``
+        nuovo: un diario rimasto da un turno vecchio non si confonde col nuovo,
+        perché il ripristino legge solo quello col ``stamp`` del checkpoint.
+
+        Ritorna il riferimento da mettere nel checkpoint (``stamp`` e ``count``),
+        o ``None`` se il diario non si è potuto scrivere.
+        """
+        import json
+        import uuid
+
+        path = self._turn_journal_path(key)
+        if path is None:
+            return None
+        from jenny.agent.tools.context import current_turn_id
+
+        turn_id = current_turn_id()
+        journals: dict[str, tuple[str | None, str, int]] = self.__dict__.setdefault(
+            "_checkpoint_journals", {},
+        )
+        state = journals.get(key)
+        try:
+            if state is None or turn_id is None or state[0] != turn_id or state[2] > len(prior):
+                stamp = uuid.uuid4().hex
+                lines = [json.dumps({"_type": "turn_journal", "stamp": stamp}) + "\n"]
+                lines += [json.dumps(m, ensure_ascii=False) + "\n" for m in prior]
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write("".join(lines))
+            else:
+                _, stamp, written = state
+                fresh = prior[written:]
+                if fresh:
+                    with open(path, "a", encoding="utf-8") as fh:
+                        fh.write("".join(
+                            json.dumps(m, ensure_ascii=False) + "\n" for m in fresh
+                        ))
+        except (OSError, TypeError, ValueError) as exc:
+            # UnicodeEncodeError è un ValueError: un surrogato isolato lo ripulisce
+            # il salvataggio della sessione, che col turno in linea lo vede.
+            journals.pop(key, None)
+            logger.warning(
+                "Turn journal for {} not written ({}); the checkpoint carries the turn inline",
+                key, exc,
+            )
+            return None
+        journals[key] = (turn_id, stamp, len(prior))
+        return {"stamp": stamp, "count": len(prior)}
+
+    def _read_turn_journal(self, key: str, ref: Any) -> list[dict[str, Any]]:
+        """I messaggi del diario del turno a cui punta *ref*, o ``[]``."""
+        import json
+
+        if not isinstance(ref, dict):
+            return []
+        stamp, count = ref.get("stamp"), ref.get("count")
+        path = self._turn_journal_path(key)
+        if path is None or not isinstance(count, int) or count <= 0:
+            return []
+        messages: list[dict[str, Any]] = []
+        try:
+            with open(path, encoding="utf-8") as fh:
+                head = json.loads(fh.readline() or "null")
+                if not isinstance(head, dict) or head.get("stamp") != stamp:
+                    raise ValueError("stamp mismatch")
+                for line in fh:
+                    if len(messages) >= count:
+                        break
+                    message = json.loads(line)
+                    if isinstance(message, dict):
+                        messages.append(message)
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "Turn journal for {} unreadable ({}); restoring only the last iteration",
+                key, exc,
+            )
+            return []
+        return messages
+
+    def _drop_turn_journal(self, key: str) -> None:
+        """Dimentica il diario del turno di *key* e ne toglie il file."""
+        self.__dict__.get("_checkpoint_journals", {}).pop(key, None)
+        path = self._turn_journal_path(key)
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def _mark_pending_user_turn(self, session: Session) -> None:
         session.metadata[self._PENDING_USER_TURN_KEY] = True
@@ -184,8 +320,15 @@ class TurnPersistenceMixin:
         session.metadata.pop(self._PENDING_USER_TURN_KEY, None)
 
     def _clear_runtime_checkpoint(self, session: Session) -> None:
+        """Toglie il checkpoint dai metadati, e con lui il diario del turno.
+
+        Il diario si cancella qui e non dopo il salvataggio che segue: tutti i
+        chiamanti salvano subito dopo, senza ``await`` in mezzo, e il turno che
+        il diario proteggeva è già nei messaggi della sessione.
+        """
         if self._RUNTIME_CHECKPOINT_KEY in session.metadata:
             session.metadata.pop(self._RUNTIME_CHECKPOINT_KEY, None)
+        self._drop_turn_journal(session.key)
 
     @staticmethod
     def _checkpoint_message_key(message: dict[str, Any]) -> tuple[Any, ...]:
@@ -210,8 +353,16 @@ class TurnPersistenceMixin:
         assistant_message = checkpoint.get("assistant_message")
         completed_tool_results = checkpoint.get("completed_tool_results") or []
         pending_tool_calls = checkpoint.get("pending_tool_calls") or []
+        # Le iterazioni già chiuse del turno e i messaggi iniettati:
+        # assenti in un checkpoint scritto da una versione
+        # precedente, che si ripristina come prima.
+        prior_messages = checkpoint.get("prior_messages") or self._read_turn_journal(
+            session.key, checkpoint.get("prior_journal"),
+        )
 
-        restored_messages: list[dict[str, Any]] = []
+        restored_messages: list[dict[str, Any]] = [
+            dict(message) for message in prior_messages if isinstance(message, dict)
+        ]
         if isinstance(assistant_message, dict):
             restored = dict(assistant_message)
             restored.setdefault("timestamp", datetime.now().isoformat())
@@ -247,7 +398,10 @@ class TurnPersistenceMixin:
             ):
                 overlap = size
                 break
-        session.messages.extend(restored_messages[overlap:])
+        # Dalla stessa porta di un turno finito: il runtime context tolto dai
+        # messaggi utente iniettati, i risultati tool troncati, le immagini a
+        # segnaposto, i risultati orfani scartati.
+        self._save_turn(session, restored_messages, overlap)
 
         self._clear_pending_user_turn(session)
         self._clear_runtime_checkpoint(session)

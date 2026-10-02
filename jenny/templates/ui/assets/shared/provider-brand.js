@@ -1,6 +1,17 @@
+/* Il segno di Anthropic (la «A» e la barra), in linea e monocromatico: prende
+   il colore del testo come i glifi Tabler, che un'icona Anthropic non ce
+   l'hanno — al suo posto c'era `ti-brand-figma`. In linea perche' la CSP della
+   WebUI non carica immagini da fuori; decorativo, perche' accanto c'e' sempre
+   il nome. Il riquadro ha il margine dei glifi Tabler (24 su 28), cosi' alla
+   stessa taglia le due schede si somigliano. */
+const ANTHROPIC_LOGO = '<svg class="brand-logo" viewBox="-2 -2 28 28" aria-hidden="true" focusable="false">'
+  + '<path fill="currentColor" fill-rule="evenodd" d="M17.304 3.541h-3.672l6.696 16.918H24Z'
+  + 'M6.696 3.541 0 20.459h3.744l1.37-3.553h7.005l1.369 3.553h3.744L10.536 3.541Z'
+  + 'm-.371 10.223 2.291-5.945 2.291 5.945Z"/></svg>';
+
 const PROVIDER_BRANDS = {
   openai:        { label: "OpenAI",        color: "#10a37f", logo: null },
-  anthropic:     { label: "Anthropic Compatible", color: "#d4a574", logo: null },
+  anthropic:     { label: "Anthropic Compatible", labelKey: "provider.anthropic", color: "#d4a574", logo: ANTHROPIC_LOGO },
   google:        { label: "Google",        color: "#4285f4", logo: null },
   groq:          { label: "Groq",          color: "#f55036", logo: null },
   deepseek:      { label: "DeepSeek",      color: "#4d6bfe", logo: null },
@@ -66,9 +77,43 @@ const PROVIDER_ALIASES = {
   opencode_zen: 'opencode',
 };
 
+/** Il colore di una marca che la tabella non conosce: una tinta ricavata dal
+ *  nome, saturazione e chiarezza fisse.
+ *
+ *  Era la regola del pallino nell'officina (`_brandColor`), mentre la casa
+ *  leggeva la tabella: la stessa marca aveva due colori, e ogni marca che
+ *  l'utente si aggiunge da se' — il motivo per cui quella schermata esiste —
+ *  in casa era grigia. Ora le conosciute prendono il loro colore e le altre
+ *  questa tinta, stabile fra un'apertura e l'altra, in tutti e due i gusci.
+ *  Non passa dai token del tema: identifica una marca, non un ruolo. */
+function colorFromName(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h}, 62%, 55%)`;
+}
+
 export function getProviderBrand(name) {
-  if (!name) return { label: 'Unknown', color: '#888', logo: null };
+  if (!name) return { label: 'Unknown', labelKey: 'provider.unknown', color: '#888', logo: null };
   const normalized = name.toLowerCase().replace(/[\s-]+/g, '_');
   const aliased = PROVIDER_ALIASES[normalized] || normalized;
-  return PROVIDER_BRANDS[aliased] || { label: name, color: '#888', logo: null };
+  return PROVIDER_BRANDS[aliased] || { label: name, color: colorFromName(name), logo: null };
+}
+
+/** Il nome di una marca da mostrare, nella lingua dell'interfaccia.
+ *
+ *  I nomi propri (OpenAI, Mistral) sono gli stessi in ogni lingua e stanno
+ *  nella tabella. Due no, e hanno la loro chiave i18n (`labelKey`): «Anthropic
+ *  Compatible», che e' una descrizione e non un marchio, e la marca che manca.
+ *  `label` resta in inglese per chi la legge
+ *  come dato — `shortBrand` in `home-model.js` ne toglie « Compatible» — e
+ *  qui fa da ripiego se la traduzione non c'e'. *t* e' un appiglio e non un
+ *  `import`, per la stessa ragione di `shared/wire-error.js`.
+ */
+export function brandLabel(brand, t) {
+  if (!brand) return '';
+  if (brand.labelKey && typeof t === 'function') {
+    const text = t(brand.labelKey);
+    if (text && text !== brand.labelKey) return text;
+  }
+  return brand.label || '';
 }

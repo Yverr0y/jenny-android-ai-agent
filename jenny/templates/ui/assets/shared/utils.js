@@ -6,15 +6,6 @@ export function escapeHtml(text) {
   }[c]));
 }
 
-export function hashString(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h) + s.charCodeAt(i);
-    h |= 0;
-  }
-  return Math.abs(h);
-}
-
 export function getFileExtension(filename) {
   return filename.split('.').pop().toLowerCase();
 }
@@ -87,6 +78,34 @@ export function ensureVendor(src) {
   return p;
 }
 
+/** Come `ensureVendor`, ma per un foglio di stile.
+ *
+ *  Serve perche' una libreria puo' non essere fatta di solo codice: KaTeX
+ *  disegna con i suoi font e la sua spaziatura, e senza il CSS le formule
+ *  escono come lettere sparse — peggio del `$f(x)$` grezzo da cui si parte.
+ *
+ *  Stesso patto di `ensureVendor`: una promessa per URL, e il fallimento **non
+ *  si ricorda**, cosi' un secondo tentativo puo' riuscire (rete assente al
+ *  primo colpo, asset non ancora estratto dall'APK).
+ */
+export function ensureVendorStyle(href) {
+  const cached = _vendorLoads.get(href);
+  if (cached) return cached;
+  const p = new Promise((resolve, reject) => {
+    const el = document.createElement('link');
+    el.rel = 'stylesheet';
+    el.href = href;
+    el.onload = () => resolve();
+    el.onerror = () => {
+      _vendorLoads.delete(href);
+      reject(new Error(`Failed to load ${href}`));
+    };
+    document.head.appendChild(el);
+  });
+  _vendorLoads.set(href, p);
+  return p;
+}
+
 
 /**
  * Copia *text* negli appunti. Ritorna true se ha funzionato.
@@ -116,5 +135,54 @@ export async function copyToClipboard(text) {
     return ok;
   } catch {
     return false;
+  }
+}
+
+/** Vero se *reason* e' un fallimento della rete, e non un errore qualunque.
+ *
+ *  `fetch` rifiuta con un `TypeError` quando la richiesta non parte o non
+ *  torna: «Failed to fetch» in Chromium (la WebView), «NetworkError when
+ *  attempting to fetch resource» in Firefox, «Load failed» in Safari. Tutto il
+ *  resto — un `TypeError` del codice, un `Error('Cron failed: 500')` — non e'
+ *  la rete, e dire «errore di rete» a chi ha il Wi-Fi acceso lo manda a
+ *  cercare il guasto nel posto sbagliato. */
+export function isNetworkFailure(reason) {
+  if (!reason || reason.name !== 'TypeError') return reason?.name === 'NetworkError';
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(
+    String(reason.message || ''),
+  );
+}
+
+/* ── `localStorage`, senza che un accesso negato butti giu' chi chiama ─────
+   Nella WebView con i dati del sito bloccati, in un'anteprima o con la quota
+   piena, `localStorage` **solleva** — gia' leggendo la proprieta', non solo
+   scrivendo. Chiamato nudo dal caricamento di un modulo (`state.js` leggeva il
+   tema cosi') l'errore si portava via l'intero grafo degli import, cioe' la
+   pagina. Qui si legge `null` e si scrive
+   niente: sono tutte preferenze, e senza si riparte dai default. */
+
+export function readStorage(key) {
+  try {
+    return globalThis.localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Vero se il valore e' stato scritto. */
+export function writeStorage(key, value) {
+  try {
+    globalThis.localStorage.setItem(key, value);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+export function removeStorage(key) {
+  try {
+    globalThis.localStorage.removeItem(key);
+  } catch (_) {
+    /* storage non disponibile */
   }
 }

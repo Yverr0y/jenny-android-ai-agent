@@ -1,6 +1,6 @@
 """I tre orologi dell'innesco: chi viene giardinato a questo tick.
 
-Passo **T4.3** di ``roadmap/taccuino-passi.md``. Ogni cancello è provato come
+Passo **T4.3** del piano del taccuino. Ogni cancello è provato come
 **unico impedimento** — con gli altri due aperti — perché una guardia che non può
 scattare non è una guardia, ed è la stessa lezione già scritta in
 ``agent/autocompact.py`` (là togliere il filtro non faceva cadere nessun test,
@@ -397,14 +397,14 @@ def test_a_project_that_keeps_failing_does_not_starve_the_others(tmp_path):
     fermo da tre giorni non arriva mai in cima. Con due progetti basta uno rotto
     per non giardinare più l'altro.
     """
-    rotto = _project(tmp_path, "rotto")
-    write_state(rotto, GardenerState(
+    broken = _project(tmp_path, "rotto")
+    write_state(broken, GardenerState(
         last_attempt_at=(_NOW - timedelta(hours=7)).isoformat(timespec="seconds"),
         failures=9,
     ))
-    sano = _project(tmp_path, "sano")
+    healthy = _project(tmp_path, "sano")
     stamp = (_NOW - timedelta(days=3)).isoformat(timespec="seconds")
-    write_state(sano, GardenerState(last_run_at=stamp, last_attempt_at=stamp))
+    write_state(healthy, GardenerState(last_run_at=stamp, last_attempt_at=stamp))
 
     pick = _pick(tmp_path)
 

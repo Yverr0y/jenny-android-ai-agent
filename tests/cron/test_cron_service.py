@@ -1,38 +1,18 @@
 import asyncio
+import functools
 import json
 import time
 
 import pytest
+from support.aio import other_tasks, settle_tasks, wait_until
+from support.cron import disable_job
 
 from jenny.cron.service import CronJobSkippedError, CronService
 from jenny.cron.types import CronJob, CronJobSilencedError, CronPayload, CronSchedule
 from jenny.session.keys import UNIFIED_SESSION_KEY
 
-
-async def _wait_until(predicate, *, timeout: float = 1.0, interval: float = 0.01) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
-        await asyncio.sleep(interval)
-    assert predicate()
-
-
-async def _settle(*, ignore: set[asyncio.Task] | None = None, timeout: float = 1.0) -> None:
-    """Cede il controllo finché non resta nessun task pendente oltre a *ignore*.
-
-    Non conta i giri di loop. Un ``for _ in range(N): await asyncio.sleep(0)``
-    non fa passare il *tempo*, solo il controllo: quanti giri servano dipende da
-    quante volte la catena di callback rimbalza, e un task che attraversa
-    ``asyncio.to_thread`` può non essere finito dopo N giri qualunque.
-    """
-    ignore = (ignore or set()) | {asyncio.current_task()}
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        pending = {t for t in asyncio.all_tasks() if t not in ignore and not t.done()}
-        if not pending:
-            return
-        await asyncio.wait(pending, timeout=max(0.0, deadline - time.monotonic()))
+# La scadenza di questo file: un secondo.
+_wait_until = functools.partial(wait_until, timeout=1.0)
 
 
 def _bound_chat(chat_id: str = "chat-1") -> dict[str, str]:
@@ -54,6 +34,99 @@ def test_add_job_rejects_unknown_timezone(tmp_path) -> None:
         )
 
     assert service.list_jobs(include_disabled=True) == []
+
+
+@pytest.mark.parametrize(
+    ("expr", "why"),
+    [
+        ("0 25 * * *", "out of range"),       # un'ora che non esiste
+        ("0 9 * *", "5, 6 or 7 fields"),       # un campo in meno
+        ("0 0 31 2 *", "has no run"),          # si legge, ma non scatta mai
+    ],
+)
+def test_add_job_rejects_an_expression_that_would_never_fire(tmp_path, expr, why) -> None:
+    """``_compute_next_run`` inghiotte l'errore e torna ``None``: senza questo
+    rifiuto il job nasceva abilitato, senza prossima esecuzione, e taceva per
+    sempre."""
+    service = CronService(tmp_path / "cron" / "jobs.json")
+
+    with pytest.raises(ValueError, match=why):
+        service.add_job(
+            name="mai", schedule=CronSchedule(kind="cron", expr=expr), message="hello",
+        )
+
+    assert service.list_jobs(include_disabled=True) == []
+
+
+def test_validation_and_scheduling_read_the_same_timezone(monkeypatch) -> None:
+    """Chi valida all'aggiunta e chi calcola la prossima esecuzione risolvono il
+    fuso con lo stesso helper: due copie potevano divergere."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from jenny.cron import service as service_mod
+
+    requested: list[str | None] = []
+
+    def _spy(schedule):
+        requested.append(schedule.tz)
+        return ZoneInfo("Pacific/Kiritimati")
+
+    monkeypatch.setattr(service_mod, "_schedule_tzinfo", _spy)
+    schedule = CronSchedule(kind="cron", expr="0 9 * * *", tz="Europe/Rome")
+    service_mod._validate_cron_expr(schedule)
+    next = service_mod._compute_next_run(schedule, 1_790_000_000_000)
+
+    assert requested == ["Europe/Rome", "Europe/Rome"]
+    ora = datetime.fromtimestamp(next / 1000, ZoneInfo("Pacific/Kiritimati"))
+    assert (ora.hour, ora.minute) == (9, 0)
+
+
+@pytest.mark.parametrize("every_ms", [0, -60_000, None])
+def test_add_job_rejects_an_interval_that_would_never_fire(tmp_path, every_ms) -> None:
+    """Un intervallo nullo o negativo faceva un job abilitato e muto."""
+    service = CronService(tmp_path / "cron" / "jobs.json")
+
+    with pytest.raises(ValueError, match="positive interval"):
+        service.add_job(
+            name="mai",
+            schedule=CronSchedule(kind="every", every_ms=every_ms),
+            message="hello",
+            **_bound_chat(),
+        )
+
+    assert service.list_jobs(include_disabled=True) == []
+
+
+@pytest.mark.parametrize("every_seconds", [0, -30])
+def test_the_cron_tool_reports_a_non_positive_interval_as_an_error(
+    tmp_path, every_seconds
+) -> None:
+    from jenny.agent.tools.context import RequestContext
+    from jenny.agent.tools.cron import CronTool
+
+    tool = CronTool(CronService(tmp_path / "cron" / "jobs.json"), default_timezone="Europe/Rome")
+    tool.set_context(
+        RequestContext(channel="websocket", chat_id="chat-1", session_key="websocket:chat-1")
+    )
+
+    result = tool._add_job(None, "Standup", every_seconds, None, None, None)
+
+    assert result.startswith("Error:"), result
+
+
+def test_the_cron_tool_reports_a_bad_expression_as_an_error(tmp_path) -> None:
+    from jenny.agent.tools.context import RequestContext
+    from jenny.agent.tools.cron import CronTool
+
+    tool = CronTool(CronService(tmp_path / "cron" / "jobs.json"), default_timezone="Europe/Rome")
+    tool.set_context(
+        RequestContext(channel="websocket", chat_id="chat-1", session_key="websocket:chat-1")
+    )
+
+    result = tool._add_job(None, "Standup", None, "0 25 * * *", None, None)
+
+    assert result.startswith("Error: invalid cron expression '0 25 * * *'"), result
 
 
 def test_add_job_accepts_valid_timezone(tmp_path) -> None:
@@ -518,7 +591,7 @@ async def test_run_job_disabled_does_not_flip_running_state(tmp_path) -> None:
         message="hello",
         **_bound_chat(),
     )
-    service.enable_job(job.id, enabled=False)
+    disable_job(service, job.id)
 
     result = await service.run_job(job.id)
 
@@ -566,8 +639,7 @@ async def test_running_service_honors_external_disable(tmp_path) -> None:
         # a short sleep here can overrun the 200ms schedule and let the job fire
         # before the external update is written.
         external = CronService(store_path)
-        updated = external.enable_job(job.id, enabled=False)
-        assert updated is not None
+        updated = disable_job(external, job.id)
         assert updated.enabled is False
 
         await asyncio.sleep(0.35)
@@ -720,8 +792,7 @@ async def test_external_update_preserves_run_history_records(tmp_path):
     await service.run_job(job.id, force=True)
 
     external = CronService(store_path)
-    updated = external.enable_job(job.id, enabled=False)
-    assert updated is not None
+    disable_job(external, job.id)
 
     fresh = CronService(store_path)
     loaded = fresh.get_job(job.id)
@@ -775,7 +846,7 @@ async def test_timer_execution_is_not_rolled_back_by_list_jobs_reload(tmp_path):
 
 @pytest.mark.asyncio
 async def test_concurrent_job_mutation_does_not_cancel_inflight_job(tmp_path) -> None:
-    """Regression: add_job/remove_job/enable_job/update_job on a DIFFERENT job
+    """Regression: add_job/remove_job on a DIFFERENT job
     must not cancel a job whose execution is currently in-flight inside the
     timer task. Previously, _arm_timer() unconditionally cancelled
     self._timer_task -- the same task running the in-flight job's turn --
@@ -819,8 +890,6 @@ async def test_concurrent_job_mutation_does_not_cancel_inflight_job(tmp_path) ->
             message="hello",
             **_bound_chat("b"),
         )
-        service.enable_job(job_b.id, enabled=False)
-        service.update_job(job_b.id, name="renamed")
         service.remove_job(job_b.id)
 
         # ``Task.cancelling()`` conta le richieste di cancellazione ricevute e
@@ -835,7 +904,7 @@ async def test_concurrent_job_mutation_does_not_cancel_inflight_job(tmp_path) ->
         assert inflight_task.cancelling() == 0
 
         # E in più: nessun task pendente resta a poter cancellare più tardi.
-        await _settle(ignore={inflight_task})
+        await settle_tasks(lambda: other_tasks(inflight_task), timeout=1.0)
 
         assert inflight_task.cancelling() == 0
         assert service._timer_task is inflight_task
@@ -862,141 +931,6 @@ async def test_concurrent_job_mutation_does_not_cancel_inflight_job(tmp_path) ->
         assert calls == [job_a.id]
     finally:
         service.stop()
-
-
-# ── update_job tests ──
-
-
-def test_update_job_changes_name(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    job = service.add_job(
-        name="old name",
-        schedule=CronSchedule(kind="every", every_ms=60_000),
-        message="hello",
-        **_bound_chat(),
-    )
-    result = service.update_job(job.id, name="new name")
-    assert isinstance(result, CronJob)
-    assert result.name == "new name"
-    assert result.payload.message == "hello"
-
-
-def test_update_job_changes_schedule(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    job = service.add_job(
-        name="sched",
-        schedule=CronSchedule(kind="every", every_ms=60_000),
-        message="hello",
-        **_bound_chat(),
-    )
-    old_next = job.state.next_run_at_ms
-
-    new_sched = CronSchedule(kind="every", every_ms=120_000)
-    result = service.update_job(job.id, schedule=new_sched)
-    assert isinstance(result, CronJob)
-    assert result.schedule.every_ms == 120_000
-    assert result.state.next_run_at_ms != old_next
-
-
-def test_update_job_changes_message(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    job = service.add_job(
-        name="msg",
-        schedule=CronSchedule(kind="every", every_ms=60_000),
-        message="old message",
-        **_bound_chat(),
-    )
-    result = service.update_job(job.id, message="new message")
-    assert isinstance(result, CronJob)
-    assert result.payload.message == "new message"
-
-
-def test_update_job_changes_cron_expression(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    job = service.add_job(
-        name="cron-job",
-        schedule=CronSchedule(kind="cron", expr="0 9 * * *", tz="UTC"),
-        message="hello",
-        **_bound_chat(),
-    )
-    result = service.update_job(
-        job.id,
-        schedule=CronSchedule(kind="cron", expr="0 18 * * *", tz="UTC"),
-    )
-    assert isinstance(result, CronJob)
-    assert result.schedule.expr == "0 18 * * *"
-    assert result.state.next_run_at_ms is not None
-
-
-def test_update_job_not_found(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    result = service.update_job("nonexistent", name="x")
-    assert result == "not_found"
-
-
-def test_update_job_rejects_system_job(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    service.register_system_job(CronJob(
-        id="dream",
-        name="dream",
-        schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
-        payload=CronPayload(kind="system_event"),
-    ))
-    result = service.update_job("dream", name="hacked")
-    assert result == "protected"
-    assert service.get_job("dream").name == "dream"
-
-
-def test_update_job_validates_schedule(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    job = service.add_job(
-        name="validate",
-        schedule=CronSchedule(kind="every", every_ms=60_000),
-        message="hello",
-        **_bound_chat(),
-    )
-    with pytest.raises(ValueError, match="unknown timezone"):
-        service.update_job(
-            job.id,
-            schedule=CronSchedule(kind="cron", expr="0 9 * * *", tz="Bad/Zone"),
-        )
-
-
-@pytest.mark.asyncio
-async def test_update_job_preserves_run_history(tmp_path) -> None:
-    import asyncio
-    store_path = tmp_path / "cron" / "jobs.json"
-    service = CronService(store_path, on_job=lambda _: asyncio.sleep(0))
-    job = service.add_job(
-        name="hist",
-        schedule=CronSchedule(kind="every", every_ms=60_000),
-        message="hello",
-        **_bound_chat(),
-    )
-    await service.run_job(job.id)
-
-    result = service.update_job(job.id, name="renamed")
-    assert isinstance(result, CronJob)
-    assert len(result.state.run_history) == 1
-    assert result.state.run_history[0].status == "ok"
-
-
-def test_update_job_offline_writes_action(tmp_path) -> None:
-    service = CronService(tmp_path / "cron" / "jobs.json")
-    job = service.add_job(
-        name="offline",
-        schedule=CronSchedule(kind="every", every_ms=60_000),
-        message="hello",
-        **_bound_chat(),
-    )
-    service.update_job(job.id, name="updated-offline")
-
-    action_path = tmp_path / "cron" / "action.jsonl"
-    assert action_path.exists()
-    lines = [line for line in action_path.read_text().strip().split("\n") if line]
-    last = json.loads(lines[-1])
-    assert last["action"] == "update"
-    assert last["params"]["name"] == "updated-offline"
 
 
 @pytest.mark.asyncio
@@ -1044,3 +978,31 @@ async def test_list_jobs_during_on_job_does_not_cause_stale_reload(tmp_path) -> 
         next_run = j["state"]["nextRunAtMs"]
         assert next_run is not None
         assert next_run > now_ms, f"Job '{j['name']}' next_run should be in the future"
+
+
+def test_a_stale_cron_lock_does_not_hang_the_store(tmp_path, monkeypatch):
+    """Un ``cron.lock`` lasciato da un processo morto viene tolto, non aspettato per sempre.
+
+    ``SoftFileLock`` e' un file creato con ``O_EXCL``: un kill dentro il
+    ``with`` lo lascia li', e senza timeout ``_load_store`` — sincrono, chiamato
+    da ``register_system_job`` al boot — bloccava l'event loop intero.
+    """
+    from jenny.cron import service as service_module
+
+    monkeypatch.setattr(service_module, "_LOCK_TIMEOUT_S", 0.2)
+    store_path = tmp_path / "cron" / "jobs.json"
+    store_path.parent.mkdir(parents=True)
+    # Il giornale esiste (vuoto): e' cio' che fa passare ``_load_store`` dal lock.
+    (store_path.parent / "action.jsonl").write_text("", encoding="utf-8")
+    stale_lock = tmp_path / "cron.lock"
+    stale_lock.write_text("", encoding="utf-8")
+    service = CronService(store_path)
+    assert service._lock.lock_file == str(stale_lock)
+
+    started = time.monotonic()
+    store = service._load_store()
+
+    assert store is not None
+    assert time.monotonic() - started < 2.0
+    assert not service._lock.is_locked
+    assert not stale_lock.exists()

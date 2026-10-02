@@ -1,6 +1,7 @@
 """Base class for agent tools."""
 from __future__ import annotations
 
+import json
 import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -9,7 +10,6 @@ from typing import Any, TypeVar
 
 if typing.TYPE_CHECKING:
     from jenny.agent.tools.context import ToolContext
-    from jenny.pydantic_compat import BaseModel
 
 _ToolT = TypeVar("_ToolT", bound="Tool")
 
@@ -167,13 +167,7 @@ class Tool(ABC):
 
     # --- Plugin metadata ---
 
-    config_key: str = ""
-    _plugin_discoverable: bool = True
     _scopes: set[str] = {"core"}
-
-    @classmethod
-    def config_cls(cls) -> type[BaseModel] | None:
-        return None
 
     @classmethod
     def enabled(cls, ctx: ToolContext) -> bool:
@@ -235,6 +229,14 @@ class Tool(ABC):
                 return val
 
         if t == "string":
+            # Un dict o una lista per un parametro stringa (``write_file(content={...})``)
+            # diventano il JSON che il modello intendeva, non il ``repr`` Python
+            # (``{'a': True, 'b': None}``), che nessun lettore JSON apre.
+            if isinstance(val, (dict, list)):
+                try:
+                    return json.dumps(val, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    return str(val)
             return val if val is None else str(val)
 
         if t == "boolean" and isinstance(val, str):

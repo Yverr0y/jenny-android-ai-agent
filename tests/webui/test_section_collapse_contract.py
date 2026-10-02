@@ -17,6 +17,13 @@ la forma di difetto che tutto il lavoro sulla navigazione esiste per togliere:
 * ``_scrollToHash`` cercava l'ancora in tutto il documento mentre il gemello
   della chat era già ristretto al proprio contenitore.
 
+Gli ultimi due punti **non hanno più un banco qui** dal 21/09/2026: guardavano
+``mobile-wiki.js``, e la wiki è uscita dall'officina. Le due regole non sono
+cadute, hanno cambiato casa insieme alla vista: il lettore della casa le fa
+girare in node su un DOM finto (``test_home_reader_client.py`` — un link
+relativo si risolve contro la pagina che lo contiene, un'ancora resta sulla
+pagina). Restano qui i primi due punti, che sono del guscio.
+
 Asserzioni sul sorgente, nello stile del resto di ``tests/webui/``.
 """
 
@@ -63,49 +70,31 @@ def test_home_never_discards_unsaved_work() -> None:
     )
 
 
-def test_the_return_mode_is_cleared_before_collapsing() -> None:
-    """``_closeEditor`` con ``_returnMode`` valorizzato *naviga* nella history
-    per tornare alla sezione d'origine. Da Home non si torna indietro: si va a
-    casa. Senza azzerarlo, il tasto Home produrrebbe una navigazione."""
+def test_home_dismounts_the_editor_without_navigating() -> None:
+    """``_closeEditor`` di suo *naviga*: torna in Memoria, da dove il file è
+    stato aperto. Da Home non si torna indietro, si va a casa — e la
+    navigazione la fa ``goHome``. Senza il freno, una pressione di Home
+    produrrebbe due destinazioni di fila.
+
+    **Aggiornato**: il freno era azzerare ``_returnMode``, cioè spegnere uno
+    stato per ottenere un comportamento. Adesso è un parametro con quel nome
+    (``stay``), che è la stessa richiesta detta a voce alta."""
     body = _method(_src("mobile-workspace.js"), "collapseToRoot")
-    assert "this._returnMode = null;" in body
-    assert body.index("this._returnMode = null;") < body.index("this._closeEditor(")
+    assert "stay: true" in body, "Home smonta e naviga due volte"
 
 
 def test_open_chat_is_one_behaviour_in_one_place() -> None:
-    """La chat *diventa* la radice: non è la vista home con sopra un cambio di
-    tab."""
+    """Il tocco su un avviso porta alla chat personale, e nell'officina quella
+    chat non c'e': si va a casa, come la pillola «⌂ Jenny», con un indirizzo e
+    non componendo cambi di vista. Aggiornato il 29/09/2026: prima apriva la
+    Console, cioe' l'ultima vista usata (collaudo del 27/09).
+
+    Il guscio deve poter distinguere "aperta qui" da "ci pensa la casa",
+    altrimenti cancella una notifica che l'utente non ha ancora visto."""
     body = _method(_src("mobile-app.js"), "openChat")
-    assert "this._dismissAllOverlays()" in body
-    assert "collapseToRoot?.()" in body
-    assert "this.switchMode('chat', false)" in body, "niente push: si collassa, non si impila"
-    assert "this._navPos = 0" in body
-    assert "homeView()" not in body, "la vista home è una preferenza, la chat no"
-    # Il guscio deve poter distinguere "aperta" da "bloccata dall'onboarding",
-    # altrimenti cancella una notifica che l'utente non ha ancora visto.
-    assert "return false;" in body and "return true;" in body
-
-
-def test_a_relative_markdown_link_navigates_inside_the_wiki() -> None:
-    body = _method(_src("mobile-wiki.js"), "_resolveRelativePage")
-    assert "/\\.md$/i" in body, "solo i .md diventano navigazione"
-    for guard in ("startsWith('/')", "includes('..')"):
-        assert guard in body, f"manca il guard conservativo: {guard}"
-    assert "this.currentPath" in body, "il path si risolve contro la pagina corrente"
-
-    wiring = _method(_src("mobile-wiki.js"), "_wireWikiLinks")
-    assert "this._resolveRelativePage(href)" in wiring
-    assert wiring.index("_resolveRelativePage") < wiring.index("linkNotOpenable"), (
-        "il ramo dei relativi deve precedere quello che avvisa e non naviga"
-    )
-
-
-def test_the_anchor_is_looked_up_inside_the_page_content() -> None:
-    """``getElementById`` portava lo scroll su un elemento di chrome della SPA
-    quando la pagina conteneva un ``[x](#dock)``."""
-    body = _method(_src("mobile-wiki.js"), "_scrollToHash")
-    assert "this.contentEl" in body
-    assert "document.getElementById" not in body
+    assert "api.navigate('/html-mobile/', { replace: true })" in body
+    assert "switchMode" not in body, "la Console non e' la chat dell'avviso"
+    assert "return false;" in body
 
 
 def test_the_session_popover_has_no_escape_listener_of_its_own() -> None:

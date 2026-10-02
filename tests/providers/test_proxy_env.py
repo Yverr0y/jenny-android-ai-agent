@@ -18,7 +18,7 @@ class TestLocalEndpointProxyDisabled:
 
     async def test_lan_ip_disables_proxy(self):
         provider = OpenAICompatProvider(
-            api_key="test", api_base="http://192.168.8.188:1234/v1", default_model="",
+            api_key="test", api_base="http://192.0.2.188:1234/v1", default_model="",
         )
         await provider._ensure_client()
         transport = provider._http_client._transport

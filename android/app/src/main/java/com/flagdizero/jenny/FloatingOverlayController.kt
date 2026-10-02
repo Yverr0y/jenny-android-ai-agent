@@ -62,28 +62,29 @@ import kotlin.math.max
 /**
  * La mascotte flottante: Jenny sopra le altre app, un tap e le parli.
  *
- * ## Una finestra, due taglie
+ * ## Tre finestre, una sola che cambia taglia
  *
  * Il nodo di qualunque overlay è che **una finestra prende tutti i tocchi dentro
  * i suoi limiti**: a schermo intero renderebbe il telefono inutilizzabile,
- * piccola non basta a contenere un campo di testo e un fumetto. Qui la finestra
- * è una sola e cambia taglia:
+ * piccola non basta a contenere un campo di testo e una conversazione. Qui le
+ * finestre sono tre, montate in quest'ordine (quindi una sopra l'altra):
  *
- * * `PARKED` — grande quanto lo sprite, non focusable, al bordo dove l'hai
- *   lasciata. È il 99% del tempo;
- * * `CHAT` — schermo intero e focusable, con lo scrim, il campo in basso e il
- *   fumetto sopra la testa.
+ * * **il palco** — schermo intero, a `(0,0)`, per sempre ([stageParams]).
+ *   Cambia solo *cosa accetta*: da fermo `NOT_TOUCHABLE` ([STAGE_ASLEEP]), in
+ *   volo toccabile ([STAGE_TOUCHABLE]), in chat anche focusable
+ *   ([STAGE_CHAT]). Porta lo scrim, la colonna della chat e l'arte del volo;
+ * * **lei** — grande quanto lo sprite, e si ridimensiona solo quando cambia la
+ *   taglia ([applyMascotSize]): dove sta a schermo è la sua `x/y`
+ *   ([buildMascotWindow]);
+ * * **la maniglia** — grande quanto lo sprite, trasparente, sopra di lei: è
+ *   lei a prendere i tocchi ([buildGrip]). È l'unica che cambia taglia: al
+ *   `DOWN` diventa l'arena a schermo intero, così il dito non ne esce durante
+ *   il gesto, e alla fine del gesto torna piccola ([openArena], [restGrip]).
  *
- * **Il cambio di taglia avviene sempre fra un gesto e l'altro, mai durante.** Il
- * tap si completa e *poi* la finestra cresce; il trascinamento non cambia
- * taglia affatto (la finestra piccola segue il dito). Non esiste un gesto che
- * richieda di ridimensionare a dito abbassato, ed è questo che evita tutta la
- * classe di bug in cui il primo `MOVE` dopo il ridimensionamento arriva con
- * coordinate relative a una cornice diversa.
- *
- * Quando la finestra è intera sta a `(0,0)`, quindi la posizione della mascotte
- * dentro la pagina coincide con la sua posizione sullo schermo: il passaggio
- * fra le due taglie non sposta niente di un pixel.
+ * Le posizioni si contano in px schermo (per le due finestre piccole, con la
+ * correzione della status bar scritta in [parkTop]). Nessun passaggio fra
+ * stati ridimensiona una finestra che si vede: cresce e cala solo la maniglia,
+ * che non disegna niente.
  *
  * ## Chi possiede cosa
  *
@@ -135,9 +136,9 @@ object FloatingOverlayController {
     private const val DOCKED_OUT_RATIO = 0.469f
     private const val OUT_RATIO = 0.25f
 
-    /** Quanto dura lo scivolamento fra i due ancoraggi. `.jenny-duo.side-left`
-     *  usa 0,3 s con questa curva, ed è la stessa transizione. */
-    private const val SIDE_SLIDE_MS = 300L
+    /** Quanto dura lo scivolamento fra i due ancoraggi. `.jenny-duo` usa
+     *  0,3 s con questa curva, ed è la stessa transizione. */
+    private const val ANCHOR_SLIDE_MS = 300L
 
     /** Quanto è larga la pillola, in frazione dello schermo. Su 574 dp fa 356. */
     private const val PILL_WIDTH_RATIO = 0.62f
@@ -178,7 +179,7 @@ object FloatingOverlayController {
      * Misurati sui pixel opachi di `jenny-body-front-idle` (768 px): i piedi
      * finiscono alla riga 668 e il corpo occupa le colonne 229–572, quindi il
      * suo asse sta a 0,52 del quadrato — non a metà — con l'arte che guarda a
-     * sinistra, cioè non specchiata; specchiata, l'asse è a 1 − 0,52. Servono
+     * sinistra, cioè com'è sul bordo destro, l'unico. Servono
      * a metterla **in piedi sul cap** della pillola invece che al centro del
      * suo quadrato trasparente.
      *
@@ -333,7 +334,10 @@ object FloatingOverlayController {
         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
-    /** ...e sveglio: prende i tocchi ma non il fuoco (il solo fumetto). */
+    /** ...e in volo: prende i tocchi ma non il fuoco. Toccabile per non essere
+     *  tappato a 0,8 di opacità (v. `buildViews`); i tocchi li prende comunque
+     *  la maniglia, che in volo gli sta sopra a schermo intero. Il «solo
+     *  fumetto» per cui era nato non esiste più. */
     private const val STAGE_TOUCHABLE = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
@@ -342,17 +346,14 @@ object FloatingOverlayController {
 
     private const val PREFS = "jenny_floating"
 
-    /**
-     * L'unica cosa che si ricorda: su quale bordo si è posata.
-     *
-     * **L'altezza no.** È la riga sopra la barra di input, in ogni stato —
-     * l'invariante che `.jenny-duo` dichiara nel CSS («Non deve mai cambiare
-     * in Y») — ed è anche il pavimento del volo, come `fs.y0` in JS. Per un
-     * giro (17/09) si è provato a farla cadere fino in fondo e restare dove
-     * atterrava: finiva sempre in un angolo, mezza fuori, sotto le icone del
-     * dock di chiunque. La UI ha una riga sola, e questa è quella.
-     */
-    private const val PREF_RIGHT = "park_right"
+    // Fra le preferenze non c'e' il bordo: e' sempre il destro (24/09/2026).
+    //
+    // **E nemmeno l'altezza.** E' la riga sopra la barra di input, in ogni
+    // stato — l'invariante che `.jenny-duo` dichiara nel CSS («Non deve mai
+    // cambiare in Y») — ed e' anche il pavimento del volo, come `fs.y0` in JS.
+    // Per un giro (17/09) si e' provato a farla cadere fino in fondo e restare
+    // dove atterrava: finiva sempre in un angolo, mezza fuori, sotto le icone
+    // del dock di chiunque. La UI ha una riga sola, e questa e' quella.
 
     /** La taglia spinta dalla SPA, in px. */
     private const val PREF_SIZE = "mascot_px"
@@ -361,19 +362,6 @@ object FloatingOverlayController {
      *  virgola, nell'ordine di [Palette]. */
     private const val PREF_PALETTE = "palette"
 
-    /**
-     * I colori della finestra flottante, presi dal tema scelto nell'app.
-     *
-     * Erano sette costanti esadecimali scritte qui dentro, ed erano la palette
-     * `chanel`: chi sceglieva Synthwave si ritrovava la barra avorio sopra la
-     * propria app rosa. Adesso arrivano dalla WebUI, che legge i token
-     * *calcolati* del tema attivo — la stessa lettura che `shared/theme.js` fa
-     * già per le barre di sistema e per le mini-app.
-     *
-     * Sei valori, non sette: [surface] veste sia la barra che il fumetto, ed è
-     * la stessa coppia `--surface`/`--text` su cui si regge ogni superficie
-     * della SPA. Il contrasto viene dal tema, non da una scelta fatta qui.
-     */
     /** Una riga della conversazione. `mine` = l'ha scritta l'utente. */
     private data class Line(val mine: Boolean, val text: String)
 
@@ -407,6 +395,19 @@ object FloatingOverlayController {
         }
     }
 
+    /**
+     * I colori della finestra flottante, presi dal tema scelto nell'app.
+     *
+     * Erano sette costanti esadecimali scritte qui dentro, ed erano la palette
+     * `chanel`: chi sceglieva Synthwave si ritrovava la barra avorio sopra la
+     * propria app rosa. Adesso arrivano dalla WebUI, che legge i token
+     * *calcolati* del tema attivo — la stessa lettura che `shared/theme.js` fa
+     * già per le barre di sistema e per le mini-app.
+     *
+     * Sei valori, non sette: [surface] veste sia la barra che il fumetto, ed è
+     * la stessa coppia `--surface`/`--text` su cui si regge ogni superficie
+     * della SPA. Il contrasto viene dal tema, non da una scelta fatta qui.
+     */
     private data class Palette(
         val surface: Int,
         val border: Int,
@@ -417,20 +418,21 @@ object FloatingOverlayController {
     )
 
     /**
-     * Il ripiego: `chanel`, cioè il tema di default della WebUI.
+     * Il ripiego: `synthwave`, cioè il tema di default della WebUI
+     * (`DEFAULT_THEME` in `shared/theme.js`).
      *
      * Non sono i colori «di prima» ritoccati a mano — sono esattamente i token
      * che la SPA spingerebbe con quel tema (`mobile-style.css`, blocco
-     * `:root`), quindi non esiste un montaggio in cui la finestra si veda
-     * diversa da come si vedrà un istante dopo.
+     * `[data-theme="synthwave"]`), quindi non esiste un montaggio in cui la
+     * finestra si veda diversa da come si vedrà un istante dopo.
      */
-    private val CHANEL = Palette(
-        surface = 0xFF1E1E1E.toInt(),   // --surface
-        border = 0x47F4F1EA,            // --border-strong: rgba(244,241,234,.28)
-        text = 0xFFF4F1EA.toInt(),      // --text
-        hint = 0x52F4F1EA,              // --text-faint: rgba(244,241,234,.32)
-        accent = 0xFFF4F1EA.toInt(),    // --accent
-        onAccent = 0xFF141414.toInt(),  // --on-accent
+    private val DEFAULT_PALETTE = Palette(
+        surface = 0xFF1A181D.toInt(),   // --surface
+        border = 0xFF3A3641.toInt(),    // --border-strong
+        text = 0xFFF2ECFF.toInt(),      // --text
+        hint = 0xFF6E6875.toInt(),      // --text-faint
+        accent = 0xFFF92AAD.toInt(),    // --accent
+        onAccent = 0xFF0A090B.toInt(),  // --on-accent
     )
 
     private val main = Handler(Looper.getMainLooper())
@@ -534,15 +536,12 @@ object FloatingOverlayController {
      *  ragione: la finestra vive nel processo del service e può comparire
      *  prima che la SPA abbia caricato. */
     @Volatile
-    private var palette = CHANEL
+    private var palette = DEFAULT_PALETTE
     /** Il riquadro della mascotte (corpo + faccia). Si chiama così da quando
      *  il fumetto ha smesso di stargli sopra in colonna. */
     private var column: FrameLayout? = null
 
     private val sprites = HashMap<String, Bitmap?>()
-
-    /** Su quale dei due bordi. Default destra, come la mascotte in chat. */
-    private var parkedRight = true
 
     /**
      * Lato dello sprite in px, così com'è nella WebUI. `0` = non lo so ancora.
@@ -570,6 +569,10 @@ object FloatingOverlayController {
 
     /** Il volo in corso, o `null` se sta ferma. */
     private var flight: FloatingFlight? = null
+
+    /** La taglia è cambiata durante un volo: la applica l'atterraggio (v.
+     *  [applyMascotSize], [endFlight]). */
+    private var sizePendingAfterFlight = false
 
     /** Dove sta la maniglia da ferma: segue il riquadro (v. `placeColumn`). */
     private var gripX = 0
@@ -627,10 +630,11 @@ object FloatingOverlayController {
      *
      * **L'attesa però finisce lo stesso**, e questo va fatto *prima* del
      * `return`: la risposta è arrivata, che ci sia o no un posto dove
-     * disegnarla. Tenendolo dopo, un volo preso mentre aspettava (che annulla
-     * il timeout ma non lo stato) lasciava [waitingForReply] acceso per
-     * sempre — faccia che pensa a ogni riapertura, e [armHold] che non arma
-     * più niente perché il suo primo guardiano è proprio quello.
+     * disegnarla. Tenendolo dopo, un volo preso mentre aspettava (che allora
+     * annullava il timeout ma non lo stato; oggi spegne anche quello, v.
+     * [startFlight]) lasciava [waitingForReply] acceso per sempre — faccia che
+     * pensa a ogni riapertura, e [armHold] che non arma più niente perché il
+     * suo primo guardiano è proprio quello.
      */
     fun showReply(text: String): Boolean {
         cancelTimeout()
@@ -660,12 +664,31 @@ object FloatingOverlayController {
         return enabled && canDrawOverlays(ctx)
     }
 
-    /** Smonta tutto. Chiamata da `GatewayService.onDestroy`. */
+    /**
+     * Smonta le finestre. Chiamata da `GatewayService.onDestroy`.
+     *
+     * **Smonta, e non dimentica.** Metteva anche `enabled = false`, e l'unico
+     * che lo rimette a `true` è Python (`apply_floating_config`), che gira
+     * all'avvio del gateway o a un cambio d'impostazione. Ma il service può
+     * morire e rinascere con il thread del gateway ancora vivo — `startGateway`
+     * allora non rilancia niente, e Python non ripassa mai di lì: la mascotte
+     * spariva fino al prossimo riavvio dell'app, con l'interruttore che diceva
+     * «accesa». Ora il voler-la-vedere resta a Python, e a tenerla giù mentre il
+     * service non c'è è [applyVisibility], che guarda `GatewayService.isRunning`;
+     * a rimetterla su, [onServiceStarted].
+     */
     fun teardown() {
-        main.post {
-            enabled = false
-            detach()
-        }
+        main.post { detach() }
+    }
+
+    /**
+     * Il service è (ri)nato: la mascotte torna se Python la vuole. Chiamata da
+     * `GatewayService.onCreate`, dopo `startGateway`. Se il processo è nuovo
+     * [enabled] è ancora `false` e non succede niente: sarà Python, all'avvio
+     * del gateway, a dire la sua.
+     */
+    fun onServiceStarted() {
+        main.post { applyVisibility() }
     }
 
     /**
@@ -716,7 +739,7 @@ object FloatingOverlayController {
      * `Color.parseColor` quella forma non la legge — solleva e basta.
      *
      * Un valore illeggibile non porta giù gli altri cinque: al suo posto resta
-     * quello di [CHANEL], che è anche il ripiego dell'intera palette.
+     * quello di [DEFAULT_PALETTE], che è anche il ripiego dell'intera palette.
      *
      * Si può chiamare da qualunque thread e a finestra non montata: il valore
      * si ricorda e vale al prossimo montaggio.
@@ -730,12 +753,12 @@ object FloatingOverlayController {
         onAccent: String,
     ) {
         val wanted = Palette(
-            surface = color(surface, CHANEL.surface),
-            border = color(border, CHANEL.border),
-            text = color(text, CHANEL.text),
-            hint = color(hint, CHANEL.hint),
-            accent = color(accent, CHANEL.accent),
-            onAccent = color(onAccent, CHANEL.onAccent),
+            surface = color(surface, DEFAULT_PALETTE.surface),
+            border = color(border, DEFAULT_PALETTE.border),
+            text = color(text, DEFAULT_PALETTE.text),
+            hint = color(hint, DEFAULT_PALETTE.hint),
+            accent = color(accent, DEFAULT_PALETTE.accent),
+            onAccent = color(onAccent, DEFAULT_PALETTE.onAccent),
         )
         main.post {
             if (wanted == palette) return@post
@@ -789,10 +812,17 @@ object FloatingOverlayController {
      *
      * In volo non si tocca niente: la fisica è stata costruita con il lato di
      * partenza, e cambiarlo a metà caduta la farebbe saltare. La taglia nuova
-     * è già memorizzata, e il volo successivo nasce con quella.
+     * è già memorizzata e si segna come in sospeso: la applica [endFlight]
+     * all'atterraggio — riquadro, finestra e maniglia insieme. Prima non la
+     * applicava nessuno: la finestra restava della taglia vecchia, e la
+     * maniglia, che si misura su quella nuova, non combaciava più con lei.
      */
     private fun applyMascotSize(ctx: Context) {
-        if (flight != null) return
+        if (flight != null) {
+            sizePendingAfterFlight = true
+            return
+        }
+        sizePendingAfterFlight = false
         if (column == null) return
         val size = mascotSize(ctx)
         for (layer in listOfNotNull(mascotBody, mascotFace, flightArt)) {
@@ -828,7 +858,11 @@ object FloatingOverlayController {
 
     private fun applyVisibility(): Boolean {
         val ctx = appContext ?: return false
-        val wanted = enabled && !MainActivity.isInForeground
+        // Il service è la condizione che teardown() toglieva spegnendo
+        // [enabled]: senza di lui la finestra raccoglierebbe domande per un
+        // gateway che il sistema sta smontando. Tenerla qui invece che nel
+        // flag è ciò che permette di ricordarsi che Python la vuole.
+        val wanted = enabled && GatewayService.isRunning && !MainActivity.isInForeground
         if (!wanted) {
             if (root != null) detach()
             return enabled
@@ -861,12 +895,12 @@ object FloatingOverlayController {
             // la maniglia, che è l'unica a poter crescere fino a coprire lo
             // schermo senza che si veda.
             val box = buildMascotWindow(ctx)
-            val blp = mascotWinParams(ctx)
+            val blp = parkedSquareParams(ctx)
             wm.addView(box, blp)
             mascotWin = box
             mascotWinParams = blp
             val handle = buildGrip(ctx)
-            val glp = gripParams(ctx)
+            val glp = parkedSquareParams(ctx)
             wm.addView(handle, glp)
             grip = handle
             gripParams = glp
@@ -894,6 +928,22 @@ object FloatingOverlayController {
         // che guarda `flight != null`, e la spegnerebbe appena riaccesa.
         flight?.cancel()
         flight = null
+        sizePendingAfterFlight = false  // il montaggio dopo nasce già alla taglia giusta
+        // Gli animator prima delle viste. Il respiro è `INFINITE` e resta
+        // registrato presso l'AnimationHandler del main anche con la vista
+        // staccata: senza `cancel` chiede un fotogramma a ogni vsync finché il
+        // GC non raccoglie la colonna (l'ObjectAnimator la tiene solo
+        // debolmente, e solo allora si ferma da sé). `sliding` si
+        // spegne prima: il `cancel` dello scivolamento chiama `onAnimationEnd`,
+        // che altrimenti ricollocherebbe la colonna e farebbe ripartire il
+        // respiro su viste che stanno per sparire.
+        sliding = false
+        slide?.cancel()
+        slide = null
+        breath?.cancel()
+        breath = null
+        column?.animate()?.cancel()
+        sendButton?.animate()?.cancel()
         val wm = windowManager
         if (wm != null) {
             for (v in listOfNotNull(grip, mascotWin, root)) {
@@ -917,6 +967,8 @@ object FloatingOverlayController {
         scrim = null
         inputRow = null
         input = null
+        inputBar = null
+        sendButton = null
         column = null
         historyScroll = null
         historyList = null
@@ -974,32 +1026,18 @@ object FloatingOverlayController {
     }
 
     /**
-     * La maniglia: un riquadro trasparente grande quanto lo sprite, sopra di
-     * lei, che porta il `setOnTouchListener`.
+     * Un quadrato grande quanto lo sprite, parcheggiato al bordo: così partono
+     * la finestra di lei (toccabile di proposito, v. [buildMascotWindow]) e la
+     * maniglia, un riquadro trasparente sopra di lei che porta il
+     * `setOnTouchListener`.
      *
-     * È l'unica finestra che cambia taglia — piccola da parcheggiata, intera
+     * Si chiama due volte e l'oggetto non si condivide, perché la maniglia è
+     * l'unica finestra che cambia taglia — piccola da parcheggiata, intera
      * durante il volo (l'arena) — e siccome non disegna niente, cambiarla non
      * si vede. Tutta la classe di difetti «la mascotte salta quando la
      * finestra cambia» muore qui.
      */
-    /** La finestra di lei. Toccabile di proposito: v. [buildMascotWindow]. */
-    private fun mascotWinParams(ctx: Context): WindowManager.LayoutParams {
-        val size = mascotSize(ctx)
-        val lp = WindowManager.LayoutParams(
-            size,
-            size,
-            overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        )
-        lp.gravity = Gravity.TOP or Gravity.START
-        lp.x = parkX(ctx)
-        lp.y = parkTop(ctx)
-        return lp
-    }
-
-    private fun gripParams(ctx: Context): WindowManager.LayoutParams {
+    private fun parkedSquareParams(ctx: Context): WindowManager.LayoutParams {
         val size = mascotSize(ctx)
         val lp = WindowManager.LayoutParams(
             size,
@@ -1230,9 +1268,9 @@ object FloatingOverlayController {
 
         // Nel palco ci sta **solo l'arte del volo**, e solo mentre vola.
         //
-        // La mascotte ferma vive nella maniglia, non qui, per una ragione di
-        // sistema: un overlay non fidato con `FLAG_NOT_TOUCHABLE` viene tappato
-        // da Android a 0,8 di opacità (protezione anti-tapjacking, si legge in
+        // La mascotte ferma vive nella sua finestra ([buildMascotWindow]), non
+        // qui, per una ragione di sistema: un overlay non fidato con
+        // `FLAG_NOT_TOUCHABLE` viene tappato da Android a 0,8 di opacità (protezione anti-tapjacking, si legge in
         // `dumpsys` come `alpha=0.8`), e il palco da fermo *deve* essere
         // `NOT_TOUCHABLE` o si mangerebbe ogni tocco del telefono. Disegnarla
         // là vorrebbe dire una Jenny semitrasparente, sempre.
@@ -1312,24 +1350,46 @@ object FloatingOverlayController {
     }
 
     /**
-     * La maniglia: il riquadro che si tocca — **e in cui lei vive**.
+     * La maniglia: il riquadro che si tocca. **Lei non ci vive**: sta nella
+     * finestra sotto ([buildMascotWindow]), e questa è una `View` vuota e
+     * trasparente, grande quanto lo sprite e sopra di lei.
      *
-     * Grande quanto lo sprite, toccabile, quindi fuori dal tetto di opacità
-     * che Android mette agli overlay `NOT_TOUCHABLE`: è l'unico posto in cui
-     * si può disegnare a piena opacità qualcosa che sta sempre a schermo.
+     * Esiste per poter cambiare taglia senza che si veda: al `DOWN` diventa
+     * l'arena a schermo intero ([openArena]), a fine gesto torna piccola
+     * ([restGrip]). Ridimensionare la finestra di lei, invece, si vedrebbe.
      */
     @SuppressLint("ClickableViewAccessibility")
     private fun buildGrip(ctx: Context): View {
         val handle = View(ctx)
         bindTouch(ctx, handle)
+        // **Fuori dalla zona del gesto «indietro».** Parcheggiata sporge dal
+        // bordo per poco meno di metà quadrato: quel che resta visibile sta
+        // tutto nella fascia in cui Android legge uno swipe come *back*, e
+        // senza esclusione il sistema si prende il gesto al primo movimento.
+        //
+        // Sulla maniglia, non sulla finestra di lei, dove stava fino al
+        // 26/09/2026 senza effetto: `DisplayContent.calculateSystemGestureExclusion`
+        // (AOSP) scorre le finestre dall'alto e a ciascuna conta l'esclusione
+        // solo dentro la sua area toccabile **non ancora coperta** da quelle
+        // sopra. La maniglia le sta sopra, toccabile e grande uguale: all'altra
+        // non restava niente. In arena (schermo intero, durante il volo) non
+        // si esclude nulla: coprirebbe tutto il bordo.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            handle.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val arena = gripParams?.width == WindowManager.LayoutParams.MATCH_PARENT
+                v.systemGestureExclusionRects =
+                    if (arena) emptyList() else listOf(android.graphics.Rect(0, 0, v.width, v.height))
+            }
+        }
         return handle
     }
 
     /**
      * La finestra di lei: i due livelli dell'arte, e niente altro.
      *
-     * **Non si ridimensiona mai.** È la regola che tiene in piedi tutto il
-     * resto: dove sta a schermo è la `x/y` di questa finestra, punto, quindi
+     * **Non si ridimensiona mai per un gesto o un cambio di stato** — solo
+     * quando cambia la taglia in Impostazioni ([applyMascotSize], mai in
+     * volo). È la regola che tiene in piedi tutto il resto: dove sta a schermo è la `x/y` di questa finestra, punto, quindi
      * non esiste un fotogramma in cui due contabilità divergono. Il volo non
      * la fa crescere — per quello c'è la maniglia, che è trasparente — e la
      * scivolata fra gli ancoraggi muove lei, non un figlio dentro di lei.
@@ -1349,18 +1409,7 @@ object FloatingOverlayController {
         mascotBody = body
         mascotFace = face
         column = box
-        // **Fuori dalla zona del gesto «indietro».** Parcheggiata sporge dal
-        // bordo per poco meno di metà quadrato: quel che resta visibile sta
-        // tutto nella fascia in cui Android legge uno swipe come *back*, e
-        // senza questa riga il sistema si prende il gesto al primo movimento.
-        // Sta qui e non sulla maniglia perché questa finestra è sempre grande
-        // quanto lei: la maniglia, in arena, coprirebbe tutto lo schermo.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            box.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-                v.systemGestureExclusionRects =
-                    listOf(android.graphics.Rect(0, 0, v.width, v.height))
-            }
-        }
+        // L'esclusione dal gesto «indietro» non sta qui: v. [buildGrip].
         return box
     }
 
@@ -1835,9 +1884,9 @@ object FloatingOverlayController {
         ).apply { gravity = Gravity.CENTER_HORIZONTAL })
         for (line in history) {
             val bubble = bubbleView(ctx, line)
-            // Il tuo messaggio sta dal lato dove lei **non** sta, il suo dal
-            // suo: è tutto il legame fra la conversazione e chi la tiene.
-            val atStart = if (line.mine) parkedRight else !parkedRight
+            // Il tuo messaggio sta dal lato dove lei **non** sta — lei è a
+            // destra, quindi il tuo a sinistra — il suo dal suo.
+            val atStart = line.mine
             list.addView(bubble, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -1947,7 +1996,7 @@ object FloatingOverlayController {
 
     /** Una bolla: il fondo, l'angolo stretto dal lato di chi parla, il testo. */
     private fun bubbleView(ctx: Context, line: Line): TextView {
-        val atStart = if (line.mine) parkedRight else !parkedRight
+        val atStart = line.mine
         val r = dp(ctx, BUBBLE_RADIUS_DP).toFloat()
         val c = dp(ctx, BUBBLE_CORNER_DP).toFloat()
         // topLeft, topRight, bottomRight, bottomLeft — due valori ciascuno.
@@ -1981,10 +2030,24 @@ object FloatingOverlayController {
             //
             // Ultimo, dopo i colori: `setMarkdown` scrive il testo e attacca il
             // movement method dei link.
+            //
+            // **In un `try`.** La conversazione si ridisegna tutta a ogni
+            // risposta: un testo che fa sollevare Markwon (o un plugin) non
+            // romperebbe una bolla, ma ogni render da lì in poi, finché quella
+            // riga resta nella storia. Il ripiego è il testo com'è scritto —
+            // lo stesso che la bolla mostrava prima del markdown. `Throwable`
+            // perché il parser scende per ricorsione: un annidamento profondo
+            // (mille `>` di fila) è uno `StackOverflowError`, non un'eccezione.
             if (line.mine) {
                 text = line.text
             } else {
-                markdownRenderer(ctx).setMarkdown(this, line.text)
+                try {
+                    markdownRenderer(ctx).setMarkdown(this, line.text)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Markdown render failed (${e.javaClass.simpleName}), plain text")
+                    movementMethod = null
+                    text = line.text
+                }
             }
         }
     }
@@ -2165,9 +2228,10 @@ object FloatingOverlayController {
                     } else if (!expanded) {
                         // Il sistema si è preso il gesto (un bordo, una
                         // notifica). L'arena era già aperta dal `DOWN` e a
-                        // schermo intero **inghiotte ogni tocco**: lasciarla lì
-                        // fino allo scadere del timer è un telefono morto per
-                        // venti secondi. Si richiude adesso.
+                        // schermo intero **inghiotte ogni tocco**: la richiude
+                        // `restGrip` qui sotto, subito. `collapse` a finestra
+                        // chiusa non fa altro che togliere il timer di
+                        // inattività armato al `DOWN` (esce prima del resto).
                         collapse()
                     }
                     tracker?.recycle()
@@ -2181,13 +2245,13 @@ object FloatingOverlayController {
     }
 
     /**
-     * Porta la finestra a schermo intero senza cambiare nient'altro.
+     * Porta la **maniglia** a schermo intero senza cambiare nient'altro.
      *
      * Serve al tocco, non all'aspetto: è l'arena in cui il dito può muoversi e
      * la mascotte può volare. Resta **non focusable** — nessuna tastiera
      * rubata a chi sta sotto — e la mascotte resta esattamente dov'era, perché
-     * la posizione che aveva come origine della finestra diventa un margine
-     * dentro di essa.
+     * sta in un'altra finestra, che non cambia. La maniglia non disegna niente:
+     * crescere non si vede.
      */
     private fun openArena(ctx: Context) {
         // A chat aperta l'arena c'è già: è il palco, intero e toccabile.
@@ -2215,18 +2279,19 @@ object FloatingOverlayController {
     /**
      * La presa: da qui in poi disegna il volo.
      *
-     * **La finestra resta della taglia dello sprite e si muove**, un fotogramma
-     * alla volta, esattamente come faceva il trascinamento. La prima versione
-     * la promuoveva a schermo intero per avere l'arena, ed è stata smentita dal
-     * telefono nel modo più netto: ridimensionare una finestra sotto il dito
-     * **annulla il gesto**. Misurato il 17/09 — `ACTION_CANCEL` cinque
-     * millisecondi dopo la presa, e la mascotte che cadeva da ferma senza
-     * essersi mossa. Spostarla, invece, il tocco lo tiene: è la differenza fra
-     * `updateViewLayout` che cambia `x`/`y` e uno che cambia `width`/`height`.
+     * **Alla presa nessuna finestra cambia taglia.** L'arena c'è già: la
+     * maniglia è cresciuta a schermo intero al `DOWN`, col dito ancora fermo
+     * ([bindTouch], [openArena]). Ridimensionare una finestra sotto il dito a
+     * gesto avviato è ciò che il 17/09 lo annullava — `ACTION_CANCEL` cinque
+     * millisecondi dopo la presa, e la mascotte che cadeva da ferma — ed è per
+     * questo che qui non succede.
      *
-     * L'oscillazione ci sta dentro lo stesso: il personaggio occupa circa il
-     * 45% del canvas quadrato e il resto è margine trasparente, quindi anche
-     * inclinata di 78° resta dentro il suo riquadro.
+     * Il volo si disegna **nel palco**, che è già a schermo intero: l'arte del
+     * volo ([flightArt]) si sposta per traslazione, un fotogramma alla volta,
+     * mentre la finestra di lei si nasconde. Per questo l'oscillazione non
+     * viene mai ritagliata, a qualunque inclinazione — non per il margine
+     * trasparente dello sprite, che è poco: il personaggio ne riempie circa il
+     * 73%, misurato sul telefono.
      */
     private fun startFlight(ctx: Context) {
         val mascot = column ?: return
@@ -2240,7 +2305,14 @@ object FloatingOverlayController {
         mascot.animate().cancel()
         cancelTimeout()
         main.removeCallbacks(holdRunnable)
-        // Lanciarla via è una chiusura come le altre.
+        // Lanciarla via è una chiusura come le altre, attesa compresa (come in
+        // [collapse]). Il timeout qui sopra era l'unico che l'avrebbe spenta:
+        // senza questa riga, un volo preso mentre aspettava una risposta che
+        // poi non arriva lasciava [waitingForReply] acceso per sempre — faccia
+        // che pensa a ogni riapertura, e [armHold] che non arma più niente.
+        // Se la risposta arriva dopo, [showReply] la trova chiusa e la lascia
+        // alla conversazione dell'app.
+        waitingForReply = false
         clearHistory()
         // Si può prenderla anche a chat aperta: allora il campo e il velo se
         // ne vanno, perché mentre vola non c'è niente a cui scrivere. La
@@ -2272,7 +2344,6 @@ object FloatingOverlayController {
 
         val width = screenWidth(ctx)
         val dockY = parkTop(ctx).toFloat() + size * FloatingFlight.PIVOT_Y
-        val leftDock = -(size * DOCKED_OUT_RATIO) + size * FloatingFlight.PIVOT_X
         val rightDock = width - size + size * DOCKED_OUT_RATIO +
             size * FloatingFlight.PIVOT_X
         flight = FloatingFlight(
@@ -2281,9 +2352,9 @@ object FloatingOverlayController {
             viewportH = screenHeight(ctx).toFloat(),
             density = metrics.density,
             dockPivotY = dockY,
-            dockPivotX = leftDock to rightDock,
+            dockPivotX = rightDock,
             onFrame = { left, top, rot, pose, flip -> drawFlight(left, top, rot, pose, flip) },
-            onSettled = { right -> endFlight(ctx, right) },
+            onSettled = { endFlight(ctx) },
         ).also {
             it.grab(
                 startLeft + size * FloatingFlight.PIVOT_X,
@@ -2320,15 +2391,20 @@ object FloatingOverlayController {
     /** Atterrata e riagganciata alla sua riga: torna docked, con l'arte del
      *  bordo. La camminata finisce esattamente sull'ancoraggio docked, quindi
      *  il passaggio alla finestra piccola non la sposta di un pixel. */
-    private fun endFlight(ctx: Context, right: Boolean) {
+    private fun endFlight(ctx: Context) {
         flight = null
-        parkedRight = right
         saveParkPosition(ctx)
         syncFace()
         // La camminata finisce esattamente sull'ancoraggio docked: la maniglia
-        // ci si rimette sopra e torna piccola, e lei riappare lì dentro.
-        placeColumn(ctx, parkX(ctx), parkTop(ctx))
-        setGrip(ctx, arena = false)
+        // ci si rimette sopra e torna piccola, e lei riappare lì dentro. Con
+        // una taglia cambiata in volo, lo fa `applyMascotSize` alla misura
+        // nuova (stesse due chiamate, dopo aver ridimensionato i livelli).
+        if (sizePendingAfterFlight) {
+            applyMascotSize(ctx)
+        } else {
+            placeColumn(ctx, parkX(ctx), parkTop(ctx))
+            setGrip(ctx, arena = false)
+        }
         column?.visibility = View.VISIBLE
         // Consegna al contrario: si spegne l'arte del volo un giro dopo, per
         // non lasciare un fotogramma senza nessuna delle due.
@@ -2338,7 +2414,7 @@ object FloatingOverlayController {
                 applyStage(STAGE_ASLEEP, WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED)
             }
         }
-        Log.i(TAG, "Pegman flight settled (right=$right)")
+        Log.i(TAG, "Pegman flight settled")
     }
 
     // ------------------------------------------------------------------ //
@@ -2426,12 +2502,10 @@ object FloatingOverlayController {
      * con la faccia già disegnata dentro — esiste. Quando è *out* torna la
      * pila a due livelli, corpo × faccia, che è dove le espressioni si leggono.
      *
-     * Lo specchio è quello di `.jenny-duo.side-left .jenny-art-stack`: l'arte
-     * nasce guardando verso sinistra, cioè giusta sul bordo destro, e si
-     * ribalta sull'altro.
+     * Niente specchio: l'arte nasce guardando verso sinistra, cioè giusta sul
+     * bordo destro, che è l'unico.
      */
     private fun syncFace(sad: Boolean = false) {
-        column?.scaleX = if (parkedRight) 1f else -1f
         if (!expanded) {
             mascotBody?.setImageBitmap(sprite("jenny-side"))
             mascotFace?.visibility = View.GONE
@@ -2487,7 +2561,7 @@ object FloatingOverlayController {
     /**
      * Scivola fino a *(left, top)* dentro la finestra grande, e **ci resta**.
      *
-     * La curva e la durata sono quelle di `.jenny-duo.side-left` nel CSS —
+     * La curva e la durata sono quelle di `.jenny-duo` nel CSS —
      * 0,3 s con un rimbalzino finale — così il gesto è lo stesso che si vede
      * in chat. La differenza importante è la fine: la traslazione viene
      * *committata* nel margine e azzerata, altrimenti resta addosso al
@@ -2511,7 +2585,7 @@ object FloatingOverlayController {
         sliding = true
         slide?.cancel()
         slide = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = SIDE_SLIDE_MS
+            duration = ANCHOR_SLIDE_MS
             interpolator = OvershootInterpolator(1.1f)
             addUpdateListener { a ->
                 val k = a.animatedValue as Float
@@ -2533,8 +2607,9 @@ object FloatingOverlayController {
     }
 
     /** Ferma ogni animazione sul riquadro e lo rimette dritto e non traslato.
-     *  I due pivot tornano al centro: il volo li sposta sulla manica alzata,
-     *  e uno specchio o una rotazione attorno a quel punto sposta anche lei. */
+     *  I due pivot tornano al centro: il dondolio dell'attesa
+     *  ([startBreathing]) li porta ai piedi, e una rotazione attorno a quel
+     *  punto sposta anche lei. */
     private fun clearTransforms(ctx: Context) {
         val mascot = column ?: return
         sliding = false
@@ -2597,12 +2672,6 @@ object FloatingOverlayController {
     }
 
 
-    /**
-     * L'ascissa del bordo, docked o *out*.
-     *
-     * Gli stessi due ancoraggi della mascotte in chat: `-0.469 × lato` a riposo,
-     * `-0.25 × lato` quando è attiva, specchiati sul bordo sinistro.
-     */
     /** Il lato dello sprite: quello della WebUI, o il suo default. */
     private fun mascotSize(ctx: Context): Int =
         if (mascotPx > 0) mascotPx else dp(ctx, MASCOT_FALLBACK_DP)
@@ -2613,9 +2682,13 @@ object FloatingOverlayController {
      * Parcheggiata sta al bordo, per [DOCKED_OUT_RATIO] fuori schermo. «Out»
      * con la chat aperta sta **in piedi sul cap della pillola** dal suo lato:
      * l'asse del corpo ([AXIS_RATIO]) cade sul centro del cap — la pallina
-     * d'invio a destra, il suo specchio a sinistra. «Out» senza chat — il
-     * solo fumetto di risposta — rientra a un quarto dal bordo, come prima:
-     * lì la pillola non c'è, e non c'è niente su cui stare.
+     * d'invio, a destra.
+     *
+     * «Out» senza chat oggi non capita: il fumetto di risposta da solo non
+     * esiste più (la conversazione sta nella colonna del composer), e ogni
+     * chiamante con `out = true` ha già la chat aperta. Il ramo con
+     * [OUT_RATIO] — a un quarto dal bordo — resta come ripiego per un
+     * chiamante futuro che la chiedesse fuori a chat chiusa.
      */
     private fun parkX(ctx: Context, out: Boolean = false): Int {
         val size = mascotSize(ctx)
@@ -2624,14 +2697,10 @@ object FloatingOverlayController {
             val pillW = pillWidth(ctx)
             val pillLeft = (width - pillW) / 2
             val cap = dp(ctx, BAR_PAD_DP) + dp(ctx, SEND_DP) / 2
-            return if (parkedRight) {
-                pillLeft + pillW - cap - (size * AXIS_RATIO).toInt()
-            } else {
-                pillLeft + cap - (size * (1f - AXIS_RATIO)).toInt()
-            }
+            return pillLeft + pillW - cap - (size * AXIS_RATIO).toInt()
         }
         val hidden = (size * if (out) OUT_RATIO else DOCKED_OUT_RATIO).toInt()
-        return if (parkedRight) width - size + hidden else -hidden
+        return width - size + hidden
     }
 
     /**
@@ -2746,7 +2815,6 @@ object FloatingOverlayController {
 
     private fun loadParkPosition(ctx: Context) {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        parkedRight = prefs.getBoolean(PREF_RIGHT, true)
         if (mascotPx <= 0) mascotPx = prefs.getInt(PREF_SIZE, 0)
         storedPalette(prefs.getString(PREF_PALETTE, null))?.let { palette = it }
     }
@@ -2754,7 +2822,6 @@ object FloatingOverlayController {
     private fun saveParkPosition(ctx: Context) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean(PREF_RIGHT, parkedRight)
             // La taglia può essere arrivata dalla SPA prima che ci fosse un
             // contesto con cui scriverla: qui c'è di sicuro.
             .apply { if (mascotPx > 0) putInt(PREF_SIZE, mascotPx) }
@@ -2764,10 +2831,7 @@ object FloatingOverlayController {
     private fun openChat(ctx: Context) {
         collapse()
         try {
-            val intent = Intent(ctx, MainActivity::class.java)
-                .setAction(MainActivity.ACTION_OPEN_CHAT)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            ctx.startActivity(intent)
+            ctx.startActivity(MainActivity.openChatIntent(ctx))
         } catch (e: Exception) {
             Log.i(TAG, "Could not open the chat: ${e.javaClass.simpleName}")
         }

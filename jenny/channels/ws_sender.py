@@ -236,7 +236,6 @@ class OutboundSenderMixin:
                 msg.metadata.get("_progress")
                 or msg.metadata.get("_file_edit_events")
                 or msg.metadata.get("_turn_end")
-                or msg.metadata.get("_session_updated")
                 or msg.metadata.get("_goal_status")
                 or msg.metadata.get("_mascot_mood")
                 or msg.metadata.get(OUTBOUND_META_SUBAGENT_STATUS) is not None
@@ -268,6 +267,19 @@ class OutboundSenderMixin:
                 self.logger.warning("subagent activity payload without a usable task_id")
                 return []
             await self.send_subagent_activity(task_id, subagent_activity)
+            return []
+        # Il turno aspetta i subagent che ha lanciato: frame dedicato, mai una
+        # bolla, mai nel transcript — dice cosa succede adesso, e un reload a
+        # attesa finita non deve ridirlo.
+        waiting = msg.metadata.get("_waiting_for_subagents")
+        if waiting:
+            if conns and isinstance(waiting, int):
+                turn_id = msg.metadata.get(WEBUI_TURN_METADATA_KEY)
+                await self.send_turn_waiting(
+                    msg.chat_id,
+                    subagents=waiting,
+                    turn_id=turn_id if isinstance(turn_id, str) and turn_id else None,
+                )
             return []
         # L'umore della mascotte: frame dedicato, mai una bolla, mai nel
         # transcript (un reload riparte da ``idle``: l'umore e' del momento).
@@ -304,19 +316,7 @@ class OutboundSenderMixin:
                 only_conns=only_conns,
                 skip_persist=skip_persist,
             )
-            if not pending:
-                # Only announce the session refresh once turn_end has fully
-                # landed — otherwise a retry would re-broadcast it too.
-                await self.send_session_updated(msg.chat_id, scope="thread")
             return pending
-        if msg.metadata.get("_session_updated"):
-            if conns:
-                scope = msg.metadata.get("_session_update_scope")
-                await self.send_session_updated(
-                    msg.chat_id,
-                    scope=scope if isinstance(scope, str) else None,
-                )
-            return []
         if msg.metadata.get("_file_edit_events"):
             edits = msg.metadata.get("_file_edit_events")
             return await self.send_file_edit_events(
@@ -332,7 +332,23 @@ class OutboundSenderMixin:
         # della pipeline le firma/rifirma come qualsiasi media locale. Idempotente
         # sui retry: il dedup nell'ingest salta il fetch se già presente.
         if text or msg.media:
-            text, new_media = await self._media.localize_remote_media(text, msg.media)
+            # Con un tetto *totale*: siamo nel ciclo seriale del dispatcher, e
+            # finché si scarica nessun canale riceve niente (v.
+            # ``media_ingest.LOCALIZE_TOTAL_TIMEOUT_S``). Allo scadere si parte
+            # con gli URL remoti, come per un'immagine che non si scarica.
+            from jenny.webui import media_ingest
+
+            try:
+                text, new_media = await asyncio.wait_for(
+                    self._media.localize_remote_media(text, msg.media),
+                    timeout=media_ingest.LOCALIZE_TOTAL_TIMEOUT_S,
+                )
+            except TimeoutError:
+                self.logger.warning(
+                    "remote media not localized within {}s; sending the remote URLs",
+                    media_ingest.LOCALIZE_TOTAL_TIMEOUT_S,
+                )
+                new_media = msg.media
             if new_media != msg.media:
                 msg = dataclasses.replace(msg, media=new_media)
         wire_text = self._media.rewrite_local_markdown_images(text)
@@ -628,8 +644,16 @@ class OutboundSenderMixin:
             if delta:
                 buffered.append(delta)
             full_text = "".join(buffered)
+            authoritative = meta.get("_stream_full_text")
+            if isinstance(authoritative, str):
+                # Lo stream ha perso dei delta sotto backpressure (v.
+                # ``MessageBus.try_publish_outbound``): il buffer qui ha solo
+                # quelli arrivati. Vale il testo intero che il bus ha tenuto, e
+                # va sempre nel frame: il client sostituisce il blocco, il
+                # transcript riscrive la riga.
+                full_text = authoritative
             rewritten = self._media.rewrite_local_markdown_images(full_text)
-            if delta or rewritten != full_text:
+            if delta or rewritten != full_text or isinstance(authoritative, str):
                 body["text"] = rewritten
         else:
             body = {
@@ -711,6 +735,33 @@ class OutboundSenderMixin:
         raw = json.dumps(body, ensure_ascii=False)
         # Idempotent refresh-hint: discard pending, no retry (next status replaces it).
         await self._fanout(conns, raw, label=" goal_status ")
+
+    async def send_turn_waiting(
+        self,
+        chat_id: str,
+        *,
+        subagents: int,
+        turn_id: str | None = None,
+    ) -> None:
+        """Il turno e' vivo ma fermo ad aspettare ``subagents`` subagent.
+
+        Stessa disciplina di ``goal_status``: nessun retry e nessuna
+        persistenza. Non ha un frame di fine: l'attesa la chiude il primo frame
+        del turno che viene dopo, o il suo ``turn_end``.
+        """
+        conns = list(self._subs.get(chat_id, ()))
+        if not conns:
+            return
+        body: dict[str, Any] = {
+            "event": "turn_waiting",
+            "chat_id": chat_id,
+            "reason": "subagents",
+            "subagents": subagents,
+        }
+        if turn_id:
+            body["turn_id"] = turn_id
+        raw = json.dumps(body, ensure_ascii=False)
+        await self._fanout(conns, raw, label=" turn_waiting ")
 
     async def send_mascot_mood(
         self,
@@ -950,18 +1001,6 @@ class OutboundSenderMixin:
             if payload is None or not payload["events"]:
                 continue
             await self.send_subagent_activity(task_id, payload)
-
-    async def send_session_updated(self, chat_id: str, *, scope: str | None = None) -> None:
-        """Notify WebUI clients that a session row should refresh."""
-        conns = list(self._conn_chats)
-        if not conns:
-            return
-        body: dict[str, Any] = {"event": "session_updated", "chat_id": chat_id}
-        if scope:
-            body["scope"] = scope
-        raw = json.dumps(body, ensure_ascii=False)
-        # Idempotent refresh-hint: discard pending, no retry (next update replaces it).
-        await self._fanout(conns, raw, label=" session_updated ")
 
     async def send_app_data_changed(self, slug: str) -> None:
         """Broadcast that a Jenny App's data changed (open app iframes refresh)."""

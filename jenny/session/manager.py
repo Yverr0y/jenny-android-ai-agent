@@ -23,9 +23,45 @@ from jenny.utils.helpers import (
 from jenny.utils.path import atomic_write
 
 FILE_MAX_MESSAGES = 2000
+
+# Nei metadata di una sessione-progetto: quanti dei suoi messaggi, dall'inizio,
+# la raccolta del diario ha gia' riassunto (``AutoCompact._harvest_project_diary``).
+# Sta qui e non nell'autocompact perche' e' un indice nei messaggi, e chi li
+# accorcia o li azzera — :meth:`Session.clear`, :meth:`Session.retain_recent_legal_suffix`
+# — deve spostarlo insieme a loro, come fa con ``last_consolidated``.
+DIARY_HARVEST_METADATA_KEY = "_diary_harvested"
 _MESSAGE_TIME_PREFIX_RE = re.compile(r"^\[Message Time: [^\]]+\]\n?")
 _LOCAL_IMAGE_BREADCRUMB_RE = re.compile(r"^\[image: (?:/|~)[^\]]+\]\s*$")
 _TOOL_CALL_ECHO_RE = re.compile(r'^\s*message\([^)]*\)\s*$')
+# Un code point surrogato in una ``str`` e' sempre isolato: una coppia valida,
+# decodificata, e' gia' un carattere solo. In UTF-8 non esiste, e ``json.loads``
+# lo produce da un frame tagliato a meta' di un'emoji (``"\\ud83d"``).
+_LONE_SURROGATE_RE = re.compile("[\ud800-\udfff]")
+
+
+def scrub_lone_surrogates(text: str) -> str:
+    """*text* con ogni surrogato isolato sostituito da U+FFFD.
+
+    Un surrogato in un messaggio faceva fallire **ogni** salvataggio della
+    sessione da li' in poi — ``encode("utf-8")`` lo rifiuta — e anche i turni
+    puliti rispondevano con l'errore generico fino al riavvio. Si ripulisce
+    all'ingresso del messaggio (``AgentLoop._process_message``) e, come rete, in
+    :meth:`SessionManager.save`.
+    """
+    return _LONE_SURROGATE_RE.sub("\ufffd", text)
+
+
+def _scrub_value(value: Any) -> Any:
+    """:func:`scrub_lone_surrogates` applicata a ogni stringa di una struttura JSON."""
+    if isinstance(value, str):
+        return scrub_lone_surrogates(value)
+    if isinstance(value, list):
+        return [_scrub_value(item) for item in value]
+    if isinstance(value, dict):
+        return {_scrub_value(k): _scrub_value(v) for k, v in value.items()}
+    return value
+
+
 def _sanitize_assistant_replay_text(content: str) -> str:
     """Remove internal replay artifacts that the model may have copied before.
 
@@ -194,6 +230,10 @@ class Session:
         self.last_consolidated = 0
         self.updated_at = datetime.now()
         self.metadata.pop("_last_summary", None)
+        # L'indice della raccolta del diario conta messaggi che non ci sono piu':
+        # tenuto, dopo ``/new`` i messaggi nuovi — meno dei vecchi — non
+        # sarebbero mai stati raccolti.
+        self.metadata.pop(DIARY_HARVEST_METADATA_KEY, None)
 
     def retain_recent_legal_suffix(
         self,
@@ -277,6 +317,15 @@ class Session:
             1 for i, m in enumerate(original)
             if i < before_lc and id(m) in retained_ids
         )
+
+        # L'indice della raccolta del diario scorre allo stesso modo: resta il
+        # numero dei messaggi *rimasti* che erano gia' stati raccolti.
+        harvested = self.metadata.get(DIARY_HARVEST_METADATA_KEY)
+        if isinstance(harvested, int) and not isinstance(harvested, bool):
+            self.metadata[DIARY_HARVEST_METADATA_KEY] = sum(
+                1 for i, m in enumerate(original)
+                if i < harvested and id(m) in retained_ids
+            )
 
         self.messages = retained
         self.last_consolidated = new_lc
@@ -423,6 +472,15 @@ class SessionManager:
         """Get the file path for a session."""
         return self.sessions_dir / f"{self.safe_key(key)}.jsonl"
 
+    def turn_journal_path(self, key: str) -> Path:
+        """Il diario del turno in corso di *key*, accanto al suo file di sessione.
+
+        Lo scrive il checkpoint del turno (v. ``TurnPersistenceMixin``): i
+        messaggi già chiusi del turno, in append. L'estensione non è ``.jsonl``
+        di proposito, perché chi elenca le sessioni non lo scambi per una.
+        """
+        return self.sessions_dir / f"{self.safe_key(key)}.turn-journal"
+
     def get_or_create(self, key: str) -> Session:
         """
         Get an existing session or create a new one.
@@ -532,6 +590,23 @@ class SessionManager:
         the most recent writes.
         """
         path = self._get_session_path(session.key)
+        try:
+            atomic_write(path, self._serialize(session), fsync_file=fsync, fsync_dir=fsync)
+        except UnicodeEncodeError:
+            # Un surrogato isolato arrivato da una porta che non ripulisce:
+            # si ripulisce la sessione **in
+            # memoria**, cosi' cache e disco restano uguali, e si riscrive.
+            # Senza, ogni salvataggio successivo falliva allo stesso modo.
+            logger.warning(
+                "Session {} carried a lone UTF-16 surrogate; replaced with U+FFFD", session.key,
+            )
+            session.messages = _scrub_value(session.messages)
+            session.metadata = _scrub_value(session.metadata)
+            atomic_write(path, self._serialize(session), fsync_file=fsync, fsync_dir=fsync)
+        self._cache[session.key] = session
+
+    @staticmethod
+    def _serialize(session: Session) -> str:
         metadata_line = {
             "_type": "metadata",
             "key": session.key,
@@ -543,8 +618,7 @@ class SessionManager:
         lines = [json.dumps(metadata_line, ensure_ascii=False) + "\n"]
         for msg in session.messages:
             lines.append(json.dumps(msg, ensure_ascii=False) + "\n")
-        atomic_write(path, "".join(lines), fsync_file=fsync, fsync_dir=fsync)
-        self._cache[session.key] = session
+        return "".join(lines)
 
     def flush_all(self) -> int:
         """Re-save every cached session with fsync for durable shutdown.
@@ -552,10 +626,28 @@ class SessionManager:
         Returns the number of sessions flushed.  Errors on individual
         sessions are logged but do not prevent other sessions from being
         flushed.
+
+        Una sessione **vuota e mai salvata** non si scrive: niente messaggi,
+        niente metadati, nessun file su disco. È quella che ``get_or_create``
+        inventa per chi ha solo guardato — l'inseguimento di un progetto
+        rinominato, il controllo sull'id della wiki, l'umore della mascotte —
+        e che resta in cache dopo che il rinomino o la cancellazione l'aveva
+        invalidata. Scriverla allo spegnimento faceva risorgere
+        ``project_<vecchio>.jsonl``, e quel file orfano bastava a rifiutare un
+        rinomino all'indietro con ``name_taken``. Non si perde niente: una
+        sessione così, riletta, è identica a una che non esiste
+        (v. anche ``_repair``, che un file senza messaggi né metadati lo tratta
+        come assente).
         """
         flushed = 0
         for key, session in list(self._cache.items()):
             try:
+                if (
+                    not session.messages
+                    and not session.metadata
+                    and not self._get_session_path(key).exists()
+                ):
+                    continue
                 self.save(session, fsync=True)
                 flushed += 1
             except Exception:

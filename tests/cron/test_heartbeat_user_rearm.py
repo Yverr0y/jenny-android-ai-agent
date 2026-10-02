@@ -10,7 +10,7 @@ lo raggiunge mai, ``tasks_due_for_escalation`` lo salta e ``already_warned_block
 dice al modello "di questi non parlare, qualunque cosa trovi". L'unica uscita
 automatica è un ``CHECK_OK`` che il modello può non scrivere mai — e un
 follow-up senza marcatore è lo *stato normale* di un controllo delegato sano
-misurato sul device (v. ``roadmap/heartbeat-escalation-amnesia.md``).
+misurato sul device.
 
 Le due mitigazioni misurate, che questo file tiene ferme perché senza di loro la
 funzione è una seccatura invece di una correzione:
@@ -63,8 +63,8 @@ from jenny.session.keys import UNIFIED_SESSION_KEY, session_key_for_channel
 from jenny.session.manager import Session, last_user_message_ms
 from jenny.utils.runtime import SUSTAINED_GOAL_CONTINUE_PROMPT
 
-_WATERBOT = (
-    "- Ogni ciclo, controlla l'umidità delle piante e avvisami solo se una è sotto il 15%."
+_RAINCHECK = (
+    "- Ogni ciclo, controlla la pioggia nelle città e avvisami solo se una è sopra il 70%."
 )
 
 _ESCALATION_HEAD = "These recurring tasks have now failed to run"
@@ -221,8 +221,8 @@ class _Harness:
 
 @pytest.fixture
 def broken(tmp_path: Path) -> _Harness:
-    harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
-    harness.agent.broken = {1: "hps irraggiungibile"}
+    harness = _Harness(tmp_path, _heartbeat_md(_RAINCHECK))
+    harness.agent.broken = {1: "pibox irraggiungibile"}
     return harness
 
 
@@ -340,7 +340,7 @@ class TestTheStoreOnTheDevice:
         momento esatto in cui l'APK atterra, per un guasto vecchio di ore."""
         store = tmp_path / "cron" / "jobs.json"
         store.parent.mkdir(parents=True)
-        tasks = parse_heartbeat_tasks(_heartbeat_md(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_heartbeat_md(_RAINCHECK))
         store.write_text(
             json.dumps(
                 {
@@ -373,8 +373,8 @@ class TestTheStoreOnTheDevice:
             encoding="utf-8",
         )
 
-        harness = _Harness(tmp_path, _heartbeat_md(_WATERBOT))
-        harness.agent.broken = {1: "hps irraggiungibile"}
+        harness = _Harness(tmp_path, _heartbeat_md(_RAINCHECK))
+        harness.agent.broken = {1: "pibox irraggiungibile"}
         harness.user_says()
         await harness.cycles(ESCALATE_AFTER_FAILURES + 3)
 
@@ -427,7 +427,7 @@ class TestTheTwoBlocksStayDisjoint:
     """
 
     def _state(self) -> tuple[CronJobState, list]:
-        tasks = parse_heartbeat_tasks(_heartbeat_md(_WATERBOT))
+        tasks = parse_heartbeat_tasks(_heartbeat_md(_RAINCHECK))
         state = CronJobState(
             task_checks={
                 tasks[0].id: CronTaskCheckState(
@@ -528,7 +528,7 @@ class TestTheLastUserMessageReader:
             {"role": "user", "content": "a", "timestamp": human.isoformat()},
             {
                 "role": "user",
-                "content": "[Subagent 'backup latest hps' completed successfully]…",
+                "content": "[Subagent 'backup latest pibox' completed successfully]…",
                 "timestamp": announce.isoformat(),
                 INJECTED_EVENT_META: SUBAGENT_RESULT_EVENT,
             },

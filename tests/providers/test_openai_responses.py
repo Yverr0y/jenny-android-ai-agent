@@ -1,10 +1,12 @@
 """Tests for the shared openai_responses converters and parsers."""
 
+import asyncio
 import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from jenny.providers.base import StreamTimeout
 from jenny.providers.openai_compat_provider import OpenAICompatProvider
 from jenny.providers.openai_responses.converters import (
     convert_messages,
@@ -728,6 +730,33 @@ class TestConsumeSse:
         assert usage == {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
 
     @pytest.mark.asyncio
+    async def test_incomplete_response_is_a_length_stop_with_usage(self):
+        """``response.incomplete`` chiude lo stream al tetto di token.
+
+        È l'evento terminale al posto di ``response.completed``: ignorarlo
+        lasciava ``finish_reason="stop"`` e usage vuoto, e il runner non
+        riconosceva il troncamento. Il ramo non-stream lo mappava già a
+        ``length`` (``map_finish_reason("incomplete")``).
+        """
+        response = _SseResponse([
+            {"type": "response.output_text.delta", "delta": "Risposta tagli"},
+            {
+                "type": "response.incomplete",
+                "response": {
+                    "status": "incomplete",
+                    "incomplete_details": {"reason": "max_output_tokens"},
+                    "usage": {"input_tokens": 10, "output_tokens": 64, "total_tokens": 74},
+                },
+            },
+        ])
+
+        content, _, finish_reason, usage, _ = await consume_sse_with_reasoning(response)
+
+        assert content == "Risposta tagli"
+        assert finish_reason == "length"
+        assert usage == {"prompt_tokens": 10, "completion_tokens": 64, "total_tokens": 74}
+
+    @pytest.mark.asyncio
     async def test_tool_call_done_arguments_callback(self):
         response = _SseResponse([
             {
@@ -804,6 +833,74 @@ class TestConsumeSse:
 
         assert tool_calls[0].arguments == arguments
         assert type(tool_calls[0].arguments) is type(arguments)
+
+
+class _PausingSseResponse:
+    """Stream SSE che si ferma *pause_s* secondi dopo gli eventi di *before*."""
+
+    def __init__(self, before: list[dict], pause_s: float, after: list[dict]):
+        self._before, self._pause_s, self._after = before, pause_s, after
+
+    async def aiter_lines(self):
+        for event in self._before:
+            yield f"data: {json.dumps(event)}"
+            yield ""
+        await asyncio.sleep(self._pause_s)
+        for event in self._after:
+            yield f"data: {json.dumps(event)}"
+            yield ""
+
+
+_PREAMBLE = [
+    {"type": "response.created", "response": {}},
+    {"type": "response.in_progress", "response": {}},
+    {"type": "response.output_item.added", "item": {"type": "reasoning"}},
+]
+_ANSWER = [
+    {"type": "response.output_text.delta", "delta": "ciao"},
+    {"type": "response.completed", "response": {"status": "completed"}},
+]
+
+
+class TestResponsesStreamBudget:
+    """Il budget lungo vale finché il modello non ha prodotto output.
+
+    Gli eventi di servizio (``response.created``, ``in_progress``, l'annuncio
+    di un item di ragionamento) arrivano subito, poi un modello reasoning può
+    tacere a lungo: contarli come output applicava l'idle al ragionamento muto.
+    """
+
+    async def test_service_events_do_not_end_the_first_output_budget(self):
+        response = _PausingSseResponse(_PREAMBLE, 0.3, _ANSWER)
+
+        content, _, finish_reason, _, _ = await consume_sse_with_reasoning(
+            response, idle_timeout_s=0.1, first_output_timeout_s=2.0,
+        )
+
+        assert (content, finish_reason) == ("ciao", "stop")
+
+    async def test_silence_after_the_first_text_is_an_idle_timeout(self):
+        before = [*_PREAMBLE, {"type": "response.output_text.delta", "delta": "ci"}]
+        response = _PausingSseResponse(before, 0.3, _ANSWER)
+
+        with pytest.raises(StreamTimeout) as info:
+            await consume_sse_with_reasoning(
+                response, idle_timeout_s=0.1, first_output_timeout_s=2.0,
+            )
+
+        assert info.value.saw_output is True
+        assert info.value.waited_s == 0.1
+
+    async def test_a_stall_before_any_output_reports_the_first_budget(self):
+        response = _PausingSseResponse(_PREAMBLE, 0.5, _ANSWER)
+
+        with pytest.raises(StreamTimeout) as info:
+            await consume_sse_with_reasoning(
+                response, idle_timeout_s=0.05, first_output_timeout_s=0.2,
+            )
+
+        assert info.value.saw_output is False
+        assert info.value.waited_s == 0.2
 
 
 class TestCachedTokensOnTheResponsesPath:

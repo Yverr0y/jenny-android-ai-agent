@@ -1,6 +1,6 @@
 """La passata del giardiniere: la cassetta chiusa, il prompt, il cursore.
 
-Passo **T4.2** di ``roadmap/taccuino-passi.md``.
+Passo **T4.2** del piano del taccuino.
 
 Il gruppo che conta è ``TestTheToolbox``, e la ragione va scritta: **il
 confinamento di un turno interno è il registry, non lo scope.** Un turno interno
@@ -646,7 +646,7 @@ class TestThePrompt:
 #
 # **Il secondo numero dell'audit del 23/08: 23 pagine su 188 oltre il tetto** dei
 # 6000 caratteri con cui una pagina entra nel blocco di progetto — 9 in ``main``,
-# 9 in ``allergie``, 5 in ``patreon-creator``, le altre cinque wiki pulite
+# 9 in ``alpinismo``, 5 in ``palestra-schede``, le altre cinque wiki pulite
 # (mediana 3.216, massimo 16.384). Oltre quel tetto la pagina non entra
 # **affatto**: non tronca, si salta intera, a ogni turno di ogni conversazione, e
 # l'ordine è alfabetico — nessuna domanda dell'utente può richiamarla.
@@ -779,7 +779,7 @@ class TestThePagesThatAreTooLong:
 # 2000 caratteri con cui la mappa entra in ogni turno (12.298 / 7.132 / 5.235 /
 # 3.480 / 3.229 / 3.089 / 3.016, contro 292 dell'ottava). Quindi su quasi ogni
 # progetto il modello vede la **testa** della mappa e nient'altro: su
-# ``patreon-creator`` — la peggiore, 12.298 caratteri e 262 righe — il
+# ``palestra-schede`` — la peggiore, 12.298 caratteri e 262 righe — il
 # troncamento lascia visibili **5 delle 51 pagine** che la mappa nomina.
 #
 # La causa non è il numero di pagine — l'elenco nudo delle otto wiki costa da
@@ -798,7 +798,7 @@ def _oversized_map(root: Path) -> int:
     """Una mappa fatta come quelle vere, e restituisce la sua misura.
 
     Prosa sopra l'elenco, e l'elenco lungo: sono le proporzioni di
-    ``patreon-creator`` misurate sul telefono il 23/08 (12.298 caratteri, 262
+    ``palestra-schede`` misurate sul telefono il 23/08 (12.298 caratteri, 262
     righe, 51 pagine nominate su 52 esistenti — la mappa era l'artefatto più
     grosso di quella wiki, più grosso della sua pagina più grossa). Le voci qui
     sono trentatré e non cinquantuno solo per tenere leggibile il fixture: quel
@@ -1003,7 +1003,7 @@ class TestTheRun:
         letto righe vere, e se non promuove **il cursore le brucia comunque** —
         su un diario append-only, cioè per sempre.
 
-        Il caso di campo (25/08, ``viaggio-pazzo``): tre passate in un giorno,
+        Il caso di campo (25/08, ``viaggio-lento``): tre passate in un giorno,
         **una** riga di log. Dal registro non si distingueva «non è mai passato»
         da «è passato e ha deciso di no», che è il dubbio con cui l'utente ha
         aperto l'indagine.
@@ -1896,7 +1896,7 @@ class TestReadingWhatWasSaid:
         """Il taglio non è solo il tetto: è anche il file che si è spezzato.
 
         Superati gli 8 MB, ``transcript_store`` sposta i turni vecchi in
-        ``<chiave>.segments/`` e lascia sul posto la coda. La finestra risultava
+        ``<key>.segments/`` e lascia sul posto la coda. La finestra risultava
         allora **intera** — tre messaggi, ``truncated=False`` — mentre metà
         conversazione stava in un altro file: la rete del controllo incrociato
         era lossy *e* muta.

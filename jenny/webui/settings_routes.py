@@ -3,11 +3,17 @@
 Keep WebUI Settings route handlers here, not in ``channels/websocket.py``.
 The websocket channel owns transport concerns; this module owns WebUI Settings
 request mapping and response shaping.
+
+Le quattro scritture che portano un **segreto** non sono piu' qui: la chiave del
+provider (``provider/update``, ``provider-models``), il token Telegram
+(``telegram/save``) e la password SSH (``ssh/host/save``) viaggiavano nella
+query, cioe' nella riga di richiesta che log e traceback vedono.
+Sono comandi dell'RPC WebSocket in ``webui/commands.py``
+(``settings.provider.models``/``update``, ``telegram.save``, ``ssh.host.save``).
 """
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -15,21 +21,18 @@ from websockets.http11 import Request as WsRequest
 from websockets.http11 import Response
 
 from jenny.bus.queue import MessageBus
-from jenny.channels.http_utils import parse_flag
+from jenny.channels.http_utils import QueryParams, parse_flag
 from jenny.webui.settings_api import (
     WebUISettingsError,
     delete_provider,
     power_diagnostics_payload,
-    provider_models_payload,
     run_update_check,
-    save_onboarding,
     settings_payload,
     start_update_install,
     update_agent_settings,
     update_floating_settings,
     update_location_settings,
     update_power_settings,
-    update_provider,
     update_status_payload,
     update_web_search_settings,
 )
@@ -38,7 +41,6 @@ from jenny.webui.ssh_api import (
     delete_ssh_host,
     generate_ssh_key,
     probe_ssh_host_key,
-    save_ssh_host,
     ssh_settings_payload,
     update_ssh_settings,
 )
@@ -48,8 +50,6 @@ from jenny.webui.worker_settings import (
     update_memory_settings,
     update_worker_settings,
 )
-
-QueryParams = dict[str, list[str]]
 
 
 async def _enrich_floating(payload: dict) -> None:
@@ -81,8 +81,6 @@ class WebUISettingsRouter:
         parse_query: Callable[[str], QueryParams],
         json_response: Callable[[dict[str, Any]], Response],
         error_response: Callable[[int, str | None], Response],
-        session_manager: Any | None = None,
-        onboarding_event: Any | None = None,
         on_settings_changed: Callable[[], None] | None = None,
         on_telegram_changed: Callable[[], None] | None = None,
         on_jobs_changed: Callable[[str], None] | None = None,
@@ -93,8 +91,6 @@ class WebUISettingsRouter:
         self._parse_query = parse_query
         self._json_response = json_response
         self._error_response = error_response
-        self._session_manager = session_manager
-        self._onboarding_event = onboarding_event
         self._on_settings_changed = on_settings_changed
         self._on_telegram_changed = on_telegram_changed
         # Secondo gancio, e non un allargamento del primo:
@@ -109,12 +105,8 @@ class WebUISettingsRouter:
             return await self._handle_settings(request)
         if path == "/api/settings/update":
             return await self._handle_settings_update(request)
-        if path == "/api/settings/provider/update":
-            return await self._handle_settings_provider_update(request)
         if path == "/api/settings/provider/delete":
             return await self._handle_settings_provider_delete(request)
-        if path == "/api/settings/provider-models":
-            return await self._handle_settings_provider_models(request)
         if path == "/api/settings/memory/update":
             return await self._handle_settings_memory_update(request)
         if path == "/api/settings/workers/update":
@@ -133,8 +125,6 @@ class WebUISettingsRouter:
             return self._handle_ssh_settings(request)
         if path == "/api/settings/ssh/update":
             return await self._handle_mutation(request, update_ssh_settings, "ssh settings update")
-        if path == "/api/settings/ssh/host/save":
-            return await self._handle_mutation(request, save_ssh_host, "ssh host save")
         if path == "/api/settings/ssh/host/delete":
             return await self._handle_mutation(request, delete_ssh_host, "ssh host delete")
         if path == "/api/settings/ssh/key/generate":
@@ -149,12 +139,8 @@ class WebUISettingsRouter:
             return await self._handle_update_install(request)
         if path == "/api/updates/status":
             return self._handle_update_status(request)
-        if path == "/api/onboarding/save":
-            return await self._handle_onboarding_save(request)
         if path == "/api/telegram/status":
             return self._handle_telegram_status(request)
-        if path == "/api/telegram/save":
-            return await self._handle_telegram_save(request)
         if path == "/api/telegram/unpair":
             return await self._handle_telegram_unpair(request)
         if path == "/api/telegram/update":
@@ -246,35 +232,6 @@ class WebUISettingsRouter:
             request, update_worker_settings, "worker settings update", on_success=after,
         )
 
-    async def _handle_settings_provider_update(self, request: WsRequest) -> Response:
-        async def handler(query: QueryParams) -> dict[str, Any]:
-            data: dict[str, str] = {"name": _query_param(query, "name")}
-            if fmt := _query_param(query, "format"):
-                data["format"] = fmt
-            if api_key := _query_param(query, "api_key"):
-                data["api_key"] = api_key
-            if api_base := _query_param(query, "api_base"):
-                data["api_base"] = api_base
-            if ca_bundle := _query_param(query, "ca_bundle"):
-                data["ca_bundle"] = ca_bundle
-            # Segnale separato perche' il client non puo' mandare la stringa
-            # vuota: v. il commento in ``update_provider``.
-            if clear := _query_param(query, "ca_bundle_clear"):
-                data["ca_bundle_clear"] = clear
-            return await update_provider(data)
-
-        # Anche qui senza condizione: era «solo se il provider toccato e'
-        # quello attivo», cioe' un'altra cosa da tenere allineata a mano. La
-        # decide meglio il fingerprint, che riassume il solo provider *attivo*:
-        # modificarne uno inattivo da' un'impronta identica e la guardia
-        # ritorna da sola, senza ricostruire niente.
-        return await self._handle_mutation(
-            request,
-            handler,
-            "provider update",
-            on_success=lambda query, payload: self._fire_settings_changed(),
-        )
-
     async def _handle_settings_provider_delete(self, request: WsRequest) -> Response:
         async def handler(query: QueryParams) -> dict[str, Any]:
             return await delete_provider({"name": _query_param(query, "name")})
@@ -287,28 +244,6 @@ class WebUISettingsRouter:
             "provider delete",
             on_success=lambda query, payload: self._fire_settings_changed(),
         )
-
-    async def _handle_settings_provider_models(self, request: WsRequest) -> Response:
-        if not self._authorized(request):
-            return self._unauthorized()
-        try:
-            payload = await asyncio.to_thread(provider_models_payload, self._query(request))
-        except WebUISettingsError as e:
-            return self._error_response(e.status, e.message)
-        except Exception:
-            self.logger.exception("failed to load provider model list")
-            return self._error_response(500, "failed to load provider model list")
-        # Diagnostica: il fetch modelli è advisory e non solleva su status
-        # applicativi (not_configured/error/unsupported), quindi senza questo log
-        # una lista vuota resterebbe invisibile nei log del gateway.
-        self.logger.info(
-            "[provider-models] provider={!r} status={!r} count={} message={!r}",
-            payload.get("provider"),
-            payload.get("status"),
-            payload.get("model_count"),
-            payload.get("message"),
-        )
-        return self._json_response(payload)
 
     async def _handle_settings_web_search_update(self, request: WsRequest) -> Response:
         if not self._authorized(request):
@@ -491,48 +426,6 @@ class WebUISettingsRouter:
             on_success(query, payload)
         return self._json_response(payload)
 
-    async def _handle_onboarding_save(self, request: WsRequest) -> Response:
-        if not self._authorized(request):
-            return self._unauthorized()
-        query = self._query(request)
-        data = {
-            "provider_name": _query_param(query, "provider_name"),
-            "format": _query_param(query, "format"),
-            "api_key": _query_param(query, "api_key"),
-            "api_base": _query_param(query, "api_base"),
-            "model": _query_param(query, "model"),
-            "bot_name": _query_param(query, "bot_name"),
-            "bot_icon": _query_param(query, "bot_icon"),
-            "locale": _query_param(query, "locale"),
-        }
-        self.logger.info(
-            "[onboarding-route] received: provider_name={!r} format={!r} model={!r} "
-            "api_key_len={} bot_name={!r} query_keys={}",
-            data["provider_name"],
-            data["format"],
-            data["model"],
-            len(data["api_key"]),
-            data["bot_name"],
-            sorted(query.keys()),
-        )
-        try:
-            payload = await save_onboarding(
-                data,
-                session_manager=self._session_manager,
-                onboarding_event=self._onboarding_event,
-            )
-        except WebUISettingsError as e:
-            self.logger.warning("[onboarding-route] settings error: {}", e.message)
-            return self._error_response(e.status, e.message)
-        except Exception:
-            self.logger.exception("onboarding save failed")
-            return self._error_response(500, "failed to save onboarding configuration")
-        self.logger.info(
-            "[onboarding-route] success: chat_id={}",
-            payload.get("chat_id"),
-        )
-        return self._json_response(payload)
-
     # -- Telegram ---------------------------------------------------------- #
 
     def _fire_telegram_changed(self) -> None:
@@ -553,22 +446,6 @@ class WebUISettingsRouter:
         except Exception:
             self.logger.exception("telegram status failed")
             return self._error_response(500, "failed to load telegram status")
-
-    async def _handle_telegram_save(self, request: WsRequest) -> Response:
-        if not self._authorized(request):
-            return self._unauthorized()
-        from jenny.webui.telegram_api import save_telegram_token
-
-        token = _query_param(self._query(request), "token")
-        try:
-            payload = await save_telegram_token(token)
-        except WebUISettingsError as e:
-            return self._error_response(e.status, e.message)
-        except Exception:
-            self.logger.exception("telegram token save failed")
-            return self._error_response(500, "failed to save telegram token")
-        self._fire_telegram_changed()
-        return self._json_response(payload)
 
     async def _handle_telegram_unpair(self, request: WsRequest) -> Response:
         if not self._authorized(request):

@@ -9,16 +9,22 @@ serializzazione delle modifiche concorrenti sta invece in
 import json
 import os
 import re
+import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, get_args, get_origin
 
 from loguru import logger
 
-from jenny.config.bootstrap import restrict_config_permissions
+from jenny.config.bootstrap import write_private_file
 from jenny.config.schema import Config
-from jenny.pydantic_compat import BaseModel, ValidationError
-from jenny.utils.path import atomic_write
+from jenny.pydantic_compat import (
+    BaseModel,
+    ValidationError,
+    canonical_input_key,
+    field_for_input_key,
+    lenient_literals,
+)
 
 
 def get_config_path() -> Path:
@@ -70,6 +76,13 @@ def load_config_with_raw(
             "Config keys not recognised by this version (kept in the file, ignored at runtime): {}",
             ", ".join(unknown),
         )
+    shadowed = _shadowed_key_paths(raw)
+    if shadowed:
+        logger.warning(
+            "Config keys written twice under two spellings (the camelCase one is used; "
+            "these are ignored and dropped on the next write): {}",
+            ", ".join(shadowed),
+        )
 
     _apply_ssrf_whitelist(config)
     _resolve_default_timezone(config)
@@ -87,7 +100,7 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
 
     try:
         raw = _read_raw(path)
-        return raw, Config.model_validate(raw)
+        return raw, _validate(raw, path)
     except (json.JSONDecodeError, ValueError, ValidationError) as primary_error:
         logger.error("Config at {} is unusable: {}", path, primary_error)
 
@@ -95,7 +108,7 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
     if backup.exists():
         try:
             raw = _read_raw(backup)
-            config = Config.model_validate(raw)
+            config = _validate(raw, backup)
         except (json.JSONDecodeError, ValueError, ValidationError) as backup_error:
             logger.error("Config backup at {} is unusable too: {}", backup, backup_error)
         else:
@@ -103,8 +116,7 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
             # Promuoviamo il backup a file vivo: senza questo passo ogni avvio
             # rifarebbe il recupero, e la prima scrittura riuscita partirebbe
             # da un grezzo rotto.
-            atomic_write(path, json.dumps(raw, indent=2, ensure_ascii=False))
-            restrict_config_permissions(path)
+            write_private_file(path, json.dumps(raw, indent=2, ensure_ascii=False))
             _record_recovery("backup", quarantined)
             logger.warning("Config recovered from {}; broken file kept at {}", backup, quarantined)
             return raw, config
@@ -116,6 +128,24 @@ def _load_with_recovery(path: Path) -> tuple[dict[str, Any], Config]:
         quarantined,
     )
     return {}, Config()
+
+
+def _validate(raw: dict[str, Any], path: Path) -> Config:
+    """Valida *raw*; un valore fuori da un ``Literal`` costa solo il suo campo.
+
+    Il campo ricade sul default e lo si dice a WARNING: il resto del file vale.
+    Prima quel valore faceva rifiutare il file intero, e con lui il ``.bak`` che
+    lo porta uguale — si ripartiva sui default di tutto.
+    """
+    with lenient_literals() as fallbacks:
+        config = Config.model_validate(raw)
+    for model, field, value in fallbacks:
+        logger.warning(
+            "Config at {}: {}.{} = {!r} is not a value this version knows; using the "
+            "default instead (the next write replaces it)",
+            path, model, field, value,
+        )
+    return config
 
 
 def _read_raw(path: Path) -> dict[str, Any]:
@@ -167,7 +197,12 @@ def _resolve_default_timezone(config: Config) -> None:
         return
     from jenny.runtime.context import get_runtime_context
 
-    config.agents.defaults.timezone = get_runtime_context().device_timezone or "UTC"
+    resolved = get_runtime_context().device_timezone or "UTC"
+    config.agents.defaults.timezone = resolved
+    # Il valore dato alla sentinella, per :func:`_unresolve_default_timezone`:
+    # senza fuso rilevato "" diventa "UTC", e il confronto col solo fuso del
+    # device non lo riconosceva — la prima scrittura congelava "UTC" nel file.
+    config._auto_timezone = resolved
 
 
 def _apply_ssrf_whitelist(config: Config) -> None:
@@ -202,13 +237,12 @@ def save_config(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     data = config.model_dump(mode="json", by_alias=True)
-    _unresolve_default_timezone(data)
+    _unresolve_default_timezone(data, config)
     if preserve_unknown_from:
         data = _merge_unknown(preserve_unknown_from, data)
 
     _rotate_backup(path)
-    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
-    restrict_config_permissions(path)
+    write_private_file(path, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def _rotate_backup(path: Path) -> None:
@@ -226,8 +260,7 @@ def _rotate_backup(path: Path) -> None:
         return
     try:
         backup = _backup_path(path)
-        atomic_write(backup, content, fsync_dir=False)
-        restrict_config_permissions(backup)
+        write_private_file(backup, content, fsync_dir=False)
     except OSError as e:
         # Il backup è una rete di sicurezza, non un requisito: se non si può
         # scrivere, il salvataggio vero deve comunque procedere.
@@ -246,10 +279,76 @@ RETIRED_KEY_PATHS: frozenset[str] = frozenset({
     "agents.defaults.atlas",
     "wiki.defaultWiki",
     "wiki.default_wiki",
+    # Il modello della richiesta dell'umore, ritirata il 24/09/2026 con la
+    # richiesta stessa: l'umore si legge dagli emoji (``session/mascot_mood.py``).
+    "agents.defaults.mascotMoodModelPreset",
+    "agents.defaults.mascot_mood_model_preset",
+    # Le estensioni Markdown della wiki, ritirate il 24/09/2026: il renderer
+    # non le ha mai lette (``webui/wiki.py`` usa le sue), e la documentazione
+    # le dava per configurabili. Ogni file le porta, perche' il dump scriveva
+    # anche i default.
+    "wiki.extensions",
+    # Il blocco delle pagine della casa prima del rinomino in inglese del
+    # 25/09/2026: ``casa: {schermate, ordine}``. Lo traduce in ``home`` lo schema
+    # (``Config._migrate_casa_to_home``); qui smette di esistere nel file.
+    "casa",
 })
 
 
-def _merge_unknown(raw: Any, dumped: Any, prefix: str = "") -> Any:
+# La forma di un nodo del JSON, per sapere quali chiavi vi sono campi del modello:
+# ``("model", M)`` un oggetto validato da ``M``; ``("dict", M)`` una mappa con
+# chiavi libere (i nomi dei preset) e valori ``M``; ``None`` un nodo senza schema
+# (``websocket``, un ``dict[str, Any]``), dove ogni chiave e' dato e non campo.
+_Shape = tuple[str, type[BaseModel]] | None
+
+
+def _shape_of(annotation: Any) -> _Shape:
+    """La forma di un valore annotato *annotation*, se porta dentro un modello."""
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return ("model", annotation)
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin in (Union, types.UnionType):
+        for arg in args:
+            shape = _shape_of(arg)
+            if shape is not None and shape[0] == "model":
+                return shape
+        return None
+    if origin is dict and len(args) == 2:
+        inner = _shape_of(args[1])
+        if inner is not None and inner[0] == "model":
+            return ("dict", inner[1])
+    return None
+
+
+def _classify_key(shape: _Shape, key: str) -> tuple[str, _Shape]:
+    """Che cosa e' *key* in un nodo di forma *shape*, e la forma del suo valore.
+
+    ``"field"`` la chiave con cui il modello scrive un suo campo; ``"synonym"`` un
+    campo noto scritto con un'altra grafia (``max_tokens`` per ``maxTokens``), che
+    il modello legge e riscrive con la sua; ``"other"`` tutto il resto: una chiave
+    ignota a questo schema, o un dato di un nodo senza schema.
+    """
+    if shape is None:
+        return "other", None
+    kind, model = shape
+    if kind == "dict":
+        return "other", ("model", model)
+    if not model.__pydantic_rebuilt__:
+        model.model_rebuild(raise_errors=False)
+    field = field_for_input_key(model, key)
+    if field is None:
+        return "other", None
+    finfo = model.model_fields[field]
+    child = _shape_of(finfo.resolved_type if finfo.resolved_type is not None else finfo.annotation)
+    if key != canonical_input_key(model, field):
+        return "synonym", child
+    return "field", child
+
+
+def _merge_unknown(
+    raw: Any, dumped: Any, prefix: str = "", shape: _Shape = ("model", Config)
+) -> Any:
     """Restituisce *dumped* con le chiavi presenti solo in *raw* riportate dentro.
 
     Ricorsivo sui dizionari. Le liste vengono sostituite in blocco: allineare
@@ -260,59 +359,127 @@ def _merge_unknown(raw: Any, dumped: Any, prefix: str = "") -> Any:
 
     Le chiavi in :data:`RETIRED_KEY_PATHS` **non** vengono riportate: e' l'unico
     punto in cui una chiave ritirata smette di esistere nel file.
+
+    Nemmeno un campo noto scritto con un'altra grafia (``max_tokens`` accanto al
+    ``maxTokens`` del dump): e' lo stesso campo, e il dump lo porta gia' con la
+    grafia del modello. Riportarlo lo lasciava nel file in coda al dump, dove
+    alla lettura dopo vinceva lui: ogni modifica dalla UI si salvava e non aveva
+    effetto, per sempre.
     """
     if not isinstance(raw, dict) or not isinstance(dumped, dict):
         return dumped
     merged = dict(dumped)
     for key, raw_value in raw.items():
         where = f"{prefix}{key}"
+        role, child = _classify_key(shape, key)
+        if role == "synonym":
+            continue
         if key not in merged:
             if where not in RETIRED_KEY_PATHS:
                 merged[key] = raw_value
         else:
-            merged[key] = _merge_unknown(raw_value, merged[key], f"{where}.")
+            merged[key] = _merge_unknown(raw_value, merged[key], f"{where}.", child)
     return merged
 
 
-def _unknown_key_paths(raw: Any, dumped: Any, prefix: str = "") -> list[str]:
+def _unknown_key_paths(
+    raw: Any, dumped: Any, prefix: str = "", shape: _Shape = ("model", Config)
+) -> list[str]:
     """Elenca i percorsi delle chiavi presenti in *raw* ma non nel dump del modello.
 
     Una chiave ritirata non e' sconosciuta: non compare, o il warning che questa
     lista alimenta suonerebbe a ogni caricamento fino alla prima riscrittura.
+    Nemmeno un campo noto scritto con un'altra grafia: quello il modello lo
+    legge (v. :func:`_shadowed_key_paths` per il caso in cui non lo legge).
     """
     if not isinstance(raw, dict) or not isinstance(dumped, dict):
         return []
     unknown: list[str] = []
     for key, raw_value in raw.items():
         where = f"{prefix}{key}"
+        role, child = _classify_key(shape, key)
+        if role == "synonym":
+            continue
         if key not in dumped:
             if where not in RETIRED_KEY_PATHS:
                 unknown.append(where)
             continue
         if isinstance(raw_value, dict):
-            unknown.extend(_unknown_key_paths(raw_value, dumped[key], f"{where}."))
+            unknown.extend(_unknown_key_paths(raw_value, dumped[key], f"{where}.", child))
         elif isinstance(raw_value, list) and isinstance(dumped.get(key), list):
+            item_shape = _list_item_shape(shape, key)
             for i, (raw_item, dumped_item) in enumerate(zip(raw_value, dumped[key])):
-                unknown.extend(_unknown_key_paths(raw_item, dumped_item, f"{where}[{i}]."))
+                unknown.extend(
+                    _unknown_key_paths(raw_item, dumped_item, f"{where}[{i}].", item_shape)
+                )
     return unknown
 
 
-def _unresolve_default_timezone(data: dict[str, Any]) -> None:
+def _list_item_shape(shape: _Shape, key: str) -> _Shape:
+    """La forma degli elementi della lista che il campo *key* di *shape* contiene."""
+    if shape is None or shape[0] != "model":
+        return None
+    model = shape[1]
+    field = field_for_input_key(model, key)
+    if field is None:
+        return None
+    finfo = model.model_fields[field]
+    annotation = finfo.resolved_type if finfo.resolved_type is not None else finfo.annotation
+    if get_origin(annotation) is list and get_args(annotation):
+        inner = _shape_of(get_args(annotation)[0])
+        if inner is not None and inner[0] == "model":
+            return inner
+    return None
+
+
+def _shadowed_key_paths(
+    raw: Any, prefix: str = "", shape: _Shape = ("model", Config)
+) -> list[str]:
+    """Le grafie di un campo che il modello **non** legge, perche' c'e' anche la sua.
+
+    ``max_tokens`` da solo si legge (e alla prossima scrittura diventa
+    ``maxTokens``); ``max_tokens`` accanto a ``maxTokens`` no: vince la grafia del
+    modello, e questa sparisce alla prossima scrittura. E' l'unico caso in cui un
+    valore scritto nel file non ha effetto, e va detto.
+    """
+    if not isinstance(raw, dict) or shape is None:
+        return []
+    shadowed: list[str] = []
+    for key, raw_value in raw.items():
+        where = f"{prefix}{key}"
+        role, child = _classify_key(shape, key)
+        if role == "synonym" and shape[0] == "model":
+            field = field_for_input_key(shape[1], key)
+            if field is not None and canonical_input_key(shape[1], field) in raw:
+                shadowed.append(where)
+        if isinstance(raw_value, dict):
+            shadowed.extend(_shadowed_key_paths(raw_value, f"{where}.", child))
+        elif isinstance(raw_value, list):
+            item_shape = _list_item_shape(shape, key)
+            for i, item in enumerate(raw_value):
+                shadowed.extend(_shadowed_key_paths(item, f"{where}[{i}].", item_shape))
+    return shadowed
+
+
+def _unresolve_default_timezone(data: dict[str, Any], config: Config) -> None:
     """Riporta a "auto" la timezone risolta prima della persistenza.
 
     ``load_config`` risolve la sentinella vuota nella timezone del device;
     senza questo passo ogni salvataggio la congelerebbe come valore esplicito
     (e smetterebbe di seguire i cambi di timezone del dispositivo). Se il
-    valore coincide con la timezone del device si riscrive ``""`` (= auto);
-    una scelta esplicita diversa viene persistita normalmente.
+    valore coincide con la timezone del device, o con quella che il
+    caricamento ha dato a ``""`` (``UTC`` quando il fuso non si rileva), si
+    riscrive ``""`` (= auto); una scelta esplicita diversa viene persistita
+    normalmente.
     """
     from jenny.runtime.context import get_runtime_context
 
-    device_tz = get_runtime_context().device_timezone
-    if not device_tz:
-        return
+    auto_values = {
+        get_runtime_context().device_timezone,
+        getattr(config, "_auto_timezone", None),
+    } - {None, ""}
     defaults = data.get("agents", {}).get("defaults")
-    if isinstance(defaults, dict) and defaults.get("timezone") == device_tz:
+    if isinstance(defaults, dict) and defaults.get("timezone") in auto_values:
         defaults["timezone"] = ""
 
 

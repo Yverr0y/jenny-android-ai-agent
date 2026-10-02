@@ -4,13 +4,13 @@ import asyncio
 import json
 import time
 import uuid
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, NamedTuple
 
-from filelock import SoftFileLock
+from filelock import SoftFileLock, Timeout
 from loguru import logger
 
 from jenny.cron.session_turns import is_bound_cron_job
@@ -32,12 +32,19 @@ from jenny.cron.types import (
 # non arriverebbe qui.
 from jenny.runtime import power
 from jenny.session.keys import normalize_user_session_key
+from jenny.utils.clock import now_ms as _now_ms
 from jenny.utils.path import atomic_write
 
 if TYPE_CHECKING:
     from jenny.cron.heartbeat_followup import HeartbeatFollowup
 
 _LockClass = SoftFileLock
+# Quanto aspettare il file lock del giornale prima di considerarlo stantio.
+# ``SoftFileLock`` e' un file creato con ``O_EXCL``: un processo ucciso dentro
+# il ``with`` — su Android e' il modo normale in cui il processo finisce — lo
+# lascia li', e senza timeout il prossimo avvio si pianta in ``_load_store``,
+# sincrono sull'event loop, watchdog compreso.
+_LOCK_TIMEOUT_S = 5.0
 
 
 class _LoadedStore(NamedTuple):
@@ -58,10 +65,6 @@ class _LoadedStore(NamedTuple):
 
 class CronJobSkippedError(Exception):
     """Raised by cron callbacks when a job was intentionally skipped."""
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
 
 
 _CRON_MODES: tuple[str, ...] = ("reminder", "monitor")
@@ -136,6 +139,19 @@ def _validate_mode_for_add(raw: Any) -> Literal["reminder", "monitor"]:
     return "monitor" if raw == "monitor" else "reminder"
 
 
+def _schedule_tzinfo(schedule: CronSchedule):
+    """Il fuso in cui leggere l'espressione: quello del job, o l'ora locale.
+
+    Una sola risoluzione per chi calcola la prossima esecuzione e per chi valida
+    all'aggiunta: due copie potevano divergere, e un job validato in un fuso
+    sarebbe poi scattato in un altro. ``safe_zoneinfo`` non solleva mai
+    (ripiego: l'offset locale, poi UTC).
+    """
+    from jenny.utils.helpers import safe_zoneinfo
+
+    return safe_zoneinfo(schedule.tz) if schedule.tz else datetime.now().astimezone().tzinfo
+
+
 def _compute_next_run(schedule: CronSchedule, now_ms: int) -> int | None:
     """Compute next run time in ms."""
     if schedule.kind == "at":
@@ -149,21 +165,29 @@ def _compute_next_run(schedule: CronSchedule, now_ms: int) -> int | None:
 
     if schedule.kind == "cron" and schedule.expr:
         try:
-            from croniter import croniter
+            from jenny.cron.cronexpr import next_after
 
-            from jenny.utils.helpers import safe_zoneinfo
             # Use caller-provided reference time for deterministic scheduling
             base_time = now_ms / 1000
-            # safe_zoneinfo non solleva mai (fallback: offset locale, poi UTC).
-            tz = safe_zoneinfo(schedule.tz) if schedule.tz else datetime.now().astimezone().tzinfo
-            base_dt = datetime.fromtimestamp(base_time, tz=tz)
-            cron = croniter(schedule.expr, base_dt)
-            next_dt = cron.get_next(datetime)
-            return int(next_dt.timestamp() * 1000)
+            base_dt = datetime.fromtimestamp(base_time, tz=_schedule_tzinfo(schedule))
+            # Non più croniter: v. il cappello di ``cronexpr`` per il perché.
+            return int(next_after(schedule.expr, base_dt).timestamp() * 1000)
         except Exception:
             return None
 
     return None
+
+
+def next_run_on_resume(job: CronJob, now_ms: int) -> int | None:
+    """Quando ripartirebbe *job* se lo riprendessi adesso; ``None`` = non puo'.
+
+    Da adesso e senza recupero: e' ``_compute_next_run``, non
+    ``_next_run_with_catch_up``. Un ``at`` scaduto durante la pausa torna
+    ``None``. Pubblica perche' la stessa domanda la fa il pannello
+    (``webui/cron_api.py``) per decidere se offrire «Riprendi»: una regola sola,
+    cosi' il bottone non compare dove il server poi rifiuterebbe.
+    """
+    return _compute_next_run(job.schedule, now_ms)
 
 
 def _next_run_with_catch_up(schedule: CronSchedule, now_ms: int) -> int | None:
@@ -205,6 +229,33 @@ def _validate_schedule_for_add(schedule: CronSchedule) -> None:
         # Degrada (accetta) quando il database tzdata manca del tutto.
         if msg := validate_timezone_name(schedule.tz):
             raise ValueError(msg)
+
+    if schedule.kind == "cron":
+        _validate_cron_expr(schedule)
+
+    # Un intervallo nullo o negativo: ``_compute_next_run`` torna ``None`` e il
+    # job nasceva abilitato ma muto, senza mai partire ne' dirlo.
+    if schedule.kind == "every" and (not schedule.every_ms or schedule.every_ms <= 0):
+        raise ValueError("an interval schedule needs a positive interval")
+
+
+def _validate_cron_expr(schedule: CronSchedule) -> None:
+    """Un'espressione che non si legge, o che non scatta mai, si rifiuta qui.
+
+    ``_compute_next_run`` inghiotte ogni errore e torna ``None``, ed e' giusto:
+    lo chiamano anche il boot e il timer, su job gia' salvati, e li' un'eccezione
+    non ha nessuno a cui arrivare. Ma all'aggiunta quel ``None`` diventava un job
+    abilitato che non parte mai e non lo dice — ``0 25 * * *`` accettato in
+    silenzio. Qui c'e' ancora qualcuno a cui dirlo.
+    """
+    from jenny.cron.cronexpr import next_after
+
+    if not schedule.expr:
+        raise ValueError("a cron schedule needs an expression")
+    try:
+        next_after(schedule.expr, datetime.now(_schedule_tzinfo(schedule)))
+    except ValueError as exc:
+        raise ValueError(f"invalid cron expression {schedule.expr!r}: {exc}") from None
 
 
 class CronService:
@@ -386,6 +437,7 @@ class CronService:
                 created_at_ms=j.get("createdAtMs", 0),
                 updated_at_ms=j.get("updatedAtMs", 0),
                 delete_after_run=j.get("deleteAfterRun", False),
+                paused_at_ms=j.get("pausedAtMs"),
             )
             jobs.append(job)
         return jobs, version
@@ -489,6 +541,7 @@ class CronService:
             return
 
         jobs_map = {j.id: j for j in self._store.jobs}
+
         def _update(params: dict):
             j = CronJob.from_dict(params)
             # Stessa tolleranza che ``_parse_jobs`` applica a jobs.json: il
@@ -510,7 +563,7 @@ class CronService:
             if job_id := params.get("job_id"):
                 jobs_map.pop(job_id, None)
 
-        with self._lock:
+        with self._locked():
             with open(self._action_path, "r", encoding="utf-8") as f:
                 changed = False
                 for line in f:
@@ -532,6 +585,31 @@ class CronService:
                 self._action_path.write_text("", encoding="utf-8")
                 self._save_store()
         return
+
+    @contextmanager
+    def _locked(self):
+        """Il file lock del giornale, con timeout e recupero del lock stantio.
+
+        Il lock difende ``action.jsonl`` fra istanze; il gateway gira in un
+        solo processo, quindi un lock che non si libera entro
+        ``_LOCK_TIMEOUT_S`` e' di un processo morto e va tolto. Un secondo
+        timeout dopo la rimozione propaga: meglio un avvio che fallisce
+        rumorosamente di uno che resta appeso per sempre.
+        """
+        try:
+            self._lock.acquire(timeout=_LOCK_TIMEOUT_S)
+        except Timeout:
+            logger.warning(
+                "Cron lock {} held for more than {}s: assuming a dead holder and removing it",
+                self._lock.lock_file, _LOCK_TIMEOUT_S,
+            )
+            with suppress(OSError):
+                Path(self._lock.lock_file).unlink()
+            self._lock.acquire(timeout=_LOCK_TIMEOUT_S)
+        try:
+            yield
+        finally:
+            self._lock.release()
 
     def _load_store(self) -> CronStore | None:
         """Load jobs from disk. Reloads automatically if file was modified externally.
@@ -635,6 +713,7 @@ class CronService:
                     "createdAtMs": j.created_at_ms,
                     "updatedAtMs": j.updated_at_ms,
                     "deleteAfterRun": j.delete_after_run,
+                    "pausedAtMs": j.paused_at_ms,
                 }
                 for j in self._store.jobs
             ]
@@ -858,7 +937,7 @@ class CronService:
         execution is running *inside* ``self._timer_task`` itself (mid-await
         in ``_on_timer``'s ``due_jobs`` loop -> ``_execute_job``). Cancelling
         and replacing the task here -- as would happen from an unrelated
-        ``add_job``/``remove_job``/``enable_job``/``update_job`` call made
+        ``add_job``/``remove_job`` call made
         while that job's agent turn is still running -- would abort the
         in-flight job mid-execution, lose its result, and leave its
         ``next_run_at_ms`` stale, causing a silent double-fire on the next
@@ -1017,12 +1096,34 @@ class CronService:
             ]
 
             for job in due_jobs:
+                # ``due_jobs`` e' la foto d'inizio giro, e ogni job prima di
+                # questo e' stato un turno d'agente: nel frattempo l'officina
+                # puo' averlo messo in pausa, eliminato o ripreso con una
+                # scadenza nuova. Durante il giro lo store non si ricarica
+                # (``_load_store`` con ``_timer_active``), quindi quei gesti
+                # hanno mutato proprio questi oggetti: basta riguardarli.
+                if not self._still_due(job, now):
+                    continue
                 await self._execute_job(job)
+                # Dopo **ogni** job, non a fine giro: un giro dura quanto la somma
+                # dei suoi turni d'agente, e un kill (o lo spegnimento, che
+                # cancella il job in corso) a meta' lasciava su disco i job gia'
+                # eseguiti ancora dovuti. Al riavvio ripartivano, compreso un
+                # promemoria ``at`` gia' consegnato.
+                self._save_store()
 
-            self._save_store()
+            if not due_jobs:
+                self._save_store()
         finally:
             self._timer_active = False
         self._arm_timer()
+
+    def _still_due(self, job: CronJob, now: int) -> bool:
+        """Il job e' ancora nello store, acceso e dovuto a *now*."""
+        if self._store is None or not any(j is job for j in self._store.jobs):
+            return False
+        next_run = job.state.next_run_at_ms
+        return bool(job.enabled and next_run and now >= next_run)
 
     @staticmethod
     def _reset_could_not_check(state: CronJobState) -> None:
@@ -1124,16 +1225,18 @@ class CronService:
             else:
                 job.enabled = False
                 job.state.next_run_at_ms = None
-        else:
+        elif job.paused_at_ms is None:
             # Compute next run
             job.state.next_run_at_ms = _compute_next_run(job.schedule, _now_ms())
+        # Altrimenti la pausa e' arrivata mentre il job stesso girava:
+        # ``set_paused`` ha gia' tolto la prossima esecuzione, e ricalcolarla qui
+        # lasciava un job «in pausa» con una scadenza armata nello store.
 
-    def _append_action(self, action: Literal["add", "del", "update"], params: dict):
+    def _append_action(self, action: Literal["add", "del"], params: dict):
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock:
+        with self._locked():
             with open(self._action_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps({"action": action, "params": params}, ensure_ascii=False) + "\n")
-
 
     # ========== Public API ==========
 
@@ -1276,6 +1379,59 @@ class CronService:
 
         return "not_found"
 
+    def set_paused(
+        self, job_id: str, paused: bool
+    ) -> Literal["paused", "resumed", "unchanged", "expired", "protected", "not_found"]:
+        """Mette in pausa un job dell'utente, o lo riprende.
+
+        La chiama la route dell'officina (``webui/cron_routes.py``), sullo stesso
+        servizio che usa il tool ``cron``: e' lo stesso imbuto di scrittura, non
+        un secondo scrittore. Stessa protezione di :meth:`remove_job` — un
+        ``system_event`` non e' dell'utente — e stesso modo di persistere:
+        ``jobs.json`` se il servizio gira, il giornale delle azioni se e' fermo.
+
+        - Pausa: spento, senza prossima esecuzione, con ``paused_at_ms``. Un job
+          gia' spento per un'altra ragione (``at`` eseguito, job senza sessione)
+          non si mette in pausa: ``unchanged``.
+        - Ripresa: la prossima esecuzione si conta **da adesso**, senza recupero
+          (``_compute_next_run``, non ``_next_run_with_catch_up``). Un «ogni ora»
+          ripreso dopo tre ore riparte fra un'ora; un ``at`` scaduto durante la
+          pausa torna ``expired`` e resta in pausa, perche' riprenderlo lo farebbe
+          scattare subito, in ritardo.
+        """
+        store = self._load_store()
+        job = next((j for j in store.jobs if j.id == job_id), None) if store else None
+        if job is None:
+            return "not_found"
+        if job.payload.kind == "system_event":
+            logger.info("Cron: refused to pause/resume protected system job {}", job_id)
+            return "protected"
+        now = _now_ms()
+        if paused:
+            if job.paused_at_ms is not None or not job.enabled:
+                return "unchanged"
+            job.enabled = False
+            job.state.next_run_at_ms = None
+            job.paused_at_ms = now
+        else:
+            if job.paused_at_ms is None:
+                return "unchanged"
+            next_run = next_run_on_resume(job, now)
+            if next_run is None:
+                return "expired"
+            job.enabled = True
+            job.paused_at_ms = None
+            job.state.next_run_at_ms = next_run
+        job.updated_at_ms = now
+        if self._running:
+            self._save_store()
+            self._arm_timer()
+        else:
+            # Il giornale tratta come upsert tutto cio' che non e' ``del``.
+            self._append_action("add", asdict(job))
+        logger.info("Cron: {} job '{}' ({})", "paused" if paused else "resumed", job.name, job.id)
+        return "paused" if paused else "resumed"
+
     def retire_system_job(self, job_id: str) -> bool:
         """Toglie un job di sistema che **questa versione non sa piu' eseguire**.
 
@@ -1314,69 +1470,6 @@ class CronService:
             job_id, dropped,
         )
         return True
-
-    def enable_job(self, job_id: str, enabled: bool = True) -> CronJob | None:
-        """Enable or disable a job."""
-        store = self._load_store()
-        for job in store.jobs:
-            if job.id == job_id:
-                job.enabled = enabled
-                job.updated_at_ms = _now_ms()
-                self._enforce_agent_binding(job)
-                if job.enabled:
-                    job.state.next_run_at_ms = _next_run_with_catch_up(job.schedule, _now_ms())
-                else:
-                    job.state.next_run_at_ms = None
-                if self._running:
-                    self._save_store()
-                    self._arm_timer()
-                else:
-                    self._append_action("update", asdict(job))
-                return job
-        return None
-
-    def update_job(
-        self,
-        job_id: str,
-        *,
-        name: str | None = None,
-        schedule: CronSchedule | None = None,
-        message: str | None = None,
-        delete_after_run: bool | None = None,
-    ) -> CronJob | Literal["not_found", "protected"]:
-        """Update mutable fields of an existing job. System jobs cannot be updated."""
-        store = self._load_store()
-        job = next((j for j in store.jobs if j.id == job_id), None)
-        if job is None:
-            return "not_found"
-        if job.payload.kind == "system_event":
-            return "protected"
-
-        if schedule is not None:
-            _validate_schedule_for_add(schedule)
-            job.schedule = schedule
-        if name is not None:
-            job.name = name
-        if message is not None:
-            job.payload.message = message
-        if delete_after_run is not None:
-            job.delete_after_run = delete_after_run
-        self._enforce_agent_binding(job)
-
-        job.updated_at_ms = _now_ms()
-        if job.enabled:
-            job.state.next_run_at_ms = _next_run_with_catch_up(job.schedule, _now_ms())
-        else:
-            job.state.next_run_at_ms = None
-
-        if self._running:
-            self._save_store()
-            self._arm_timer()
-        else:
-            self._append_action("update", asdict(job))
-
-        logger.info("Cron: updated job '{}' ({})", job.name, job.id)
-        return job
 
     async def run_job(self, job_id: str, force: bool = False) -> bool:
         """Manually run a job without disturbing the service's running state."""

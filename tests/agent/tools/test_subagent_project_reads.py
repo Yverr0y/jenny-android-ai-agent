@@ -54,7 +54,7 @@ def install(tmp_path: Path) -> Any:
     (root / "skills" / "llm-wiki").mkdir(parents=True, exist_ok=True)
     (root / _SKILL).write_text("# come si scrive una wiki\n", encoding="utf-8")
     (root / "AGENTS.md").write_text("# chi sono i miei agenti\n", encoding="utf-8")
-    project = root / "wikis" / "patreon"
+    project = root / "wikis" / "palestra"
     (project / "wiki").mkdir(parents=True)
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -109,7 +109,7 @@ async def _tools_inside(project: Path, *, writable: bool = True) -> dict[str, An
             path=str(root / "SOUL.md"), content="fuori"
         )
         probes["write_other_project"] = await write.execute(
-            path=str(root / "wikis" / "etf" / "nota.md"), content="fuori"
+            path=str(root / "wikis" / "etna" / "nota.md"), content="fuori"
         )
         probes["write_outside"] = await write.execute(
             path=str(project.parents[2] / "outside" / "nota.md"), content="fuori"

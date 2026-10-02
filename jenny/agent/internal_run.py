@@ -12,8 +12,7 @@ come «pure file I/O for memory files», e questa non è I/O sui file di memoria
 il giardiniere non ne apre nessuno. Prima erano ``@staticmethod``
 lì, e ``gardener.py`` importava ``MemoryStore`` dentro la funzione
 soltanto per raggiungerle — un import locale che non serviva a rompere un ciclo,
-ma a mascherare una collocazione sbagliata (v. la disciplina in
-``.agent/design.md``).
+ma a mascherare una collocazione sbagliata.
 
 ``MemoryStore`` ri-esporta i tre nomi come alias, quindi
 ``MemoryStore.internal_run_should_commit`` continua a funzionare: sono in uso nei

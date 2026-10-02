@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Path esposti dal FileProvider per l'apertura dei file del workspace col
-     viewer di sistema (JennyNative.openFile). Copre l'intero filesDir: la
-     validazione anti-traversal è fatta a monte nel bridge. Il cache-path
-     espone i file temporanei dello scatto foto (EXTRA_OUTPUT verso l'app
+<!-- Path esposti dal FileProvider. Il provider non è esportato: un file esce
+     solo con un permesso concesso da noi in un Intent.
+
+     workspace: i file che JennyNative.openFile/shareFile/saveToDownloads
+     passano al viewer o allo share sheet di sistema. Solo il workspace, non
+     tutto filesDir: fuori ci sono la chiave privata SSH (ssh/), lo store degli
+     snapshot e lo staging dei backup. Dentro il workspace config.json (chiavi
+     dei provider) non si può escludere da qui: lo rifiuta resolveLocalFile in
+     MainActivity, prima di chiedere l'Uri.
+
+     camera_temp: i file temporanei dello scatto foto (EXTRA_OUTPUT verso l'app
      fotocamera di sistema). -->
 <paths>
-    <files-path name="internal_files" path="." />
+    <files-path name="workspace" path="workspace/" />
     <cache-path name="camera_temp" path="camera/" />
 </paths>

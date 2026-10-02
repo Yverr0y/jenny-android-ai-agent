@@ -9,18 +9,15 @@ consegna il tap al bersaglio vero — e non fa niente in tutti gli altri casi.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 SELECTION_JS = ASSETS / "shared" / "selection.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 _HARNESS = """
 import assert from 'node:assert/strict';
@@ -99,13 +96,7 @@ def _harness() -> str:
 
 
 def _run_js(script: str) -> None:
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", _harness() + "\n" + script],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(_harness() + "\n" + script)
 
 
 def test_the_root_class_follows_the_selection() -> None:
@@ -182,4 +173,31 @@ def test_a_tap_on_the_text_itself_is_left_to_the_browser() -> None:
       fire('touchend', { changedTouches: [touch(100, 500)], preventDefault: () => prevented++ });
       assert.equal(prevented, 0);
       assert.equal(removedRanges, 0);
+    """)
+
+
+def test_a_selection_inside_a_field_is_not_a_reading_selection() -> None:
+    """``activeElement`` era sempre ``null`` qui, e
+    ``inEditableField`` non girava mai — toglierlo lasciava tutto verde. Un
+    campo col fuoco (il composer, un input, un ``contenteditable``) ha una sua
+    selezione, che non e' la lettura di una bolla: niente chrome trasparente."""
+    _run_js("""
+      exposeSelectionState();
+      const contains = () => true;
+      for (const active of [
+        { tagName: 'TEXTAREA' }, { tagName: 'INPUT' }, { tagName: 'DIV', isContentEditable: true },
+      ]) {
+        document.activeElement = active;
+        select();
+        assert.equal(hasSelection(), false, JSON.stringify(active));
+        assert.equal(selectionInside({ contains }), false, JSON.stringify(active));
+        assert.equal(root.cls.has('has-selection'), false, JSON.stringify(active));
+        deselect();
+      }
+      // E fuori dal campo la stessa selezione torna a contare.
+      document.activeElement = { tagName: 'BODY' };
+      select();
+      assert.equal(hasSelection(), true);
+      assert.equal(selectionInside({ contains }), true);
+      assert.equal(root.cls.has('has-selection'), true);
     """)

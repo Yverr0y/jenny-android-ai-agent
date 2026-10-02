@@ -1,6 +1,6 @@
 """Il cursore del giardiniere: cosa ha letto, e cosa non deve saltare.
 
-Passo **T4.1** di ``roadmap/taccuino-passi.md``. Qui non c'è nessun modello: c'è
+Passo **T4.1** del piano del taccuino. Qui non c'è nessun modello: c'è
 la domanda «di questo diario, cosa non ho ancora letto?» e la risposta su disco.
 
 Due test valgono più degli altri, e per la stessa ragione: **una riga di diario

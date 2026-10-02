@@ -5,7 +5,7 @@ per una versione piu' nuova, sbagliato per una chiave che questa versione ha
 tolto: resterebbe nel file per sempre, e con lei il warning «Config keys not
 recognised» a ogni caricamento. ``RETIRED_KEY_PATHS`` e' la terza specie, e la
 versione 2 dello schema fa riscrivere il file una volta all'avvio cosi' cadono
-al primo boot (v. ``.agent/retire-atlas-and-main-plan.md``, D2).
+al primo boot.
 
 Il meccanismo si prova con percorsi **sintetici** montati sulla lista: le due
 voci vere (``agents.defaults.atlas``, ``wiki.defaultWiki``) sono ancora campi
@@ -89,14 +89,14 @@ def test_a_truly_unknown_key_beside_them_still_warns(tmp_path, retired) -> None:
 
 
 async def test_the_first_boot_rewrites_the_file_without_them(tmp_path, retired) -> None:
-    """Versione 1 → 2: una scrittura sola, e le chiavi ritirate non ci sono piu'."""
+    """Una versione indietro: una scrittura sola, e le chiavi ritirate non ci sono piu'."""
     path = tmp_path / "config.json"
     _write(path, {**_LEGACY, "somethingFromTheFuture": {"keep": "me"}})
 
     assert await persist_schema_migrations(config_path=path) is True
 
     written = json.loads(path.read_text(encoding="utf-8"))
-    assert written["configVersion"] == CURRENT_CONFIG_VERSION == 2
+    assert written["configVersion"] == CURRENT_CONFIG_VERSION == 3
     assert "gone" not in written["agents"]["defaults"]
     assert "old_name" not in written["wiki"]
     # Quel che era vicino resta: i valori dell'utente e la chiave del futuro.
@@ -124,3 +124,62 @@ def test_the_real_retired_keys_load_without_a_warning(tmp_path) -> None:
     })
 
     assert _warnings_while(lambda: load_config_with_raw(path)) == []
+
+
+async def test_the_mood_model_preset_is_retired_for_real(tmp_path) -> None:
+    """La prima chiave ritirata che e' **davvero** uscita dallo schema.
+
+    ``mascotMoodModelPreset`` sceglieva il modello della richiesta dell'umore,
+    che dal 24/09/2026 non esiste piu' (l'umore si legge dagli emoji). Un file
+    che la porta ancora si carica senza avvisi, e alla prima scrittura
+    ordinaria la chiave cade mentre le vicine restano.
+    """
+    from jenny.config.store import mutate
+
+    path = tmp_path / "config.json"
+    _write(path, {
+        "configVersion": CURRENT_CONFIG_VERSION,
+        "agents": {"defaults": {
+            "mascotMood": True,
+            "mascotMoodModelPreset": "cheap",
+            "mascot_mood_model_preset": "cheap",
+        }},
+    })
+
+    assert _warnings_while(lambda: load_config_with_raw(path)) == []
+
+    def _deactivate(config) -> None:
+        config.agents.defaults.mascot_mood = False
+
+    await mutate(_deactivate, config_path=path)
+    defaults = json.loads(path.read_text(encoding="utf-8"))["agents"]["defaults"]
+    assert defaults["mascotMood"] is False
+    assert "mascotMoodModelPreset" not in defaults
+    assert "mascot_mood_model_preset" not in defaults
+
+
+async def test_the_wiki_extensions_are_retired(tmp_path) -> None:
+    """``wiki.extensions`` non l'ha mai letto nessuno: il renderer usava le sue.
+
+    Il dump scriveva anche i default, quindi ogni ``config.json`` sul telefono
+    la porta. Si carica senza avvisi e cade alla prima scrittura.
+    """
+    from jenny.config.store import mutate
+
+    path = tmp_path / "config.json"
+    _write(path, {
+        "configVersion": CURRENT_CONFIG_VERSION,
+        "wiki": {"enabled": True, "wikisDir": "wikis",
+                 "extensions": ["fenced_code", "tables", "toc", "wikilinks", "mermaid"]},
+    })
+
+    assert _warnings_while(lambda: load_config_with_raw(path)) == []
+
+    def _deactivate(config) -> None:
+        config.wiki.enabled = False
+
+    await mutate(_deactivate, config_path=path)
+    wiki = json.loads(path.read_text(encoding="utf-8"))["wiki"]
+    assert wiki["enabled"] is False
+    assert "extensions" not in wiki
+

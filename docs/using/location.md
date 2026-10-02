@@ -17,18 +17,20 @@ Two independent switches must both be on for any location data to reach Jenny at
 
 | Gate | Where | Default |
 |---|---|---|
-| In-app toggle | Settings → Tools → Location → **Share my location** | ON |
-| Android runtime permission | System permission prompt (`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`) | Requested at first launch |
+| In-app toggle | Workshop → **Hands** → **Location** → **Share my location** | ON |
+| Android runtime permission | System permission prompt (`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`, precise or approximate — either one is enough) | Requested at first launch |
 
-The Settings toggle is exactly this text, with the hint: "Jenny uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour."
+The toggle is exactly this text, with the hint (with her name, if you renamed her): "Jenny uses your phone's GPS to know where you are: the recent position is injected into context each message, a precise fix only on request. Requires the Android location permission. Locations shared via Telegram apply there only and expire after an hour."
 
-Important: **the in-app toggle does not request the Android permission.** It only flips `tools.location.enable` in the backend config. The permission itself is asked once, separately, when the app starts up (alongside the notification permission) — not from this toggle. If you denied it at that point, turning the in-app toggle ON later does nothing: the native bridge always returns nothing without the permission, and the toggle has no way to trigger the system prompt itself. In that case go to Android's own app settings (Settings → Apps → Jenny → Permissions → Location) to grant it.
+The toggle flips `tools.location.enable` in the backend config; the permission is Android's. It is first asked when the app starts up, right after the notification permission, and Android offers both **Precise** and **Approximate** — either one is enough for Jenny.
+
+If the toggle is on but Android hasn't granted the permission, **Hands → Location** says so under the toggle — *"Android hasn't allowed Jenny to use the location yet"* — with an **Allow location** button. Tapping it, or turning the toggle on while the permission is missing, asks Android again. Once Android stops asking (after you've refused twice, or chose "Don't ask again"), the same button opens Jenny's page in Android's settings instead, where the permission is granted under **Permissions → Location**. The notice disappears as soon as the permission is there.
 
 If you ask Jenny for your location while either gate is off, the `get_location` tool replies with an explicit error rather than failing silently:
 
 > "Location unavailable — the toggle may be off, the Android location permission not granted, or no GPS fix is currently known."
 
-The passive context line, on the other hand, fails silently by design: it is just omitted, with no error and nothing shown in the chat. <!-- TODO: verify on-device (O-10): confirm the Settings toggle's visual state and the get_location error text when the Android permission has been denied, and whether the app ever re-prompts for it. -->
+The passive context line, on the other hand, fails silently by design: it is just omitted, with no error and nothing shown in the chat.
 
 Jenny never requests background location access (`ACCESS_BACKGROUND_LOCATION`) — reads only happen while the app's foreground service is alive, which on Android is the same lifetime as the gateway itself (see [Android permissions](../reference/android-permissions.md)).
 
@@ -46,13 +48,13 @@ If you share a location (or a venue) from inside the paired Telegram chat, Jenny
 - For up to `telegramTtlS` (default 3600 seconds = 1 hour, minimum 60), every reply sent through Telegram uses that shared position instead of the phone's GPS. The context line reads `User location (shared via Telegram): <place> (lat, lng)` instead of the usual "Device location" line.
 - Once the hour is up, Telegram falls back to the phone's live GPS, exactly like the WebUI already does. The WebUI is never affected by a Telegram location share.
 - The override is kept only in memory — it does not survive an app restart, and there is no per-chat persistence beyond that TTL.
-- If the location toggle is off, sharing a location in Telegram is not recorded at all, and the bot replies with its generic "photos, voice notes, and documents are coming soon" message — which is misleading here (it's really about location being disabled, not about unsupported media), so don't read that reply as a media limitation in this specific case.
+- If the location toggle is off, sharing a location in Telegram is not recorded at all, and the bot replies with the generic "🤷 I can't handle this kind of message yet." it uses for unsupported message types — which is misleading here (it's really about location being disabled, not about unsupported media), so don't read that reply as a media limitation in this specific case.
 
 See [Telegram bridge](telegram.md) for the rest of what Telegram can and cannot do.
 
 ## Configuration
 
-The Settings screen only exposes the on/off toggle. The other two fields are config-only today — edit `workspace/config.json` and restart the app to change them.
+The workshop only exposes the on/off toggle. The other two fields are config-only today — edit `workspace/config.json` and restart the app to change them.
 
 | Config key (camelCase) | Default | Meaning |
 |---|---|---|
@@ -66,14 +68,14 @@ See [Configuration reference](../reference/configuration.md) for the snake_case 
 
 To stop location data from reaching Jenny entirely, do either of these (both work; the toggle is the quicker one):
 
-- **In-app:** Settings → Tools → Location → turn off **Share my location**. The toast confirms "Location disabled". This flips `tools.location.enable` to `false` immediately, no restart needed — both the context line and the `get_location` tool go dark right away.
+- **In-app:** in the workshop, **Hands** → **Location** → turn off **Share my location**. The toast confirms "Location disabled". This flips `tools.location.enable` to `false` immediately, no restart needed — both the context line and the `get_location` tool go dark right away.
 - **Android permission:** revoke Location for Jenny from the system app settings. This achieves the same result at the OS level regardless of what the in-app toggle says, since the native bridge cannot return anything without it.
 
 Turning either one off does not retroactively remove location lines already sent to your provider in past turns — it only stops new ones going forward.
 
 ## Related pages
 
-- [Settings](../reference/settings.md) — the Tools section and what else lives there.
+- [Settings](../reference/settings.md#location) — the Location group in the workshop's Hands drawer, and what else lives there.
 - [Telegram bridge](telegram.md) — the location-sharing override in context, and what Telegram can/cannot receive.
 - [Android permissions](../reference/android-permissions.md) — the full permission table and what happens if you deny each one.
 - [Privacy](../internals/privacy.md) — everywhere your data can leave the device, location included.

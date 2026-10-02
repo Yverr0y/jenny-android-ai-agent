@@ -15,7 +15,6 @@ from jenny.config.schema import Config
 class MockChannel:
     def __init__(self, name: str, *, send_progress: bool = True) -> None:
         self.name = name
-        self.display_name = name
         self.send_progress = send_progress
         self.send_tool_hints = send_progress
         self.show_reasoning = False
@@ -125,6 +124,67 @@ async def test_progress_not_delivered_to_channel_that_declines() -> None:
 
     assert tg.sent == []
     assert len(ws.sent) == 1
+
+
+_START = [{"version": 1, "phase": "start", "call_id": "c1", "name": "web_search"}]
+
+
+async def test_tool_start_reaches_a_channel_without_tool_hints_minus_the_hint() -> None:
+    """Con ``sendToolHints`` spento il suggerimento resta fuori, gli strumenti no.
+
+    Il ``tool_hint`` e' l'unico frame che dice quali strumenti partono: buttarlo
+    intero lasciava alla WebUI i soli ``end``, e la riga di lavoro della casa
+    non si riaccendeva mai durante un giro di strumenti.
+    """
+    d = WebSocketDispatcher(Config(), MessageBus())
+    ws = MockChannel("websocket")
+    ws.send_tool_hints = False
+    d.channels["websocket"] = ws
+
+    await d.bus.publish_outbound(
+        OutboundMessage(
+            channel="websocket", chat_id="project:orto", content='web_search("gatti")',
+            metadata={"_progress": True, "_tool_hint": True, "_tool_events": _START},
+        )
+    )
+    await _pump(d, lambda: ws.sent)
+
+    assert len(ws.sent) == 1
+    sent = ws.sent[0]
+    assert sent.content == ""
+    assert sent.chat_id == "project:orto"
+    assert sent.metadata["_tool_hint"] is False
+    assert sent.metadata["_progress"] is True
+    assert sent.metadata["_tool_events"] == _START
+
+
+async def test_a_bare_tool_hint_stays_dropped_and_progress_gating_still_wins() -> None:
+    """Un suggerimento senza strumenti resta scartato come prima, e dove i
+    progress sono spenti (Telegram) non passano nemmeno gli strumenti."""
+    d = WebSocketDispatcher(Config(), MessageBus())
+    ws = MockChannel("websocket")
+    ws.send_tool_hints = False
+    tg = MockChannel("telegram", send_progress=False)
+    d.channels["websocket"] = ws
+    d.channels["telegram"] = tg
+
+    await d.bus.publish_outbound(
+        OutboundMessage(
+            channel="websocket", chat_id="1", content="subagent started: fix parser",
+            metadata={"_progress": True, "_tool_hint": True},
+        )
+    )
+    await d.bus.publish_outbound(
+        OutboundMessage(
+            channel="telegram", chat_id="42", content="web_search(…)",
+            metadata={"_progress": True, "_tool_hint": True, "_tool_events": _START},
+        )
+    )
+    await d.bus.publish_outbound(OutboundMessage(channel="websocket", chat_id="1", content="fine"))
+    await _pump(d, lambda: ws.sent)
+
+    assert [m.content for m in ws.sent] == ["fine"]
+    assert tg.sent == []
 
 
 def test_coordination_flags_are_single_source_for_both_lists() -> None:

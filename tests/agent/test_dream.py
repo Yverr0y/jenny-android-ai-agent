@@ -64,15 +64,56 @@ class TestBuildDreamPrompt:
         prompt = result.prompt
         assert "skill-creator" in prompt
 
-    def test_truncates_long_entries(self, store):
-        long_content = "x" * 2000
-        store.append_history(long_content)
+    def test_a_long_entry_reaches_the_prompt_whole(self, store):
+        """Niente taglio per voce.
+
+        Fino al 26/09 ogni voce passava da ``truncate_text(..., 500)`` e il cursore
+        avanzava oltre: i fatti dopo il cinquecentesimo carattere di un riassunto
+        non arrivavano mai in memoria, e sul telefono circa meta' delle voci
+        superava quel tetto.
+        """
+        facts = [f"- [durable] fatto inventato numero {i:02d}: " + "dettaglio " * 5 + "fine"
+                 for i in range(12)]
+        store.append_history("\n".join(facts))
         result = store.build_dream_prompt()
         assert result is not None
-        prompt = result.prompt
-        # The full 2000 chars should not appear — truncated to 500
-        assert long_content not in prompt
-        assert "x" * 500 in prompt
+        history = MemoryStore.dream_prompt_history(result.prompt)
+        assert all(fact in history for fact in facts)
+        assert result.cursor == 1
+
+    def test_the_batch_is_bounded_in_chars_with_whole_entries(self, store):
+        """Il batch si limita in caratteri: meno voci per run, ma intere."""
+        for i in range(4):
+            store.append_history(f"voce-{i} " + "y" * 590)
+        result = store.build_dream_prompt(max_chars=1500)
+        assert result is not None
+        history = MemoryStore.dream_prompt_history(result.prompt)
+        assert result.cursor == 2
+        assert "voce-0 " + "y" * 590 in history
+        assert "voce-1 " + "y" * 590 in history
+        assert "voce-2" not in history
+
+        # La voce che non ci stava apre il run seguente: niente e' saltato.
+        store.set_last_dream_cursor(result.cursor)
+        nxt = store.build_dream_prompt(max_chars=1500)
+        assert nxt is not None and nxt.cursor == 4
+        assert "voce-2 " + "y" * 590 in MemoryStore.dream_prompt_history(nxt.prompt)
+
+    def test_an_entry_longer_than_the_budget_goes_alone_and_whole(self, store):
+        store.append_history("enorme " + "z" * 3000)
+        store.append_history("piccola")
+        result = store.build_dream_prompt(max_chars=1000)
+        assert result is not None
+        history = MemoryStore.dream_prompt_history(result.prompt)
+        assert result.cursor == 1
+        assert "enorme " + "z" * 3000 in history
+        assert "piccola" not in history
+
+    def test_max_entries_still_caps_the_batch(self, store):
+        for i in range(5):
+            store.append_history(f"corta-{i}")
+        result = store.build_dream_prompt(max_entries=3)
+        assert result is not None and result.cursor == 3
 
     def test_batches_oldest_unprocessed_entries_first(self, store):
         for i in range(25):
@@ -367,6 +408,26 @@ class TestDreamReviewState:
     def test_corrupted_state_reads_as_zero_without_raising(self, store, payload):
         store._review_state_file.write_text(payload, encoding="utf-8")
         assert store.get_review_state() == (0, 0)
+        # Le altre due letture dello stesso file seguono la stessa regola.
+        assert store.get_nothing_new_runs() == 0
+        assert store.get_review_forced_at_stuck() == 0
+
+    def test_bytes_that_are_not_utf8_read_as_zero(self, store):
+        """Un file scritto a meta' puo' finire in mezzo a un carattere multibyte:
+        la decodifica fallisce con un ``ValueError``, non un ``OSError``, e fino al
+        24/09/2026 ``get_review_state`` lo lasciava uscire."""
+        store._review_state_file.write_bytes(b'{"runs_since_review": 3, "x": "\xe8\xff')
+        assert store.get_review_state() == (0, 0)
+        assert store.get_nothing_new_runs() == 0
+        assert store.get_review_forced_at_stuck() == 0
+
+    def test_the_four_fields_round_trip(self, store):
+        store.set_review_state(
+            runs_since_review=5, stuck_runs=2, forced_at_stuck=2, nothing_new_runs=3,
+        )
+        assert store.get_review_state() == (5, 2)
+        assert store.get_review_forced_at_stuck() == 2
+        assert store.get_nothing_new_runs() == 3
 
     def test_partial_state_keeps_the_readable_half(self, store):
         store._review_state_file.write_text(
@@ -654,7 +715,7 @@ class TestDreamTools:
         )
         user_result = await tools.execute(
             "edit_file",
-            {"path": "USER.md", "old_text": "(unset)", "new_text": "Ludovico"},
+            {"path": "USER.md", "old_text": "(unset)", "new_text": "Marco"},
         )
 
         assert "Successfully edited" in soul_result, soul_result
@@ -662,7 +723,7 @@ class TestDreamTools:
         assert "Successfully edited" in user_result, user_result
         assert "Precise" in store.soul_file.read_text(encoding="utf-8")
         assert "Project Y active" in store.memory_file.read_text(encoding="utf-8")
-        assert "Ludovico" in store.user_file.read_text(encoding="utf-8")
+        assert "Marco" in store.user_file.read_text(encoding="utf-8")
 
 
 class TestWriteFileSaysWhatThePromptSays:

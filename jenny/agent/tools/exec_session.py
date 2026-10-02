@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import atexit
 import sys
 import threading
@@ -19,7 +20,7 @@ from jenny.agent.tools.schema import (
     StringSchema,
     tool_parameters_schema,
 )
-from jenny.config.tool_schemas import PythonExecConfig
+from jenny.utils.helpers import truncate_head_tail
 
 DEFAULT_YIELD_MS = 1000
 MAX_YIELD_MS = 30_000
@@ -27,6 +28,8 @@ DEFAULT_WAIT_FOR_MS = 10_000
 MAX_WAIT_FOR_MS = 120_000
 DEFAULT_MAX_OUTPUT_CHARS = 10_000
 MAX_OUTPUT_CHARS = 50_000
+# Passo dell'attesa asincrona in ``_PythonSession.poll``.
+_POLL_STEP_S = 0.05
 
 
 @dataclass(slots=True)
@@ -104,7 +107,6 @@ class _PythonSession:
         self._error: str | None = None
         self._timed_out = False
         self._terminated = False
-        self._result: Any = None
         self._exit_code: int | None = None
         self._stop_event = threading.Event()
 
@@ -206,11 +208,24 @@ class _PythonSession:
                 if self._exit_code is None:
                     self._exit_code = 0
 
-    def poll(self, yield_time_ms: int, max_output_chars: int) -> _SessionPoll:
+    async def poll(self, yield_time_ms: int, max_output_chars: int) -> _SessionPoll:
+        """Aspetta fino a ``yield_time_ms`` (o la fine del thread) e raccoglie l'output.
+
+        L'attesa è un ``asyncio.sleep`` a passi brevi, mai un ``time.sleep``:
+        questo metodo gira sul thread dell'event loop, e un sonno bloccante qui
+        fermava tutto il gateway per la durata dell'attesa.
+        A ogni passo si guarda ``_done``, così un codice che finisce
+        prima non paga l'attesa intera.
+        """
         self.last_access = time.monotonic()
 
         if yield_time_ms > 0 and not self._done:
-            time.sleep(min(yield_time_ms, MAX_YIELD_MS) / 1000)
+            until = time.monotonic() + min(yield_time_ms, MAX_YIELD_MS) / 1000
+            while not self._done:
+                remaining = until - time.monotonic()
+                if remaining <= 0:
+                    break
+                await asyncio.sleep(min(_POLL_STEP_S, remaining))
 
         if not self._done and time.monotonic() >= self.deadline:
             # Percorso deadline: segnala lo stop al thread e marca SOLO
@@ -223,12 +238,7 @@ class _PythonSession:
             output = "".join(self._output_chunks)
             self._output_chunks.clear()
 
-        # Truncate
-        truncated = 0
-        if len(output) > max_output_chars:
-            half = max_output_chars // 2
-            truncated = len(output) - max_output_chars
-            output = output[:half] + f"\n\n... ({truncated:,} chars truncated) ...\n\n" + output[-half:]
+        output, truncated = truncate_head_tail(output, max_output_chars)
 
         return _SessionPoll(
             output=output,
@@ -313,7 +323,7 @@ class ExecSessionManager:
         )
         self._python_sessions[session_id] = session
 
-        poll = session.poll(yield_time_ms, max_output_chars)
+        poll = await session.poll(yield_time_ms, max_output_chars)
         if poll.done:
             self._python_sessions.pop(session_id, None)
         return session_id, poll
@@ -364,7 +374,7 @@ class ExecSessionManager:
         if terminate:
             session.terminate()
 
-        poll = session.poll(yield_time_ms, max_output_chars)
+        poll = await session.poll(yield_time_ms, max_output_chars)
         if poll.done:
             self._python_sessions.pop(session_id, None)
         return poll
@@ -388,8 +398,6 @@ class ExecSessionManager:
             or not s.owner_session_key
             or s.owner_session_key == owner_session_key
         ]
-
-
 
 
 DEFAULT_EXEC_SESSION_MANAGER = ExecSessionManager()
@@ -443,6 +451,39 @@ def format_session_poll(session_id: str, poll: _SessionPoll) -> str:
     return "\n".join(parts) if parts else "(no output yet)"
 
 
+class PythonExecGateMixin:
+    """L'interruttore di ``python_exec``, per lui e per le sue sessioni.
+
+    Senza la sezione in config si resta accesi (è il default storico); con la
+    sezione vale ``enable``. Era copiato identico in tre classi. Qui e non in
+    ``python_exec.py`` perché è quello a importare questo modulo.
+    """
+
+    @classmethod
+    def enabled(cls, ctx: Any) -> bool:
+        cfg = getattr(ctx.config, "python_exec", None)
+        if cfg is None:
+            return True
+        return cfg.enable
+
+
+class _ExecSessionTool(PythonExecGateMixin, Tool):
+    """Base dei due tool che guardano le sessioni: stesso gestore, stesso scope."""
+
+    _scopes = {"core", "subagent"}
+
+    def __init__(
+        self,
+        *,
+        manager: ExecSessionManager | None = None,
+    ) -> None:
+        self._manager = manager or DEFAULT_EXEC_SESSION_MANAGER
+
+    @classmethod
+    def create(cls, ctx: Any) -> Tool:
+        return cls()
+
+
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
@@ -455,7 +496,6 @@ def format_session_poll(session_id: str, poll: _SessionPoll) -> str:
             default=False,
         ),
         yield_time_ms=IntegerSchema(
-            DEFAULT_YIELD_MS,
             description="Milliseconds to wait before returning recent output (default 1000, max 30000).",
             minimum=0,
             maximum=MAX_YIELD_MS,
@@ -465,48 +505,50 @@ def format_session_poll(session_id: str, poll: _SessionPoll) -> str:
             nullable=True,
         ),
         wait_timeout_ms=IntegerSchema(
-            DEFAULT_WAIT_FOR_MS,
             description="Maximum milliseconds to wait for wait_for text (default 10000, max 120000).",
             minimum=0,
             maximum=MAX_WAIT_FOR_MS,
             nullable=True,
         ),
         max_output_chars=IntegerSchema(
-            DEFAULT_MAX_OUTPUT_CHARS,
-            description="Maximum output characters to return from this poll (default 10000, max 50000).",
+            description=(
+                "Maximum output characters to return from this poll "
+                "(default: the python_exec output limit, max 50000)."
+            ),
             minimum=1000,
             maximum=MAX_OUTPUT_CHARS,
         ),
         required=["session_id"],
     )
 )
-class WriteStdinTool(Tool):
-    """Poll, wait for output, or terminate a running Python exec session."""
+class WriteStdinTool(_ExecSessionTool):
+    """Poll, wait for output, or terminate a running Python exec session.
 
-    _scopes = {"core", "subagent"}
-    config_key = "python_exec"
-
-    @classmethod
-    def config_cls(cls):
-        return PythonExecConfig
-
-    @classmethod
-    def enabled(cls, ctx: Any) -> bool:
-        cfg = getattr(ctx.config, "python_exec", None)
-        if cfg is None:
-            return True
-        return cfg.enable
+    Senza ``max_output_chars`` il tetto è quello di ``python_exec``
+    (``tools.pythonExec.maxOutputChars``), non la costante da 10.000: la
+    sessione nasce da ``python_exec`` con quel tetto, e un poll che ne usasse
+    un altro tagliava l'output di una sessione che la sua prima risposta
+    mostrava intero.
+    """
 
     def __init__(
         self,
         *,
         manager: ExecSessionManager | None = None,
+        default_max_output_chars: int | None = None,
     ) -> None:
-        self._manager = manager or DEFAULT_EXEC_SESSION_MANAGER
+        super().__init__(manager=manager)
+        self._default_max_output_chars = clamp_session_int(
+            default_max_output_chars, DEFAULT_MAX_OUTPUT_CHARS, 1000, MAX_OUTPUT_CHARS,
+        )
 
     @classmethod
     def create(cls, ctx: Any) -> Tool:
-        return cls()
+        cfg = getattr(ctx.config, "python_exec", None)
+        value = getattr(cfg, "max_output_chars", None)
+        if not isinstance(value, int) or isinstance(value, bool):
+            value = None
+        return cls(default_max_output_chars=value)
 
     @property
     def exclusive(self) -> bool:
@@ -539,7 +581,7 @@ class WriteStdinTool(Tool):
         try:
             output_limit = clamp_session_int(
                 max_output_chars,
-                DEFAULT_MAX_OUTPUT_CHARS,
+                self._default_max_output_chars,
                 1000,
                 MAX_OUTPUT_CHARS,
             )
@@ -607,33 +649,8 @@ class WriteStdinTool(Tool):
 
 
 @tool_parameters(tool_parameters_schema())
-class ListExecSessionsTool(Tool):
+class ListExecSessionsTool(_ExecSessionTool):
     """List active exec sessions."""
-
-    _scopes = {"core", "subagent"}
-    config_key = "python_exec"
-
-    @classmethod
-    def config_cls(cls):
-        return PythonExecConfig
-
-    @classmethod
-    def enabled(cls, ctx: Any) -> bool:
-        cfg = getattr(ctx.config, "python_exec", None)
-        if cfg is None:
-            return True
-        return cfg.enable
-
-    def __init__(
-        self,
-        *,
-        manager: ExecSessionManager | None = None,
-    ) -> None:
-        self._manager = manager or DEFAULT_EXEC_SESSION_MANAGER
-
-    @classmethod
-    def create(cls, ctx: Any) -> Tool:
-        return cls()
 
     @property
     def name(self) -> str:

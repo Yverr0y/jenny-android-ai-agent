@@ -1,0 +1,150 @@
+"""La regola che divide le skill in Mani, eseguita davvero sotto node.
+
+``shared/skills-view.js`` è puro per questo: la riga in cassetto e il pannello
+leggono la stessa funzione, e qui la si prova senza telefono. Stesso idioma di
+``test_launcher_rank_client.py``.
+
+La domanda dietro ogni caso è una: **un interruttore su questa skill
+sopravvive al riavvio?** Le integrate vengono ri-estratte dall'APK a ogni
+avvio, quindi no — e un interruttore che mente è peggio di un lucchetto.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from support.js_harness import locale, requires_node, run_js
+
+VIEW_JS = (
+    Path(__file__).resolve().parents[2]
+    / "jenny" / "templates" / "ui" / "assets" / "shared" / "skills-view.js"
+)
+
+
+pytestmark = requires_node
+
+
+def _run_js(script: str) -> None:
+    source = (
+        VIEW_JS.read_text(encoding="utf-8")
+        + "\nimport assert from 'node:assert/strict';\n"
+        + script
+    )
+    run_js(source)
+
+
+def test_each_kind_of_skill_lands_where_the_plan_says() -> None:
+    """Una voce per riga della tabella «Le regole di divisione»."""
+    _run_js(
+        """
+        const skills = [
+          { name: 'memory', bundled: true, internal: true, locked: false },
+          { name: 'cron', bundled: true, internal: false, locked: true },
+          { name: 'mia-bloccata', bundled: false, internal: false, locked: true },
+          { name: 'mia', bundled: false, internal: false, locked: false },
+          { name: 'mia-di-servizio', bundled: false, internal: true, locked: false },
+        ];
+        const { yours, integrate, service } = splitSkill(skills);
+        assert.deepEqual(yours.map(s => s.name), ['mia-bloccata', 'mia']);
+        assert.deepEqual(integrate.map(s => s.name), ['cron']);
+        assert.equal(service, 2);
+        """
+    )
+
+
+def test_only_your_unlocked_skills_get_a_switch() -> None:
+    _run_js(
+        """
+        assert.equal(controllable({ bundled: false, internal: false, locked: false }), true);
+        assert.equal(controllable({ bundled: true, internal: false, locked: false }), false,
+          'una integrata senza lucchetto resta comunque ri-estratta al riavvio');
+        assert.equal(controllable({ bundled: false, internal: false, locked: true }), false);
+        assert.equal(controllable({ bundled: false, internal: true, locked: false }), false);
+        """
+    )
+
+
+def test_a_payload_without_skills_divides_into_nothing() -> None:
+    _run_js(
+        """
+        assert.deepEqual(splitSkill([]), { yours: [], integrate: [], service: 0 });
+        assert.deepEqual(splitSkill(undefined), { yours: [], integrate: [], service: 0 });
+        """
+    )
+
+
+def test_the_summary_speaks_the_interface_language_then_falls_back() -> None:
+    _run_js(
+        """
+        const both = { name: 'cron', description: 'Schedule reminders.',
+                       user_summary: { it: 'Promemoria', en: 'Reminders' } };
+        assert.equal(skillBlurb(both, 'en'), 'Reminders');
+        assert.equal(skillBlurb(both, 'it'), 'Promemoria');
+        assert.equal(skillBlurb({ ...both, user_summary: { en: 'Reminders' } }, 'it'),
+          'Reminders');
+        assert.equal(skillBlurb({ ...both, user_summary: null }, 'it'), 'Schedule reminders.');
+        """
+    )
+
+
+def test_a_bundled_skill_takes_its_summary_from_i18n() -> None:
+    """Le integrate non portano più ``user_summary``: il modello leggeva l'italiano
+    nel frontmatter. Il riassunto viene da ``skills.userSummary.<nome>``, e una
+    chiave mancante (``t`` la restituisce uguale) ripiega sul resto."""
+    _run_js(
+        """
+        const dict = { 'skills.userSummary.cron': 'Promemoria' };
+        const t = (k) => dict[k] ?? k;
+        const cron = { name: 'cron', bundled: true, description: 'Schedule reminders.' };
+        assert.equal(skillBlurb(cron, 'it', t), 'Promemoria');
+        assert.equal(skillBlurb({ ...cron, name: 'memory' }, 'it', t), 'Schedule reminders.');
+        assert.equal(skillBlurb(cron, 'it'), 'Schedule reminders.',
+          'senza t si comporta come prima');
+        const mine = { name: 'cron', bundled: false, description: 'Mine.',
+                       user_summary: { it: 'La mia' } };
+        assert.equal(skillBlurb(mine, 'it', t), 'La mia',
+          'una skill tua con lo stesso nome non prende il riassunto della integrata');
+        """
+    )
+
+
+def test_the_summary_never_repeats_the_name() -> None:
+    """Senza descrizione il server ripiega sul nome: sotto il nome non va."""
+    _run_js(
+        """
+        assert.equal(skillBlurb({ name: 'mia', description: 'mia' }, 'it'), '');
+        assert.equal(skillBlurb({ name: 'mia', description: '  ' }, 'it'), '');
+        assert.equal(skillBlurb({ name: 'mia' }, 'it'), '');
+        """
+    )
+
+
+def test_the_drawer_row_has_two_forms() -> None:
+    _run_js(
+        """
+        const t = (k, v) => `${k}:${JSON.stringify(v)}`;
+        assert.equal(skillsSummary({ yours: [{}, {}], integrate: [{}] }, t),
+          'skills.summary:{"integrate":1,"yours":2}');
+        assert.equal(skillsSummary({ yours: [], integrate: [{}, {}] }, t),
+          'skills.summaryNoneYours:{"integrate":2}');
+        """
+    )
+
+
+def test_the_lock_says_why_in_two_different_ways() -> None:
+    """Una skill tua con `locked` non «viene con l'app»: il lucchetto deve dire
+    il motivo vero, e la chiave deve esistere nelle due lingue."""
+    _run_js(
+        """
+        assert.equal(blockReason({ bundled: true, locked: false }), 'skills.builtInLocked');
+        assert.equal(blockReason({ bundled: true, locked: true }), 'skills.builtInLocked');
+        assert.equal(blockReason({ bundled: false, locked: true }), 'skills.yoursLocked');
+        """
+    )
+    for language in ("it", "en"):
+        entries = locale(language)["skills"]
+        assert entries["yoursLocked"] and entries["yoursLocked"] != entries["builtInLocked"]
+    settings = (VIEW_JS.parents[1] / "mobile-settings.js").read_text(encoding="utf-8")
+    assert "i18n.t('skills.builtInLocked')" not in settings, (
+        "il lucchetto della riga dice di nuovo «Viene con l'app» a tutte"
+    )

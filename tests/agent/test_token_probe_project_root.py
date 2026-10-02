@@ -1,6 +1,6 @@
 """La sonda dei token misura il prompt che il turno costruira' davvero.
 
-Passo **T3.8** di ``roadmap/audit-taccuino-corrections.md``.
+Passo **T3.8** delle correzioni al taccuino.
 
 ``Consolidator.estimate_session_prompt_tokens`` chiamava ``build_messages``
 **senza** ``workspace=``: per una sessione ``project:*`` il prompt di prova

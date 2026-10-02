@@ -9,13 +9,20 @@ c'è di proposito: il contenuto di un file non può viaggiare su questo trasport
 (l'hook di handshake di ``websockets`` non legge body; query string e header
 stanno in 8192 byte per riga e in ISO-8859-1), quindi ``workspace.write`` è un
 comando dell'RPC WebSocket — v. ``webui.commands`` e ``channels.ws_rpc``.
+
+Non ci sono nemmeno cancellazione, rinomina e copia: fino al 26/09/2026 erano
+GET di questo router, cioe' scritture sul disco su una superficie di sola
+lettura. Sono i comandi ``workspace.delete``/``rename``/``copy``, autenticati
+all'handshake. Resta ``mkdir``, un parametro corto e idempotente.
 """
 
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import quote
 
 from websockets.datastructures import Headers
 from websockets.http11 import Request as WsRequest
@@ -30,75 +37,11 @@ from jenny.channels.http_utils import (
 
 # A livello di modulo perché ora la traduce ``dispatch``; il resto di
 # ``workspace_files`` resta importato dentro gli handler.
-from jenny.webui.workspace_files import WorkspaceBinaryFileError
-
-QueryParams = dict[str, list[str]]
-
-
-
-def _project_delete_refusal(workspace_root: Path, target: Path) -> str | None:
-    """Il motivo per cui *target* non si cancella da qui, o ``None``.
-
-    **La delete del file manager non deve poter cancellare un progetto**, e il
-    perche' non e' che sia pericolosa: e' che e' *parziale*. Un progetto vive in
-    due domini — l'albero sotto ``wikis/<nome>/`` e le quattro tracce della sua
-    conversazione, che stanno altrove (v.
-    ``session/project_rename.py::project_trace_paths``). Una ``rmtree`` raggiunge
-    il primo e non sa del secondo, quindi libera il *nome* senza liberare la
-    conversazione: il progetto successivo creato con quel nome se la riprende
-    tutta. Riprodotto sul telefono il 24/08/2026.
-
-    Il rifiuto **dice dove**, che e' la forma degli altri rifiuti di questo
-    codice (``command/builtin.py::_gardener_no_target``, il rifiuto di
-    ``journal_append`` fuori da un progetto): su un telefono un divieto che non
-    indica la strada e' un vicolo cieco.
-
-    Due bersagli, non uno. La radice del progetto e' quello ovvio; la sua
-    ``wiki/`` e' lo stesso guasto per un'altra porta, perche' senza quella
-    cartella ``is_wiki_root`` diventa falso e il progetto sparisce dal picker
-    **con la chat ancora attaccata al nome** — cioe' di nuovo l'orfano.
-
-    Solo i figli diretti di ``wikis_dir``: ``is_wiki_root`` da solo direbbe di si'
-    a qualunque cartella che contenga una ``wiki/``, e bloccherebbe
-    cancellazioni legittime altrove nel workspace.
-    """
-    from jenny.session.keys import is_valid_project_name
-    from jenny.utils.wiki_paths import is_wiki_root
-
-    try:
-        from jenny.config.loader import load_config
-
-        wikis_dir = workspace_root / (load_config().wiki.wikis_dir or "wikis")
-    except Exception:  # noqa: BLE001 — senza config si usa il nome di default
-        wikis_dir = workspace_root / "wikis"
-
-    if target.parent == wikis_dir and is_wiki_root(target):
-        name = target.name
-    elif (
-        target.name == "wiki"
-        and target.parent.parent == wikis_dir
-        and is_wiki_root(target.parent)
-    ):
-        name = target.parent.name
-    else:
-        return None
-    if not is_valid_project_name(name):
-        # Una cartella il cui nome non puo' essere il nome di una conversazione
-        # (``wikis/Ricerca ETF``, v. ``_collect_projects``) non ha una chat da
-        # orfanare, e ``project.delete`` la rifiuterebbe proprio per quel nome:
-        # rifiutare qui la renderebbe incancellabile da qualunque porta.
-        return None
-    return (
-        f"`{name}` is a project, not just a folder: its conversation lives outside "
-        "this tree, and deleting the folder here would leave that behind under a name "
-        "anything else could take. Deleting a project is its own operation and it "
-        "removes both — the file browser uses it for you, so if you are seeing this "
-        "the app is out of date or something else made the call."
-    )
+from jenny.webui.workspace_files import WorkspaceBinaryFileError, os_error_text
 
 
 class WorkspaceRoutes:
-    """Route ``/api/workspace/*`` (CRUD file del workspace)."""
+    """Route ``/api/workspace/*``: letture del file manager, piu' ``mkdir``."""
 
     def __init__(
         self,
@@ -135,7 +78,7 @@ class WorkspaceRoutes:
     async def dispatch(self, request: WsRequest, path: str) -> Response | None:
         """Auth, gate e traduzione degli errori del filesystem: qui, una volta.
 
-        I sette handler ripetevano identici il controllo del token, il gate
+        Gli handler ripetevano identici il controllo del token, il gate
         ``workspace.enabled`` e la stessa scala a quattro rami — cioè il modo
         più facile per lasciarne uno che risponde 500 dove gli altri
         rispondono 404. ``backup_routes.dispatch`` faceva già così.
@@ -148,9 +91,6 @@ class WorkspaceRoutes:
             "/api/workspace/list": self._list,
             "/api/workspace/read": self._read,
             "/api/workspace/mkdir": self._mkdir,
-            "/api/workspace/rename": self._rename,
-            "/api/workspace/delete": self._delete,
-            "/api/workspace/copy": self._copy,
             "/api/workspace/download": self._download,
         }
         handler = handlers.get(path)
@@ -175,7 +115,9 @@ class WorkspaceRoutes:
         except PermissionError:
             return http_error(403, "permission denied")
         except OSError as e:
-            return http_error(400, str(e))
+            # Il perche', non il dove: ``str(e)`` porta il percorso assoluto
+            # della cartella privata dell'app.
+            return http_error(400, os_error_text(e))
 
     async def _list(self, request: WsRequest) -> Response:
         from jenny.webui.workspace_files import list_directory, validate_path
@@ -184,7 +126,12 @@ class WorkspaceRoutes:
         rel_path = query_first(query, "path") or ""
         workspace_root = self._get_workspace_root()
         full_path = validate_path(workspace_root, rel_path)
-        items = list_directory(full_path, workspace_root=workspace_root)
+        # Il disco fuori dal loop: una cartella grande
+        # sono centinaia di ``stat``, e un file da aprire fino a ``max_size`` di
+        # ``read_bytes`` — in cui il gateway non risponderebbe a nessuno.
+        items = await asyncio.to_thread(
+            list_directory, full_path, workspace_root=workspace_root
+        )
         return http_json_response({"items": items, "path": rel_path})
 
     async def _read(self, request: WsRequest) -> Response:
@@ -203,7 +150,7 @@ class WorkspaceRoutes:
             max_size = load_config().workspace.max_file_size
         except Exception:
             max_size = 1_000_000
-        content = read_file(full_path, max_size=max_size)
+        content = await asyncio.to_thread(read_file, full_path, max_size=max_size)
         return http_json_response({"content": content, "path": rel_path})
 
     async def _mkdir(self, request: WsRequest) -> Response:
@@ -221,66 +168,49 @@ class WorkspaceRoutes:
         create_directory(full_path)
         return http_json_response({"success": True, "path": rel_path})
 
-    async def _rename(self, request: WsRequest) -> Response:
-        from jenny.webui.workspace_files import rename_path, validate_path
-
-        query = parse_query(request.path)
-        old_rel = query_first(query, "oldPath") or ""
-        new_rel = query_first(query, "newPath") or ""
-        workspace_root = self._get_workspace_root()
-        old_path = validate_path(workspace_root, old_rel)
-        new_path = validate_path(workspace_root, new_rel)
-        rename_path(old_path, new_path)
-        return http_json_response({"success": True})
-
-    async def _delete(self, request: WsRequest) -> Response:
-        err = self._require_workspace_flag(
-            "allow_delete", 403, "workspace deletes are disabled"
-        )
-        if err:
-            return err
-        from jenny.webui.workspace_files import delete_path, validate_path
-
-        query = parse_query(request.path)
-        rel_path = query_first(query, "path") or ""
-        workspace_root = self._get_workspace_root()
-        full_path = validate_path(workspace_root, rel_path)
-        refusal = _project_delete_refusal(workspace_root, full_path)
-        if refusal:
-            return http_error(403, refusal)
-        delete_path(full_path)
-        return http_json_response({"success": True, "path": rel_path})
-
-    async def _copy(self, request: WsRequest) -> Response:
-        from jenny.webui.workspace_files import copy_path, validate_path
-
-        query = parse_query(request.path)
-        src_rel = query_first(query, "path") or ""
-        dest_rel = query_first(query, "dest") or ""
-        workspace_root = self._get_workspace_root()
-        src_path = validate_path(workspace_root, src_rel)
-        dest_path = validate_path(workspace_root, dest_rel)
-        copy_path(src_path, dest_path)
-        return http_json_response({"success": True})
-
     async def _download(self, request: WsRequest) -> Response:
-        from jenny.webui.workspace_files import validate_path
+        from jenny.webui.workspace_files import read_download, validate_path
 
         query = parse_query(request.path)
         rel_path = query_first(query, "path") or ""
         workspace_root = self._get_workspace_root()
         full_path = validate_path(workspace_root, rel_path)
-        if not full_path.exists():
-            return http_error(404, "path not found")
-        if full_path.is_dir():
+        try:
+            data = await asyncio.to_thread(read_download, full_path)
+        except IsADirectoryError:
             return http_error(400, "cannot download a directory")
-        data = full_path.read_bytes()
 
         content_type = mimetypes.guess_type(full_path.name)[0] or "application/octet-stream"
         headers = Headers(
             [
                 ("Content-Type", content_type),
-                ("Content-Disposition", f'attachment; filename="{full_path.name}"'),
+                ("Content-Disposition", content_disposition(full_path.name)),
+                # Il tipo lo decide l'estensione: che il browser non ne indovini
+                # un altro dal contenuto (un ``.txt`` che «sembra» HTML).
+                ("X-Content-Type-Options", "nosniff"),
             ]
         )
         return Response(200, "OK", headers, data)
+
+
+def content_disposition(name: str) -> str:
+    """``attachment`` con il nome del file, per qualunque nome (RFC 6266).
+
+    Il nome finiva crudo fra virgolette: un'emoji o un
+    accento facevano rifiutare l'header a ``websockets`` — 500 invece del file —,
+    un ``"`` chiudeva il valore prima del tempo, e su POSIX un nome puo'
+    contenere un a-capo, cioe' un header in piu'. Due parametri: ``filename*``
+    in UTF-8 percent-encodato, che e' quello che i browser usano, e ``filename``
+    in ASCII stampabile per chi non lo capisce, con ``\\`` e ``"`` escapati e
+    tutto il resto sostituito da ``_``.
+
+    Un nome che non e' UTF-8 — su Linux un nome e' fatto di byte, e Python porta
+    quelli che non decodifica come surrogati — faceva sollevare ``quote``
+    (``UnicodeEncodeError``, cioe' un 500). Quei byte diventano U+FFFD: l'header
+    dichiara UTF-8, e i byte grezzi percent-encodati non lo sarebbero.
+    """
+    fallback = "".join(
+        ("\\" + ch if ch in '"\\' else ch) if " " <= ch <= "~" else "_" for ch in name
+    )
+    readable = name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(readable, safe='')}"

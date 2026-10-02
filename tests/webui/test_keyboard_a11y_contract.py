@@ -153,53 +153,6 @@ def test_switching_drawers_is_not_a_return_to_the_view() -> None:
     assert "if (!this._swapping) this._releaseContent()" in _method(drawer, "close")
 
 
-# ── N26 · griglia App da tastiera ─────────────────────────────────────────────
-
-
-def test_every_touchable_thing_in_the_apps_view_is_a_real_button() -> None:
-    """Sul Titan 2 Tab è navigazione primaria, e la scheda Apps ha quattro cose
-    che si toccano: la linguetta di una stanza, il corpo di una riga, la riga
-    "Nuova…", la cella di una app Android.
-
-    Prima erano tutte ``<div>``, e ``wireEvents`` ci riappiccicava
-    ``tabindex``/``role``/``keydown`` a **ogni** ridisegno — cioè a ogni tasto
-    digitato nella ricerca. Un solo builder dimenticato e quella cosa smetteva
-    di esistere per Tab e per TalkBack, senza rumore. Un ``<button>`` porta
-    Invio, Spazio, il fuoco e il ruolo dalla nascita: qui si verifica che i
-    quattro builder lo creino davvero, e che non sia tornato nessun rattoppo.
-    """
-    source = _read("mobile-apps.js")
-    for method, css_class in (
-        ("_renderRoomTabs", "apps-room-tab"),
-        ("_rowMain", "apps-row-main"),
-        ("_buildAddRow", "apps-add-row"),
-        ("_buildAndroidCell", "app-cell"),
-    ):
-        body = _method(source, method)
-        assert "createElement('button')" in body, f"{method} non crea un <button>"
-        assert "type = 'button'" in body, (
-            f"{method}: senza type, dentro un form il pulsante lo invierebbe"
-        )
-        assert css_class in body
-
-    assert "wireEvents" not in source, (
-        "il rattoppo tabindex/role a ogni ridisegno non deve tornare: la "
-        "semantica sta nei builder"
-    )
-
-
-def test_the_keyboard_focus_in_the_apps_view_is_visible() -> None:
-    css = CSS.read_text(encoding="utf-8")
-    for selector in (
-        ".apps-room-tab:focus-visible",
-        ".apps-row-main:focus-visible",
-        ".apps-add-row:focus-visible",
-        ".apps-az-letter:focus-visible",
-        ".app-cell:focus-visible",
-    ):
-        assert selector in css, f"{selector}: una tappa Tab senza anello di fuoco è cieca"
-
-
 def test_the_lightbox_takes_the_focus_and_gives_it_back() -> None:
     """La lightbox copre tutto ma non rende inerte ciò che sta sotto: senza
     portare il fuoco sulla chiusura, Tab proseguiva nella pagina coperta."""
@@ -253,7 +206,9 @@ def test_every_long_press_caller_consumes_the_flag() -> None:
             continue
         callers += 1
         assert "import { setupLongPress }" in source, f"{path.name} non importa l'helper condiviso"
-        guards = len(re.findall(r"if \(\w+\.dataset\.longpress\)", source))
+        # `[\w.]+` e non `\w+`: la guardia puo' stare su un campo dell'oggetto
+        # (`this.door.dataset.longpress`) e non solo su una variabile locale.
+        guards = len(re.findall(r"if \([\w.]+\.dataset\.longpress\)", source))
         assert guards == calls, (
             f"{path.name}: {calls} long-press ma {guards} guardie nei click handler"
         )
@@ -265,11 +220,14 @@ def test_the_workspace_sheets_ignore_the_synthetic_tap() -> None:
     ``<dialog>`` appena aperto e lo richiudeva all'istante. La sezione App aveva
     già la finestra di grazia; i due sheet del Workspace no."""
     source = _read("mobile-workspace.js")
+    # I due menu montano il foglio da `_openSheet`; il comportamento vero è
+    # in `test_workspace_sheets_client.py`.
     for name in ("showContextSheet", "_showNewMenu"):
-        body = _method(source, name)
-        assert "const openedAt = Date.now();" in body, f"{name} non misura da quando è aperto"
-        assert "Date.now() - openedAt > 400" in body, f"{name} non ha la finestra di grazia"
-        assert "sheet.addEventListener('click'" not in body, (
-            f"{name} conserva il vecchio listener del backdrop senza finestra di grazia"
-        )
-        assert "sheet.onclick = null" in body, "il gestore del backdrop va sganciato alla chiusura"
+        assert "this._openSheet(" in _method(source, name), f"{name} monta il foglio da sé"
+    body = _method(source, "_openSheet")
+    assert "const openedAt = Date.now();" in body, "il foglio non misura da quando è aperto"
+    assert "Date.now() - openedAt > 400" in body, "il foglio non ha la finestra di grazia"
+    assert "sheet.addEventListener('click'" not in body, (
+        "il foglio conserva il vecchio listener del backdrop senza finestra di grazia"
+    )
+    assert "sheet.onclick = null" in body, "il gestore del backdrop va sganciato alla chiusura"

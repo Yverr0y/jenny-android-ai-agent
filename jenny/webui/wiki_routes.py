@@ -1,10 +1,18 @@
 """Adapter di route HTTP per le API Wiki + Audit della WebUI (estratto da
 ws_http). Stesso pattern di ``WebUISettingsRouter``/``SkillsRoutes``.
 
-Solo letture e parametri corti. La chiusura di un audit non è qui: porta una
-nota di testo libero, e questo trasporto non può trasportare contenuto (v. la
-docstring di ``webui.commands``). È il comando ``audit.resolve`` dell'RPC
-WebSocket.
+Solo letture e parametri corti — questo trasporto non può trasportare contenuto
+(v. la docstring di ``webui.commands``), e infatti la scrittura di una pagina sta
+di là (``page.write``).
+
+**Una segnalazione si apre e basta**, e nemmeno quello passa più di qui: il
+commento è testo libero, quindi dal 26/09/2026 è il comando ``audit.create``.
+Leggerle e chiuderle non passa di qui:
+dal 22/09/2026 confermarne una porta l'utente nella chat del quaderno, e di lì in
+poi sono Jenny e i suoi strumenti file a lavorarle, con lo script della skill
+(``llm-wiki/scripts/audit_review.py``). Le rotte che le elencavano e il comando
+che le chiudeva erano rimasti senza un cliente, e se ne sono andati con lo stesso
+giro.
 """
 
 from __future__ import annotations
@@ -29,9 +37,8 @@ from jenny.channels.http_utils import (
     parse_query,
     query_first,
 )
-from jenny.utils.wiki_paths import WIKI_INDEX_FILENAME
-
-QueryParams = dict[str, list[str]]
+from jenny.security.workspace_policy import is_path_within
+from jenny.utils.wiki_paths import WIKI_INDEX_FILENAME, safe_wiki_page_path
 
 # Chiavi frontmatter esposte al client in ``/api/page``. Tutto il resto (URL
 # sorgente, provenance, slug/flag interni) resta lato server: il frontmatter
@@ -52,10 +59,10 @@ _FRONTMATTER_ALLOWLIST = frozenset(
 # lunga, è un file finito lì per sbaglio.
 #
 # **Rifiuta invece di troncare**, e la ragione non è la prudenza: il client usa
-# il ``raw`` per calcolare gli offset di un audit, e ``audit.resolve`` rilegge il
-# file **intero** per ancorarlo. Un ``raw`` tagliato darebbe ancore giuste per un
-# testo che il server non ha, cioè un commento attaccato al punto sbagliato — un
-# guasto silenzioso al posto di un 413 che si legge.
+# il ``raw`` per calcolare gli offset di un audit, e ``audit.create`` rilegge
+# il file **intero** per ancorarlo. Un ``raw`` tagliato darebbe ancore giuste per
+# un testo che il server non ha, cioè un commento attaccato al punto sbagliato —
+# un guasto silenzioso al posto di un 413 che si legge.
 _PAGE_MAX_BYTES = 1_048_576
 
 
@@ -66,37 +73,35 @@ def _filter_frontmatter(fm: Any) -> dict[str, Any] | None:
     return {k: v for k, v in fm.items() if k in _FRONTMATTER_ALLOWLIST}
 
 
-def safe_wiki_page_path(input_path: str) -> str | None:
-    """Normalizza e valida un path di pagina wiki relativo.
-
-    Rifiuta path assoluti o che risalgono fuori dalla wiki (``..``). Ritorna il
-    path normalizzato relativo, la mappa (:data:`WIKI_INDEX_FILENAME`) se vuoto,
-    o ``None`` se invalido.
-    """
-    if not input_path:
-        return WIKI_INDEX_FILENAME
-    if os.path.isabs(input_path):
-        return None
-    normalized = os.path.normpath(input_path).replace(os.sep, "/")
-    if normalized.startswith(".."):
-        return None
-    return normalized
-
-
 def _collect_projects(wikis_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Le wiki divise in due: quelle apribili come chat, e quelle no.
 
-    ``[{name, modified}]`` per ognuna, nell'ordine in cui le da' la discovery.
-    ``modified`` e' l'mtime della radice della wiki, che oggi e' il solo segnale
-    di attivita' disponibile: la conversazione di un progetto non esiste ancora
-    (item 3). Quando esistera', l'ultima attivita' dovra' venire da lei, non dal
-    filesystem — un `lint` non e' attivita' dell'utente.
+    ``[{name, modified, pages}]`` per ognuna, nell'ordine in cui le da' la
+    discovery. ``modified`` e' l'mtime della radice della wiki, che oggi e' il
+    solo segnale di attivita' disponibile: la conversazione di un progetto non
+    esiste ancora (item 3). Quando esistera', l'ultima attivita' dovra' venire
+    da lei, non dal filesystem — un `lint` non e' attivita' dell'utente.
+
+    ``pages`` e' il numero di pagine della wiki, ed e' qui e non su una route
+    sua perche' questa e' la sola chiamata che l'elenco fa gia'. Costa una
+    ``rglob`` per quaderno: misurato sul Titan 2, contare ricorsivamente i
+    ``.md`` di quattordici quaderni (464 file) sta in **20 ms** di flash.
+    L'alternativa sarebbe ``/api/graph``, che la stessa cifra la mette nel
+    ``degree`` di un nodo — cioe' dentro una risposta da ~110 kB (grafo +
+    indice full-text) che non si puo' chiedere per scrivere "34".
+
+    **Conta con la regola di chi le elenca**, ``is_wiki_page_rel``, e non tutti
+    i ``.md``: ``summaries/`` non e' fatto di pagine di contenuto e resta fuori
+    da grafo, albero e ricerca. Con una ``rglob`` nuda la pastiglia
+    dell'intestazione diceva «7 pagine» e la stanza dietro ne elencava sei —
+    visto al primo giro sul banco, su un quaderno con un riassunto dentro. Un
+    numero su una porta deve contare quel che c'e' dall'altra parte.
 
     **La divisione e' il punto.** Il nome di una cartella e' anche il nome di una
     sessione (``project:<nome>``), e i due lati non facevano la stessa domanda:
     questo elenco dava qualunque cartella, mentre
     ``channels/websocket.py::_envelope_chat_id`` accetta solo cio' che passa
-    ``is_valid_project_name``. Una wiki chiamata ``Ricerca ETF`` compariva nel
+    ``is_valid_project_name``. Una wiki chiamata ``Ricerca ETNA`` compariva nel
     chip e, aprendola, ne apriva un'altra. Un nome che il server elenca deve
     essere un nome che il server accetta.
 
@@ -111,7 +116,7 @@ def _collect_projects(wikis_dir: Path) -> tuple[list[dict[str, Any]], list[dict[
     continuerebbe a offrire quel che non si apre.
     """
     from jenny.session.keys import is_valid_project_name
-    from jenny.utils.wiki_paths import discover_wiki_roots
+    from jenny.utils.wiki_paths import discover_wiki_roots, is_wiki_page_rel
 
     projects: list[dict[str, Any]] = []
     unopenable: list[dict[str, Any]] = []
@@ -120,7 +125,17 @@ def _collect_projects(wikis_dir: Path) -> tuple[list[dict[str, Any]], list[dict[
             modified = int(root.stat().st_mtime)
         except OSError:
             modified = 0
-        entry = {"name": name, "modified": modified}
+        try:
+            pages_dir = root / "wiki"
+            pages = sum(
+                1 for f in pages_dir.rglob("*.md")
+                if is_wiki_page_rel(f.relative_to(pages_dir))
+            )
+        except OSError:
+            # Una cartella sparita fra la discovery e il conteggio: zero e'
+            # la risposta onesta, e non deve far cadere l'intero elenco.
+            pages = 0
+        entry = {"name": name, "modified": modified, "pages": pages}
         if is_valid_project_name(name):
             projects.append(entry)
         else:
@@ -132,7 +147,12 @@ def _collect_projects(wikis_dir: Path) -> tuple[list[dict[str, Any]], list[dict[
 
 
 class WikiRoutes:
-    """Route ``/api/{config,tree,graph,page}`` e ``/api/audit*``."""
+    """Route ``/api/{projects,project/describe,graph,page}``.
+
+    Solo letture. ``/api/audit/create`` scriveva una segnalazione col commento
+    nell'indirizzo; dal 26/09/2026 è il comando RPC ``audit.create``
+    (``webui/commands.py``), perché un commento è testo libero.
+    """
 
     def __init__(
         self,
@@ -195,56 +215,17 @@ class WikiRoutes:
     # -- dispatch --
 
     async def dispatch(self, request: WsRequest, path: str) -> Response | None:
-        if path == "/api/config":
-            return await self._wiki_config(request)
         if path == "/api/projects":
             return await self._projects_list(request)
         if path == "/api/project/describe":
             return await self._project_describe(request)
-        if path == "/api/tree":
-            return await self._wiki_tree(request)
         if path == "/api/graph":
             return await self._wiki_graph(request)
         if path == "/api/page":
             return await self._wiki_page(request)
-        if path == "/api/audit":
-            return await self._audit_list(request)
-        if path == "/api/audit/create":
-            return await self._audit_create(request)
         return None
 
     # -- wiki handlers --
-
-    async def _wiki_tree(self, request: WsRequest) -> Response:
-        if not self._check_api_token(request):
-            return http_error(401, "Unauthorized")
-        err = self._check_wiki_enabled()
-        if err:
-            return err
-        from jenny.webui.wiki import build_home_tree, build_tree, discover_wikis
-
-        query = parse_query(request.path)
-        wiki_name = query_first(query, "wiki") or ""
-        wikis_dir = self._get_wikis_dir()
-
-        if wiki_name:
-            wikis = discover_wikis(wikis_dir)
-            if wiki_name not in wikis:
-                return http_error(404, "wiki not found")
-            wiki_root = wikis[wiki_name].parent
-            loop = asyncio.get_running_loop()
-            tree = await loop.run_in_executor(None, build_tree, wiki_root)
-        else:
-            loop = asyncio.get_running_loop()
-            tree = await loop.run_in_executor(None, build_home_tree, wikis_dir)
-
-        def tree_to_dict(node):
-            result = {"name": node.name, "path": node.path, "kind": node.kind}
-            if node.children:
-                result["children"] = [tree_to_dict(c) for c in node.children]
-            return result
-
-        return http_json_response(tree_to_dict(tree))
 
     async def _wiki_graph(self, request: WsRequest) -> Response:
         if not self._check_api_token(request):
@@ -252,10 +233,17 @@ class WikiRoutes:
         err = self._check_wiki_enabled()
         if err:
             return err
-        from jenny.webui.wiki import build_home_graph, discover_wikis
+        from jenny.webui.wiki import discover_wikis
 
         query = parse_query(request.path)
         wiki_name = query_first(query, "wiki") or ""
+        # Il nome del quaderno è **obbligatorio**, come per ``audit.create``.
+        # C'era una vista senza nome — il grafo a stella di *tutte* le wiki — e
+        # non c'è più: l'unica informazione che portava era quante pagine ha
+        # ciascuna, e l'elenco dei quaderni la dà già con nomi, date e ricerca,
+        # senza pagare una risposta da ~110 kB.
+        if not wiki_name:
+            return http_error(400, "wiki required")
         wikis_dir = self._get_wikis_dir()
         loop = asyncio.get_running_loop()
 
@@ -263,19 +251,14 @@ class WikiRoutes:
         # postings dell'indice sono indici nell'array ``nodes`` qui sotto.
         # Servirli da due endpoint aprirebbe la finestra in cui la wiki cambia
         # fra le due chiamate: il client accenderebbe i nodi sbagliati.
-        if wiki_name:
-            wikis = discover_wikis(wikis_dir)
-            if wiki_name not in wikis:
-                return http_error(404, "wiki not found")
-            bundle = await loop.run_in_executor(
-                None, self._get_search_service().bundle, wikis[wiki_name]
-            )
-            graph = bundle.graph
-            search = bundle.search
-        else:
-            # Vista home: nodi = wiki, non pagine. Non c'è testo da cercare.
-            graph = await loop.run_in_executor(None, build_home_graph, wikis_dir)
-            search = None
+        wikis = discover_wikis(wikis_dir)
+        if wiki_name not in wikis:
+            return http_error(404, "wiki not found")
+        bundle = await loop.run_in_executor(
+            None, self._get_search_service().bundle, wikis[wiki_name]
+        )
+        graph = bundle.graph
+        search = bundle.search
 
         return http_json_response(
             {
@@ -337,13 +320,15 @@ class WikiRoutes:
             # impedisce di raggiungere i fratelli raw/ audit/ log/.
             containment_root = wiki_dir
 
+        # Il contenimento **prima** dell'esistenza: nell'ordine inverso un 404
+        # contro un 403 diceva a chi chiede se un file fuori dalla wiki c'e'.
+        # Anche un errore di risoluzione (un loop di symlink) e' un 403: fino al
+        # 24/09/2026 usciva come 500, perche' qui si catturava solo ValueError.
+        if not is_path_within(full, containment_root):
+            return http_error(403, "path escapes wiki root")
+
         if not full.is_file():
             return http_error(404, "file not found")
-
-        try:
-            full.resolve().relative_to(containment_root.resolve())
-        except ValueError:
-            return http_error(403, "path escapes wiki root")
 
         try:
             size = full.stat().st_size
@@ -378,30 +363,12 @@ class WikiRoutes:
             }
         )
 
-    async def _wiki_config(self, request: WsRequest) -> Response:
-        if not self._check_api_token(request):
-            return http_error(401, "Unauthorized")
-        err = self._check_wiki_enabled()
-        if err:
-            return err
-        from jenny.webui.wiki import discover_wikis
-
-        wikis_dir = self._get_wikis_dir()
-        wikis = list(discover_wikis(wikis_dir).keys())
-        return http_json_response(
-            {
-                "author": "me",
-                "wikis": wikis,
-                "homePath": "_index.md",
-            }
-        )
-
     async def _projects_list(self, request: WsRequest) -> Response:
         """Elenco dei progetti per lo scope chip.
 
         **Un progetto e' una wiki**, quindi l'elenco e' `discover_wiki_roots` e
         non il contenuto di una cartella `projects/`: quella non esiste, e il
-        chip la leggeva (v. `roadmap/project-sessions.md`, item 10). `dir` viaggia
+        chip la leggeva. `dir` viaggia
         col payload perche' il chip mostra lo scope come un percorso e il nome
         della cartella e' configurabile (`config.wiki.wikis_dir`).
 
@@ -459,84 +426,3 @@ class WikiRoutes:
         if not described["exists"] and not described["orphan"]:
             return http_error(404, "project not found")
         return http_json_response(described)
-
-    # -- audit handlers --
-
-    async def _audit_list(self, request: WsRequest) -> Response:
-        if not self._check_api_token(request):
-            return http_error(401, "Unauthorized")
-        err = self._check_wiki_enabled()
-        if err:
-            return err
-        from jenny.webui.wiki import discover_wikis, list_audits
-
-        query = parse_query(request.path)
-        wiki_name = query_first(query, "wiki") or ""
-        target = query_first(query, "target") or None
-        mode = query_first(query, "mode") or "open"
-        if mode not in {"open", "resolved", "all"}:
-            return http_error(400, "invalid mode")
-
-        if not wiki_name:
-            return http_json_response({"entries": []})
-
-        wikis = discover_wikis(self._get_wikis_dir())
-        if wiki_name not in wikis:
-            return http_error(404, "wiki not found")
-        pages_dir = wikis[wiki_name]
-        wiki_root = pages_dir.parent
-
-        audits = list_audits(wiki_root, target=target, mode=mode)
-        return http_json_response({"entries": audits})
-
-    async def _audit_create(self, request: WsRequest) -> Response:
-        if not self._check_api_token(request):
-            return http_error(401, "Unauthorized")
-        err = self._check_wiki_enabled()
-        if err:
-            return err
-        from jenny.webui.wiki import create_audit, discover_wikis
-
-        query = parse_query(request.path)
-        wikis = discover_wikis(self._get_wikis_dir())
-
-        wiki_name = query_first(query, "wiki") or ""
-        if not wiki_name or wiki_name not in wikis:
-            return http_error(400, "wiki required")
-
-        wiki_root = wikis[wiki_name].parent
-        target = query_first(query, "target") or ""
-
-        pages_dir = wikis[wiki_name]
-        raw_path = (pages_dir / (target or WIKI_INDEX_FILENAME)).resolve()
-        try:
-            raw_path.relative_to(pages_dir.resolve())
-        except ValueError:
-            return http_error(403, "Forbidden")
-        raw_markdown = ""
-        if raw_path.is_file():
-            raw_markdown = raw_path.read_text("utf-8")
-
-        try:
-            sel_start = int(query_first(query, "selStart") or 0)
-            sel_end = int(query_first(query, "selEnd") or 0)
-        except (ValueError, TypeError):
-            return http_error(400, "invalid selStart/selEnd")
-
-        try:
-            result = create_audit(
-                wiki_root=wiki_root,
-                target=target,
-                raw_markdown=raw_markdown,
-                sel_start=sel_start,
-                sel_end=sel_end,
-                comment=query_first(query, "comment") or "",
-                severity=query_first(query, "severity") or "warn",
-                author=query_first(query, "author") or "anonymous",
-            )
-            result.pop("entry", None)
-            return http_json_response(result)
-        except FileNotFoundError as exc:
-            return http_error(404, str(exc))
-        except ValueError as exc:
-            return http_error(400, str(exc))

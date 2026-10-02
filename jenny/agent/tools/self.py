@@ -10,7 +10,6 @@ from loguru import logger
 from jenny.agent.tools.base import Tool
 from jenny.agent.tools.context import ContextAware, RequestContext
 from jenny.agent.tools.runtime_state import RuntimeState
-from jenny.config.tool_schemas import MyToolConfig  # re-export (def in config.tool_schemas)
 
 if TYPE_CHECKING:
     from jenny.agent.subagent import SubagentStatus
@@ -38,13 +37,6 @@ def _is_subagent_status(value: Any) -> bool:
 class MyTool(Tool, ContextAware):
     """Check and set the agent loop's runtime configuration."""
 
-    _plugin_discoverable = False  # Requires AgentLoop reference; registered manually
-    config_key = "my"
-
-    @classmethod
-    def config_cls(cls):
-        return MyToolConfig
-
     @classmethod
     def enabled(cls, ctx: Any) -> bool:
         return ctx.config.my.enable
@@ -62,6 +54,9 @@ class MyTool(Tool, ContextAware):
         "_session_locks", "_active_tasks", "_background_tasks",
         # Security boundaries (inspect + modify both blocked)
         "restrict_to_workspace", "channels_config",
+        # La config dei tool porta i confini veri (restrict_to_workspace, i moduli
+        # di python_exec, gli host SSH): leggerla o cambiarla da qui li scavalca.
+        "tools_config",
         "_concurrency_gate", "_extra_hooks",
     })
 
@@ -70,7 +65,6 @@ class MyTool(Tool, ContextAware):
         "_current_iteration",  # updated by runner only
         "exec_config",  # inspect allowed (e.g. check sandbox), modify blocked
         "android_web_config",  # inspect allowed (e.g. check enable), modify blocked
-        "workspace_sandbox",  # read-only view of workspace enforcement level
     })
 
     _DENIED_ATTRS = frozenset({
@@ -348,7 +342,7 @@ class MyTool(Tool, ContextAware):
             parts.append(self._format_value(getattr(state, k, None), k))
         parts.append(self._format_value(state.model_preset, "model_preset"))
         # Other useful top-level keys shown in description
-        for k in ("workspace", "provider_retry_mode", "max_tool_result_chars", "_current_iteration", "android_web_config", "exec_config", "workspace_sandbox", "subagents"):
+        for k in ("workspace", "provider_retry_mode", "max_tool_result_chars", "_current_iteration", "android_web_config", "exec_config", "subagents"):
             if _has_real_attr(state, k):
                 parts.append(self._format_value(getattr(state, k, None), k))
         # Token usage
@@ -380,15 +374,25 @@ class MyTool(Tool, ContextAware):
             if leaf.lower() in self._SENSITIVE_NAMES:
                 self._audit("modify", f"BLOCKED sensitive leaf '{leaf}'")
                 return f"Error: '{leaf}' is not accessible"
+            # Ogni segmento, non solo il primo: `x.restrict_to_workspace` è lo
+            # stesso confine di `restrict_to_workspace`.
+            if any(part in self.BLOCKED for part in key.split(".")):
+                self._audit("modify", f"BLOCKED {key}")
+                return f"Error: '{key}' is protected and cannot be modified"
             parent, err = self._resolve_path(parent_path)
             if err:
                 return f"Error: {err}"
-            if isinstance(parent, dict):
-                parent[leaf] = value
-            else:
-                setattr(parent, leaf, value)
-            self._audit("modify", f"{key} = {value!r}")
-            return f"Set {key} = {value!r}"
+            # Fail-closed come per le chiavi semplici (`_modify_free`): la
+            # allowlist (`RESTRICTED`, `model_preset`) non ha voci annidate,
+            # quindi un attributo annidato del loop non è mai scrivibile. Prima
+            # qui c'era un `setattr` libero: `tools_config.restrict_to_workspace`
+            # passava senza che nessuna lista l'avesse deciso.
+            self._audit("modify", f"BLOCKED nested runtime attr {key}")
+            return (
+                f"Error: '{key}' is a nested runtime attribute and is not settable. Only "
+                "whitelisted runtime controls can be modified; free-form keys are "
+                "stored in the scratchpad instead."
+            )
         if key == "model_preset":
             return self._modify_model_preset(value)
         if key in self.RESTRICTED:
@@ -493,7 +497,10 @@ class MyTool(Tool, ContextAware):
         return f"unsupported type {type(value).__name__}"
 
 
-# Registrazione esplicita dei tool di questo modulo (Fase 5.3): il
-# ToolLoader legge questa lista invece della reflection dir(). Un nuovo
-# tool va aggiunto qui esplicitamente.
+# Vuota di proposito, e non per dimenticanza. ``MyTool`` ha bisogno di un
+# riferimento vivo all'``AgentLoop`` che gira (``runtime_state``), che il
+# ``ToolLoader`` non sa dare: lo registra a mano
+# ``AgentLoop._register_default_tools``, dopo il loader. Il modulo resta in
+# ``_HARDCODED_TOOL_MODULES`` con una lista vuota perche' il loader rifiuta un
+# modulo senza ``TOOLS``.
 TOOLS = []

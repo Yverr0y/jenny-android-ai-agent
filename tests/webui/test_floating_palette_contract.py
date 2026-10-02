@@ -15,17 +15,17 @@ tenere allineati. Qui si prova il giro intero, che nessun compilatore vede:
   e tre temi su sette scrivono così i bordi;
 * i tre anelli del ponte: la chiamata in ``shared/theme.js``, il metodo
   ``@JavascriptInterface`` che la riceve, il metodo del controller che la applica;
-* il ripiego del Kotlin, che dev'essere `chanel` e non una palette inventata.
+* il ripiego del Kotlin, che dev'essere il tema di default e non una palette
+  inventata.
 """
 
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
+from support.kotlin_source import read_source
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
@@ -33,7 +33,6 @@ THEME_JS = ASSETS / "shared" / "theme.js"
 SPA_CSS = ASSETS / "mobile-style.css"
 ANDROID = ROOT / "android/app/src/main/java/com/flagdizero/jenny"
 
-_NODE = shutil.which("node")
 
 # I sei token che vestono la finestra, nell'ordine in cui viaggiano sul ponte.
 TOKENS = ["--surface", "--border-strong", "--text", "--text-faint", "--accent", "--on-accent"]
@@ -69,21 +68,14 @@ def _run_js(script: str) -> str:
         + "\nimport assert from 'node:assert/strict';\n"
         + script
     )
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
-    return proc.stdout
+    return run_js(source)
 
 
-@pytest.mark.skipif(_NODE is None, reason="node non disponibile")
-class TestLaConversione:
+@requires_node
+class TestTheConversion:
     """``argbHex``: da come lo scrive il CSS a come lo legge Android."""
 
-    def test_le_forme_che_i_temi_usano_davvero(self):
+    def test_the_shapes_the_themes_really_use(self):
         _run_js("""
         // Esadecimale pieno: il caso di --surface in tutti e sette i temi.
         assert.equal(argbHex('#1e1e1e'), '#ff1e1e1e');
@@ -98,7 +90,7 @@ class TestLaConversione:
         console.log('ok');
         """)
 
-    def test_un_valore_che_non_si_legge_non_diventa_un_colore(self):
+    def test_an_unreadable_value_does_not_become_a_color(self):
         """Meglio niente che un nero involontario: chi chiama salta la spinta."""
         _run_js("""
         for (const bad of ['', '  ', 'var(--surface)', 'color-mix(in srgb, red, blue)',
@@ -108,7 +100,7 @@ class TestLaConversione:
         console.log('ok');
         """)
 
-    def test_un_cambio_tema_spinge_sei_colori(self):
+    def test_a_theme_change_pushes_six_colors(self):
         out = _run_js("""
         globalThis.tokens = {
           '--surface': '#2a2139', '--border-strong': '#4d3d6b', '--text': '#f2ecff',
@@ -124,7 +116,7 @@ class TestLaConversione:
             "#ff2a2139", "#ff4d3d6b", "#fff2ecff", "#ff6a6798", "#fff92aad", "#ffffffff"
         ]
 
-    def test_un_token_mancante_non_spinge_una_palette_a_metà(self):
+    def test_a_missing_token_does_not_push_a_half_palette(self):
         """Cinque colori nuovi e uno vecchio sono peggio di sei vecchi."""
         _run_js("""
         globalThis.tokens = { '--surface': '#2a2139' };  // gli altri cinque vuoti
@@ -134,10 +126,10 @@ class TestLaConversione:
         """)
 
 
-class TestIlPonte:
+class TestTheBridge:
     """I tre anelli che tengono su il giro, e che nessun compilatore vede."""
 
-    def test_la_webui_spinge_i_sei_token(self):
+    def test_the_webui_pushes_the_six_tokens(self):
         source = THEME_JS.read_text(encoding="utf-8")
         block = re.search(r"const FLOATING_TOKENS = \[(.*?)\];", source, re.S)
         assert block, "FLOATING_TOKENS non è più leggibile in shared/theme.js"
@@ -145,7 +137,7 @@ class TestIlPonte:
         assert "native.setFloatingPalette(" in source
         assert "syncFloatingPalette();" in source
 
-    def test_i_token_spinti_esistono_nel_css(self):
+    def test_the_pushed_tokens_exist_in_the_css(self):
         """Un token rinominato nel CSS non farebbe rumore: `getPropertyValue`
         di una custom property assente torna la stringa vuota."""
         root = re.search(r":root \{(.*?)\n\}", SPA_CSS.read_text(encoding="utf-8"), re.S)
@@ -153,34 +145,43 @@ class TestIlPonte:
         declared = set(re.findall(r"^\s*(--[\w-]+):", root.group(1), re.M))
         assert set(TOKENS) <= declared, f"token spariti da :root: {set(TOKENS) - declared}"
 
-    def test_il_guscio_riceve_e_il_controller_applica(self):
-        main_activity = (ANDROID / "MainActivity.kt").read_text(encoding="utf-8")
+    def test_the_shell_receives_and_the_controller_applies(self):
+        main_activity = read_source(ANDROID / "MainActivity.kt")
         assert "fun setFloatingPalette(" in main_activity
         assert "FloatingOverlayController.setPalette(" in main_activity
 
-        controller = (ANDROID / "FloatingOverlayController.kt").read_text(encoding="utf-8")
+        controller = read_source(ANDROID / "FloatingOverlayController.kt")
         assert "fun setPalette(" in controller
         assert "private fun applyPalette()" in controller
 
-    def test_il_ripiego_del_kotlin_e_il_tema_di_default(self):
+    def test_the_kotlin_fallback_is_the_default_theme(self):
         """Il ripiego serve al primo montaggio, prima che la SPA abbia caricato.
-        Dev'essere `chanel` **preso dal CSS**, non una palette scelta lì: se
-        diverge, la finestra si vede in un modo e un istante dopo in un altro.
+        Dev'essere il tema di default (``DEFAULT_THEME``) **preso dal CSS**, non
+        una palette scelta lì: se diverge, la finestra si vede in un modo e un
+        istante dopo in un altro. Il blocco del tema vince su ``:root``, come nel
+        CSS.
         """
-        controller = (ANDROID / "FloatingOverlayController.kt").read_text(encoding="utf-8")
-        block = re.search(r"private val CHANEL = Palette\((.*?)\n    \)", controller, re.S)
+        controller = read_source(ANDROID / "FloatingOverlayController.kt")
+        block = re.search(r"private val DEFAULT_PALETTE = Palette\((.*?)\n    \)", controller, re.S)
         assert block, "la palette di riserva non è più leggibile"
         kotlin = dict(re.findall(r"(\w+) = 0x([0-9A-Fa-f]{8})", block.group(1)))
 
-        root = re.search(r":root \{(.*?)\n\}", SPA_CSS.read_text(encoding="utf-8"), re.S)
-        assert root
-        css = dict(re.findall(r"^\s*(--[\w-]+):\s*([^;]+);", root.group(1), re.M))
+        spa_css = SPA_CSS.read_text(encoding="utf-8")
+        default = re.search(
+            r"DEFAULT_THEME = '([a-z0-9]+)'", (ASSETS / "shared" / "theme.js").read_text()
+        )
+        assert default
+        css = {}
+        for selector in (":root", f'[data-theme="{default.group(1)}"]'):
+            block_css = re.search(re.escape(selector) + r" \{(.*?)\n\}", spa_css, re.S)
+            assert block_css, selector
+            css.update(re.findall(r"^\s*(--[\w-]+):\s*([^;]+);", block_css.group(1), re.M))
 
         for field, token in zip(
             ["surface", "border", "text", "hint", "accent", "onAccent"], TOKENS
         ):
             assert kotlin[field].lower() == _argb(css[token].strip()), (
-                f"{field} del ripiego non è più {token} di :root ({css[token].strip()})"
+                f"{field} del ripiego non è più {token} del tema di default ({css[token].strip()})"
             )
 
 

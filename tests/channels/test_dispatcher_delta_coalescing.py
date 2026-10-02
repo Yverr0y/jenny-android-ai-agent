@@ -3,6 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from support.aio import wait_until
 
 from jenny.bus.events import OutboundMessage
 from jenny.bus.queue import MessageBus
@@ -25,7 +26,6 @@ class MockChannel(WebSocketChannel):
     """Mock channel for testing."""
 
     name = "mock"
-    display_name = "Mock"
 
     def __init__(self, config, bus):
         super().__init__(config, bus, gateway=_mock_gateway())
@@ -282,30 +282,29 @@ class TestDispatchOutboundWithCoalescing:
             metadata={},  # Regular message
         ))
 
-        # Run one iteration of dispatch logic manually
-        pending = []
-        processed = []
+        # Il ciclo vero, non una sua copia: la copia
+        # restava verde anche togliendo la coalescenza dal dispatcher. Qui, se
+        # ``_dispatch_outbound`` non rimette in coda il messaggio che
+        # ``_coalesce_stream_deltas`` ha tolto dal bus per guardarlo, «Final»
+        # non arriva mai e l'attesa scade.
+        channel = manager.channels["websocket"]
+        order: list[tuple[str, str]] = []
+        channel._send_delta_mock.side_effect = (
+            lambda chat_id, delta, metadata: order.append(("delta", delta)) or []
+        )
+        channel._send_mock.side_effect = lambda msg: order.append(("send", msg.content)) or []
 
-        # First iteration: should coalesce A+B
-        if pending:
-            msg = pending.pop(0)
-        else:
-            msg = await bus.consume_outbound()
+        task = asyncio.create_task(manager._dispatch_outbound())
+        try:
+            await wait_until(lambda: len(order) >= 2, timeout=1.5, interval=0.02)
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        if msg.metadata.get("_stream_delta") and not msg.metadata.get("_stream_end"):
-            msg, extra_pending = manager._coalesce_stream_deltas(msg)
-            pending.extend(extra_pending)
-
-        channel = manager._route_channel(msg)
-        if channel:
-            await channel.send_delta(msg.chat_id, msg.content, msg.metadata)
-            processed.append(("delta", msg.content))
-
-        # Should have sent coalesced delta
-        assert processed == [("delta", "AB")]
-        # Should have pending regular message
-        assert len(pending) == 1
-        assert pending[0].content == "Final"
+        assert order == [("delta", "AB"), ("send", "Final")]
 
 
 class TestProgressFiltering:
@@ -346,10 +345,11 @@ class TestProgressFiltering:
 
         task = asyncio.create_task(manager._dispatch_outbound())
         try:
-            for _ in range(30):
-                if manager.channels["websocket"]._send_mock.await_count >= 1:
-                    break
-                await asyncio.sleep(0.05)
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
         finally:
             task.cancel()
             try:
@@ -373,10 +373,11 @@ class TestProgressFiltering:
 
         task = asyncio.create_task(manager._dispatch_outbound())
         try:
-            for _ in range(30):
-                if manager.channels["websocket"]._send_mock.await_count >= 1:
-                    break
-                await asyncio.sleep(0.05)
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
         finally:
             task.cancel()
             try:
@@ -389,18 +390,78 @@ class TestProgressFiltering:
         assert send_mock.await_args_list[0].args[0].content == "read_file(foo.py)"
 
 
-class TestRetryWaitFiltering:
-    """Internal provider retry heartbeats must never reach channels."""
+class TestRetryWaitDelivery:
+    """L'avviso d'attesa del provider arriva come riga di progresso, mai come risposta.
+
+    Era scartato del tutto: con un ``Retry-After`` lungo l'utente guardava una
+    bolla ferma senza sapere perché. Il difetto
+    più vecchio che lo scarto correggeva — il diagnostico recapitato come se
+    fosse una risposta — resta corretto: l'avviso diventa ``_progress``, quindi
+    la WebUI lo rende come riga subordinata, e un canale che non vuole progress
+    (Telegram) non lo riceve.
+    """
 
     @pytest.mark.asyncio
-    async def test_retry_wait_message_dropped(self, manager, bus):
-        """A ``_retry_wait`` message must be filtered before channel dispatch.
+    async def test_retry_wait_reaches_the_webui_as_progress(self, manager, bus):
+        await bus.publish_outbound(OutboundMessage(
+            channel="websocket",
+            chat_id="chat1",
+            content="Model request failed, retry in 60s (attempt 1).",
+            metadata={"_retry_wait": True},
+        ))
+        task = asyncio.create_task(manager._dispatch_outbound())
+        try:
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        Regression: provider retry diagnostics like
-        ``Model request failed, retry in 1s (attempt 1).`` were being
-        delivered to end-user channels because the runner bound
-        ``on_retry_wait`` to the progress callback.
+        sent = manager.channels["websocket"]._send_mock.await_args_list[0].args[0]
+        # Nella lingua dell'agente (italiano di default), non nell'inglese del log.
+        assert sent.content == "Il modello non risponde: riprovo fra 60 s (tentativo 1)."
+        assert sent.metadata.get("_progress") is True
+        assert not sent.metadata.get("_tool_hint")
+
+    @pytest.mark.asyncio
+    async def test_retry_wait_stays_english_for_an_english_agent(self, manager, bus):
+        manager.config.agents.defaults.language = "en"
+        await bus.publish_outbound(OutboundMessage(
+            channel="websocket",
+            chat_id="chat1",
+            content="Model request failed after 4 attempts, giving up.",
+            metadata={"_retry_wait": True},
+        ))
+        task = asyncio.create_task(manager._dispatch_outbound())
+        try:
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        sent = manager.channels["websocket"]._send_mock.await_args_list[0].args[0]
+        assert sent.content == "Model request failed after 4 attempts, giving up."
+
+    @pytest.mark.asyncio
+    async def test_retry_wait_is_dropped_where_progress_is_off(self, manager, bus):
+        """Un canale con ``send_progress`` spento (Telegram) non lo riceve.
+
+        Il messaggio vero che segue passa, l'avviso no.
         """
+        manager.channels["websocket"].send_progress = False
         retry_msg = OutboundMessage(
             channel="websocket",
             chat_id="chat1",
@@ -418,10 +479,11 @@ class TestRetryWaitFiltering:
 
         task = asyncio.create_task(manager._dispatch_outbound())
         try:
-            for _ in range(30):
-                if manager.channels["websocket"]._send_mock.await_count >= 1:
-                    break
-                await asyncio.sleep(0.05)
+            await wait_until(
+                lambda: manager.channels["websocket"]._send_mock.await_count >= 1,
+                timeout=1.5,
+                interval=0.05,
+            )
         finally:
             task.cancel()
             try:

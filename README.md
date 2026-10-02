@@ -21,18 +21,19 @@ hardware and keep the whole loop offline.
 
 </div>
 
-<!-- Captured on a Unihertz Titan 2 (1440x1440 square display) with
-     `scripts/capture_screenshots.sh`. Unretouched framebuffer grabs.
+<!-- Captured on the Android emulator at 1080x1920 (a 16:9 phone) with
+     `scripts/capture_screenshots.sh`. Unretouched framebuffer grabs; only the status bar is
+     in Android's demo mode (fixed clock, full battery, no notification icons).
 
      Width 200 is not arbitrary: GitHub's README column is 838px and does not grow with the
-     window (`container-lg` caps it). Four squares at 200px plus the inter-tag whitespace come
+     window (`container-lg` caps it). Four images at 200px plus the inter-tag whitespace come
      to ~814px, so the row holds on desktop and stacks on mobile instead of wrapping into a
      ragged 3+1. At 215px it no longer fits. -->
 
 <p align="center">
   <img src="docs/img/hero-chat.png"  alt="Jenny reading back data from a mini-app she wrote herself, in chat" width="200">
-  <img src="docs/img/apps.png"       alt="Mini-apps written by the AI agent, in its app grid"                 width="200">
-  <img src="docs/img/themes.png"     alt="Theme picker with live previews of the built-in themes"             width="200">
+  <img src="docs/img/apps.png"       alt="A mini-app the AI agent wrote on request: a meal log for a cat"   width="200">
+  <img src="docs/img/themes.png"     alt="Settings, with the theme picker and Synthwave '84 selected"         width="200">
   <img src="docs/img/wiki-graph.png" alt="Graph view of a wiki the agent wrote and cross-linked itself"       width="200">
 </p>
 
@@ -48,7 +49,7 @@ work and proactive messages possible at all.
 If you have ever self-hosted an AI agent on a server, this is that: except the host is a
 phone you already own, it has a screen, and its battery is the UPS.
 
-**It is a pre-release prototype.** Sideloaded, no store and no auto-updates, and the
+**It is a 1.0, built by one person, not a polished consumer product.** Sideloaded, no store and no silent auto-updates (Jenny tells you when a release exists and installs it only when you confirm), and the
 [known limitations](#known-limitations) are listed in full rather than discovered later.
 
 ## Is it actually free software?
@@ -79,7 +80,7 @@ device, so switching provider doesn't cost you your memory.
 
 **📚 It builds you a wiki.** Feed it articles, notes, PDFs or web pages and ask it to compile
 them: you get cross-linked Markdown pages — concepts and entities, joined by `[[wikilinks]]` —
-browsable in their own tab, with a graph view of how they connect (that's the fourth screenshot
+browsable from the notebook they belong to, with a graph view of how they connect (that's the fourth screenshot
 above). Driven entirely from chat through a built-in `llm-wiki` skill: create one, ingest a
 source, compile, ask it questions, run a lint pass for dead links and orphan pages. It does
 **not** update itself — every step is a request you make, or a job you schedule. Multiple wikis
@@ -118,7 +119,7 @@ most of which is the embedded CPython runtime. Verify it against the hash publis
 release page:
 
 ```bash
-shasum -a 256 jenny-0.11.0.apk
+shasum -a 256 jenny-1.0.0.apk
 ```
 
 Android will ask you to allow installing from outside the Play Store. The APK is signed with
@@ -144,11 +145,13 @@ token-gated even on loopback, because Android does not isolate loopback TCP betw
 Jenny makes six kinds of outbound connection — your provider, Bing when it searches,
 `api.telegram.org` if you enabled the bridge, any URL you or the agent explicitly fetch,
 OpenRouter's attribution headers when that's your provider, and a daily check for a new
-release. **None of them carries anything about you.** The update check is a plain `GET` of the
+release. **None of them carries anything about you.** (Beyond these, there are only the
+connections you set up yourself: SSH to hosts you register, and the HTTP actions of mini-apps you
+install.) The update check is a plain `GET` of the
 `latest.json` published with the release: no identifier, no version, no headers of ours, no
 query string — a public file fetched and compared on the device. It is the only one that goes
 to a server this project controls, and the only one you did not switch on: it runs every 24h,
-and `updates.enabled: false` stops it. Jenny declares 15 permissions and asks for **no**
+and `updates.enabled: false` stops it. Jenny declares 16 permissions and asks for **no**
 camera, microphone, contacts, SMS, call log, background location or storage.
 → [Every connection and permission](https://jenny.flagdizero.com/docs/reference/android-permissions/)
 
@@ -194,8 +197,10 @@ Collected in one place rather than scattered, so you can judge before installing
 
 ## Status and roadmap
 
-**Pre-release prototype.** It works, it's been my daily driver for months, and it has rough
-edges — onboarding most of all, which is exactly where feedback is worth most.
+**1.0, the first stable release.** It has been my daily driver for months, and from here on a
+change that breaks something you rely on gets a new major number — see the
+[changelog](CHANGELOG.md). It is still one person's project with rough edges, onboarding most of
+all, which is exactly where feedback is worth most.
 
 Not promised, roughly in order: measured battery numbers · voice in and out · a credential
 store so mini-apps can reach authenticated servers · the agent operating other apps on the
@@ -218,7 +223,7 @@ would want it — GitHub's search ranks on them, and this project has no marketi
 A native Android app with an embedded CPython 3.11 (Chaquopy 17), `minSdk 26` /
 `targetSdk 34`. The agent runs as a persistent foreground service and serves a mobile-first
 SPA over loopback. Messages flow through an async bus that decouples the channel from the
-core. Over 3,500 tests; CI runs `ruff`, `pytest` on 3.11 and 3.12, and `pyright` — blocking on the
+core. Over 12,000 tests; CI runs `ruff`, `pytest` on 3.11 and 3.12, and `pyright` — blocking on the
 subsystems that are already type-clean, advisory on the rest, which is the honest state of a
 codebase being tightened rather than one pretending to be finished.
 

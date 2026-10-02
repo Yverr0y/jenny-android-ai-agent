@@ -34,53 +34,35 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import locale, member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHIP_JS = ASSETS / "shared" / "scope-chip.js"
+LIST_JS = ASSETS / "shared" / "conversation-list.js"
 I18N_JS = ASSETS / "shared" / "i18n.js"
 CSS = ASSETS / "mobile-style.css"
-I18N_DIR = ASSETS / "i18n"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _chip() -> str:
     return CHIP_JS.read_text(encoding="utf-8")
 
 
-def _member(source: str, name: str) -> str:
-    """Il corpo di un metodo, dal sorgente e non riscritto."""
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
 def _const(source: str, name: str) -> str:
     """Un `const NOME = {...};` di modulo, dal sorgente."""
-    m = re.search(rf"\nconst {re.escape(name)} = \{{.*?\n\}};", source, re.S)
+    m = re.search(rf"\n(?:export )?const {re.escape(name)} = \{{.*?\n\}};", source, re.S)
     assert m, f"const {name} non trovato"
-    return m.group(0)
-
-
-def _locale(name: str) -> dict:
-    return json.loads((I18N_DIR / f"{name}.json").read_text(encoding="utf-8"))
+    return m.group(0).replace("export const", "const")
 
 
 _HARNESS = """
 import assert from 'node:assert/strict';
 
-const DEFAULT_DIR = 'wikis';
+const { ConversationList, ago } = await import('__LIST_URL__');
 __HINT_KEYS__
 
 /* La `t()` vera di `i18n.js` sulle traduzioni vere: la nota va letta come la
@@ -158,10 +140,10 @@ const api = {
 class Chip {
   constructor() {
     this.scope = { kind: 'personal', name: null };
-    this._projects = null;
-    this._unopenable = null;
-    this._loadFailed = false;
-    this._dir = DEFAULT_DIR;
+    /* Le due liste stanno in `conversation-list.js`, importato vero: la
+       divisione fra apribili e non — e il fatto che un guasto non la cancelli
+       — e' la sua regola, e va misurata dove vive. */
+    this._list = new ConversationList(() => api.listProjects());
     this.menu = makeEl('div');
     this.picked = [];
   }
@@ -179,6 +161,10 @@ class Chip {
     row.appendChild(item);
     return row;
   }
+  __PROJECTS__
+  __UNOPENABLE__
+  __LOAD_FAILED__
+  __DIR__
   __LOAD_PROJECTS__
   __RENDER_MENU__
   __LABEL__
@@ -193,28 +179,32 @@ class Chip {
 def _harness() -> str:
     src = _chip()
     return (
-        _HARNESS.replace("__HINT_KEYS__", _const(src, "UNOPENABLE_HINT_KEYS"))
-        .replace("__TRANSLATIONS__", json.dumps({"it": _locale("it")}))
-        .replace("__T__", _member(I18N_JS.read_text(encoding="utf-8"), "t"))
-        .replace("__LOAD_PROJECTS__", _member(src, "_loadProjects"))
-        .replace("__RENDER_MENU__", _member(src, "_renderMenu"))
-        .replace("__LABEL__", _member(src, "_label"))
-        .replace("__SEP__", _member(src, "_sep"))
-        .replace("__NOTE__", _member(src, "_note"))
-        .replace("__ITEM__", _member(src, "_item"))
-        .replace("__AGO__", _member(src, "_ago"))
+        # La mappa motivo→chiave e' passata in `conversation-list.js` col resto
+        # di quel che i due gusci dividono: `reason` arriva dal server e la sua
+        # traduzione e' una sola.
+        _HARNESS.replace("__HINT_KEYS__",
+                         _const(LIST_JS.read_text(encoding="utf-8"),
+                                "UNOPENABLE_HINT_KEYS"))
+        .replace("__LIST_URL__", LIST_JS.as_uri())
+        .replace("__PROJECTS__", member(src, "_projects"))
+        .replace("__UNOPENABLE__", member(src, "_unopenable"))
+        .replace("__LOAD_FAILED__", member(src, "_loadFailed"))
+        .replace("__DIR__", member(src, "_dir"))
+        .replace("__TRANSLATIONS__", json.dumps({"it": locale("it")}))
+        .replace("__T__", member(I18N_JS.read_text(encoding="utf-8"), "t"))
+        .replace("__LOAD_PROJECTS__", member(src, "_loadProjects"))
+        .replace("__RENDER_MENU__", member(src, "_renderMenu"))
+        .replace("__LABEL__", member(src, "_label"))
+        .replace("__SEP__", member(src, "_sep"))
+        .replace("__NOTE__", member(src, "_note"))
+        .replace("__ITEM__", member(src, "_item"))
+        .replace("__AGO__", member(src, "_ago"))
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # Le stringhe italiane vere, così l'asserzione parla della frase che si legge sul
@@ -223,7 +213,7 @@ def _run_js(script: str) -> None:
 # raccolta di tutto il file — cioè della suite, che si interrompe su un errore di
 # collect.
 def _it(key: str) -> str:
-    return _locale("it")["scope"].get(key, f"(scope.{key} manca)")
+    return locale("it")["scope"].get(key, f"(scope.{key} manca)")
 
 
 def _rule() -> str:
@@ -241,13 +231,13 @@ def test_the_unopenable_array_is_read_and_kept() -> None:
     """Il difetto in una riga: `unopenable` non veniva letto affatto."""
     _run_js("""
       const chip = new Chip();
-      nextPayload = { dir: 'wikis', projects: [{ name: 'patreon', modified: 100 }],
+      nextPayload = { dir: 'wikis', projects: [{ name: 'palestra', modified: 100 }],
         unopenable: [
-          { name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' },
+          { name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' },
           { name: 'università', modified: 300, reason: 'invalid_name' },
         ] };
       await chip._loadProjects();
-      assert.deepEqual(chip._unopenable.map((f) => f.name), ['università', 'Ricerca ETF'],
+      assert.deepEqual(chip._unopenable.map((f) => f.name), ['università', 'Ricerca ETNA'],
                        'le cartelle non apribili sono state buttate, o non sono ordinate come le altre');
       assert.deepEqual(chip._unopenable.map((f) => f.reason), ['invalid_name', 'invalid_name'],
                        'il motivo non viaggia con la voce: la riga non saprebbe cosa dire');
@@ -259,11 +249,11 @@ def test_a_failed_read_does_not_erase_the_unopenable_cache() -> None:
     _run_js("""
       const chip = new Chip();
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       nextPayload = 'fail';
       await chip._loadProjects();
-      assert.deepEqual(chip._unopenable.map((f) => f.name), ['Ricerca ETF'],
+      assert.deepEqual(chip._unopenable.map((f) => f.name), ['Ricerca ETNA'],
                        'un guasto di rete ha cancellato la cartella dallo schermo');
       assert.equal(chip._loadFailed, true);
     """)
@@ -275,16 +265,16 @@ def test_a_failed_read_does_not_erase_the_unopenable_cache() -> None:
 def test_the_row_appears_with_its_own_label_and_one_note() -> None:
     _run_js(f"""
       const chip = new Chip();
-      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'patreon', modified: 100 }}],
+      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'palestra', modified: 100 }}],
         unopenable: [
-          {{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }},
+          {{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }},
           {{ name: 'università', modified: 90, reason: 'invalid_name' }},
         ] }};
       await chip._loadProjects();
       chip._renderMenu();
 
       const written = texts(chip.menu);
-      assert.equal(written.includes('Ricerca ETF'), true,
+      assert.equal(written.includes('Ricerca ETNA'), true,
                    'la cartella che il server manda come non apribile non compare');
       assert.equal(written.includes('università'), true);
       assert.equal(written.includes({json.dumps(_it("unopenableSection"))}), true,
@@ -298,7 +288,7 @@ def test_the_row_appears_with_its_own_label_and_one_note() -> None:
       assert.equal(notes[0].includes('{{rule}}'), false,
                    'la regola non è stata interpolata: a schermo resta il segnaposto');
       // E i progetti veri restano dove erano.
-      assert.ok(written.indexOf('patreon') < written.indexOf('Ricerca ETF'),
+      assert.ok(written.indexOf('palestra') < written.indexOf('Ricerca ETNA'),
                 'le righe da sistemare vengono prima di quelle su cui si lavora');
     """)
 
@@ -308,11 +298,11 @@ def test_the_row_is_shown_even_when_there_are_no_openable_projects() -> None:
     _run_js("""
       const chip = new Chip();
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
       const written = texts(chip.menu);
-      assert.equal(written.includes('Ricerca ETF'), true,
+      assert.equal(written.includes('Ricerca ETNA'), true,
                    "l'unica cartella del workspace non è sullo schermo");
       // «Nessun progetto ancora» resta vero — nessuno di quelli si apre — ed è
       // la riga sotto a spiegare cos'è quella cartella.
@@ -324,7 +314,7 @@ def test_nothing_is_added_when_every_folder_opens() -> None:
     """Il rovescio: senza cartelle bloccate la tendina è quella di prima."""
     _run_js(f"""
       const chip = new Chip();
-      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'patreon', modified: 100 }}],
+      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'palestra', modified: 100 }}],
         unopenable: [] }};
       await chip._loadProjects();
       chip._renderMenu();
@@ -349,8 +339,8 @@ def test_the_row_is_not_selectable() -> None:
     """
     _run_js("""
       const chip = new Chip();
-      nextPayload = { dir: 'wikis', projects: [{ name: 'patreon', modified: 100 }],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+      nextPayload = { dir: 'wikis', projects: [{ name: 'palestra', modified: 100 }],
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
 
@@ -366,7 +356,7 @@ def test_the_row_is_not_selectable() -> None:
       assert.equal(byClass(row, 'scope-menu-check').length, 0);
       assert.equal(row.dataset.reason, 'invalid_name');
 
-      // E il conto dei listener di tutta la tendina: personale + patreon +
+      // E il conto dei listener di tutta la tendina: personale + palestra +
       // "nuovo progetto", e nient'altro.
       assert.equal(listeners(chip.menu), 3,
                    'la tendina ha una riga tappabile in più del previsto');
@@ -380,7 +370,7 @@ def test_the_row_still_says_when_the_folder_last_moved() -> None:
       const chip = new Chip();
       const twoHoursAgo = Math.floor(Date.now() / 1000) - 7200;
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: twoHoursAgo, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: twoHoursAgo, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
       const written = texts(byClass(chip.menu, 'is-unopenable')[0]);
@@ -417,7 +407,7 @@ def test_an_unknown_reason_does_not_get_told_the_name_rule() -> None:
 def test_two_folders_on_the_same_reason_share_one_note() -> None:
     _run_js(f"""
       const chip = new Chip();
-      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'patreon', modified: 400 }}],
+      nextPayload = {{ dir: 'wikis', projects: [{{ name: 'palestra', modified: 400 }}],
         unopenable: [
           {{ name: 'a b', modified: 300, reason: 'invalid_name' }},
           {{ name: 'c d', modified: 200, reason: 'invalid_name' }},
@@ -443,14 +433,14 @@ def test_a_rename_moves_the_folder_to_the_openable_list() -> None:
     _run_js("""
       const chip = new Chip();
       nextPayload = { dir: 'wikis', projects: [],
-        unopenable: [{ name: 'Ricerca ETF', modified: 100, reason: 'invalid_name' }] };
+        unopenable: [{ name: 'Ricerca ETNA', modified: 100, reason: 'invalid_name' }] };
       await chip._loadProjects();
       chip._renderMenu();
       assert.equal(byClass(chip.menu, 'is-unopenable').length, 1);
       assert.equal(listeners(chip.menu), 2, 'personale + nuovo progetto, e nient\\'altro');
 
       // L'agente la rinomina, e la lettura dopo la trova dall'altro lato.
-      nextPayload = { dir: 'wikis', projects: [{ name: 'ricerca-etf', modified: 200 }],
+      nextPayload = { dir: 'wikis', projects: [{ name: 'ricerca-etna', modified: 200 }],
         unopenable: [] };
       await chip._loadProjects();
       chip._renderMenu();
@@ -458,13 +448,13 @@ def test_a_rename_moves_the_folder_to_the_openable_list() -> None:
       assert.equal(byClass(chip.menu, 'is-unopenable').length, 0,
                    'la riga grigia resta dopo il rename');
       const written = texts(chip.menu);
-      assert.equal(written.includes('ricerca-etf'), true);
-      assert.equal(written.includes('Ricerca ETF'), false, 'il nome vecchio è ancora a schermo');
+      assert.equal(written.includes('ricerca-etna'), true);
+      assert.equal(written.includes('Ricerca ETNA'), false, 'il nome vecchio è ancora a schermo');
       assert.equal(listeners(chip.menu), 3, 'la cartella rinominata non è diventata tappabile');
 
       // E ora si apre davvero: la riga chiama `select` col nome nuovo.
       const rows = byClass(chip.menu, 'scope-menu-item')
-        .filter((r) => texts(r).includes('ricerca-etf'));
+        .filter((r) => texts(r).includes('ricerca-etna'));
       assert.equal(rows.length, 1);
       assert.equal(rows[0].tag, 'button');
     """)
@@ -484,13 +474,13 @@ def test_the_payload_the_route_builds_is_the_payload_the_chip_reads(tmp_path) ->
     from jenny.webui.wiki_routes import _collect_projects
 
     wikis = tmp_path / "wikis"
-    for name in ("Ricerca ETF", "patreon"):
+    for name in ("Ricerca ETNA", "palestra"):
         (wikis / name / "wiki").mkdir(parents=True)
         (wikis / name / "wiki" / "index.md").write_text(f"# {name}\n", encoding="utf-8")
 
     projects, unopenable = _collect_projects(wikis)
     payload = {"dir": wikis.name, "projects": projects, "unopenable": unopenable}
-    assert [p["name"] for p in projects] == ["patreon"]
+    assert [p["name"] for p in projects] == ["palestra"]
 
     _run_js(f"""
       const chip = new Chip();
@@ -498,7 +488,7 @@ def test_the_payload_the_route_builds_is_the_payload_the_chip_reads(tmp_path) ->
       await chip._loadProjects();
       chip._renderMenu();
       const written = texts(chip.menu);
-      assert.equal(written.includes('Ricerca ETF'), true,
+      assert.equal(written.includes('Ricerca ETNA'), true,
                    'il chip non legge il payload che la route costruisce');
       assert.equal(written.includes({json.dumps(_hint())}), true,
                    "il motivo che il server manda non trova la frase che gli corrisponde");
@@ -512,16 +502,16 @@ def test_the_payload_the_route_builds_is_the_payload_the_chip_reads(tmp_path) ->
 
 def test_the_new_strings_exist_in_both_locales() -> None:
     """Grep, non comportamento: nessuna delle due lingue resta con la chiave."""
-    for locale in ("it", "en"):
-        scope = _locale(locale)["scope"]
+    for lang in ("it", "en"):
+        scope = locale(lang)["scope"]
         for key in ("unopenableSection", "unopenableInvalidName", "unopenableOther"):
-            assert key in scope, f"chiave scope.{key} mancante in {locale}.json"
+            assert key in scope, f"chiave scope.{key} mancante in {lang}.json"
             assert scope[key].strip()
         assert "{rule}" in scope["unopenableInvalidName"], (
-            f"{locale}: la nota non ha il posto in cui va la regola dei nomi"
+            f"{lang}: la nota non ha il posto in cui va la regola dei nomi"
         )
         assert "{rule}" not in scope["unopenableOther"], (
-            f"{locale}: un motivo sconosciuto si prende la regola dei nomi"
+            f"{lang}: un motivo sconosciuto si prende la regola dei nomi"
         )
 
 
@@ -532,27 +522,32 @@ def test_the_name_rule_is_not_copied_a_fourth_time() -> None:
     skill, e la `VALID_NAME` del client). La nota non ne aggiunge una quarta in
     prosa: interpola quella che c'è.
     """
-    for locale in ("it", "en"):
-        scope = _locale(locale)["scope"]
+    for lang in ("it", "en"):
+        scope = locale(lang)["scope"]
         for key in ("unopenableInvalidName", "unopenableOther", "unopenableSection"):
             lowered = scope[key].lower()
             for word in ("underscore", "64"):
                 assert word not in lowered, (
-                    f"{locale}: scope.{key} riscrive la regola dei nomi invece di citarla"
+                    f"{lang}: scope.{key} riscrive la regola dei nomi invece di citarla"
                 )
-    src = _chip()
-    # Il modulo *cita* la regola due volte — il toast del dialogo di creazione e
-    # la nota della tendina — e non la **scrive** mai: nessuna parola della
-    # regola compare nel JS, né in una stringa né altrove.
-    assert src.count("i18n.t('scope.invalidName')") == 2, (
-        "la regola si cita per chiave, e i punti che la citano sono due"
+    # I tre moduli che hanno a che fare con la regola, da quando è stata portata
+    # dove stanno le conversazioni: chi la applica, chi la cita nella tendina,
+    # chi la cita creando. La citano per chiave e non la **scrivono** mai.
+    assets = ASSETS / "shared"
+    trio = {
+        name: (assets / name).read_text(encoding="utf-8")
+        for name in ("conversation-list.js", "scope-chip.js", "project-create.js")
+    }
+    quotes = sum(src.count("'scope.invalidName'") for src in trio.values())
+    assert quotes == 2, (
+        f"la regola si cita per key, e i punti che la citano sono due (trovati {quotes})"
     )
-    assert "underscore" not in src.lower(), (
-        "la regola dei nomi è finita in prosa dentro il JS"
-    )
-    assert len(re.findall(r"A-Za-z0-9\]\[A-Za-z0-9", src)) == 1, (
-        "una seconda regex sulla forma dei nomi nel client"
-    )
+    for name, src in trio.items():
+        assert "underscore" not in src.lower(), (
+            f"{name}: la regola dei nomi è finita in prosa dentro il JS"
+        )
+    regex = sum(len(re.findall(r"A-Za-z0-9\]\[A-Za-z0-9", src)) for src in trio.values())
+    assert regex == 1, "una seconda regex sulla forma dei nomi nel client"
 
 
 def test_the_disabled_row_has_a_look_of_its_own() -> None:

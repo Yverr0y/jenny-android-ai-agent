@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from jenny.config.loader import load_config
 from jenny.config.schema import CURRENT_CONFIG_VERSION, AgentDefaults, Config
 
@@ -65,6 +67,67 @@ def test_a_garbage_version_degrades_to_zero_instead_of_raising() -> None:
     assert config.config_version == CURRENT_CONFIG_VERSION
 
 
+@pytest.mark.parametrize("version", ["1e400", "2.5", '"3"', "true", "-1", "null", "[]"])
+def test_a_version_that_is_not_a_plain_integer_costs_nothing_else(tmp_path, version) -> None:
+    """``1e400`` (infinito per ``json``) faceva sollevare ``OverflowError`` fuori
+    dal recupero — crash-loop del gateway; ``2.5``, ``"3"``, ``true`` o ``-1`` facevano
+    rifiutare il file intero, e si ripartiva sui default di tutto."""
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"configVersion": %s, "agents": {"defaults": {"maxTokens": 1234}}}' % version,
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.agents.defaults.max_tokens == 1234
+    assert config.config_version == CURRENT_CONFIG_VERSION
+    assert not list(tmp_path.glob("config.corrupt-*"))
+
+
+@pytest.mark.parametrize("version", ['"3"', '" 3 "', "3.0", '"03"'])
+def test_a_whole_number_in_another_form_is_that_version(tmp_path, version) -> None:
+    """Un ``"3"`` (o ``3.0``) scritto a mano o da un altro strumento valeva 0: la
+    migrazione v1 rigirava e riportava a 3 un ``maxConcurrentSubagents: 1``
+    scelto dall'utente dopo lo stamp. E' la versione 3, scritta in un'altra forma."""
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"configVersion": %s, "agents": {"defaults": {"maxConcurrentSubagents": 1}}}'
+        % version,
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.agents.defaults.max_concurrent_subagents == 1
+    assert config.config_version == CURRENT_CONFIG_VERSION
+
+
+@pytest.mark.parametrize("version", ['"2.5"', "2.5", "true", '"-1"', '"tre"', '"%s"' % ("9" * 50)])
+def test_a_version_that_is_no_whole_number_is_still_zero(version) -> None:
+    config = Config.model_validate(json.loads(
+        '{"configVersion": %s, "agents": {"defaults": {"maxConcurrentSubagents": 1}}}' % version
+    ))
+    assert config.agents.defaults.max_concurrent_subagents == _NEW_CONCURRENCY
+    assert config.config_version == CURRENT_CONFIG_VERSION
+
+
+async def test_persist_writes_a_string_version_back_as_an_integer(tmp_path) -> None:
+    from jenny.config.store import persist_schema_migrations
+
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"configVersion": "3", "agents": {"defaults": {"maxConcurrentSubagents": 1}}}',
+        encoding="utf-8",
+    )
+
+    await persist_schema_migrations(config_path=path)
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert written["configVersion"] == CURRENT_CONFIG_VERSION
+    assert written["agents"]["defaults"]["maxConcurrentSubagents"] == 1
+
+
 def test_the_stamp_is_serialized_so_the_next_write_persists_it() -> None:
     """Nessuna scrittura dedicata: lo stamp viaggia col primo dump ordinario."""
     dumped = Config.model_validate({}).model_dump(mode="json", by_alias=True)
@@ -81,6 +144,19 @@ def test_migration_runs_through_the_real_loader(tmp_path) -> None:
     config = load_config(path)
     assert config.agents.defaults.max_concurrent_subagents == _NEW_CONCURRENCY
     assert config.config_version == CURRENT_CONFIG_VERSION
+
+
+@pytest.mark.parametrize("version", ["1e400", '"3"'])
+async def test_persist_rewrites_a_version_that_is_not_an_integer(tmp_path, version) -> None:
+    from jenny.config.store import persist_schema_migrations
+
+    path = tmp_path / "config.json"
+    path.write_text('{"configVersion": %s}' % version, encoding="utf-8")
+
+    assert await persist_schema_migrations(config_path=path) is True
+    assert json.loads(path.read_text(encoding="utf-8"))["configVersion"] == (
+        CURRENT_CONFIG_VERSION
+    )
 
 
 async def test_persist_stamps_the_file_once(tmp_path) -> None:

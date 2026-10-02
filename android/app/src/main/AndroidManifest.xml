@@ -29,7 +29,9 @@
          stato ucciso a schermo spento. Permesso "normale" fino ad Android 11 e
          concedibile — revocabile — dall'utente da Android 12: quando manca,
          scheduleWake ricade su una sveglia inesatta, che slitta ma scatta
-         comunque. NON si dichiara USE_EXACT_ALARM: è riservato a sveglie e
+         comunque — e sveglia un gateway vivo, ma non ne rialza uno morto:
+         la sua allowlist non permette di avviare un foreground service (v.
+         GatewayStarter). NON si dichiara USE_EXACT_ALARM: è riservato a sveglie e
          timer visibili all'utente, non è revocabile e farebbe rifiutare l'app
          in review su Play. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -122,9 +124,9 @@
         <!-- `configChanges` largo apposta: ogni configurazione NON elencata qui
              ricrea l'activity, e la ricreazione distrugge la WebView — cioè la
              SPA, con la vista corrente, lo scroll della chat, la mini-app
-             aperta e la connessione WebSocket. Non c'è `onSaveInstanceState`
-             che la rimetta a posto (`stateNotNeeded` è già dichiarato sopra: lo
-             stato non si salva per scelta).
+             aperta e la connessione WebSocket. `onSaveInstanceState` salva solo
+             il path di un export in corso, non la SPA: niente la rimette a
+             posto.
 
              Le voci aggiunte sono i cambi che sul Titan 2 capitano davvero a
              app in primo piano: `uiMode` (tema scuro di sistema, anche quello
@@ -132,21 +134,46 @@
              `density`+`smallestScreenSize`+`screenLayout` (dimensione display),
              `locale` (lingua).
 
+             Poi `keyboard` e `navigation` (Sett 2026): mancavano, e sono proprio
+             i cambi di QUESTO telefono — una tastiera Bluetooth che si attacca o
+             si stacca cambia `keyboard` (e con lei spesso `navigation`), e
+             `keyboardHidden` da solo non la copre. Ricreava l'activity con la
+             SPA dentro. `layoutDirection` è il compagno di `locale`: passare a
+             una lingua RTL cambia anche quello, e senza dichiararlo la lingua
+             assorbita qui sopra ricreava comunque.
+
              Assorbirli senza ricreare è sicuro **perché nulla di nativo dipende
-             da quelle risorse**: `Theme.Jenny` è `Theme.AppCompat.Light`, non
-             DayNight, quindi `uiMode` non cambia nessun colore; i temi della
+             da quelle risorse**: `Theme.Jenny` discende da `Theme.AppCompat.Light.NoActionBar`, non
+             DayNight, quindi `uiMode` non cambia nessun colore (nemmeno gli
+             splash per tema di values-v31, che dipendono dal tema della WebUI); i temi della
              WebUI sono CSS puro (`data-theme` + `setThemeBars`) e non usano
-             `prefers-color-scheme`; `activity_main.xml` scrive le sue tre
+             `prefers-color-scheme`; `activity_main.xml` scrive le sue sei
              stringhe in chiaro e non referenzia nessun `@string`, quindi
              `locale` non ha niente da ri-risolvere. La WebView, invece, il
              `fontScale` lo riceve da sola (v. `loadWebView`: `textZoom` non
-             viene più forzato). -->
+             viene più forzato). `keyboard`/`navigation`: nessuna risorsa usa i
+             qualificatori di tastiera o di navigazione, e la domanda "c'è una
+             tastiera fisica?" la WebUI la fa a ogni uso (`hasHardwareKeyboard`).
+             `layoutDirection`: le due viste native (caricamento, errore) sono
+             centrate e non hanno un verso da rispecchiare.
+
+             Poi (26/09/2026) `fontWeightAdjustment`, il «testo in grassetto»
+             di Accessibilità (API 31): è un interruttore del pannello
+             accanto alla dimensione carattere, e senza dichiararlo ricreava
+             l'activity come faceva `fontScale`. Assorbito, le due viste native
+             tengono il peso di prima fino alla prossima creazione; la SPA non
+             lo legge. `colorMode` (gamma larga/HDR del display) e
+             `touchscreen`: nessuna risorsa usa i loro qualificatori
+             (`widecg`, `highdr`, `notouch`, `finger`), quindi non c'è niente
+             da ri-risolvere. Restano fuori `mcc|mnc`: un cambio di SIM è raro,
+             e una ricreazione lì è il comportamento che le librerie si
+             aspettano per le loro risorse per operatore. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:stateNotNeeded="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|fontScale|density|locale">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|fontScale|fontWeightAdjustment|density|locale|layoutDirection|colorMode|touchscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -165,8 +192,11 @@
                 android:value="local_agent_runtime" />
         </service>
 
-        <!-- Espone i file del workspace ad app esterne per l'apertura col
-             viewer di sistema (JennyNative.openFile → ACTION_VIEW). -->
+        <!-- Passa ad app esterne, con un permesso concesso Intent per Intent, i
+             file del workspace (JennyNative.openFile/shareFile → ACTION_VIEW,
+             ACTION_SEND) e il file temporaneo della fotocamera. Solo quelle due
+             radici: v. res/xml/file_paths.xml, e resolveLocalFile in
+             MainActivity per config.json. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -227,12 +257,16 @@
         </receiver>
 
         <!-- Risposta rapida dalla tendina. Nessun intent-filter, e non è una
-             dimenticanza: l'unica cosa che lo raggiunge è il PendingIntent che
-             NotifierBridge appende all'alert, e quello porta già la nostra
-             identita. exported="false" per la stessa ragione di WakeReceiver,
-             qui anche piu netta: questo receiver consegna testo a un turno
-             dell'agente, quindi un'app qualunque che potesse mandargli un
-             broadcast potrebbe far dire a Jenny quello che vuole. -->
+             dimenticanza: lo raggiunge il PendingIntent che NotifierBridge
+             appende all'alert. exported="false" per la stessa ragione di
+             WakeReceiver, qui anche piu netta: questo receiver consegna testo a
+             un turno dell'agente, quindi un'app qualunque che potesse mandargli
+             un broadcast potrebbe far dire a Jenny quello che vuole.
+
+             Non è però chiuso del tutto, e non può esserlo: quel PendingIntent
+             è mutabile (la risposta diretta lo richiede), quindi un'app con
+             l'accesso alle notifiche, che le azioni degli alert le vede, può
+             mandarlo con un testo suo. V. il KDoc di ReplyReceiver. -->
         <receiver
             android:name=".ReplyReceiver"
             android:exported="false" />

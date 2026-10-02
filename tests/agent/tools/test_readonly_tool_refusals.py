@@ -1,6 +1,6 @@
 """I tool che si portano la destinazione da sé, e che quindi devono chiedere.
 
-Passo **4.2** di ``roadmap/progetti-passi.md``, la metà che non passa dai
+Passo **4.2** del piano dei progetti, la metà che non passa dai
 cancelli di percorso.
 
 Questi quattro non risolvono niente con ``resolve_allowed_path``: la
@@ -159,7 +159,7 @@ async def test_inside_a_project_the_project_rule_speaks_first(readonly: Path) ->
     Dire "sola lettura" dentro un progetto manderebbe l'utente ad accendere
     l'interruttore per poi trovarsi rifiutato di nuovo.
     """
-    tool, _ = _cron_tool("project:patreon")
+    tool, _ = _cron_tool("project:palestra")
     result = await tool.execute(action="add", message="x", at="2026-09-01T09:00:00")
     assert "project" in result.lower()
     assert result != READONLY_TOOL_REFUSAL

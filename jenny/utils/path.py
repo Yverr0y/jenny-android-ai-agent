@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import uuid
+from collections.abc import Iterable
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -108,6 +109,12 @@ def atomic_write(
     l'argomento. Quelle copie non facevano ``fsync``, e una usava un nome
     temporaneo fisso — cioè la collisione fra scrittori concorrenti che il
     suffisso uuid qui sopra esiste per evitare.
+
+    Con *chmod* il temporaneo **nasce** ``0600``, non ci arriva: ``chmod`` dopo
+    la scrittura lasciava il contenuto — le chiavi di ``config.json`` — per un
+    momento in un file coi permessi di default (``0644`` con umask ``022``). Il
+    modo chiesto si applica a contenuto completo, prima della rename. Senza
+    *chmod* il file nasce come lo farebbe ``open``, secondo l'umask.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,8 +123,15 @@ def atomic_write(
     encoding = None if isinstance(content, bytes) else "utf-8"
 
     tmp_path = path.with_suffix(f"{path.suffix}.{uuid.uuid4().hex}.tmp")
+    create_mode = 0o600 if chmod is not None else 0o666
+
+    def _opener(file: str, flags: int) -> int:
+        # ``O_EXCL``: il nome e' unico (uuid), e un file che c'e' gia' non e' il
+        # nostro — meglio un errore che scriverci dentro coi suoi permessi.
+        return os.open(file, flags | os.O_EXCL, create_mode)
+
     try:
-        with open(tmp_path, mode, encoding=encoding) as f:
+        with open(tmp_path, mode, encoding=encoding, opener=_opener) as f:
             f.write(content)
             if fsync_file:
                 f.flush()
@@ -183,3 +197,28 @@ def _abbreviate_url(url: str, max_len: int = 40) -> str:
     if kept:
         return domain + "/\u2026/" + "/".join(kept) + "/" + basename
     return domain + "/\u2026/" + basename
+
+
+def append_lines_durable(
+    path: Path, lines: Iterable[str], *, tolerate_fsync_error: bool = False
+) -> None:
+    """Accoda *lines* a *path* (ognuna col suo a capo) e le porta su disco.
+
+    ``flush`` e ``fsync`` prima di tornare: chi chiama lo fa perché subito dopo
+    butta la copia in memoria, o gli originali — il diario della memoria, la
+    coda di un progetto compattata, il transcript della WebUI. Era scritto tre
+    volte. Con *tolerate_fsync_error* un ``fsync`` fallito non solleva (le righe
+    sono comunque nel file, solo non ancora garantite su disco): è la scelta del
+    transcript, che non deve far fallire un turno per questo. Gli altri due no,
+    perché il loro chiamante cancella qualcosa subito dopo.
+    """
+    with open(path, "a", encoding="utf-8") as f:
+        for line in lines:
+            f.write(line + "\n")
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            if not tolerate_fsync_error:
+                raise
+

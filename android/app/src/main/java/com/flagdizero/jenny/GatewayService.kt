@@ -67,7 +67,7 @@ class GatewayService : Service() {
          *  tendina, il fumetto per la mascotte. Una stringa che diverge non
          *  rompe la compilazione: fa rifiutare ogni messaggio di quella
          *  superficie, in silenzio. È il legame che
-         *  `tests/runtime/test_native_input.py::TestConfineConKotlin` controlla
+         *  `tests/runtime/test_native_input.py::TestBoundaryWithKotlin` controlla
          *  leggendo questo file. */
         const val NATIVE_SOURCE_NOTIFICATION = "notification"
         const val NATIVE_SOURCE_FLOATING = "floating"
@@ -349,6 +349,10 @@ class GatewayService : Service() {
         // l'utente l'ha spenta si disarma da sé invece di riarmarsi.
         AlarmClockFallback.arm(this)
         startGateway()
+        // Un service ricreato con il gateway ancora vivo non ripassa da Python
+        // (`startGateway` non rilancia niente), quindi la mascotte flottante
+        // smontata in `onDestroy` la rimette su il nativo, se era voluta.
+        FloatingOverlayController.onServiceStarted()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -365,6 +369,13 @@ class GatewayService : Service() {
         }
         isRunning = true
         Watchdog.noteAlive(this)
+        // In foreground, quindi «Jenny è ferma» non è più vero: da qualunque
+        // strada si sia arrivati — il tocco sulla notifica, l'app aperta a
+        // mano, il boot — la notifica di riavvio se ne va qui.
+        if (intent?.getBooleanExtra(RestartNotice.EXTRA_FROM_NOTICE, false) == true) {
+            Log.i(TAG, "Gateway service started from the restart notice")
+        }
+        RestartNotice.clear(this)
         // Idempotente: riparte solo se il thread del gateway non c'è più. È il
         // braccio operativo del watchdog — senza, "riavviare il service" su un
         // processo vivo ma con Python morto non riavvierebbe proprio niente.
@@ -497,7 +508,9 @@ class GatewayService : Service() {
         // una finestra che accetta domande, e senza nessuno che risponda
         // resterebbe a schermo a raccogliere testo per un agente che non c'è.
         // Smontarla qui e non in `stop()` del canale è deliberato — vive nel
-        // processo del service, non nel giro dei canali.
+        // processo del service, non nel giro dei canali. Si smonta senza
+        // dimenticare che era accesa: la rimette su `onCreate`, se il service
+        // rinasce (v. FloatingOverlayController.teardown).
         FloatingOverlayController.teardown()
         // Il wakelock della modalità "always" (e con lui la rotazione) si molla
         // SOLO se dietro non è rimasto un gateway vivo.
@@ -851,6 +864,16 @@ class GatewayService : Service() {
                 Log.i(TAG, "FGS location type refused (caller not in a while-in-use state)")
                 // Vedi `hasLocationType`: ripiegare qui declasserebbe un
                 // foreground che il tipo ce l'ha già.
+                if (hasLocationType) return true
+            } catch (e: IllegalStateException) {
+                // Da Android 12 (API 31) l'avvio in foreground da background
+                // lancia ForegroundServiceStartNotAllowedException, che e' una
+                // IllegalStateException: si prende la classe madre, che esiste
+                // a ogni livello di API, invece di nominare una classe che
+                // sotto la 31 non c'e'. Prima usciva da qui e il servizio
+                // cadeva, senza arrivare al ripiego qui sotto, che la stessa
+                // eccezione la gestisce gia'.
+                Log.w(TAG, "FGS location start not allowed (${e.javaClass.simpleName})")
                 if (hasLocationType) return true
             }
         }

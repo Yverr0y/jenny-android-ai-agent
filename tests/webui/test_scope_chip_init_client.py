@@ -21,18 +21,17 @@ I metodi si estraggono dal sorgente e girano in node, come in
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import function, member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHIP_JS = ASSETS / "shared" / "scope-chip.js"
+LIST_JS = ASSETS / "shared" / "conversation-list.js"
+STATE_JS = ASSETS / "shared" / "state.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _source() -> str:
@@ -40,13 +39,7 @@ def _source() -> str:
 
 
 def _member(source: str, name: str) -> str:
-    m = re.search(
-        rf"\n  ((?:async |get |static )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
+    return member(source, name, prefixes=("async ", "get ", "static "))
 
 
 def _const(source: str, name: str) -> str:
@@ -55,30 +48,29 @@ def _const(source: str, name: str) -> str:
     return m.group(0)
 
 
-def _function(source: str, name: str) -> str:
-    m = re.search(rf"(?ms)^function {re.escape(name)}\(.*?^\}}$", source)
-    assert m, f"function {name} non trovata"
-    return m.group(0)
-
-
 _HARNESS = """
 import assert from 'node:assert/strict';
 
 // Costanti e helper del modulo, dal sorgente: riscriverli qui vorrebbe dire
 // misurare una copia.
-__DEFAULT_DIR__
 __NAME_IN_PLACEHOLDER__
 __SHORT__
 
+/* Il costruttore vero monta un `ConversationList`, che e' dove sono finiti i
+   campi dell'elenco: si importa quello, non se ne fa una sagoma. La rete non
+   viene mai toccata da questi test — `init` aggancia e basta — ma la fetch va
+   passata lo stesso, perche' e' il costruttore vero a chiederla. */
+const { ConversationList } = await import('__LIST_URL__');
+const api = { listProjects: () => Promise.resolve({}) };
+
+/* Il nome di lei (`shared/bot-name.js`): qui quello di partenza. */
+const botName = { get: () => 'Jenny', set() {}, onChange() { return () => {}; } };
 const i18n = {
   t: (key, vars) => 'i18n:' + key + (vars ? ':' + Object.values(vars).join(',') : ''),
-  localeSubs: 0,
-  onLocaleChange() { this.localeSubs++; },
 };
 
 const AppState = {
   readonlyTurn: false,
-  pinnedWiki: null,
   composeMenu: null,
   subs: [],
   on(key, fn) { this.subs.push([key, fn]); },
@@ -86,11 +78,14 @@ const AppState = {
 };
 /* «Una sola tendina aperta» passa dallo stesso canale, e per questo test è
    un'iscrizione come le altre: quel che si misura qui è che `init` non ne
-   registri due. Il comportamento sta in `test_compose_menus_client.py`. */
+   registri due. Il comportamento sta in `test_compose_menus_client.py`.
+   `armComposeMenu` è quella vera di `state.js`, dal sorgente. */
 function claimComposeMenu(id) { AppState.set('composeMenu', id); }
 function onOtherComposeMenu(id, close) {
   AppState.on('composeMenu', (who) => { if (who !== id) close(); });
 }
+const composeMenus = new Set();
+__ARM_COMPOSE_MENU__
 
 /* Un elemento ridotto a quel che `render()` e `init()` toccano. `inner` decide
    quali figli esistono: `null` è il caso dell'index a cui manca lo span. */
@@ -135,6 +130,7 @@ const document = {
 
 class ScopeChip {
   __CTOR__
+  __DIR__
   __INIT__
   __PERSONAL_LABEL__
   __PATH_SEGMENTS__
@@ -157,7 +153,6 @@ function mount(complete = true) {
   menuEl = makeEl('scope-menu');
   inputEl = { placeholder: '' };
   docListeners = 0;
-  i18n.localeSubs = 0;
   AppState.subs.length = 0;
   AppState.readonlyTurn = false;
   return new ScopeChip();
@@ -168,27 +163,27 @@ function mount(complete = true) {
 def _harness() -> str:
     src = _source()
     return (
-        _HARNESS.replace("__DEFAULT_DIR__", _const(src, "DEFAULT_DIR"))
+        _HARNESS.replace("__LIST_URL__", LIST_JS.as_uri())
         .replace("__NAME_IN_PLACEHOLDER__", _const(src, "NAME_IN_PLACEHOLDER"))
-        .replace("__SHORT__", _function(src, "_short"))
+        .replace("__DIR__", _member(src, "_dir"))
+        .replace("__SHORT__", function(src, "_short"))
         .replace("__CTOR__", _member(src, "constructor"))
         .replace("__INIT__", _member(src, "init"))
         .replace("__PERSONAL_LABEL__", _member(src, "personalLabel"))
         .replace("__PATH_SEGMENTS__", _member(src, "pathSegments"))
         .replace("__RENDER__", _member(src, "render"))
         .replace("__SYNC_PLACEHOLDER__", _member(src, "syncPlaceholder"))
+        .replace(
+            "__ARM_COMPOSE_MENU__",
+            function(STATE_JS.read_text(encoding="utf-8").replace("export function", "function"),
+                      "armComposeMenu"),
+        )
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── 1. Un solo montaggio ──────────────────────────────────────────────────
@@ -201,9 +196,11 @@ def test_a_second_init_registers_nothing() -> None:
       chip.init();
       const after = {
         doc: docListeners, chip: chipEl.listeners, menu: menuEl.listeners,
-        locale: i18n.localeSubs, state: AppState.subs.length,
+        state: AppState.subs.length,
       };
-      assert.equal(after.doc, 2, 'click fuori ed Escape: due, non di più');
+      // Solo il tocco fuori: Escape arriva dalla catena di Indietro del guscio
+      // (v. `state.js::armComposeMenu`).
+      assert.equal(after.doc, 1, 'click fuori: uno, non di più');
 
       chip.init();
       chip.init();
@@ -211,7 +208,6 @@ def test_a_second_init_registers_nothing() -> None:
                    'ogni tap fuori chiuderebbe la tendina una volta per init');
       assert.equal(chipEl.listeners, after.chip);
       assert.equal(menuEl.listeners, after.menu);
-      assert.equal(i18n.localeSubs, after.locale);
       assert.equal(AppState.subs.length, after.state);
     """)
 
@@ -222,9 +218,8 @@ def test_the_latch_does_not_swallow_the_first_init() -> None:
       const chip = mount();
       chip.init();
       assert.equal(chip._initialized, true);
-      assert.equal(docListeners, 2);
+      assert.equal(docListeners, 1);
       assert.deepEqual(AppState.subs.map(([key]) => key), ['composeMenu', 'readonlyTurn']);
-      assert.equal(i18n.localeSubs, 1);
       // E `init` disegna: il chip nomina la personale già prima di ogni rete.
       assert.equal(chipEl.dataset.scope, 'personal');
       assert.equal(inputEl.placeholder, 'i18n:chat.placeholder');
@@ -276,5 +271,7 @@ def test_the_drawing_is_unchanged_when_the_spans_are_there() -> None:
       chip.render();
       assert.equal(chipEl.mark.textContent, '✿');
       assert.equal(chipEl.mark.className, 'scope-chip-mark');
-      assert.deepEqual(chipEl.path.children.map((n) => n.textContent), ['i18n:scope.personal']);
+      // Il nome di lei, non una parola fissa: rinominata, il chip la segue
+      // (collaudo del 27/09/2026).
+      assert.deepEqual(chipEl.path.children.map((n) => n.textContent), ['Jenny']);
     """)

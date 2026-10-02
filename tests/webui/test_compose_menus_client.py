@@ -20,20 +20,17 @@ aggiungono è una riga a testa.
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 STATE_JS = ASSETS / "shared" / "state.js"
 SCOPE_JS = ASSETS / "shared" / "scope-chip.js"
 COMMANDS_JS = ASSETS / "shared" / "commands-chip.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 # `state.js` legge il tema da `localStorage` al caricamento del modulo, e in node
@@ -49,13 +46,7 @@ def _state_source() -> str:
 
 def _run_js(script: str) -> None:
     source = _state_source() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 _TWO_MENUS = """
@@ -133,4 +124,67 @@ def test_both_chips_claim_and_listen() -> None:
     for path, ident in ((SCOPE_JS, "scope"), (COMMANDS_JS, "commands")):
         src = path.read_text(encoding="utf-8")
         assert f"claimComposeMenu('{ident}')" in src, f"{path.name} non dichiara l'apertura"
-        assert f"onOtherComposeMenu('{ident}'" in src, f"{path.name} non ascolta le altre"
+        assert f"armComposeMenu(this, '{ident}')" in src, f"{path.name} non ascolta le altre"
+
+
+# ── L'aggancio comune ────────────────────────────────────────────────────────
+
+_ARMED = """
+import assert from 'node:assert/strict';
+/* Un `document` e due elementi che tengono i loro listener, e un evento che
+   ricorda se qualcuno ne ha fermato la propagazione. */
+function target() {
+  const t = { on: {} };
+  t.addEventListener = (type, fn) => { (t.on[type] ||= []).push(fn); };
+  t.fire = (type, extra = {}) => {
+    const e = { stopped: false, stopPropagation() { this.stopped = true; }, ...extra };
+    for (const fn of t.on[type] || []) fn(e);
+    return e;
+  };
+  return t;
+}
+globalThis.document = target();
+function chip(id) {
+  const c = { el: target(), menu: target(), toggles: 0, closes: 0 };
+  c.toggle = () => { c.toggles += 1; };
+  c.close = () => { c.closes += 1; };
+  armComposeMenu(c, id);
+  return c;
+}
+"""
+
+
+def test_the_chip_click_toggles_and_does_not_reach_document() -> None:
+    _run_js(_ARMED + """
+      const c = chip('scope');
+      const e = c.el.fire('click');
+      assert.equal(c.toggles, 1);
+      assert.equal(e.stopped, true, 'senza, il click che apre la richiuderebbe');
+      assert.equal(c.menu.fire('click').stopped, true, 'un tocco dentro la tendina non la chiude');
+      assert.equal(c.closes, 0);
+    """)
+
+
+def test_outside_tap_closes_and_escape_is_left_to_the_back_chain() -> None:
+    """Escape non e' piu' ascoltato qui: e' la scorciatoia di Indietro del
+    guscio, e la tendina e' un livello di quella catena. Ascoltato due volte,
+    la stessa pressione chiudeva la tendina **e** tornava indietro (il livello
+    e' provato in ``test_compose_menu_back_layer_client.py``)."""
+    _run_js(_ARMED + """
+      const c = chip('commands');
+      document.fire('click');
+      assert.equal(c.closes, 1);
+      document.fire('keydown', { key: 'Enter' });
+      document.fire('keydown', { key: 'Escape' });
+      assert.equal(c.closes, 1);
+    """)
+
+
+def test_opening_another_menu_closes_the_armed_one() -> None:
+    _run_js(_ARMED + """
+      const scope = chip('scope');
+      const commands = chip('commands');
+      claimComposeMenu('commands');
+      assert.equal(scope.closes, 1);
+      assert.equal(commands.closes, 0, 'la propria apertura non la chiude');
+    """)

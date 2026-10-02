@@ -18,8 +18,8 @@ export const THEMES = [
     reply: 'Il lusso non alza mai la voce.' },
   { id: 'synthwave', label: "Synthwave '84", scheme: 'dark',
     accent: '#f92aad', onAccent: '#ffffff',
-    swatch: ['#241b2f', '#f92aad', '#03edf9'],
-    desc: 'Neon rosa su notte viola, ogni luce lascia la scia.',
+    swatch: ['#111013', '#f92aad', '#03edf9'],
+    desc: 'Neon rosa sul nero, ogni luce lascia la scia.',
     reply: 'Massimo carattere — per chi non ha paura.' },
   { id: 'kyoto',     label: 'Jenny Kyoto',   scheme: 'dark',
     accent: '#b2543f', onAccent: '#f5efe4',
@@ -31,7 +31,7 @@ export const THEMES = [
     swatch: ['#17131c', '#a78bfa', '#ffd23f'],
     desc: 'Ogni messaggio è un adesivo ritagliato: bordo bianco, ombra dura, rotazione imperfetta.',
     reply: 'La chat come il retro di un laptop.' },
-  { id: 'fumetto',   label: 'Jenny Fumetto', scheme: 'light',
+  { id: 'comic',   label: 'Jenny Fumetto', scheme: 'light',
     accent: '#1b1820', onAccent: '#faf6ef',
     swatch: ['#faf6ef', '#1b1820', '#7c5cff'],
     desc: 'China su carta, retini e nuvolette: ogni risposta è una vignetta.',
@@ -41,14 +41,14 @@ export const THEMES = [
     swatch: ['#f7e0f8', '#f56ab5', '#b76bf0'],
     desc: 'Gradienti lucidi, gloss bubblegum, bordi bianchi.',
     reply: 'Il duemila come ce lo eravamo promesso.' },
-  { id: 'pietra',    label: 'Jenny Pietra',  scheme: 'light',
+  { id: 'stone',     label: 'Jenny Pietra',  scheme: 'light',
     accent: '#8c6f4e', onAccent: '#f4f1ec',
     swatch: ['#eae6df', '#37332c', '#8c6f4e'],
     desc: 'Travertino, bronzo e serif romani, luce di mezzogiorno.',
     reply: "Solida come un'idea scolpita bene." },
 ];
 
-export const DEFAULT_THEME = 'chanel';
+export const DEFAULT_THEME = 'synthwave';
 
 /** Ponte dei token verso le mini-app (iframe a origine opaca).
  *
@@ -95,7 +95,7 @@ export const APP_TOKEN_MAP = {
   '--warning':      '--warning',
 };
 
-/** Palette del tema attivo per un'app, come `nome:valore;...` (senza `--`).
+/** Palette del tema attivo per un'app, come `name:value;...` (senza `--`).
  *
  *  Legge i valori *calcolati* invece dei letterali del registro: è la stessa
  *  lettura che fa `syncNativeBars` per le barre di sistema, e vale anche per i
@@ -113,7 +113,10 @@ export function themeTokens() {
 }
 
 /** Legacy 'tc-theme' values from the old dark/light/match switcher. */
-export const MIGRATION = { dark: 'chanel', light: 'pietra', match: 'chanel' };
+/* I nomi di prima: `dark`/`light`/`match` erano i modi, `fumetto` e `pietra` gli id
+   italiani dei due temi fino al 25/09/2026. Un `tc-theme` salvato con uno di
+   questi si legge col nome di adesso (e lo riscrive `setTheme`). */
+export const MIGRATION = { dark: 'chanel', light: 'stone', match: 'chanel', fumetto: 'comic', pietra: 'stone' };
 
 export function getTheme(id) {
   return THEMES.find(t => t.id === id) || null;
@@ -207,7 +210,13 @@ export function applySyntaxTheme(scheme) {
 export function setTheme(id) {
   const theme = getTheme(MIGRATION[id] || id) || getTheme(DEFAULT_THEME);
   document.documentElement.setAttribute('data-theme', theme.id);
-  localStorage.setItem('tc-theme', theme.id);
+  // Una preferenza: se lo storage la rifiuta, il tema si applica lo stesso
+  // e al prossimo avvio si riparte dal default.
+  try {
+    localStorage.setItem('tc-theme', theme.id);
+  } catch (_) {
+    /* storage non disponibile */
+  }
   AppState.theme = theme.id;
   applySyntaxTheme(theme.scheme);
   syncNativeBars(theme.scheme);

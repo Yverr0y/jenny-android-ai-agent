@@ -4,8 +4,8 @@ Oggi l'unità di scrittura è il **file**: chi vuole aggiungere un fatto a
 ``USER.md`` riscrive tutto il file, e l'unico modo di sapere se il fatto è
 arrivato su disco è confrontare le dimensioni prima e dopo — una stima, con una
 classe di falsi negativi nota (una correzione che accorcia *portandosi dentro* il
-fatto nuovo legge come "non è atterrato niente"). Da lì nasce metà del registro
-dei difetti in ``.agent/memory-plan.md``.
+fatto nuovo legge come "non è atterrato niente"). Da lì nasce metà dei difetti
+misurati sulla memoria.
 
 Qui l'unità è la **voce**: un bullet sotto la sua intestazione. ``add`` dice
 quale fatto aggiungere, e "è atterrato?" diventa una verifica invece che una
@@ -273,7 +273,7 @@ def fragment_heading(heading: str) -> str:
 def find_entry(entries: list[Entry], target: str) -> tuple[Entry | None, str]:
     """Risolve un id o un frammento di testo in **una** voce.
 
-    Ritorna ``(voce, "")`` oppure ``(None, motivo)``. L'ambiguità è un errore,
+    Ritorna ``(entry, "")`` oppure ``(None, motivo)``. L'ambiguità è un errore,
     non una scelta: con due voci che contengono lo stesso frammento, indovinare
     significa cancellare quella sbagliata, e il modello ha in mano gli id per
     disambiguare da solo. Il motivo le elenca, così la seconda chiamata è
@@ -446,7 +446,6 @@ def render_entries(entries: list[Entry]) -> str:
     return "\n".join(out)
 
 
-
 def make_entry_archiver(workspace: Path) -> Callable[[Path, str], None]:
     """Gancio pre-scrittura che degrada le voci in uscita da un file di memoria.
 
@@ -494,6 +493,7 @@ def make_entry_archiver(workspace: Path) -> Callable[[Path, str], None]:
         except OSError:
             # File che non c'è ancora: non se ne sta andando niente.
             return
+
         def save(text: str, heading: str) -> None:
             archived_id = entry_id(text)
             try:
@@ -530,10 +530,10 @@ class MemoryEntryTool(Tool):
     """``memory add|replace|remove`` sui due file a voci."""
 
     _scopes = {"core"}
-    # Non scopribile come plugin: chi lo monta lo fa esplicitamente, perché a
-    # chi darlo è una decisione aperta (punto 1.12 del piano) e un tool che si
-    # auto-registra la prenderebbe per omissione.
-    _plugin_discoverable = False
+    # Fuori da ``TOOLS`` e da ``_HARDCODED_TOOL_MODULES``, di proposito: lo monta
+    # ``MemoryStore.build_dream_tools``, con due dipendenze che un
+    # ``ToolContext`` non porta (v. ``create``). A chi darlo oltre a Dream è la
+    # decisione aperta del punto 1.12 del piano.
 
     def __init__(
         self,
@@ -551,8 +551,8 @@ class MemoryEntryTool(Tool):
         #
         # Serve a un caso solo, ed e' meccanico di proposito: un run di Dream su
         # un batch di **progetto** riceve ``{"user"}``, perche' un fatto che
-        # nasce dentro un progetto puo' diventare identita' e non inventario
-        # (v. ``.agent/project-memory-plan.md``). Un rifiuto qui si prova con un
+        # nasce dentro un progetto puo' diventare identita' e non inventario.
+        # Un rifiuto qui si prova con un
         # test; la stessa regola scritta nel prompt no — e questa e' l'unica
         # differenza che conta fra le due, perche' il prompt lo legge un modello
         # e questa riga no.
@@ -956,8 +956,7 @@ class MemoryEntryTool(Tool):
         dalla rete al confine del file, e un ``replace`` costruito da qui
         tornerebbe a essere il buco fra i due.
 
-        Il percorso è irraggiungibile oggi (nessun ``TOOLS``,
-        ``_plugin_discoverable = False``), quindi la scelta è fra un commento e un
+        Il percorso è irraggiungibile oggi (nessun ``TOOLS``), quindi la scelta è fra un commento e un
         rifiuto per il giorno in cui qualcuno mette questo modulo in
         ``_HARDCODED_TOOL_MODULES``. Vale il rifiuto: un ``create()`` che solleva
         non aborta il boot — ``ToolLoader`` lo registra in ``failures`` e logga a
@@ -980,6 +979,8 @@ class MemoryEntryTool(Tool):
         )
 
 
-# Nessun ``TOOLS = [...]``: questo modulo non è ancora in
-# ``_HARDCODED_TOOL_MODULES``. È il passo 1.2 del piano, e dipende dal 1.12 —
-# se il tool serva anche l'agente principale o solo Dream.
+# Nessun ``TOOLS = [...]``, e il modulo non sta in ``_HARDCODED_TOOL_MODULES``
+# (il loader rifiuterebbe un modulo senza ``TOOLS``): ``MemoryEntryTool`` lo monta
+# ``MemoryStore.build_dream_tools``. Metterlo anche nel registry dell'agente
+# principale è il passo 1.2 del piano, e dipende dal 1.12 — se il tool serva
+# anche la conversazione o solo Dream.

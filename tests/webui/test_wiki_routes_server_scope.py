@@ -41,10 +41,9 @@ from __future__ import annotations
 import json
 import urllib.parse
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
+from support.gateway_http import make_handler
 from websockets.http11 import Headers
 from websockets.http11 import Request as WsRequest
 
@@ -55,26 +54,12 @@ _AUTH_SECRET = "test-secret"
 def handler(tmp_path: Path, monkeypatch):
     """GatewayHTTPHandler reale su un workspace di tmp_path (v. test_wiki_search)."""
     from jenny.config import paths as paths_mod
-    from jenny.webui.ws_http import GatewayHTTPHandler
 
     workspace = tmp_path / "data" / "workspace"
     workspace.mkdir(parents=True)
     monkeypatch.setattr(paths_mod, "get_workspace_path", lambda: workspace)
 
-    return GatewayHTTPHandler(
-        config=SimpleNamespace(
-            workspace=SimpleNamespace(enabled=True),
-            wiki=SimpleNamespace(enabled=True, wikis_dir="wikis"),
-            token_issue_secret=_AUTH_SECRET,
-            verbose=False,
-        ),
-        session_manager=None,
-        runtime_model_name=lambda: "test-model",
-        bus=MagicMock(),
-        media=MagicMock(),
-        workspaces=MagicMock(),
-        skills_workspace_path=workspace,
-    )
+    return make_handler(workspace)
 
 
 def _wiki(workspace: Path, name: str, pages: dict[str, str]) -> Path:
@@ -93,37 +78,37 @@ async def _call(handler, route: str, **params: str):
 
 
 @pytest.fixture
-def due_progetti(handler) -> Path:
+def two_projects(handler) -> Path:
     workspace = handler._get_workspace_root()
-    _wiki(workspace, "patreon", {"index.md": "# Patreon\n"})
-    _wiki(workspace, "etf", {"index.md": "# ETF\n", "note/segreto.md": "# Segreto\n"})
+    _wiki(workspace, "palestra", {"index.md": "# Palestra\n"})
+    _wiki(workspace, "etna", {"index.md": "# ETNA\n", "note/segreto.md": "# Segreto\n"})
     # Una wiki **fuori** da ``wikis/``: il bersaglio di una risalita che, senza il
     # controllo di appartenenza, sarebbe una cartella dalla forma giusta.
     (workspace / "fuori" / "wiki").mkdir(parents=True)
     (workspace / "fuori" / "wiki" / "index.md").write_text("# Fuori\n", encoding="utf-8")
     # E un fratello che non è pagine: è il vicino che il contenimento esclude.
-    (workspace / "wikis" / "etf" / "raw").mkdir()
-    (workspace / "wikis" / "etf" / "raw" / "appunti.md").write_text("# grezzo\n", encoding="utf-8")
+    (workspace / "wikis" / "etna" / "raw").mkdir()
+    (workspace / "wikis" / "etna" / "raw" / "appunti.md").write_text("# grezzo\n", encoding="utf-8")
     return workspace
 
 
 # ── il contenimento: quel che il server garantisce ────────────────────────
 
 
-@pytest.mark.parametrize("route", ["/api/tree", "/api/graph", "/api/page"])
+@pytest.mark.parametrize("route", ["/api/graph", "/api/page"])
 @pytest.mark.parametrize(
     "name",
     [
         "../fuori",
         "..",
         "../../fuori",
-        "patreon/../../fuori",
+        "palestra/../../fuori",
         "nessuna-wiki",
         "fuori",
     ],
 )
 async def test_a_wiki_name_must_be_a_wiki_that_exists_under_wikis(
-    handler, due_progetti, route: str, name: str
+    handler, two_projects, route: str, name: str
 ) -> None:
     """Il nome arriva da un client: solo i nomi che ``discover_wikis`` conosce.
 
@@ -139,10 +124,10 @@ async def test_a_wiki_name_must_be_a_wiki_that_exists_under_wikis(
 
 @pytest.mark.parametrize(
     "page",
-    ["../raw/appunti.md", "../../patreon/wiki/index.md", "/etc/passwd", "note/../../raw/appunti.md"],
+    ["../raw/appunti.md", "../../palestra/wiki/index.md", "/etc/passwd", "note/../../raw/appunti.md"],
 )
 async def test_a_page_path_that_climbs_is_refused_before_any_read(
-    handler, due_progetti, page: str
+    handler, two_projects, page: str
 ) -> None:
     """Il primo dei due cancelli: ``safe_wiki_page_path``, che guarda la *stringa*.
 
@@ -153,13 +138,13 @@ async def test_a_page_path_that_climbs_is_refused_before_any_read(
     verde. È esattamente il difetto che T4.12 ha trovato altrove, e lo si evita
     solo dicendo *quale* dei due deve rispondere.
     """
-    response = await _call(handler, "/api/page", wiki="etf", page=page)
+    response = await _call(handler, "/api/page", wiki="etna", page=page)
     assert response is not None
     assert response.status_code == 400, (page, response.status_code)
 
 
 async def test_a_symlink_out_of_the_pages_dir_is_refused_by_containment(
-    handler, due_progetti
+    handler, two_projects
 ) -> None:
     """Il secondo cancello, e l'input che solo lui vede.
 
@@ -168,21 +153,41 @@ async def test_a_symlink_out_of_the_pages_dir_is_refused_by_containment(
     fuori. È il controllo ``full.resolve().relative_to(containment_root)`` a
     fermarlo, e questo è il solo input che lo distingue dal primo cancello.
     """
-    pages = due_progetti / "wikis" / "etf" / "wiki"
-    (pages / "scorciatoia.md").symlink_to(due_progetti / "wikis" / "etf" / "raw" / "appunti.md")
+    pages = two_projects / "wikis" / "etna" / "wiki"
+    (pages / "scorciatoia.md").symlink_to(two_projects / "wikis" / "etna" / "raw" / "appunti.md")
 
-    response = await _call(handler, "/api/page", wiki="etf", page="scorciatoia.md")
+    response = await _call(handler, "/api/page", wiki="etna", page="scorciatoia.md")
 
     assert response is not None
     assert response.status_code == 403, response.status_code
 
 
+async def test_containment_answers_the_same_whether_the_file_exists_or_not(
+    handler, two_projects
+) -> None:
+    """Un link fuori dalla ``wiki/`` e' un 403 **anche** se punta al nulla.
+
+    Nell'ordine di prima — esiste? poi contenuto? — un bersaglio mancante dava
+    404 e uno presente 403: la risposta diceva a chi chiede se un file fuori
+    dalla wiki c'e'.
+    """
+    pages = two_projects / "wikis" / "etna" / "wiki"
+    outside = two_projects / "wikis" / "etna" / "raw"
+    (pages / "c-e.md").symlink_to(outside / "appunti.md")
+    (pages / "non-c-e.md").symlink_to(outside / "mai-scritto.md")
+
+    present = await _call(handler, "/api/page", wiki="etna", page="c-e.md")
+    absent = await _call(handler, "/api/page", wiki="etna", page="non-c-e.md")
+
+    assert (present.status_code, absent.status_code) == (403, 403)
+
+
 # ── l'asimmetria, messa a verbale ─────────────────────────────────────────
 
 
-@pytest.mark.parametrize("route", ["/api/tree", "/api/graph"])
+@pytest.mark.parametrize("route", ["/api/graph"])
 async def test_the_server_serves_any_of_the_users_own_wikis_by_design(
-    handler, due_progetti, route: str
+    handler, two_projects, route: str
 ) -> None:
     """**L'asimmetria del passo 5, a verbale.** Il server non conosce l'aggancio.
 
@@ -191,31 +196,36 @@ async def test_the_server_serves_any_of_the_users_own_wikis_by_design(
     modulo). Se un giorno il server dovesse davvero scoprirlo, questo test è il
     posto in cui la decisione cambia — e va cambiata qui, non aggiunta accanto.
     """
-    response = await _call(handler, route, wiki="etf")
+    response = await _call(handler, route, wiki="etna")
     assert response is not None and response.status_code == 200
     payload = json.loads(response.body.decode("utf-8"))
     assert payload
 
 
-async def test_the_home_views_still_list_every_wiki(handler, due_progetti) -> None:
-    """Senza ``wiki=`` la vista è la Home, e la Home *è* l'elenco dei progetti.
+async def test_a_wiki_outside_wikis_is_not_reachable_by_name(handler, two_projects) -> None:
+    """Quel che misurava la prova della Home, ora che la Home non c'e' piu'.
 
-    È la ragione per cui la chiusura del passo 5 sta in ``loadHome``/``loadGraph``
-    e non su queste risposte: la Home non è una vista di progetto con un filtro
-    da aggiungere, è una vista che dentro un progetto **non si apre**.
+    Qui c'era ``/api/tree`` senza nome: elencava le wiki di ``wikis/`` e doveva
+    **non** contenere la sorella ``fuori/``, che ha la forma giusta ma sta
+    altrove. L'albero e' uscito il 22/09/2026 insieme alle altre rotte senza
+    clienti, e la regola che difendeva vive comunque — l'appartenenza all'elenco
+    di ``discover_wikis``, non la forma della cartella. Questo e' lo stesso fatto
+    detto sull'unica rotta rimasta a chiedere un nome.
     """
-    response = await _call(handler, "/api/tree")
-    assert response is not None and response.status_code == 200
-    tree = json.loads(response.body.decode("utf-8"))
-    names = {child["name"] for child in tree.get("children", [])}
-    assert {"patreon", "etf"} <= names
-    assert "fuori" not in names, "la Home elenca le wiki di wikis/, non le cartelle vicine"
+    response = await _call(handler, "/api/graph", wiki="fuori")
+    assert response is not None
+    assert response.status_code == 404, response.status_code
+
+    # …e le due vere si raggiungono entrambe.
+    for name in ("palestra", "etna"):
+        ok = await _call(handler, "/api/graph", wiki=name)
+        assert ok is not None and ok.status_code == 200, name
 
 
 # ── il tetto di lettura ───────────────────────────────────────────────────
 
 
-class TestUnaPaginaEnormeNonEUnaRisposta:
+class TestAHugePageIsNotAReply:
     """T9.4/G9. ``/api/page`` leggeva il file **senza tetto**, e lo fa sul loop
     dell'evento: la risposta porta il markdown grezzo *più* l'HTML reso, quindi
     un file finito lì per sbaglio — un dump, un log, un allegato — costava più
@@ -233,20 +243,20 @@ class TestUnaPaginaEnormeNonEUnaRisposta:
     provato: il confine sì.
     """
 
-    async def test_oltre_il_tetto_e_un_413_e_non_una_risposta_a_meta(
-        self, handler, due_progetti, monkeypatch
+    async def test_beyond_the_cap_is_a_413_not_a_half_reply(
+        self, handler, two_projects, monkeypatch
     ) -> None:
         monkeypatch.setattr("jenny.webui.wiki_routes._PAGE_MAX_BYTES", 64)
-        pages = due_progetti / "wikis" / "etf" / "wiki"
+        pages = two_projects / "wikis" / "etna" / "wiki"
         (pages / "enorme.md").write_text("# Grossa\n" + "x" * 200, encoding="utf-8")
 
-        response = await _call(handler, "/api/page", wiki="etf", page="enorme.md")
+        response = await _call(handler, "/api/page", wiki="etna", page="enorme.md")
 
         assert response is not None
         assert response.status_code == 413, response.status_code
 
-    async def test_sotto_il_tetto_la_pagina_arriva_intera(
-        self, handler, due_progetti, monkeypatch
+    async def test_under_the_cap_the_page_arrives_whole(
+        self, handler, two_projects, monkeypatch
     ) -> None:
         """Il verso opposto, che è quel che rende il tetto un tetto e non un
         rifiuto: al confine esatto la pagina si serve, e il ``raw`` è tutto il
@@ -255,10 +265,10 @@ class TestUnaPaginaEnormeNonEUnaRisposta:
         monkeypatch.setattr("jenny.webui.wiki_routes._PAGE_MAX_BYTES", 64)
         body = "# Piccola\n" + "y" * 54
         assert len(body.encode("utf-8")) == 64
-        pages = due_progetti / "wikis" / "etf" / "wiki"
+        pages = two_projects / "wikis" / "etna" / "wiki"
         (pages / "piccola.md").write_text(body, encoding="utf-8")
 
-        response = await _call(handler, "/api/page", wiki="etf", page="piccola.md")
+        response = await _call(handler, "/api/page", wiki="etna", page="piccola.md")
 
         assert response is not None and response.status_code == 200
         assert json.loads(response.body.decode("utf-8"))["raw"] == body

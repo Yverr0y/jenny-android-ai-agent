@@ -24,41 +24,29 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHIP_JS = ASSETS / "shared" / "scope-chip.js"
+LIST_JS = ASSETS / "shared" / "conversation-list.js"
 CSS = ASSETS / "mobile-style.css"
 I18N_DIR = ASSETS / "i18n"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _chip() -> str:
     return CHIP_JS.read_text(encoding="utf-8")
 
 
-def _member(source: str, name: str) -> str:
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
 _HARNESS = """
 import assert from 'node:assert/strict';
 
-const DEFAULT_DIR = 'wikis';
 const i18n = { t: (key) => 'i18n:' + key };
+const { ConversationList, ago } = await import('__LIST_URL__');
 
 /* Un elemento è quel poco che `_renderMenu` e i suoi aiutanti toccano. */
 function makeEl(tag) {
@@ -116,9 +104,11 @@ const api = {
 class Chip {
   constructor() {
     this.scope = { kind: 'personal', name: null };
-    this._projects = null;
-    this._loadFailed = false;
-    this._dir = DEFAULT_DIR;
+    /* I quattro campi di prima stanno in `conversation-list.js`, che questo
+       banco importa **vero**: la regola che si misura qui — una lettura
+       fallita non cancella la cache — adesso vive li', e riscriverne una
+       copia in questo file vorrebbe dire misurare la copia. */
+    this._list = new ConversationList(() => api.listProjects());
     this.menu = makeEl('div');
     this.rendered = 0;
   }
@@ -136,6 +126,10 @@ class Chip {
     row.appendChild(item);
     return row;
   }
+  __PROJECTS__
+  __UNOPENABLE__
+  __LOAD_FAILED__
+  __DIR__
   __LOAD_PROJECTS__
   __RENDER_MENU__
   __LABEL__
@@ -150,25 +144,24 @@ class Chip {
 def _harness() -> str:
     src = _chip()
     return (
-        _HARNESS.replace("__LOAD_PROJECTS__", _member(src, "_loadProjects"))
-        .replace("__RENDER_MENU__", _member(src, "_renderMenu"))
-        .replace("__LABEL__", _member(src, "_label"))
-        .replace("__SEP__", _member(src, "_sep"))
-        .replace("__NOTE__", _member(src, "_note"))
-        .replace("__ITEM__", _member(src, "_item"))
-        .replace("__AGO__", _member(src, "_ago"))
+        _HARNESS.replace("__LIST_URL__", LIST_JS.as_uri())
+        .replace("__PROJECTS__", member(src, "_projects"))
+        .replace("__UNOPENABLE__", member(src, "_unopenable"))
+        .replace("__LOAD_FAILED__", member(src, "_loadFailed"))
+        .replace("__DIR__", member(src, "_dir"))
+        .replace("__LOAD_PROJECTS__", member(src, "_loadProjects"))
+        .replace("__RENDER_MENU__", member(src, "_renderMenu"))
+        .replace("__LABEL__", member(src, "_label"))
+        .replace("__SEP__", member(src, "_sep"))
+        .replace("__NOTE__", member(src, "_note"))
+        .replace("__ITEM__", member(src, "_item"))
+        .replace("__AGO__", member(src, "_ago"))
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── 1. La cache sopravvive al guasto ────────────────────────────────────────
@@ -179,16 +172,16 @@ def test_a_failed_read_does_not_erase_a_list_that_was_good() -> None:
     _run_js("""
       const chip = new Chip();
       nextProjects = { dir: 'wikis', projects: [
-        { name: 'bordi', modified: 200 }, { name: 'patreon', modified: 100 },
+        { name: 'bordi', modified: 200 }, { name: 'palestra', modified: 100 },
       ] };
       await chip._loadProjects();
-      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'patreon']);
+      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'palestra']);
       assert.equal(chip._loadFailed, false);
 
       // Seconda apertura, gateway caduto.
       nextProjects = 'fail';
       await chip._loadProjects();
-      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'patreon'],
+      assert.deepEqual(chip._projects.map((p) => p.name), ['bordi', 'palestra'],
                        'un 401 ha cancellato i progetti dell\\'utente');
       assert.equal(chip._loadFailed, true);
       assert.equal(chip._dir, 'wikis',
@@ -249,7 +242,7 @@ def test_the_cached_list_is_still_offered_with_a_note_on_top() -> None:
     _run_js("""
       const chip = new Chip();
       nextProjects = { dir: 'wikis', projects: [
-        { name: 'bordi', modified: 200 }, { name: 'patreon', modified: 100 },
+        { name: 'bordi', modified: 200 }, { name: 'palestra', modified: 100 },
       ] };
       await chip._loadProjects();
       nextProjects = 'fail';
@@ -258,7 +251,7 @@ def test_the_cached_list_is_still_offered_with_a_note_on_top() -> None:
 
       const written = texts(chip.menu);
       assert.equal(written.includes('bordi'), true, 'i progetti in cache sono spariti');
-      assert.equal(written.includes('patreon'), true);
+      assert.equal(written.includes('palestra'), true);
       assert.equal(written.includes('i18n:scope.loadFailed'), true);
       assert.equal(written.includes('i18n:scope.noProjects'), false);
       // La nota sta *sopra* le righe che mette in dubbio.
@@ -320,14 +313,22 @@ def test_the_error_note_has_a_rule_of_its_own() -> None:
 
 
 def test_the_catch_no_longer_empties_the_cache() -> None:
-    """Grep, non comportamento: la riga che causava il doppione non torni."""
-    src = _member(_chip(), "_loadProjects")
+    """Grep, non comportamento: la riga che causava il doppione non torni.
+
+    Il `catch` si e' spostato in `conversation-list.js` insieme al resto della
+    lettura; la riga da cui nasceva il doppione e' la stessa, e il grep la cerca
+    dove sta adesso.
+    """
+    m = re.search(r"\n  async load\(\)\s*\{(.*?)\n  \}",
+                  LIST_JS.read_text(encoding="utf-8"), re.S)
+    assert m, "load() non trovato in conversation-list.js"
+    src = m.group(1)
     catch = src[src.index("} catch"):]
     # Senza i commenti: il commento accanto *cita* la riga rimossa per dire
     # perché è stata rimossa, e un grep ingenuo la ritroverebbe lì.
     catch = re.sub(r"/\*.*?\*/", "", catch, flags=re.S)
     catch = re.sub(r"^\s*//.*$", "", catch, flags=re.M)
-    assert "this._projects = []" not in catch, (
+    assert "this.projects = []" not in catch, (
         "un guasto torna a dichiarare che l'utente non ha progetti"
     )
-    assert "this._loadFailed = true" in catch
+    assert "this.loadFailed = true" in catch

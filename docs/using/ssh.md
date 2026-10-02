@@ -10,11 +10,11 @@ Three things define the shape of this feature, and it's worth reading them befor
 - **Jenny herself has no SSH.** The assistant you talk to delegates remote work to a **`sysadmin` subagent**, which is the only kind of agent that gets the SSH tools — and which has no web access and no local code execution in exchange. Whoever reads untrusted web pages is not whoever holds a shell on your server.
 - **The credential never leaves the phone.** With key authentication — the default — Jenny generates an ed25519 key pair on device, shows you the public half to install on the server, and keeps the private half in a directory the agent's own file tools cannot read. Password authentication is also available, is more convenient and is weaker; the differences are spelled out in [Password instead of a key](#password-instead-of-a-key) below.
 
-The SSH client is native (jsch + Bouncy Castle, on the Android side), not a Python library. You don't have to care, except for one visible consequence: SSH works in the Android app and nowhere else.
+The SSH client is native (jsch + Bouncy Castle, on the Android side), not a Python library. You don't have to care, except for one visible consequence: SSH works in the Android app. Outside it there is only a test backend (asyncssh, which is not a runtime dependency) used by the test suite.
 
 ## Setting it up
 
-Everything lives under **Settings → SSH**, a section of its own between Tools and Telegram.
+Everything lives in the workshop under **Hands → SSH**, a group of its own between Location and Telegram.
 
 ### 1. Turn it on and add a host
 
@@ -28,6 +28,8 @@ Flip **Enable SSH access**, then **Add host**:
 | **User** | The account to log in as. |
 | **Description** | Free text, and not decoration: it is shown *to the model* so it can pick the right machine when you have several ("the home NAS", "the website VPS"). |
 | **Authentication** | **ed25519 key** (default) or **Password**. Key is the default and stays the default for hosts you already registered. With Password selected, a password field appears — it's required, and an empty one is refused rather than saved. |
+
+Saving a host is a command sent over the WebUI's authenticated WebSocket (`ssh.host.save`), not an HTTP GET, so a password never travels in a URL or lands in a request log.
 
 The address is checked against Jenny's network policy when you save it, and again on every connection. Private LAN ranges are allowed — a home server is the main use case — and so is the carrier-grade-NAT range Tailscale hands out, so a Tailscale hostname works with no extra configuration. Loopback, link-local and cloud-metadata addresses are refused: those point at the phone itself, so refusing them stops the agent from SSHing into its own device or using the tool as a way back into Jenny's own API.
 
@@ -45,7 +47,7 @@ The public key is kept so you can read it again later; the private key is never 
 
 ### Password instead of a key
 
-If you set **Authentication** to **Password**, Jenny logs in with the account password instead of a key pair. The "Generate key" button and the public-key block disappear from that host's card — there is nothing to install on the server — and the card shows whether a password is set rather than whether a key exists.
+If you set **Authentication** to **Password**, Jenny logs in with the account password instead of a key pair. The "Generate key" button and the public-key block disappear from that host's panel — there is nothing to install on the server — and its row shows whether a password is set rather than whether a key exists.
 
 This is genuinely more convenient: nothing to paste into `authorized_keys`, nothing to install on a machine you can't easily reach, and it works on a server where you can't edit `authorized_keys` at all. It is also weaker, in three concrete ways, and none of them are hypothetical:
 
@@ -69,7 +71,7 @@ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 
 If they match, tap **Accept**. From that moment Jenny only talks to the machine presenting that exact key.
 
-There is **no trust-on-first-use**. Until a person has accepted a fingerprint, every SSH tool call for that alias fails with an error telling the model to ask you to open Settings — and the model has no way around it. The fingerprint you accept is the one you were shown: if the reading is older than 10 minutes, or the host answers with something different in the meantime, the acceptance is refused and you have to probe again.
+There is **no trust-on-first-use**. Until a person has accepted a fingerprint, every SSH tool call for that alias fails with an error telling the model to ask you to open Settings — and the model has no way around it. The fingerprint you accept is the one you were shown: accepting does not contact the host again, it records the exact key read when you tapped Verify. If that reading is older than 10 minutes, the acceptance is refused and you have to probe again.
 
 This step is mandatory in both authentication modes, and **with a password it matters more, not less** — the dialog says so on the spot. Authenticating with a key to the wrong machine is embarrassing but cheap: the impostor gets a signature it cannot reuse anywhere. Authenticating with a password hands it your password, in full, on the first command. The fingerprint is what decides who receives it, which is why there is no way to skip it.
 
@@ -79,11 +81,11 @@ An already-accepted host that starts presenting a different key does **not** get
 
 Editing an existing host's address or port has the same effect from the other direction: the accepted fingerprint is dropped and the `known_hosts` line forgotten, because a verification of the old address says nothing about the new one. You'll have to verify again.
 
-### Restart after enabling
+### No restart needed
 
-**The SSH tools are built when the gateway starts.** Turning the switch on, or adding your first host, does not hand the tools to the agent until Jenny restarts. Adding a *second* host to an install that already had one working host does take effect immediately — the host list is read live on every call.
+The SSH tools belong only to the `sysadmin` subagent, and its tool set is built from the **current** configuration each time a job starts. Turning the switch on, or adding your first host, takes effect on the next job — no restart. Each call also re-reads the host list, so a host added or edited in Settings is seen right away.
 
-Switching SSH **off** is the opposite: it applies instantly, mid-turn, even to a subagent already working on a server. That asymmetry is deliberate — the toggle is meant to work as an emergency stop.
+Switching SSH **off** applies instantly, mid-turn, even to a subagent already working on a server: every SSH call re-checks the switch and fails once it is off. The toggle is meant to work as an emergency stop.
 
 ## What you can ask for
 
@@ -94,7 +96,7 @@ Anything you'd type in a terminal, described in words:
 - "Update the packages on the VPS and tell me when it's done."
 - "Fetch `/etc/nginx/sites-enabled/default` from the VPS so we can go through it together."
 
-Jenny hands the job to a `sysadmin` subagent, and while that agent works you can keep talking to her about something else. The subagent's activity is visible live in the UI, you can send it a correction mid-run ("no, restart the container instead of rebuilding it"), and you can cancel it outright.
+Jenny hands the job to a `sysadmin` subagent, and while that agent works you can keep talking to her about something else. The subagent's activity is visible live in the workshop's Console, you can send it a correction mid-run ("no, restart the container instead of rebuilding it"), and you can cancel it outright.
 
 Ask which machine it worked on if you have more than one — the agent is instructed to name the alias in what it reports back, but the habit is worth checking.
 
@@ -131,9 +133,9 @@ Read this section before you rely on any of it.
 
 The private key and `known_hosts` live **outside** the workspace, and snapshots and encrypted backups only ever walk the workspace. That's deliberate — a key that could be read by the agent's own file tools, or that travelled inside an exported backup file, would be a much worse problem.
 
-The price is real and you should plan for it: **restoring a `.jbk` backup, or restoring a snapshot, brings back your host list but not the keys.** After a restore (or a phone swap, or a reinstall) each host will show "No key", and for each one you'll need to generate a fresh key, paste the new public line into `authorized_keys` on the server, and remove the old one. The accepted fingerprints are gone with it, so you'll verify each host again too.
+The price is real and you should plan for it: **restoring a `.jbk` backup, or restoring a snapshot, brings back your host list but not the keys.** After a restore (or a phone swap, or a reinstall) each host's row will show "key" next to an empty circle (no key), and for each one you'll need to generate a fresh key, paste the new public line into `authorized_keys` on the server, and remove the old one. The accepted fingerprints are gone with it, so you'll verify each host again too.
 
-This is the one genuinely unpleasant part of the design. Nothing warns you at restore time.
+This is the one genuinely unpleasant part of the design. Nothing warns you at restore time; afterwards, **Hands → SSH** shows one notice naming the hosts that have to be set up again — those whose fingerprint was recorded in `config.json` but is no longer in `known_hosts`. A host you never verified is not flagged.
 
 **Password hosts are the exception, and it cuts both ways.** The password lives in `config.json`, which *is* inside the workspace, so a restore brings it back with everything else and that host works again immediately — no reinstalling anything. The other side of the same fact is that your server password travelled inside that backup file. A `.jbk` is encrypted with the passphrase you chose, so that passphrase is what stands between the file and the password; a local snapshot is not encrypted, and sits in the app's private storage like the config it came from.
 
@@ -147,12 +149,6 @@ Every command runs without a TTY and without stdin. Anything that stops to ask a
 - Package managers and installers need their non-interactive flags (`-y`, `DEBIAN_FRONTEND=noninteractive`, …). Jenny knows to add them, but a tool that hides a prompt in an unusual place will still stall.
 - There is no `ssh` session you can attach to, no shell history, no `screen`/`tmux` integration. Each command is independent, and a `cd` in one does not carry into the next.
 
-### The toggle is asymmetric
-
-Turning SSH **off** takes effect immediately. Turning it back **on** requires a gateway restart before the agent has the tools again. If you re-enable SSH and Jenny insists she has no way to reach your server, that's this — not a bug, and not something she can fix from inside the conversation.
-
-The same applies to your very first host: enabling the switch with an empty host list registers nothing.
-
 ### The agent sees your hostnames and usernames
 
 `ssh_hosts` lists alias, host, username, port and description to the model — it has to, or it couldn't choose between two machines or tell you which one it touched. Those go to your LLM provider like everything else in the context. Neither the private key nor the password is ever in that list, in a tool argument, or in a tool result.
@@ -163,13 +159,13 @@ One honest caveat on top of that: `config.json` lives in the workspace, so Jenny
 
 - **One key per alias**, not one key for all hosts. Deleting a host deletes its key, its public key, its accepted fingerprint and — on a password host — its stored password. An alias recreated later with the same name starts from scratch, which is the point: deleting really revokes. (On a password host, deleting removes Jenny's copy; the password itself still works for you, because it's yours.)
 - **Job logs stay on the server.** `/tmp/jenny-jobs` is not cleaned up by Jenny, and on most systems `/tmp` is wiped on reboot — which will make an old job unreadable. The per-host `jobLogDir` can be pointed somewhere durable, but only by editing `config.json` (there is no field for it in Settings).
-- **The job registry keeps 100 entries**, pruning only finished ones. Running jobs are never pruned.
+- **The job registry keeps 100 entries**, pruning finished ones first. On top of that, any record older than 30 days is dropped whatever its state — a job "running" for a month is one nobody can verify any more.
 - **Output is truncated, not paged.** When a command produces more than the cap, Jenny is told how many characters were dropped and to re-run it narrowed with `grep`/`tail` rather than guess. Expect the occasional second command instead of a wall of text.
 - **A connection you stop using is closed.** `idleCloseS` (default 300 s, floor 30) is how long a pooled session may sit unused before a reaper drops it, in both the Android and the development backend. It cannot be disabled from config, and that is deliberate: on a phone a forgotten session survives a wifi-to-mobile switch as a socket that will fail on the next command anyway.
 
 ## See also
 
 - [Tool reference](../reference/tools.md) — the exact behavior and limits of `ssh_hosts`, `ssh_exec`, `ssh_job` and `ssh_transfer`.
-- [Settings](../reference/settings.md) and [Configuration](../reference/configuration.md) — every field of the SSH section and the `tools.ssh.*` keys.
+- [Settings](../reference/settings.md#ssh) and [Configuration](../reference/configuration.md) — every field of the SSH section and the `tools.ssh.*` keys.
 - [Security model](../internals/security-model.md) — where SSH sits among Jenny's containment layers.
 - [Backup and restore](backup.md) — what a `.jbk` does and does not carry (spoiler: not your SSH key).

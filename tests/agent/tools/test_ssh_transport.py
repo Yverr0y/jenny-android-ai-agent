@@ -121,7 +121,7 @@ def test_password_host_does_not_need_a_key_file(ssh_home):
 def test_password_host_without_a_password_says_where_to_set_it(ssh_home):
     config = _config(_host(auth="password"))
     record_host_key(f"example.com {KEY_LINE}")
-    with pytest.raises(SshPasswordMissingError, match="Settings > SSH"):
+    with pytest.raises(SshPasswordMissingError, match="Settings → Workshop → Hands → SSH"):
         resolve_target("prod", config=config, validate=_allow_everything)
 
 

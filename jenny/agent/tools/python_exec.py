@@ -12,6 +12,7 @@ import io
 import logging
 import os  # solo per os.fsdecode / os.sep / os.path.* — helper puri, mai patchati
 import shutil
+import stat
 import sys
 import threading
 import traceback
@@ -19,6 +20,7 @@ import types
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from pathlib import Path
 from typing import Any
 
 from jenny.agent.tools.base import Tool, tool_parameters
@@ -28,6 +30,7 @@ from jenny.agent.tools.exec_session import (
     DEFAULT_YIELD_MS,
     MAX_OUTPUT_CHARS,
     MAX_YIELD_MS,
+    PythonExecGateMixin,
     _SessionStopped,
     clamp_session_int,
     format_result_line,
@@ -43,6 +46,7 @@ from jenny.agent.tools.schema import (
 )
 from jenny.config.paths import get_workspace_path
 from jenny.config.tool_schemas import PythonExecConfig  # re-export (def in config.tool_schemas)
+from jenny.utils.helpers import truncate_head_tail
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +78,13 @@ logger = logging.getLogger(__name__)
 # `sys.modules`/`os.sys` regardless), and provided no real containment given
 # `os`/`sys` are allowed. It only added a global-state hazard. Removed.
 #
+# I MODULI SONO CONDIVISI FRA LE SESSIONI. I globali del codice guardato sono
+# per session key (``PythonNamespace._globals_for``), ma ``sys.modules`` è
+# quello dell'interprete: un attributo messo su un modulo importato da un
+# quaderno si legge dalla chat personale, da un job e dal gateway stesso.
+# Limite accettato per la stessa ragione di sopra — non c'è un isolamento
+# in-process che regga — e dichiarato nella descrizione del tool.
+#
 # THE READ-ONLY TURN IS ON THIS SIDE OF THE BOUNDARY TOO, and that is the half
 # the older notes left out. The accepted open door is a raw thread reached
 # through an allowed module's internals — `asyncio.base_events.threading.Thread`,
@@ -87,7 +98,7 @@ logger = logging.getLogger(__name__)
 # writes. The asyncio hops carry both halves across
 # (`_carry_turn_across_thread`); a raw thread carries neither.
 # Consequence for anything that *describes* the switch — the prompt block in
-# `templates/agent/readonly.md`, `.agent/security.md`: the read-only turn is an
+# `templates/agent/readonly.md`, `SECURITY.md`: the read-only turn is an
 # instruction backed by tool refusals, and it must not be written up as a
 # boundary that holds against code that goes looking for a way round it.
 
@@ -451,12 +462,12 @@ def _active_path_base() -> str | None:
 # trappola: ci si cade scrivendo codice del tutto ragionevole. Misurato sul
 # device un'ora dopo aver reso `working_dir` reale — il modello ha scritto da sé
 #
-#     sys.path.insert(0, os.path.join(os.getcwd(), "skills", "waterbot", "scripts"))
-#     import wb_probe
+#     sys.path.insert(0, os.path.join(os.getcwd(), "skills", "raincheck", "scripts"))
+#     import rc_probe
 #
 # dopo aver passato `working_dir=<workspace>`. `os.getcwd()` rispondeva `/`
 # (la cwd del processo su Android), quindi la `join` produceva
-# `/skills/waterbot/scripts`, che non esiste, e l'import moriva. Terza
+# `/skills/raincheck/scripts`, che non esiste, e l'import moriva. Terza
 # incarnazione dello stesso difetto sullo stesso device.
 #
 # Da qui la regola, e vale la pena scriverla come regola e non come elenco di
@@ -469,8 +480,8 @@ def _active_path_base() -> str | None:
 # `os.path.abspath`, `os.path.realpath`, `Path.resolve()`, `Path.absolute()` e
 # `Path.cwd()` passano tutte da `os.getcwd()` (o da `os.getcwdb()` per gli
 # argomenti `bytes`) — verificato sul 3.11 di Chaquopy, non dedotto dal
-# sorgente locale. Chiude perciò anche l'incoerenza schedata a parte dal review
-# di Round 2: `os.path.abspath("data.txt")` rispondeva `/data.txt` mentre
+# sorgente locale. Chiude perciò anche un'altra incoerenza:
+# `os.path.abspath("data.txt")` rispondeva `/data.txt` mentre
 # `open("data.txt")` leggeva dalla base, quindi il modello poteva CALCOLARE un
 # percorso con una chiamata e vederselo RIFIUTARE dalla successiva.
 #
@@ -1202,18 +1213,35 @@ class PythonNamespace:
         self.blocked_modules = set(blocked_modules or [])
         self.restrict_to_workspace = restrict_to_workspace
         self.workspace = workspace or self.working_dir
-        # Base di risoluzione richiesta per le prossime esecuzioni, o None per
-        # "radice del workspace" (default storico). Volutamente NON derivata da
-        # `self.working_dir`: quello è un attributo di comodo (lo mostra
-        # `list_exec_sessions`) che di default vale la workspace globale del
-        # processo, e usarlo come base romperebbe ogni namespace costruito con
-        # un `workspace` diverso. La base la decide il chiamante, per chiamata.
-        self.exec_base: str | None = None
-        self._ns: dict[str, Any] = {
-            "__builtins__": self._safe_builtins(),
+        # Nessuna base di risoluzione sull'istanza: la passa il chiamante a ogni
+        # `execute`/`call_function` (``working_dir``), e ``None`` vuol dire
+        # "radice del workspace". Un tempo stava qui (`exec_base`), scritta da
+        # `PythonExecTool.execute` e riletta da `_enter_guard`: l'istanza è
+        # condivisa da tutte le sessioni, quindi una chiamata in coda sul pool
+        # (o un thread di sessione partito un giro dopo) trovava la base messa
+        # nel frattempo da un'altra, e scriveva nella sua cartella.
+        # Nemmeno `self.working_dir` è una base: è un attributo di comodo che
+        # di default vale la workspace globale del processo.
+        # Globali per sessione. Il tool è uno per processo, e con un solo
+        # dizionario una variabile assegnata in un quaderno si leggeva dalla
+        # chat personale, e un `def read_file(...)` sostituiva il builtin
+        # registrato per tutte le sessioni fino al riavvio. `_template` tiene
+        # ciò che ogni sessione riceve alla nascita (i builtin registrati);
+        # `_ns` resta il namespace delle chiamate senza chiave (test, host).
+        # Le chiavi sono le session key: poche e stabili (la chat, un quaderno,
+        # i job interni), quindi niente sfratto.
+        self._template: dict[str, Any] = {
             "__name__": "__python_exec__",
             "__file__": "<python_exec>",
         }
+        self._ns: dict[str, Any] = self._fresh_globals()
+        self._session_ns: dict[str | None, dict[str, Any]] = {None: self._ns}
+        self._session_ns_lock = threading.Lock()
+        # Di quale progetto sono i globali di una chiave ``project:``: l'identità
+        # della cartella quando la sessione è nata (v.
+        # ``PythonExecTool._release_stale_projects``). Un progetto cancellato e
+        # ricreato con lo stesso nome ha la stessa chiave e un'identità diversa.
+        self._session_owner: dict[str, Any] = {}
 
     # Dunder dei builtins che il namespace guardato deve comunque avere.
     # Il filtro `name.startswith("_")` qui sotto è ereditato e cieco: toglie in
@@ -1240,6 +1268,44 @@ class PythonNamespace:
     # `__import__` NON va in questa lista: è reinstallato sotto come
     # `_guarded_import` e passare dal loop lo riporterebbe a quello vero.
     _ALLOWED_DUNDER_BUILTINS = frozenset({"__build_class__"})
+
+    def _fresh_globals(self) -> dict[str, Any]:
+        """Globali nuovi: builtin propri (una copia a testa) più il modello."""
+        return {"__builtins__": self._safe_builtins(), **self._template}
+
+    def _globals_for(self, session_key: str | None) -> dict[str, Any]:
+        """I globali della sessione *session_key*, creati al primo uso."""
+        with self._session_ns_lock:
+            ns = self._session_ns.get(session_key)
+            if ns is None:
+                ns = self._session_ns[session_key] = self._fresh_globals()
+            return ns
+
+    def forget_session(self, session_key: str) -> bool:
+        """Libera i globali di *session_key*. ``True`` se c'erano.
+
+        La prossima chiamata della stessa chiave riparte da globali nuovi. I
+        globali senza chiave (``None``) non si liberano: sono quelli dell'host.
+        """
+        if session_key is None:
+            return False
+        with self._session_ns_lock:
+            self._session_owner.pop(session_key, None)
+            return self._session_ns.pop(session_key, None) is not None
+
+    def session_keys(self) -> list[str]:
+        """Le session key che hanno globali propri, adesso."""
+        with self._session_ns_lock:
+            return [key for key in self._session_ns if key is not None]
+
+    def session_owner(self, session_key: str) -> Any:
+        with self._session_ns_lock:
+            return self._session_owner.get(session_key)
+
+    def claim_session(self, session_key: str, owner: Any) -> None:
+        """Registra di chi sono i globali di *session_key*, se non lo si sa già."""
+        with self._session_ns_lock:
+            self._session_owner.setdefault(session_key, owner)
 
     @staticmethod
     def _compile(code: str, mode: str) -> types.CodeType:
@@ -1347,7 +1413,7 @@ class PythonNamespace:
         ``self.workspace``, cioè la radice con cui il tool è stato COSTRUITO,
         senza mai consultare lo scope del turno. Due confini di scrittura che
         non si parlavano dentro lo stesso file: con uno scope su
-        ``wikis/patreon`` e il tool costruito sulla radice,
+        ``wikis/ricette`` e il tool costruito sulla radice,
         ``open('<ws>/SOUL.md', 'w')`` veniva rifiutata e
         ``os.remove('<ws>/SOUL.md')`` passava.
 
@@ -2637,9 +2703,9 @@ class PythonNamespace:
     def _enter_guard(self, working_dir: str | None = None) -> None:
         """Activate the process-wide import guard for this thread.
 
-        *working_dir* (o, se assente, ``self.exec_base``) diventa la base di
-        risoluzione dei percorsi relativi e la testa di ``sys.path`` per la
-        durata dell'exec. Valida PRIMA di toccare qualunque stato globale, così
+        *working_dir* diventa la base di risoluzione dei percorsi relativi e la
+        testa di ``sys.path`` per la durata dell'exec; ``None`` vuol dire la
+        radice del workspace. Mai letta dall'istanza, che è condivisa. Valida PRIMA di toccare qualunque stato globale, così
         una base rifiutata non lascia niente da ripulire.
         """
         # Unica normalizzazione difensiva all'ingresso, e solo su `bypass`.
@@ -2674,9 +2740,7 @@ class PythonNamespace:
         from jenny.security.workspace_policy import invalidate_root_cache
 
         invalidate_root_cache()
-        base = self._resolve_exec_base(
-            working_dir if working_dir is not None else self.exec_base
-        )
+        base = self._resolve_exec_base(working_dir)
         # Stesso ragionamento del confine di path qui sotto, applicato alla
         # superficie di evasione di `os`: legarla all'`import os` esplicito non
         # bloccava nulla, perché `import shutil; shutil.os.system("...")` arriva
@@ -2778,8 +2842,18 @@ class PythonNamespace:
             finally:
                 self._unload_exec_modules()
 
-    def execute(self, code: str, working_dir: str | None = None) -> tuple[str, str, Any]:
-        """Execute code and return (stdout, stderr, result)."""
+    def execute(
+        self,
+        code: str,
+        working_dir: str | None = None,
+        session_key: str | None = None,
+    ) -> tuple[str, str, Any]:
+        """Execute code and return (stdout, stderr, result).
+
+        *session_key* sceglie i globali (vedi ``_globals_for``): passata dal
+        chiamante, come la base, e mai letta dall'istanza condivisa.
+        """
+        ns = self._globals_for(session_key)
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         result = None
@@ -2795,10 +2869,10 @@ class PythonNamespace:
             with _capture_streams(stdout_buf, stderr_buf):
                 # Try eval first (for expressions)
                 try:
-                    result = eval(self._compile(code, "eval"), self._ns)
+                    result = eval(self._compile(code, "eval"), ns)
                 except SyntaxError:
                     # Fall back to exec (for statements)
-                    exec(self._compile(code, "exec"), self._ns)
+                    exec(self._compile(code, "exec"), ns)
         except (PythonExecInterrupted, _SessionStopped, asyncio.CancelledError):
             # Interrupt del sandbox (timeout / stop): non è un errore del
             # codice utente e deve risalire fino a _run / al chiamante.
@@ -2834,9 +2908,10 @@ class PythonNamespace:
         args: list | None = None,
         kwargs: dict | None = None,
         working_dir: str | None = None,
+        session_key: str | None = None,
     ) -> tuple[str, str, Any]:
-        """Call a registered function by name."""
-        func = self._ns.get(name)
+        """Call a registered function by name (in the globals of *session_key*)."""
+        func = self._globals_for(session_key).get(name)
         if func is None:
             return "", f"Function '{name}' not found in namespace", None
         if not callable(func):
@@ -2869,8 +2944,16 @@ class PythonNamespace:
         return stdout_buf.getvalue(), _with_exec_notes(stderr_buf.getvalue()), result
 
     def register_function(self, name: str, func: Any) -> None:
-        """Register a callable in the namespace."""
-        self._ns[name] = func
+        """Register a callable in the namespace.
+
+        Va nel modello e in ogni sessione già nata: una ridefinizione fatta dal
+        codice di una sessione resta sua, la registrazione dell'host vale per
+        tutte.
+        """
+        with self._session_ns_lock:
+            self._template[name] = func
+            for ns in self._session_ns.values():
+                ns[name] = func
 
 
 # ---------------------------------------------------------------------------
@@ -2932,6 +3015,24 @@ def _interrupt_thread(ident: int | None) -> None:
         logger.debug("Could not interrupt python_exec thread %s", ident, exc_info=True)
 
 
+def _project_identity(root: Path) -> tuple[str | None, int] | None:
+    """L'identità della cartella di un progetto, o ``None`` se non c'è.
+
+    L'id della wiki distingue un progetto ricreato con lo stesso nome (lo
+    scaffolder ne scrive uno nuovo); l'inode copre le wiki fatte a mano, che
+    un id non l'hanno.
+    """
+    from jenny.utils.wiki_paths import wiki_id
+
+    try:
+        info = root.stat()
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode):
+        return None
+    return wiki_id(root), info.st_ino
+
+
 class _ContextBoundNamespace:
     """Il namespace, portato oltre il thread grezzo della sessione.
 
@@ -2955,13 +3056,29 @@ class _ContextBoundNamespace:
     **propria** copia del contesto, quindi non esiste il caso "già entrato".
     """
 
-    def __init__(self, namespace: Any) -> None:
+    def __init__(
+        self,
+        namespace: Any,
+        *,
+        working_dir: str | None = None,
+        session_key: str | None = None,
+    ) -> None:
         self._namespace = namespace
+        self._session_key = session_key
         self._execute = _carry_turn_across_thread(namespace.execute)
         self._call_function = _carry_turn_across_thread(namespace.call_function)
+        # La base della chiamata che ha aperto la sessione, fissata qui: il
+        # thread chiama senza argomenti e l'istanza condivisa non la conserva.
+        # `working_dir` è anche ciò che `list_exec_sessions` mostra.
+        self._base = working_dir
+        self.working_dir = working_dir or namespace.working_dir
 
     def execute(self, code: str, working_dir: str | None = None) -> tuple[str, str, Any]:
-        return self._execute(code, working_dir)
+        return self._execute(
+            code,
+            working_dir if working_dir is not None else self._base,
+            self._session_key,
+        )
 
     def call_function(
         self,
@@ -2970,7 +3087,13 @@ class _ContextBoundNamespace:
         kwargs: dict | None = None,
         working_dir: str | None = None,
     ) -> tuple[str, str, Any]:
-        return self._call_function(function, args, kwargs, working_dir)
+        return self._call_function(
+            function,
+            args,
+            kwargs,
+            working_dir if working_dir is not None else self._base,
+            self._session_key,
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._namespace, name)
@@ -2985,13 +3108,18 @@ async def run_python_async(
     timeout: int | None,
     max_output_chars: int,
     working_dir: str | None = None,
+    session_key: str | None = None,
 ) -> str:
     """Execute Python code/function in a thread with timeout.
 
+    *session_key* sceglie i globali della sessione: come *working_dir*,
+    arriva per argomento.
+
     *working_dir* è la base di risoluzione per questa esecuzione (vedi
-    ``PythonNamespace._enter_guard``): passata esplicitamente, non letta dal
+    ``PythonNamespace._enter_guard``): passata esplicitamente e mai letta dal
     namespace, così due chiamate concorrenti sullo stesso tool non si
-    sovrascrivono la base a vicenda.
+    sovrascrivono la base a vicenda. ``None`` vuol dire la radice del workspace,
+    non "la base dell'ultima chiamata".
 
     IL CONTESTO DEL TURNO VIAGGIA CON L'ESECUZIONE, e non è un dettaglio: è la
     differenza fra un cancello che tiene e un cancello che sembra tenere.
@@ -3029,9 +3157,11 @@ async def run_python_async(
         ident_cell[0] = threading.get_ident()
         try:
             if function:
-                return namespace.call_function(function, args, kwargs, working_dir)
+                return namespace.call_function(
+                    function, args, kwargs, working_dir, session_key,
+                )
             elif code:
-                return namespace.execute(code, working_dir)
+                return namespace.execute(code, working_dir, session_key)
             else:
                 return "", "Error: Provide 'code' or 'function'", None
         except PythonExecInterrupted:
@@ -3093,15 +3223,7 @@ async def run_python_async(
 
     output = "\n".join(parts) if parts else "(no output)"
 
-    # Truncate
-    if len(output) > max_output_chars:
-        half = max_output_chars // 2
-        output = (
-            output[:half]
-            + f"\n\n... ({len(output) - max_output_chars:,} chars truncated) ...\n\n"
-            + output[-half:]
-        )
-
+    output, _cut = truncate_head_tail(output, max_output_chars)
     return output
 
 
@@ -3139,14 +3261,15 @@ async def run_python_async(
             nullable=True,
         ),
         timeout=IntegerSchema(
-            60,
             description="Timeout in seconds (default 60, max 600).",
             minimum=1,
             maximum=600,
         ),
         max_output_chars=IntegerSchema(
-            10000,
-            description="Maximum output characters to return (default 10000, max 50000).",
+            description=(
+                "Maximum output characters to return (default: the configured "
+                "ceiling, stated in the tool description; max 50000)."
+            ),
             minimum=1000,
             maximum=MAX_OUTPUT_CHARS,
             nullable=True,
@@ -3163,25 +3286,23 @@ async def run_python_async(
         ),
     )
 )
-class PythonExecTool(Tool):
-    """Execute Python code or call registered functions."""
+class PythonExecTool(PythonExecGateMixin, Tool):
+    """Execute Python code or call registered functions.
+
+    **I globali sono per sessione, i moduli no.** Ogni session key ha il suo
+    dizionario di globali, ma ``sys.modules`` è uno solo per l'interprete:
+    un modulo importato da una sessione è lo stesso oggetto nelle altre e nel
+    gateway, e un attributo assegnato su di lui (``json.x = ...``,
+    ``math.pi = 3``) lo vedono tutti. Non è isolabile in-process — importare
+    una copia per sessione romperebbe i moduli con stato globale e le
+    estensioni C — e resta un limite accettato: ``python_exec`` non è una
+    sandbox (v. il commento TRUST BOUNDARY in testa al file). La descrizione
+    per il modello lo dice, perché è lui che può evitarlo.
+    """
 
     _scopes = {"core", "subagent"}
-    config_key = "python_exec"
 
     _MAX_TIMEOUT = 600
-    _MAX_OUTPUT = 10_000
-
-    @classmethod
-    def config_cls(cls):
-        return PythonExecConfig
-
-    @classmethod
-    def enabled(cls, ctx: Any) -> bool:
-        cfg = getattr(ctx.config, "python_exec", None)
-        if cfg is None:
-            return True
-        return cfg.enable
 
     @classmethod
     def create(cls, ctx: Any) -> Tool:
@@ -3230,10 +3351,54 @@ class PythonExecTool(Tool):
             workspace=workspace,
         )
         self._session_manager = session_manager or DEFAULT_EXEC_SESSION_MANAGER
+        # La cartella dei progetti, imparata dallo scope dell'ultimo turno di
+        # progetto: è ``config.wiki.wikis_dir``, che questo tool non riceve.
+        self._projects_dir: Path | None = None
 
     @property
     def name(self) -> str:
         return "python_exec"
+
+    def forget_session(self, session_key: str) -> bool:
+        """Libera i globali di *session_key* (v. ``PythonNamespace.forget_session``)."""
+        return self.namespace.forget_session(session_key)
+
+    def _release_stale_projects(self, session_key: str | None) -> None:
+        """Libera i globali dei progetti che non ci sono più, o non sono più loro.
+
+        I globali di una sessione vivevano fino al riavvio: un progetto
+        cancellato e ricreato con lo stesso nome ritrovava le variabili del
+        vecchio, e quelli cancellati o rinominati restavano in memoria. Nessuno
+        avvisa questo tool di una cancellazione, quindi lo si misura a ogni
+        chiamata: l'identità della cartella (id della wiki e inode) presa quando
+        la sessione è nata si confronta con quella di adesso, e una cartella
+        sparita o diversa libera i globali. Costa uno ``stat`` e la lettura di
+        un file piccolo per progetto aperto in questo processo.
+        """
+        from jenny.security.workspace_access import current_workspace_scope
+        from jenny.session.keys import PROJECT_SESSION_PREFIX, is_project_session_key
+
+        current = (
+            session_key[len(PROJECT_SESSION_PREFIX):]
+            if session_key and is_project_session_key(session_key) else None
+        )
+        scope = current_workspace_scope()
+        if current and scope is not None and scope.project_path.name == current:
+            self._projects_dir = scope.project_path.parent
+        projects_dir = self._projects_dir
+        if projects_dir is None:
+            return
+        for key in self.namespace.session_keys():
+            if not is_project_session_key(key):
+                continue
+            owner = self.namespace.session_owner(key)
+            identity = _project_identity(projects_dir / key[len(PROJECT_SESSION_PREFIX):])
+            if identity is None or (owner is not None and owner != identity):
+                self.namespace.forget_session(key)
+        if current and session_key:
+            identity = _project_identity(projects_dir / current)
+            if identity is not None:
+                self.namespace.claim_session(session_key, identity)
 
     @property
     def description(self) -> str:
@@ -3243,8 +3408,24 @@ class PythonExecTool(Tool):
             "Use function='name' with args/kwargs to call registered functions. "
             "Prefer dedicated tools (read_file, grep, apply_patch, web_search, web_fetch) for file/search/web tasks. "
             "Use python_exec for tests, builds, calculations, data processing, "
-            "and other logic. Output is truncated at 10000 chars."
+            f"and other logic. Output is truncated at {self._default_max_output()} chars. "
+            "Variables persist within this conversation only; imported modules are "
+            "shared with other conversations, so changing a module (e.g. setting an "
+            "attribute on it) is visible to all of them."
         )
+
+    def _default_max_output(self) -> int:
+        """Il tetto di config (``tools.pythonExec.maxOutputChars``), nei limiti dello schema.
+
+        Prima il default era la costante di classe ``_MAX_OUTPUT`` e il valore
+        di config, pur salvato, non si usava. Un valore che non è un
+        intero (config anomala) ripiega sul default: la descrizione del tool
+        non deve poter sollevare, la legge anche l'assemblaggio del prompt.
+        """
+        value = self.max_output_chars
+        if not isinstance(value, int) or isinstance(value, bool):
+            value = None
+        return clamp_session_int(value, 10_000, 1000, MAX_OUTPUT_CHARS)
 
     @property
     def exclusive(self) -> bool:
@@ -3267,21 +3448,23 @@ class PythonExecTool(Tool):
 
         # `working_dir` è la base di risoluzione della SOLA chiamata corrente:
         # validata qui per restituire al modello un errore leggibile invece di
-        # un traceback, e riazzerata quando non è passata (senza il reset,
-        # una chiamata con working_dir avvelenerebbe silenziosamente la
-        # risoluzione dei percorsi di tutte le successive che non lo passano).
+        # un traceback, e poi passata per argomento fino a `_enter_guard` —
+        # mai scritta sull'istanza, che è condivisa da tutte le sessioni.
         try:
             resolved_working_dir = self.namespace._resolve_exec_base(working_dir)
         except OSError as exc:
             return f"Error: {exc}"
-        # Il ramo con yield_time_ms esegue in un thread di sessione che chiama
-        # il namespace senza argomenti: la base gli arriva da qui.
-        self.namespace.exec_base = resolved_working_dir
-        self.namespace.working_dir = resolved_working_dir or self.working_dir
+        # I globali sono della sessione del turno: letta qui, sul thread
+        # del loop, e portata per argomento.
+        session_key = current_request_session_key()
+        try:
+            self._release_stale_projects(session_key)
+        except Exception:  # noqa: BLE001 — una pulizia mancata non ferma la chiamata
+            logger.debug("python_exec: stale project globals not released", exc_info=True)
 
         effective_timeout = self._resolve_timeout(timeout)
         effective_max = clamp_session_int(
-            max_output_chars, self._MAX_OUTPUT, 1000, MAX_OUTPUT_CHARS,
+            max_output_chars, self._default_max_output(), 1000, MAX_OUTPUT_CHARS,
         )
 
         if yield_time_ms is not None:
@@ -3293,6 +3476,8 @@ class PythonExecTool(Tool):
                 yield_time_ms=yield_time_ms,
                 max_output_chars=effective_max,
                 timeout=effective_timeout,
+                working_dir=resolved_working_dir,
+                session_key=session_key,
             )
 
         return await run_python_async(
@@ -3304,6 +3489,7 @@ class PythonExecTool(Tool):
             timeout=effective_timeout,
             max_output_chars=effective_max,
             working_dir=resolved_working_dir,
+            session_key=session_key,
         )
 
     async def _execute_session(
@@ -3316,6 +3502,8 @@ class PythonExecTool(Tool):
         yield_time_ms: int,
         max_output_chars: int,
         timeout: int | None,
+        working_dir: str | None,
+        session_key: str | None,
     ) -> str:
         try:
             session_id, poll = await self._session_manager.start_python(
@@ -3326,10 +3514,12 @@ class PythonExecTool(Tool):
                 # Il turno non attraversa il thread grezzo della sessione:
                 # l'involucro costruisce il ponte qui, sul thread dell'event
                 # loop. Vedi `_ContextBoundNamespace`.
-                namespace=_ContextBoundNamespace(self.namespace),
+                namespace=_ContextBoundNamespace(
+                    self.namespace, working_dir=working_dir, session_key=session_key,
+                ),
                 timeout=timeout,
                 yield_time_ms=clamp_session_int(yield_time_ms, DEFAULT_YIELD_MS, 0, MAX_YIELD_MS),
-                owner_session_key=current_request_session_key(),
+                owner_session_key=session_key,
                 max_output_chars=max_output_chars,
             )
             return format_session_poll(session_id, poll)

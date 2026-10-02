@@ -1,6 +1,6 @@
 /** Mobile Launcher — il foglio che sale dal composer.
  *
- *  Piano `.agent/apps-drawer-plan.md`, passi 1-6: l'impianto di navigazione, le
+ *  Dentro: l'impianto di navigazione, le
  *  tre liste vere, il campo di ricerca con sotto la lista ordinata e attivabile
  *  col tocco, **il modo di usarlo senza toccare lo schermo** (type-ahead,
  *  frecce, rotella, ⏎ e ⇧⏎), la geometria che schiva la gesture di home e
@@ -18,18 +18,21 @@
  *  eredita gratis il tasto Indietro, Home e la guardia del type-ahead della
  *  chat.
  *
- *  **Non possiede i dati** (D5). Skill, Jenny App e app Android stanno in
- *  `AppsController`, che ha già il ricaricamento con annuncio delle rimozioni,
- *  l'elenco delle nascoste, `onPackageChanged` e l'ascolto dei frame
- *  `apps_list_changed` / `app_data_changed`. Qui si legge da lì e ci si iscrive
- *  ai suoi cambi: una seconda macchina di ricarica sarebbe una seconda verità
- *  da tenere allineata, e si scoprirebbe disallineata proprio nei casi che il
- *  cassetto deve servire bene (una app disinstallata mentre il foglio è aperto).
+ *  **Non possiede i dati.** Jenny App e app Android stanno in
+ *  `shared/apps-source.js`, che ha il ricaricamento con annuncio delle
+ *  rimozioni, `onPackageChanged` e l'ascolto dei frame `apps_list_changed` /
+ *  `app_data_changed`; quel che ci si **fa** sta in `shared/apps-actions.js`.
+ *  Qui si legge di la' e ci si iscrive ai cambi: una seconda macchina di
+ *  ricarica sarebbe una seconda verita' da tenere allineata, e si scoprirebbe
+ *  disallineata proprio nei casi che il cassetto deve servire bene — una app
+ *  disinstallata mentre il foglio e' aperto.
  */
 
 import { i18n } from './shared/i18n.js';
 import { UsageRanking, rankEntries } from './shared/launcher-rank.js';
+import { usageStore } from './shared/launcher-usage-store.js';
 import { isTypeAheadKey } from './shared/type-ahead.js';
+import { setupLongPress } from './shared/longpress.js';
 
 /* Etichetta del tipo, a destra della riga. Chiavi proprie del cassetto e non
    quelle della scheda: lì i titoli sono intestazioni di sezione (plurali,
@@ -73,9 +76,19 @@ const COMPACT_HEIGHT = 220;
 const DRAG_CLOSE_RATIO = 0.3;
 
 export class LauncherController {
-  /** @param {object} app istanza di MobileApp (per il ritorno del fuoco). */
-  constructor(app) {
+  /** @param {object} app istanza di MobileApp (per il ritorno del fuoco).
+   *  @param {object} [opzioni]
+   *  @param {boolean} [opzioni.incorporato] il cassetto **e' una pagina** e non
+   *         un foglio: la pagina App della casa.
+   *         Niente velo, niente sfondo inerte, niente trascinamento per
+   *         chiudere e niente geometria della tastiera — cose di un foglio che
+   *         sale sopra la chat. «Aperto» vuol dire allora **la pagina che
+   *         guardi**: chi lo ospita chiama `open()` quando ci arrivi e `close()`
+   *         quando la lasci, e i tasti sono suoi solo in quel mentre.
+   *         L'officina non lo passa, e il suo foglio resta com'era. */
+  constructor(app, { builtin = false } = {}) {
     this.app = app;
+    this._builtin = builtin;
     this.sheet = document.getElementById('launcher-sheet');
     this.scrim = document.getElementById('launcher-scrim');
     this.list = document.getElementById('launcher-list');
@@ -84,7 +97,9 @@ export class LauncherController {
     this.clearBtn = document.getElementById('launcher-search-clear');
     this.statusEl = document.getElementById('launcher-status');
     this.retryBtn = document.getElementById('launcher-status-retry');
-    this.manageBtn = document.getElementById('launcher-manage');
+    /* Qui c'era `manageBtn`, la riga «Gestisci app e skill». Portava alla
+       scheda «App», che dal 21/09/2026 non esiste piu': il cassetto e' l'unico
+       posto, e disinstallare si fa col tocco lungo su una riga. */
 
     /* Verità unica sullo stato del foglio, e la ragione per cui esiste invece
        di interrogare il DOM: `present()` deve diventare falso *nell'istante*
@@ -101,6 +116,8 @@ export class LauncherController {
     // lasciato: l'iscrizione ai suoi cambi deve sopravvivere alla chiusura del
     // foglio, altrimenti riaprirlo mostrerebbe l'elenco di quando si è chiuso.
     this._apps = null;
+    /** Le azioni (aprire, la scheda). V. `_attachSource`. */
+    this._actions = null;
     // Le voci come le consegna `launcherEntries()`, non ordinate per la query:
     // riordinarle e filtrarle è lavoro di `_renderList()`, che gira a ogni
     // tasto, mentre questa si rinfresca solo quando i dati cambiano davvero.
@@ -137,9 +154,13 @@ export class LauncherController {
     // Pixel di rotella non ancora spesi — v. `_onWheel`.
     this._wheelAcc = 0;
     // Frequenza e recenza per chiave (D9). Costruito qui e non alla prima
-    // apertura: leggere una riga di localStorage costa meno di decidere se
+    // apertura: leggere una riga di storage costa meno di decidere se
     // leggerla, e il ranking serve già al primo disegno.
-    this._usage = new UsageRanking(window.localStorage);
+    /* Lo storage non è più `window.localStorage` diretto: dentro l'APK il
+       valore vive nelle SharedPreferences, che sopravvivono al kill del
+       processo — v. `shared/launcher-usage-store.js`, che sceglie il posto e
+       porta di là il valore vecchio una volta sola. */
+    this._usage = new UsageRanking(usageStore());
     /* L'altezza del viewport **senza tastiera**, da cui si calcola quella del
        foglio. Serve ricordarla perché su questo guscio la finestra si
        ridimensiona davvero quando la tastiera software sale (misurato: 432 →
@@ -158,7 +179,6 @@ export class LauncherController {
     this.closeBtn?.addEventListener('click', () => this.close());
     this.scrim?.addEventListener('click', () => this.close());
 
-    this.manageBtn?.addEventListener('click', () => this._openManager());
     this.retryBtn?.addEventListener('click', () => this._retryFailedLists());
 
     this.search?.addEventListener('input', () => this._onQueryChanged());
@@ -178,7 +198,12 @@ export class LauncherController {
        finisce comunque in `_activate`: un percorso solo, dichiarato. */
     this.list?.addEventListener('click', (e) => {
       const row = e.target.closest?.('.launcher-row');
-      if (row?.dataset.key) this._activate(row.dataset.key);
+      if (!row?.dataset.key) return;
+      /* Un tocco lungo lascia dietro di se' un click sintetico: senza questa
+         riga aprirebbe la scheda **e** lancerebbe l'app. Stessa guardia di
+         ogni altro chiamante di `setupLongPress` in questo codice. */
+      if (row.dataset.longpress) { delete row.dataset.longpress; return; }
+      this._activate(row.dataset.key);
     });
 
     /* Il fuoco che entra in una riga *è* una selezione: chi arriva con Tab o
@@ -205,22 +230,40 @@ export class LauncherController {
        lista, così funziona anche partendo dalla riga di ricerca. */
     this.sheet.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
 
-    /* I nomi dei tipi cambiano con la lingua, e questa lista la costruisce JS:
-       `_applyStaticTranslations()` passa sui `data-i18n` che *sono già in
-       pagina*, quindi copre le righe esistenti ma non quelle che nasceranno
-       dopo. Ridisegnare al cambio di lingua le copre entrambe. Il primo disegno
-       non è qui ma in `open()`: al boot le traduzioni non sono ancora arrivate
-       (`i18n.load` è asincrona) e disegnare adesso vorrebbe dire scrivere le
-       chiavi grezze in un foglio che nessuno sta guardando. */
-    i18n.onLocaleChange(() => {
-      // Le righe portano dentro testo tradotto (il tipo, l'errore di un
-      // manifest rotto): la cache va buttata, non riordinata.
-      this._rows.clear();
-      this._render();
-    });
-
+    /* Un foglio si trascina e si adatta alla tastiera; una pagina no: sta
+       dentro la pista, e la sua altezza e' quella della pagina. */
+    if (this._builtin) return;
     this._setupDrag();
     this._setupGeometry();
+  }
+
+  /** Le stringhe che stanno **nel markup** e non le scrive nessun disegno.
+   *
+   *  In officina non serviva: quel guscio ha una passata sua che gira su tutto
+   *  il documento (`MobileApp._applyStaticTranslations`, che legge
+   *  `data-i18n-placeholder` e compagnia). La casa quella passata non ce l'ha —
+   *  non ne aveva mai avuto bisogno, perché il suo markup non portava
+   *  nemmeno un `data-i18n` — e portandoci dentro questo foglio ci sono
+   *  arrivate dieci stringhe italiane fisse. Visto sul telefono, con la lingua
+   *  su inglese: titolo «MOST USED» e sotto «Cerca un'app…».
+   *
+   *  Sta qui e non in casa perché i nodi sono di questo componente: una
+   *  seconda passata generica nel guscio funzionerebbe, ma lascerebbe il
+   *  prossimo pezzo condiviso a scoprire lo stesso buco da capo. In officina
+   *  gira anche lei e riscrive gli stessi valori: costa nulla ed è idempotente.
+   */
+  _applyStaticTranslations() {
+    if (this.search) {
+      this.search.placeholder = i18n.t('launcher.searchPlaceholder');
+      this.search.setAttribute('aria-label', i18n.t('launcher.searchPlaceholder'));
+    }
+    this.clearBtn?.setAttribute('aria-label', i18n.t('launcher.clearSearch'));
+    this.list?.setAttribute('aria-label', i18n.t('launcher.resultsList'));
+    const text = this.statusEl?.querySelector('.launcher-status-text');
+    if (text) text.textContent = i18n.t('launcher.loadFailed');
+    if (this.retryBtn) this.retryBtn.textContent = i18n.t('launcher.retry');
+    document.getElementById('launcher-close')
+      ?.setAttribute('aria-label', i18n.t('common.close'));
   }
 
   /* ── Geometria: la zona di gesture e la tastiera (5.2, 5.3, 5.5) ────────── */
@@ -436,13 +479,23 @@ export class LauncherController {
 
   /** Il foglio è a schermo e reattivo? Letto da `_overlayLayers().present`. */
   isOpen() {
-    return this._open;
+    /* Incorporato non e' uno strato sopra niente: chi chiede «e' aperto?» —
+       Indietro, il gesto fra le pagine — vuole sapere se c'e' un foglio da
+       chiudere, e non c'e'. */
+    return this._builtin ? false : this._open;
   }
 
   open() {
     if (!this.sheet || this._open) return;
     this._open = true;
     this._lastFocus = document.activeElement;
+    /* Le stringhe del markup si riscrivono **qui**, non nel costruttore, e per
+       la stessa ragione per cui il primo disegno è qui: al boot `i18n.load` non
+       è ancora tornata, e `i18n.t()` restituisce la chiave. Provato a metterle
+       nel costruttore il 20/09/2026, e sul telefono il campo diceva
+       «launcher.searchPlaceholder» — cioè peggio del segnaposto italiano da cui
+       si scappava, e su una schermata che l'utente guarda davvero. */
+    this._applyStaticTranslations();
     /* Ogni apertura riparte dal campo vuoto. Ritrovare la query di ieri
        vorrebbe dire aprire il cassetto su tre voci su settanta senza aver
        chiesto niente — e il costo di ricominciare è una parola, mentre il costo
@@ -465,12 +518,21 @@ export class LauncherController {
        passati a tre pulsanti, si è ruotato lo schermo, la tastiera è su per il
        composer della chat. Si rilegge prima di mostrarlo, non dopo: il foglio
        arriva già dell'altezza giusta invece di assestarsi a fine corsa. */
-    this._syncGestureInset();
-    this._syncViewport();
+    if (!this._builtin) {
+      this._syncGestureInset();
+      this._syncViewport();
+    }
     // Prima di mostrarlo: la lista è già quella giusta quando il foglio arriva
     // a fine corsa, e non c'è un fotogramma con dentro l'elenco di ieri.
     this._attachSource();
     this._render();
+    /* Una pagina non sale e non copre niente: niente velo, niente sfondo
+       inerte, e il fuoco resta dov'e'. Spostarlo qui vorrebbe dire far
+       scorrere la vetrina della pista mentre la pagina sta ancora entrando. */
+    if (this._builtin) {
+      this.search?.setAttribute('aria-expanded', 'true');
+      return;
+    }
     this.sheet.classList.add('open');
     this.sheet.setAttribute('aria-hidden', 'false');
     this.scrim?.classList.add('open');
@@ -500,6 +562,13 @@ export class LauncherController {
   close() {
     if (!this.sheet || !this._open) return;
     this._open = false;
+    if (this._builtin) {
+      this.search?.setAttribute('aria-expanded', 'false');
+      /* Lasciando la pagina, il fuoco non resta su un campo che non si vede:
+         i tasti che seguono andrebbero li' dentro. */
+      if (this.sheet.contains(document.activeElement)) document.activeElement.blur?.();
+      return;
+    }
     /* Home può arrivare a metà trascinamento (1.8: `goHome()` smonta ogni
        livello). Gli stili in linea del gesto vanno via qui, altrimenti alla
        riapertura il foglio comparirebbe già spostato in giù di quanto era il
@@ -544,29 +613,6 @@ export class LauncherController {
   }
 
 
-  /** La riga «Gestisci» (6.1, D4): il foglio lancia, la scheda gestisce.
-   *
-   *  `switchMode('apps')` chiude già il foglio da sé (1.5), e da lì si passa
-   *  sempre: verificato con un tocco vero. La chiusura esplicita qui **non è**
-   *  quindi la correzione di un difetto osservato — è la guardia sull'unico
-   *  modo in cui quella catena si spezza: `switchMode` esce subito se il modo
-   *  richiesto è già quello corrente, e allora il foglio resterebbe aperto
-   *  sopra la scheda che avrebbe dovuto mostrare — un overlay orfano, cioè
-   *  precisamente ciò che 6.1 chiede di escludere.
-   *
-   *  Oggi quel caso non si raggiunge: il pulsante che apre il foglio sta in
-   *  `#input-bar`, che vive dentro `#view-chat`, quindi il modo corrente
-   *  all'apertura è sempre `chat`. È una coincidenza di *dove sta un pulsante*,
-   *  però, non una proprietà del cassetto — e il piano stesso lascia aperta la
-   *  possibilità di aprirlo da altrove (v. la decisione sul dock). Chiudere
-   *  prima costa una riga ed è idempotente: quando la catena normale funziona,
-   *  la chiusura dentro `switchMode` diventa un giro a vuoto.
-   */
-  _openManager() {
-    this.close();
-    this.app.switchMode('apps');
-  }
-
   /** «Riprova» dell'avviso di 6.2.
    *
    *  Il pulsante si spegne finché non arriva una risposta: senza, un tocco su
@@ -598,23 +644,26 @@ export class LauncherController {
   }
 
   _setBackgroundInert(on) {
-    const shell = document.getElementById('app');
+    /* I due gusci chiamano la propria radice in due modi — `#app` in officina,
+       `.home-shell` in casa — e questo e' l'unico punto del cassetto che ne
+       tocca una. Si cercano tutte e due invece di passarla dal costruttore:
+       un argomento in piu' su ogni chiamante per un nodo che si trova da se'. */
+    const shell = document.getElementById('app')
+      || document.querySelector('.home-shell');
     if (shell) shell.inert = on;
     /* `inert` toglie fuoco e tocchi, **non** l'impilamento: la mascotte vive
-       dentro `#app` (v. `JennyCompanion._buildDom`) ma a z-index 120, sopra
-       foglio (100) e scrim (99), e resterebbe *dipinta* sulle righe. Visto sul
-       telefono, non sull'emulatore, dove non capitava di sovrapporsi.
-       Il segno sta su `<html>` perché la mascotte è dentro lo sfondo che si sta
-       oscurando: sotto lo scrim è il posto giusto, non nascosta — sparire di
-       colpo sarebbe più brusco che essere velata come il resto della chat. */
-    document.documentElement.classList.toggle('launcher-open', on);
+       dentro la radice (v. `JennyCompanion._buildDom`) a z-index 120, e resta
+       dipinta sopra foglio (100) e scrim (99). E' voluto (D3, 25/09/2026:
+       «Jenny sempre sopra»): fino ad allora qui si metteva `launcher-open` su
+       `<html>` per farla scendere sotto lo scrim. I tocchi non li ruba, perche'
+       un nodo inerte si lascia attraversare e il dito arriva alla riga. */
   }
 
   /** Aggancia la sorgente dei dati (D5) alla prima apertura, e ci resta.
    *
-   *  Non nel costruttore: `AppsController` fa quattro fetch, e quella delle app
-   *  Android ricodifica ogni icona in base64. Farle al boot per un foglio che
-   *  potrebbe non aprirsi mai è un costo che si paga sempre e serve a volte.
+   *  Non nel costruttore: sono due fetch, e quella delle app Android
+   *  ricodifica ogni icona in base64. Farle al boot per un foglio che potrebbe
+   *  non aprirsi mai e' un costo che si paga sempre e serve a volte.
    *  Da qui in poi però l'iscrizione non si scioglie più — v. `this._apps`.
    */
   _attachSource() {
@@ -624,9 +673,13 @@ export class LauncherController {
       this._apps.ensureLoaded();
       return;
     }
-    const apps = this.app.appsController?.();
+    const apps = this.app.appsSource?.();
     if (!apps) return;
     this._apps = apps;
+    /* Le **azioni** sono un oggetto a parte: la sorgente sa cosa c'e', non cosa
+       farci. I due gusci la costruiscono ognuno col proprio modo di mandare un
+       messaggio in chat, che e' l'unica cosa in cui differiscono. */
+    this._actions = this.app.appsActions?.() || null;
     apps.addChangeListener(() => this._onDataChanged());
     apps.ensureLoaded();
   }
@@ -936,7 +989,7 @@ export class LauncherController {
     /* La scheda **non** conta come uso: è il posto dove si va per disinstallare
        o per capire cosa sia una voce, e contarla farebbe salire in classifica
        proprio le app di cui si dubita. Il ranking misura gli avvii. */
-    this._apps?.detailEntry(entry);
+    this._actions?.detailEntry(entry);
   }
 
   /** Il titolo del foglio dice in che ordine si sta guardando: a campo vuoto è
@@ -975,7 +1028,7 @@ export class LauncherController {
        registrare un avvio poi fallito è una posizione in classifica; il costo
        opposto è un cassetto che non impara mai le app che si usano di più. */
     this._usage.record(entry.key);
-    const started = this._apps?.activateEntry(entry);
+    const started = this._actions?.activateEntry(entry);
     /* Una app Android se ne va con tutto il task: il foglio deve chiudersi, o
        al ritorno lo si ritroverebbe aperto sopra la conversazione senza averlo
        chiesto. Le altre due no — una Jenny App si apre *sopra* il foglio e
@@ -999,6 +1052,13 @@ export class LauncherController {
     const row = document.createElement('div');
     row.className = 'launcher-row';
     row.dataset.key = entry.key;
+    /* **Tocco lungo: la scheda della voce** — apri, info, disinstalla.
+       Fino al 21/09/2026 ci si arrivava **solo da tastiera** (⇧⏎). Su un
+       telefono con la tastiera fisica e' una strada vera, ma non *la* strada:
+       col dito non c'era niente, e disinstallare restava una cosa da fare
+       altrove. Il click resta delegato sulla lista (v. il costruttore); questo
+       sta sulla riga perche' `setupLongPress` vuole l'elemento. */
+    setupLongPress(row, () => this._actions?.detailEntry(entry));
     /* Semantica giusta dalla nascita, non aggiunta dopo — la stessa regola che
        la scheda Apps ha poi adottato per le sue tre stanze (`mobile-apps.js`),
        dove le righe nascono `<button>` invece di essere `<div>` a cui si

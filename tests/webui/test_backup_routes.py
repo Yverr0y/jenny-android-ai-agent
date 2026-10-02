@@ -5,20 +5,16 @@ from __future__ import annotations
 import base64
 import json
 import shutil
-import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
-from websockets.http11 import Headers
-from websockets.http11 import Request as WsRequest
+from support.gateway_http import make_handler, make_request
 
 from jenny.config.schema import SnapshotConfig
 from jenny.snapshot.engine import SnapshotEngine
 from jenny.snapshot.locations import MARKER_FILE_NAME, STAGED_WORKSPACE_DIR_NAME
 from jenny.snapshot.service import SnapshotService
-from jenny.webui.ws_http import GatewayHTTPHandler
 
 pytest.importorskip("cryptography")
 
@@ -27,14 +23,11 @@ _PASSPHRASE = "passphrase di prova àè"
 
 
 def _make_request(path: str, payload: dict | None = None, token: str | None = _AUTH_SECRET):
-    if token is not None and "token=" not in path:
-        sep = "&" if "?" in path else "?"
-        path = f"{path}{sep}token={urllib.parse.quote(token)}"
-    headers = Headers()
+    headers = None
     if payload is not None:
         encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
-        headers["X-Jenny-Backup-Data"] = encoded
-    return WsRequest(path=path, headers=headers)
+        headers = [("X-Jenny-Backup-Data", encoded)]
+    return make_request(path, token, headers)
 
 
 @pytest.fixture()
@@ -55,22 +48,7 @@ def env(tmp_path: Path, monkeypatch):
     snap_cfg = SnapshotConfig(pbkdf2_iterations=100_000)
     service = SnapshotService(engine, snap_cfg)
 
-    config = SimpleNamespace(
-        workspace=SimpleNamespace(enabled=True),
-        wiki=SimpleNamespace(enabled=True, wikis_dir="wikis"),
-        token_issue_secret=_AUTH_SECRET,
-        verbose=False,
-    )
-    handler = GatewayHTTPHandler(
-        config=config,
-        session_manager=None,
-        runtime_model_name=lambda: "test-model",
-        bus=MagicMock(),
-        media=MagicMock(),
-        workspaces=MagicMock(),
-        skills_workspace_path=workspace / "skills",
-        snapshot_service=service,
-    )
+    handler = make_handler(workspace / "skills", snapshot_service=service)
     return SimpleNamespace(
         handler=handler,
         service=service,
@@ -95,20 +73,7 @@ async def test_unavailable_without_service(tmp_path: Path, monkeypatch) -> None:
     from jenny.config import paths as paths_mod
 
     monkeypatch.setattr(paths_mod, "get_workspace_path", lambda: tmp_path)
-    handler = GatewayHTTPHandler(
-        config=SimpleNamespace(
-            workspace=SimpleNamespace(enabled=True),
-            wiki=SimpleNamespace(enabled=True, wikis_dir="wikis"),
-            token_issue_secret=_AUTH_SECRET,
-            verbose=False,
-        ),
-        session_manager=None,
-        runtime_model_name=lambda: None,
-        bus=MagicMock(),
-        media=MagicMock(),
-        workspaces=MagicMock(),
-        skills_workspace_path=tmp_path / "skills",
-    )
+    handler = make_handler(tmp_path / "skills", runtime_model_name=lambda: None)
     response = await handler.backup_routes.dispatch(
         _make_request("/api/backup/snapshots"), "/api/backup/snapshots"
     )
@@ -412,3 +377,54 @@ async def test_snapshots_list_limit_clamped(env) -> None:
     # Un limit non numerico viene ignorato (nessun 500): lista completa.
     assert len(await _list("/api/backup/snapshots?limit=abc")) == 3
     assert len(await _list("/api/backup/snapshots?limit=9999")) == 3
+
+
+# ── «Quando l'hai esportato l'ultima volta» ─────────────────────────────────
+
+
+async def test_the_export_record_is_written_by_the_client_and_not_by_the_export(
+    env,
+) -> None:
+    """«Ultimo backup: ieri alle 23:10» non aveva nessuna fonte.
+
+    E non poteva averla dal lato che prepara il file: il gateway cifra il
+    container e lo lascia in staging, poi si apre il picker SAF di sistema — e
+    se quel file finisca su disco lo sa solo il client, che riceve la risposta
+    del picker. Fra le due cose c'è uno schermo annullabile, quindi segnare il
+    backup come fatto quando il container è pronto sarebbe falso proprio nel
+    caso in cui l'utente ha detto di no.
+    """
+    from jenny.config.loader import load_config
+
+    # La fixture ha gia' puntato il workspace su tmp_path: `config.json` sta
+    # li' dentro, ed e' quello che il funnel di `store.mutate` scrive.
+    config_path = env.workspace / "config.json"
+
+    assert load_config(config_path).snapshots.last_export_at == 0, "parte da «mai»"
+
+    # Preparare il container non scrive niente: l'utente non ha ancora visto
+    # il picker.
+    export = await env.handler.backup_routes.dispatch(
+        _make_request("/api/backup/export", {"passphrase": _PASSPHRASE}),
+        "/api/backup/export",
+    )
+    assert export.status_code == 200
+    assert load_config(config_path).snapshots.last_export_at == 0, (
+        "il record è stato scritto prima che il file fosse salvato"
+    )
+
+    # È il client a dire che il file c'è.
+    noted = await env.handler.backup_routes.dispatch(
+        _make_request("/api/backup/exported"), "/api/backup/exported"
+    )
+    assert noted.status_code == 200
+    when = load_config(config_path).snapshots.last_export_at
+    assert when > 0
+    assert _json(noted)["last_export_at"] == pytest.approx(when)
+
+
+async def test_the_export_record_needs_a_token(env) -> None:
+    response = await env.handler.backup_routes.dispatch(
+        _make_request("/api/backup/exported", token=None), "/api/backup/exported"
+    )
+    assert response.status_code == 401

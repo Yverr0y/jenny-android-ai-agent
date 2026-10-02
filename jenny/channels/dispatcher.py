@@ -1,11 +1,12 @@
-"""Outbound dispatcher: possiede i canali (WebSocket + Telegram) e smista
-i messaggi outbound del bus al canale indicato da ``msg.channel``."""
+"""Outbound dispatcher: possiede i canali (WebSocket, Telegram, la tendina delle
+notifiche e il fumetto della mascotte flottante) e smista i messaggi outbound del
+bus al canale indicato da ``msg.channel``."""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,7 @@ from jenny.bus.events import (
 )
 from jenny.bus.queue import MessageBus
 from jenny.config.schema import Config
+from jenny.providers import retry_notice
 from jenny.runtime.notifier import notify_delivery
 from jenny.webui.metadata import WEBUI_DEFAULT_CHAT_ID
 
@@ -60,6 +62,7 @@ class WebSocketDispatcher:
         ui_query: Any | None = None,
         get_subagent_manager: Callable[[], Any | None] | None = None,
         get_cron_service: Callable[[], Any | None] | None = None,
+        get_busy_session_keys: Callable[[], Collection[str]] | None = None,
         runtime_events: Any | None = None,
     ):
         self.config = config
@@ -68,6 +71,7 @@ class WebSocketDispatcher:
         self._snapshot_service = snapshot_service
         self._get_subagent_manager = get_subagent_manager
         self._get_cron_service = get_cron_service
+        self._get_busy_session_keys = get_busy_session_keys
         self._webui_runtime_model_name = webui_runtime_model_name
         self._onboarding_event = onboarding_event
         self._on_settings_changed = on_settings_changed
@@ -81,6 +85,8 @@ class WebSocketDispatcher:
         self._dispatch_task: asyncio.Task | None = None
         self._hot_tasks: list[asyncio.Task] = []
         self._origin_reply_fingerprints: dict[tuple[str, str, str], str] = {}
+        # Un reload di Telegram per volta: v. ``reload_telegram``.
+        self._telegram_reload_lock = asyncio.Lock()
 
         self._init_channel()
         self._init_telegram()
@@ -111,6 +117,7 @@ class WebSocketDispatcher:
             snapshot_service=self._snapshot_service,
             get_subagent_manager=self._get_subagent_manager,
             get_cron_service=self._get_cron_service,
+            get_busy_session_keys=self._get_busy_session_keys,
             logger=logger,
             onboarding_event=self._onboarding_event,
             on_settings_changed=self._on_settings_changed,
@@ -215,6 +222,35 @@ class WebSocketDispatcher:
             return False
         return channel.send_tool_hints if tool_hint else channel.send_progress
 
+    @classmethod
+    def _tool_start_without_hint(
+        cls, msg: OutboundMessage, channel: Any
+    ) -> OutboundMessage | None:
+        """Il ``tool_hint`` scartato, senza il suggerimento ma con gli strumenti.
+
+        L'unico frame che dice quali strumenti **partono** e' il ``tool_hint``
+        (``AgentProgressHook.before_execute_tools``): porta insieme la riga di
+        testo e i ``tool_events`` di fase ``start``. Un canale che i suggerimenti
+        non li vuole (``sendToolHints``, spento di default) buttava via anche gli
+        strumenti, e alla WebUI arrivavano solo gli ``end``: la riga di lavoro
+        della casa non sapeva mai cosa stesse girando, e dopo un pezzo di testo
+        restava spenta per tutto il giro di strumenti che seguiva (misurato il
+        30/09/2026 su un quaderno). Il testo resta fuori, perche' e' quello che
+        l'impostazione spegne; gli eventi passano come un progress qualunque,
+        nella stessa forma degli ``end``, e quindi solo dove i progress sono
+        ammessi.
+        """
+        if not msg.metadata.get("_tool_hint") or not msg.metadata.get("_tool_events"):
+            return None
+        if not cls._channel_allows_progress(channel):
+            return None
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content="",
+            metadata={**msg.metadata, "_tool_hint": False},
+        )
+
     async def _start_channel(self, name: str, channel: Any) -> None:
         logger.info("Starting {} channel...", name)
         try:
@@ -265,22 +301,32 @@ class WebSocketDispatcher:
         """
         from jenny.config.loader import load_config
 
-        old = self.channels.pop("telegram", None)
-        if old is not None:
+        # Serializzato: due salvataggi ravvicinati facevano girare due reload
+        # insieme. Il secondo, arrivato mentre il primo aspettava lo ``stop()``,
+        # trovava il posto vuoto e creava il suo canale; poi il primo
+        # sovrascriveva ``channels["telegram"]`` col proprio, e quello del
+        # secondo restava a fare long polling senza che nessuno lo fermasse
+        # (409 da Telegram, update doppi). Con il lock ogni reload trova e
+        # ferma il canale lasciato dal precedente.
+        async with self._telegram_reload_lock:
+            old = self.channels.pop("telegram", None)
+            if old is not None:
+                try:
+                    await old.stop()
+                except Exception:
+                    logger.exception("Error stopping telegram channel during reload")
             try:
-                await old.stop()
+                self.config = load_config()
             except Exception:
-                logger.exception("Error stopping telegram channel during reload")
-        try:
-            self.config = load_config()
-        except Exception:
-            logger.exception("reload_telegram: config reload failed")
-            return
-        self._init_telegram()
-        new = self.channels.get("telegram")
-        if new is not None:
-            self._hot_tasks.append(asyncio.create_task(self._start_channel("telegram", new)))
-        self._hot_tasks = [t for t in self._hot_tasks if not t.done()]
+                logger.exception("reload_telegram: config reload failed")
+                return
+            self._init_telegram()
+            new = self.channels.get("telegram")
+            if new is not None:
+                self._hot_tasks.append(
+                    asyncio.create_task(self._start_channel("telegram", new))
+                )
+            self._hot_tasks = [t for t in self._hot_tasks if not t.done()]
 
     @staticmethod
     def _fingerprint_content(content: str) -> str:
@@ -341,10 +387,29 @@ class WebSocketDispatcher:
                     if not self._channel_allows_progress(
                         target, tool_hint=bool(msg.metadata.get("_tool_hint"))
                     ):
-                        continue
+                        msg = self._tool_start_without_hint(msg, target)
+                        if msg is None:
+                            continue
 
                 if msg.metadata.get("_retry_wait"):
-                    continue
+                    # L'avviso «il modello non risponde, riprovo fra N s» arriva
+                    # all'utente come riga di progresso, dove i progress sono
+                    # ammessi: scartato, con un ``Retry-After`` lungo lasciava
+                    # una bolla ferma senza spiegazione. Mai come risposta:
+                    # ``_progress`` lo rende una riga subordinata nella WebUI.
+                    # Il provider la scrive in inglese (anche per i log): qui si
+                    # traduce nella lingua dell'agente.
+                    target = self._route_channel(msg)
+                    if not self._channel_allows_progress(target):
+                        continue
+                    msg = OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=retry_notice.localize(
+                            msg.content, self.config.agents.defaults.language,
+                        ),
+                        metadata={**msg.metadata, "_progress": True, "_tool_hint": False},
+                    )
 
                 if msg.metadata.get("_stream_delta") and not msg.metadata.get("_stream_end"):
                     msg, extra_pending = self._coalesce_stream_deltas(msg)

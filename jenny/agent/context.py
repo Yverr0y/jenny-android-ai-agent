@@ -25,6 +25,7 @@ from jenny.utils.android_assets import (
     template_digest,
 )
 from jenny.utils.helpers import (
+    CHARS_PER_TOKEN,
     current_time_str,
     detect_image_mime,
     load_bundled_template,
@@ -84,8 +85,7 @@ _WIKIS_BLOCK_MAX_TOKENS = 1500
 
 # La frase che precede l'elenco. E' l'unica prosa del blocco, quindi l'unica
 # cosa che vive in un prompt e non in un meccanismo: cambiarla e' cambiare cosa
-# il modello fa con l'elenco, e va ricalibrato sul telefono
-# (``.agent/retire-atlas-and-main-plan.md``, «Verifica sul telefono»).
+# il modello fa con l'elenco, e va ricalibrato sul telefono.
 _WIKIS_BLOCK_LEAD = (
     "Your wikis live under `{wikis_dir}/`. Open `{wikis_dir}/<name>/wiki/index.md` "
     "before answering about one of these subjects; to find out whether something is "
@@ -109,9 +109,8 @@ class _ProjectPages(NamedTuple):
 
     Servono al template perche' l'istruzione piu' forte del blocco parlava delle
     pagine iniettate come se fossero *le* pagine del progetto. Misurato sulle
-    otto wiki vere il 23/08, dopo T3.2: adhd 1 su 13, allergie 2 su 23,
-    android-rom 4 su 31, etf-finance 1 su 20, main 2 su 52, memory 2 su 16,
-    patreon-creator 1 su 33. Il blocco che dice quanto e' non e' una scusa: e' il
+    otto wiki di un workspace reale, dopo T3.2: 1 su 13, 2 su 23, 4 su 31,
+    1 su 20, 2 su 52, 2 su 16, 1 su 33. Il blocco che dice quanto e' non e' una scusa: e' il
     solo modo perche' "aprine altre" sia un'istruzione e non un ripiego.
 
     ``here + left_out == total`` per costruzione, quindi ``left_out`` non e' un
@@ -282,8 +281,8 @@ def _pages_in_map_order(entries: Sequence[str], map_text: str) -> list[str]:
     modificando un file.
 
     E funziona sulle mappe **come sono oggi**, che era il requisito: le otto
-    mappe vere nominano 186 pagine su 188 (fuori solo una di ``allergie`` e una
-    di ``patreon-creator``), quindi il criterio ordina praticamente tutto e il
+    mappe di un workspace reale nominano 186 pagine su 188 (fuori solo due, in
+    due wiki diverse), quindi il criterio ordina praticamente tutto e il
     ripiego alfabetico tocca due pagine in tutto il corpus. Non dipende da un
     comportamento nuovo del giardiniere — quando la potatura della prosa (T3.4)
     passera', la mappa diventera' quasi solo un elenco di pagine, e un elenco ha
@@ -295,13 +294,13 @@ def _pages_in_map_order(entries: Sequence[str], map_text: str) -> list[str]:
     * ``state:`` nel frontmatter — **zero pagine su 188** ce l'hanno. Un criterio
       che oggi non distingue niente non e' un criterio, e' un rinvio.
     * ``mtime`` — le 188 pagine di ogni wiki hanno lo **stesso** mtime al
-      nanosecondo (verificato sul telefono il 23/08: sono state scritte in una
+      nanosecondo (verificato su un workspace reale: sono state scritte in una
       passata). E per costruzione sposterebbe tutte le pagine successive a ogni
       tocco, invalidando piu' prefisso di quanto ne cambi il contenuto.
-    * conteggio dei wikilink entranti — discrimina bene (su ``adhd`` premia
-      ``ADHD-Overview``, la pagina giusta), ma e' **derivato e non dichiarato**:
-      quando sbaglia — su ``main`` la pagina piu' linkata e' una pianta da
-      appartamento — non c'e' nessuna leva per correggerlo, mentre una riga della
+    * conteggio dei wikilink entranti — discrimina bene (di solito premia
+      la pagina di panoramica, quella giusta), ma e' **derivato e non dichiarato**:
+      quando sbaglia — su ``main`` la pagina piu' linkata e' una voce
+      marginale — non c'e' nessuna leva per correggerlo, mentre una riga della
       mappa si sposta. E costa la lettura integrale di tutte le pagine a ogni
       turno, che e' esattamente quel che T3.11 ha tolto.
 
@@ -324,9 +323,9 @@ def _pages_in_map_order(entries: Sequence[str], map_text: str) -> list[str]:
     in vetrina da nessuno.
 
     Il bersaglio si risolve in due modi perche' nelle mappe vere se ne trovano
-    due: il percorso dentro ``wiki/`` (``concepts/ADHD-Overview``) e il **nome
+    due: il percorso dentro ``wiki/`` (``concepts/Tides-Overview``) e il **nome
     nudo** (``[[Active-Memory]]`` per ``concepts/Active-Memory.md``, che e' come
-    scrivono le mappe di ``memory`` e ``patreon-creator``). A parita' di nome nudo
+    scrivono alcune delle mappe misurate). A parita' di nome nudo
     vince la prima in ordine di percorso: due pagine con lo stesso nome sotto
     cartelle diverse rendono ambiguo il link, ed e' una segnalazione del lint, non
     una ragione per tornare all'alfabeto.
@@ -361,7 +360,7 @@ def _map_cut_notice(total: int, listed: Sequence[str], unlisted: int) -> str:
     :func:`_pages_left_out_notice`: la sua lunghezza entra nel conto del tetto,
     e la misura deve venire dallo stesso posto del testo. Da qui anche il fatto
     che i ``[[ ]]`` li mette **lei**: il chiamante che li avesse messi prima di
-    passare la lista avrebbe prodotto ``[[[[Patreon]]]]``, e l'ha prodotto
+    passare la lista avrebbe prodotto ``[[[[Maree]]]]``, e l'ha prodotto
     davvero al primo giro.
 
     **L'elenco sta dentro l'avviso**, non in un blocco a parte con la sua
@@ -476,8 +475,8 @@ class ContextBuilder:
     # un manuale di cron scritto da noi il secondo). È lo stesso caso di
     # ``MEMORY.md`` e riceve la stessa risposta: si salta.
     #
-    # ``AGENTS.md`` ci è entrato con ``roadmap/agents-md-ownership.md``, che ha
-    # spostato la sua metà "di sistema" in ``agent/scheduling.md`` — dove un
+    # ``AGENTS.md`` ci è entrato quando la sua metà "di sistema" è passata in
+    # ``agent/scheduling.md`` — dove un
     # aggiornamento arriva davvero, perché ``agent/**`` si riscrive a ogni boot
     # mentre i file dell'utente si creano una volta sola. Quel che resta è un
     # segnaposto, e un segnaposto nel prompt è solo contesto pagato a vuoto.
@@ -846,10 +845,7 @@ class ContextBuilder:
             )
             if entries:
                 capped = entries[-self._MAX_RECENT_HISTORY:]
-                history_text = "\n".join(
-                    f"- [{e['timestamp']}] {e['content']}" for e in capped
-                )
-                history_text = truncate_text_to_tokens(history_text, self._MAX_HISTORY_TOKENS)
+                history_text = self._render_recent_history(capped)
                 parts.append("# Recent History\n\n" + history_text)
 
         if session_summary:
@@ -859,6 +855,31 @@ class ContextBuilder:
             parts.append(inventory)
 
         return "\n\n---\n\n".join(parts)
+
+    @classmethod
+    def _render_recent_history(cls, entries: Sequence[Mapping[str, Any]]) -> str:
+        """Il blocco «Recent History», dentro ``_MAX_HISTORY_TOKENS`` e dal fondo.
+
+        Si riempie **dalle voci più nuove** e a voci intere.
+        Il taglio stava sul testo intero, dalla fine: oltre il tetto il
+        blocco teneva le voci più vecchie e buttava quelle appena scritte, cioè
+        proprio quel che esiste per portare — cosa è successo da quando Dream è
+        passato l'ultima volta. Solo la più nuova, se da sola supera il tetto, si
+        tronca: una voce a metà vale più di un blocco vuoto.
+        """
+        budget = cls._MAX_HISTORY_TOKENS * CHARS_PER_TOKEN
+        lines: list[str] = []
+        used = 0
+        for entry in reversed(entries):
+            line = f"- [{entry['timestamp']}] {entry['content']}"
+            cost = len(line) + (1 if lines else 0)
+            if used + cost > budget:
+                if not lines:
+                    lines.append(truncate_text_to_tokens(line, cls._MAX_HISTORY_TOKENS))
+                break
+            lines.append(line)
+            used += cost
+        return "\n".join(reversed(lines))
 
     @staticmethod
     def _tool_predicate(tool_names: list[str] | None) -> Callable[[str], bool]:
@@ -1265,10 +1286,10 @@ class ContextBuilder:
             # quindi dimostra "ci sta", mai "non ci sta", che e' il verso
             # sbagliato per saltare una lettura (il verso giusto lo usa
             # ``GardenerStore._page_chars_if_over``). Misurato sulle 11 wiki
-            # vere: su ``main`` (79 pagine) il ciclo ne apre 36 invece di 79 e il
-            # blocco passa da 2,1 a 1,3 ms, su ``etf-finance`` 7 invece di 20; su
-            # ``blackberry`` (139 pagine, dove le due che entrano stanno in coda
-            # alla mappa) non scatta mai. Vale quel che vale, e costa un ``if``.
+            # di un workspace reale: su ``main`` (79 pagine) il ciclo ne apre 36
+            # invece di 79 e il blocco passa da 2,1 a 1,3 ms, su una wiki da 20
+            # pagine 7 invece di 20; su una da 139 pagine (dove le due che
+            # entrano stanno in coda alla mappa) non scatta mai. Vale quel che vale, e costa un ``if``.
             floor = len(rel) + 23 + (2 if blocks else 0)
             if total + floor > _PROJECT_PAGES_MAX_CHARS:
                 left_out += 1
@@ -1341,8 +1362,8 @@ class ContextBuilder:
         viaggia, dove altro lavori no», e quel che si chiude sulla sessione e'
         l'inventario fra progetti (l'elenco delle wiki, e la coda di
         ``read_recent_history_for_prompt``), non i tre file di identita'. Chi
-        arriva qui pensando di simmetrizzare il confine legga prima
-        ``.agent/security.md``: togliere l'identita' a un attore vuol dire
+        arriva qui pensando di simmetrizzare il confine tenga presente
+        che togliere l'identita' a un attore vuol dire
         filarci la specie di sessione dentro il percorso di prompt piu'
         condiviso che c'e', e lasciare l'unico attore senza identita' a scrivere
         pagine che l'utente legge.
@@ -1365,7 +1386,16 @@ class ContextBuilder:
             # ``CLAUDE.md``: sotto un nome che sul disco non c'e', ogni ``edit``
             # che il modello prova manca il bersaglio.
             filename = file_path.name
-            content = file_path.read_text(encoding="utf-8")
+            try:
+                # ``errors="replace"``: un byte non UTF-8 in ``USER.md`` (file
+                # copiato via adb, backup di un altro device) non deve spegnere
+                # ogni turno dell'installazione — i tre file di identita' si
+                # leggono per ogni specie di sessione. Stessa scelta gia' fatta
+                # per la mappa della wiki in ``_wiki_index_text``.
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                logger.warning("Bootstrap file {} is unreadable, skipped: {}", file_path, exc)
+                continue
             if not content.strip():
                 # File esistente ma senza contenuto: un heading con sotto il
                 # nulla, pagato a ogni turno e senza nemmeno dire cosa manca.

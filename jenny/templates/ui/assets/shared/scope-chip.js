@@ -7,7 +7,7 @@
  * solo guasto irrecuperabile del disegno delle sessioni-progetto.
  *
  * Scegliere uno scope cambia **davvero** conversazione: la chiave della
- * sessione diventa `project:<nome>`, e da quella il gateway ricava sia la
+ * sessione diventa `project:<name>`, e da quella il gateway ricava sia la
  * cartella su cui l'agente lavora sia il thread da disegnare. Il chip non manda
  * mai un percorso: manda un nome, e la cartella la deduce il server — così la
  * sessione e la sua cartella non possono divergere.
@@ -17,94 +17,15 @@
  */
 
 import { i18n } from './i18n.js';
-import { AppState, claimComposeMenu, onOtherComposeMenu } from './state.js';
+import { botName } from './bot-name.js';
+import { AppState, armComposeMenu, claimComposeMenu } from './state.js';
 import { api } from './api-client.js';
-import { rpc } from './rpc-client.js';
-import { escapeHtml, showToast } from './utils.js';
-import { confirmDialog, detailDialog, promptDialog } from './dialog.js';
+import { showToast } from './utils.js';
 import { deleteProjectFlow } from './project-delete.js';
-
-/** Cartella che ospita i progetti, finche' il backend non dice la sua.
- *
- *  Un progetto **e' una wiki**: non esiste una `projects/` separata, e questo
- *  modulo ne leggeva una che non c'era. Il nome vero arriva da `/api/projects`
- *  (`config.wiki.wikis_dir` e' configurabile); questo e' il valore mostrato nel
- *  frattempo, cioe' il default della config.
- */
-const DEFAULT_DIR = 'wikis';
-
-/** Un nome di progetto è un nome di cartella: niente separatori né path.
- *
- *  **La stessa regola di `jenny/session/keys.py::_PROJECT_NAME_RE`**, che è chi
- *  la applica davvero — a ogni `chat_id` in arrivo e alla creazione. Qui era più
- *  larga in tre modi (nessuna regola sul primo carattere, nessun tetto di 64
- *  caratteri, e `a..b` che passava), quindi `.hidden` e un nome di 300 caratteri
- *  attraversavano due dialoghi per farsi rifiutare dal server in inglese.
- *
- *  Uguale, e non più stretta: questo punto è un *avviso*, non un secondo
- *  cancello. Un nome che il server accetta deve arrivarci — se questa regex
- *  rifiutasse qualcosa in più diventerebbe una seconda verità sulla forma dei
- *  nomi, e la prima cosa che si romperebbe è il recupero di un albero rimasto a
- *  metà (che il server *completa* invece di rifiutare).
- */
-const VALID_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-
-/** True se *name* è una cartella che il server aprirebbe come conversazione.
- *
- *  Le due metà di `is_valid_project_name`: la forma, e il `..` che la forma non
- *  vede (`a..b` passa la regex). Separate là e separate qui, così le due domande
- *  restano confrontabili a occhio.
- *
- *  Esportata perché la stessa domanda se la pone anche chi non sta creando
- *  niente: il tasto che dalla wiki porta nella chat del progetto esiste solo se
- *  quel nome è un nome che il server aprirebbe. È la stessa divisione che fa
- *  `wiki_routes.py::_collect_projects` fra `projects` e `unopenable`, e un tasto
- *  offerto su una cartella del secondo gruppo aprirebbe **un'altra**
- *  conversazione — il guasto per cui quella divisione esiste.
- */
-export function isOpenableProjectName(name) {
-  return typeof name === 'string' && VALID_NAME.test(name) && !name.includes('..');
-}
-
-/** Il rifiuto del server, detto nella lingua dell'utente.
- *
- *  `err.message` viene da un `CommandError` e **è in inglese**: interpolato in
- *  `scope.createFailed` dava «Creazione fallita: project already exists:
- *  patreon», cioè metà toast in una lingua che l'utente non ha scelto. Quel
- *  testo serve a chi legge i log, non a chi ha appena scritto un nome: qui va
- *  in console, e a schermo va la chiave che corrisponde al *codice*, che è
- *  l'unica parte della risposta pensata per essere letta da un programma.
- *
- *  I codici sono quelli che `jenny/webui/commands.py::project_create` può
- *  produrre. `bad_request` ne copre più di uno (nome, riga di scope, cartella di
- *  mezzo, scaffolder), ma nome e riga li ha già filtrati il dialogo: quel che
- *  resta è la cartella, e la stringa lo dice.
- */
-const CREATE_ERROR_KEYS = {
-  bad_request: 'scope.createRejected',
-  too_large: 'scope.createSeedTooLong',
-  unavailable: 'scope.createWikiOff',
-  internal: 'scope.createInternal',
-};
-
-/** Perché una cartella non si apre, detto nella lingua dell'utente.
- *
- *  `reason` è la sola parte di una voce di `unopenable` pensata per essere letta
- *  da un programma (`wiki_routes.py::_collect_projects` lo dice sul posto: il
- *  motivo lo scelga chi disegna la riga, non si indovini dal nome). Oggi ce n'è
- *  uno solo; un motivo che questa mappa non conosce prende una frase che **non
- *  nomina nessuna regola**, perché raccontare la regola dei nomi di una cartella
- *  rifiutata per un altro motivo è peggio che non spiegare niente.
- *
- *  La regola dei nomi non si riscrive qui: la frase è quella che il dialogo di
- *  creazione mostra già (`scope.invalidName`), interpolata dentro la nota. Di
- *  copie a mano di quella regola ce ne sono già tre (`session/keys.py`, lo
- *  scaffolder della skill, e `VALID_NAME` qui sopra) — una quarta, e in prosa,
- *  si desincronizzerebbe senza che nessun test se ne accorga.
- */
-const UNOPENABLE_HINT_KEYS = {
-  invalid_name: 'scope.unopenableInvalidName',
-};
+import { createProjectFlow } from './project-create.js';
+import {
+  ConversationList, UNOPENABLE_HINT_KEYS, ago, projectKey,
+} from './conversation-list.js';
 
 /** Quanto del nome entra nel placeholder prima dei puntini.
  *
@@ -139,13 +60,13 @@ export class ScopeChip {
     this.enabled = Boolean(this.el && this.menu);
     // Scope corrente: ``null`` come nome significa sessione personale.
     this.scope = { kind: 'personal', name: null };
-    this._projects = null;   // cache dell'ultimo elenco letto da disco
-    // Le cartelle che ci sono ma non si aprono, dallo stesso payload. `null` =
-    // non si sa ancora, come per `_projects`: un elenco non letto non è «non ce
-    // ne sono».
-    this._unopenable = null;
-    this._loadFailed = false; // l'ultima lettura è fallita: v. `_loadProjects`
-    this._dir = DEFAULT_DIR; // nome vero della cartella, dal backend
+    /* Quali conversazioni esistono, in che ordine, e da quanto: **non è roba
+       del chip**. Le stesse cinque regole servono al pannello «con chi parli»
+       della casa, e una seconda copia sarebbe una seconda verità su cosa c'è
+       nel workspace. Qui resta il disegno; i dati stanno in `conversation-list`
+       e i quattro campi di prima sono diventati altrettanti accessori, così il
+       resto di questo file è rimasto com'era. */
+    this._list = new ConversationList(() => api.listProjects());
     this._open = false;
     // Latch di `init`, come `sessionManager._initialized` e
     // `ChatController._wsListenersBound`. I due listener su `document` non sono
@@ -162,30 +83,47 @@ export class ScopeChip {
   init() {
     if (!this.enabled || this._initialized) return;
     this._initialized = true;
-    this.el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggle();
-    });
-    this.menu.addEventListener('click', (e) => e.stopPropagation());
-    // Chiusura: tap fuori ed Escape, come gli sheet dell'app.
-    document.addEventListener('click', () => this.close());
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.close();
-    });
-    onOtherComposeMenu('scope', () => this.close());
-    i18n.onLocaleChange(() => {
-      this.render();
-      if (this._open) this._renderMenu();
-    });
+    // Chiusura: tap fuori ed Escape, come gli sheet dell'app; e l'apertura
+    // dell'altra tendina (v. `armComposeMenu`).
+    armComposeMenu(this, 'scope');
     // Il placeholder dipende da due cose con due proprietari: lo scope (questo
     // modulo) e il modo di scrittura (`write-switch.js`). Iscriversi invece di
     // farsi chiamare rende l'ordine dei due `syncFromSession` irrilevante —
     // altrimenti chi sincronizza per secondo lascia il testo del primo.
     AppState.on('readonlyTurn', () => this.syncPlaceholder());
+    // Il nome della conversazione personale e' quello di lei: rinominata, il
+    // chip lo ridice subito (la tendina lo rilegge a ogni apertura).
+    botName.onChange(() => this.render());
     this.render();
   }
 
   // ── Stato ──────────────────────────────────────────────────────────────
+
+  /* I quattro campi che erano qui, ora letti da `conversation-list`. Restano
+     con i nomi di prima perché sono letti in una dozzina di punti di questo
+     file, e cambiarli avrebbe reso il passaggio a un modulo condiviso
+     indistinguibile da una riscrittura della tendina. In sola lettura: la cache
+     la scrive `load()`, e si butta con `invalidate()`. */
+  get _projects() {
+    return this._list.projects;
+  }
+
+  get _unopenable() {
+    return this._list.unopenable;
+  }
+
+  get _loadFailed() {
+    return this._list.loadFailed;
+  }
+
+  get _dir() {
+    return this._list.dir;
+  }
+
+  /** La cartella dei quaderni, come l'ha detta il server (o il default). */
+  get projectsDir() {
+    return this._list.dir;
+  }
 
   /** Scope attivo secondo il backend. ``null``/radice ⇒ sessione personale. */
   syncFromSession(workspaceScope) {
@@ -206,30 +144,13 @@ export class ScopeChip {
       this.scope = { kind: 'project', name: rest.split('/')[0] || null };
       if (!this.scope.name) this.scope = { kind: 'personal', name: null };
     }
-    this._publishPin();
     this.render();
   }
 
-  /** Pubblica su ``AppState`` la wiki a cui le viste sono agganciate.
-   *
-   *  Le viste wiki e grafo hanno bisogno della stessa risposta che il chip ha
-   *  gia' — *in quale progetto siamo* — e questo e' l'unico punto in cui
-   *  cambia. Passa da ``AppState`` e non da un import diretto del chip perche'
-   *  ``set`` avvisa chi ascolta: cambiare progetto mentre una vista e' aperta
-   *  la deve riagganciare, e senza notifica resterebbe sul progetto di prima.
-   *
-   *  ``null`` = sessione personale, cioe' nessun aggancio: le viste tornano a
-   *  mostrare tutte le wiki, che e' la Home di sempre.
-   */
-  _publishPin() {
-    const pinned = this.scope.kind === 'project' ? this.scope.name : null;
-    if (AppState.pinnedWiki === pinned) return;
-    AppState.set('pinnedWiki', pinned);
-  }
-
-  /** Nome mostrato per la sessione personale (non è un nome di cartella). */
+  /** Nome mostrato per la sessione personale (non è un nome di cartella):
+   *  quello di lei, che può essere stata rinominata (v. `shared/bot-name.js`). */
   get personalLabel() {
-    return i18n.t('scope.personal');
+    return botName.get();
   }
 
   /** Segmenti del percorso mostrati nel chip. */
@@ -332,48 +253,18 @@ export class ScopeChip {
     this.el.setAttribute('aria-expanded', 'false');
   }
 
-  /** Progetti = le wiki del workspace, lette dal backend. */
+  /** Progetti = le wiki del workspace, lette dal backend.
+   *
+   *  L'ordine, la divisione fra apribili e non, e la regola per cui una lettura
+   *  fallita **non** cancella l'elenco buono stanno in `conversation-list.js`:
+   *  sono le stesse per la tendina e per il pannello della casa, e da quando
+   *  sono due i posti che le usano non possono piu' stare in uno solo.
+   *
+   *  Il ridisegno resta qui, e resta legato alla riuscita: il nome della
+   *  cartella puo' essere cambiato, e su un fallimento non e' cambiato niente.
+   */
   async _loadProjects() {
-    try {
-      const data = await api.listProjects();
-      this._dir = data?.dir || DEFAULT_DIR;
-      // Dal piu' recente: l'ordine alfabetico del backend mette in cima la
-      // wiki con la lettera piu' bassa, che non e' mai quella che si cerca.
-      // Il criterio e' lo stesso `modified` che ogni riga stampa accanto al
-      // nome, quindi l'elenco non puo' contraddire quel che mostra; a parita'
-      // (mtime uguale, o mancante e quindi 0) decide il nome, per non avere
-      // un ordine che cambia a ogni apertura.
-      this._projects = (data?.projects || [])
-        .map(it => ({ name: it.name, modified: it.modified }))
-        .sort((a, b) => (b.modified || 0) - (a.modified || 0) || a.name.localeCompare(b.name));
-      // Stesso ordine delle righe apribili, e `reason` viaggia con la voce: la
-      // riga la disegna chi sa cosa dire, e cosa dire dipende dal motivo.
-      this._unopenable = (data?.unopenable || [])
-        .map(it => ({ name: it.name, modified: it.modified, reason: it.reason }))
-        .sort((a, b) => (b.modified || 0) - (a.modified || 0) || a.name.localeCompare(b.name));
-      this._loadFailed = false;
-      this.render();                    // il nome della cartella puo' essere cambiato
-    } catch {
-      /* Una lettura fallita **non e'** «nessun progetto». Qui c'era
-         `this._projects = []`, e quello scriveva a schermo una frase che il
-         client non sa: 401, 500, gateway ancora in piedi a meta' o telefono
-         offline diventavano tutti "Nessun progetto ancora" — e buttavano via
-         l'elenco buono letto un minuto prima. La risposta ovvia a quello
-         schermo e' rifare il progetto, che e' il modo in cui nasce un doppione:
-         due wiki con lo stesso scopo e la storia divisa fra le due, che nessuna
-         delle due poi contiene.
-
-         Quindi la cache non si tocca — quel che c'era resta, ed e' l'unica cosa
-         vera che abbiamo — e la tendina lo dichiara con una nota sua
-         (`scope.loadFailed`), distinta dall'elenco vuoto. Il `_dir` neanche: un
-         default sovrascritto sopra un valore letto dal backend farebbe
-         sbagliare `syncFromSession` sul prossimo scope.
-
-         `_unopenable` neanche, e per la stessa ragione: buttarlo via
-         rifarebbe sparire dallo schermo una cartella che c'e', che e'
-         esattamente lo stato che questa riga esiste per evitare. */
-      this._loadFailed = true;
-    }
+    if (await this._list.load()) this.render();
   }
 
   _renderMenu() {
@@ -568,26 +459,29 @@ export class ScopeChip {
   /** La chiave di sessione di uno scope. */
   static keyFor(scope) {
     return scope.kind === 'project' && scope.name
-      ? `project:${scope.name}`
+      ? projectKey(scope.name)
       : null;   // null = la conversazione personale, che la conosce il chiamante
   }
 
-  /** Cambia scope: il chip, il placeholder, l'aggancio delle viste, e la
-   *  conversazione sotto.
+  /** Cambia scope: il chip, il placeholder, e la conversazione sotto.
    *
-   *  L'aggancio si pubblica **qui**, non solo in `syncFromSession`. La risposta
-   *  la sappiamo già — l'utente ha appena scelto — e passare per il backend la
-   *  faceva arrivare alle viste wiki e grafo un giro di rete più tardi: fino a
-   *  quel momento il chip diceva un progetto e le due viste ne mostravano un
-   *  altro. Se poi il caricamento del thread fallisce `syncFromSession` non
-   *  viene chiamato affatto, e l'aggancio sbagliato ci restava per sempre.
-   *  Resta un solo scrittore di `pinnedWiki` (`_publishPin`), che è la regola
-   *  che tiene le viste su una sola risposta.
+   *  **Qui si pubblicava anche l'aggancio delle viste** (`AppState.pinnedWiki`,
+   *  scritto da `_publishPin`): le viste wiki e grafo dell'officina avevano
+   *  bisogno della stessa risposta che il chip ha gia', e pubblicarla subito
+   *  invece che al ritorno del backend era cio' che impediva al chip di
+   *  nominare un progetto mentre le due viste ne mostravano un altro. Quelle
+   *  viste sono uscite dall'officina il 21/09/2026 — elenco, mappa e lettore
+   *  vivono in casa, dove il quaderno aperto **e'** la conversazione aperta —
+   *  e con l'ultimo lettore se n'e' andata anche la pubblicazione.
+   *
+   *  Resta il patto che quel giro aveva stabilito, e che vale ancora: `select`
+   *  e' un'**anticipazione** di quel che il backend confermera', non una
+   *  verita'. Se il thread non si carica, `syncFromSession` non arriva mai e
+   *  quel che il chip mostra e' l'unica risposta che c'e'.
    */
   select(scope) {
     const changed = scope.kind !== this.scope.kind || scope.name !== this.scope.name;
     this.scope = scope;
-    this._publishPin();
     this.render();
     if (changed) this.onSwitch?.(ScopeChip.keyFor(scope), scope);
   }
@@ -636,7 +530,7 @@ export class ScopeChip {
       if (!this.leaveIfSelected(name)) {
         // Non era lo scope aperto: nessun cambio di conversazione, ma l'elenco
         // in cache nomina ancora un progetto che non c'è più.
-        this._projects = null;
+        this._list.invalidate();
         await this._loadProjects();
       }
       showToast(i18n.t('workspace.deletedProject', { name }), 'success');
@@ -647,117 +541,25 @@ export class ScopeChip {
 
   leaveIfSelected(name) {
     if (this.scope.kind !== 'project' || this.scope.name !== name) return false;
-    this._projects = null;              // l'elenco su disco e' cambiato
+    this._list.invalidate();            // l'elenco su disco e' cambiato
     this.select({ kind: 'personal', name: null });
     return true;
   }
 
-  /** Due domande, in quest'ordine: come si chiama, e di cosa si occupa.
+  /** Un progetto nuovo, e ci si entra.
    *
-   *  La seconda non e' un extra da riempire dopo. Un progetto senza una riga di
-   *  scope lascia il primo turno senza niente su cui appoggiarsi, e uno scope
-   *  indovinato dall'agente e' peggio di nessuno scope, perche' tutto quel che
-   *  viene archiviato dopo lo eredita. Per questo annullarla annulla la
-   *  creazione: meglio nessun progetto che un progetto senza scopo. Niente
-   *  viene creato su disco prima che entrambe le risposte ci siano.
+   *  Le due domande e le cinque regole stanno in `shared/project-create.js`: le
+   *  stesse servono al pannello della casa, e la prima volta che una delle due
+   *  copie venisse corretta l'altra comincerebbe a mentire. Qui resta quel che
+   *  è del chip: chi sono i nomi già noti, e dove si va dopo.
    */
   async _createProject() {
-    const name = await promptDialog(i18n.t('scope.newProjectName'), {
-      placeholder: i18n.t('scope.newProjectPlaceholder'),
+    const clean = await createProjectFlow({
+      t: (key, vars) => i18n.t(key, vars),
+      known: this._projects || [],
     });
-    if (!name) return;
-    const clean = name.trim();
-    // La stessa domanda del tasto che dalla wiki porta nella chat: una regola
-    // sola, o le due strade per lo stesso nome smetterebbero di rispondere
-    // uguale (v. `isOpenableProjectName`).
-    if (!isOpenableProjectName(clean)) {
-      showToast(i18n.t('scope.invalidName'), 'error');
-      return;
-    }
-
-    /* Un nome già in elenco si dice **prima** della riga di scope: scriverla per
-       poi vedersi rifiutare la creazione è il modo peggiore di scoprirlo.
-       Ma è un avviso e non un rifiuto, e la differenza è tutta: la stessa
-       cartella può essere un albero rimasto a metà, che il server *completa*
-       invece di rifiutare — fermarsi qui renderebbe irreparabile proprio il caso
-       in cui questo dialogo serve a riparare. E l'elenco può essere vecchio (una
-       lettura fallita non lo butta via, v. `_loadProjects`), che è la seconda
-       ragione per cui l'ultima parola non è di questo controllo. */
-    const taken = (this._projects || []).some(it => it.name === clean);
-    if (taken) {
-      const goOn = await confirmDialog(
-        i18n.t('scope.nameTaken', { name: clean }),
-        i18n.t('scope.nameTakenContinue'),
-      );
-      if (!goOn) return;
-    }
-
-    const seed = await promptDialog(i18n.t('scope.newProjectSeed', { name: clean }), {
-      placeholder: i18n.t('scope.newProjectSeedPlaceholder'),
-    });
-    if (!seed || !seed.trim()) {
-      showToast(i18n.t('scope.seedRequired'), 'info');
-      return;
-    }
-
-    try {
-      const first = await rpc.createProject(clean, seed.trim());
-      /* **Un nome libero di cartella puo' non essere un nome libero.** Le tracce
-         di una conversazione stanno fuori da `wikis/`, quindi un nome che il
-         picker non elenca puo' portarsi dietro la chat di un progetto
-         cancellato. Il server non sceglie per noi: torna con
-         `conversation_exists` e il conto, e la scelta e' qui.
-
-         Le due risposte sono **entrambe legittime** — «l'avevo cancellato per
-         sbaglio» e «riparto pulito» — ed e' la ragione per cui questo e' un
-         dialogo a tre uscite e non una conferma: chiudere senza scegliere non
-         crea niente, che e' la terza risposta e quella piu' facile da dare per
-         sbaglio se le uscite fossero due. */
-      if (first?.status === 'conversation_exists') {
-        const count = first?.conversation?.messages;
-        const choice = await detailDialog({
-          title: i18n.t('scope.leftoverChatTitle', { name: clean }),
-          bodyHtml: `<p>${escapeHtml(
-            count
-              ? i18n.t('scope.leftoverChatBody', { name: clean, count })
-              : i18n.t('scope.leftoverChatBodyNoCount', { name: clean }),
-          )}</p>`,
-          actions: [
-            { id: 'keep', label: i18n.t('scope.leftoverChatKeep'), variant: 'primary' },
-            { id: 'discard', label: i18n.t('scope.leftoverChatDiscard') },
-          ],
-        });
-        if (!choice) return;
-        await rpc.createProject(clean, seed.trim(), choice);
-      }
-    } catch (err) {
-      // Un rifiuto non porta dentro niente. Il server ne ha due — «ce l'hai
-      // già» e «c'è qualcosa di mezzo che non è un progetto» — e nel secondo
-      // caso entrarci vorrebbe dire aprire una conversazione su una cartella
-      // che non è una wiki: il chip nominerebbe un progetto inesistente e il
-      // primo messaggio andrebbe là. Si dice cos'è andato storto e si resta
-      // dove si era.
-      //
-      // Cos'è andato storto lo dice il **codice**, non il messaggio: quello è
-      // inglese e viene da un `CommandError`, quindi va in console e non a
-      // schermo (v. `CREATE_ERROR_KEYS`). Un codice sconosciuto vale come un
-      // guasto del gateway: meglio una frase generica nella lingua giusta che
-      // una precisa in un'altra. Senza codice l'errore non viene dal server ma
-      // dal trasporto (`ws-manager.request`: gateway spento, nessuna risposta),
-      // e quei messaggi sono già localizzati dove nascono — solo quelli
-      // possono essere mostrati così come sono.
-      console.warn('project.create failed:', err?.code || '(no code)', err?.message);
-      const key = err?.code ? (CREATE_ERROR_KEYS[err.code] || 'scope.createInternal') : null;
-      showToast(
-        key
-          ? i18n.t(key, { name: clean })
-          : i18n.t('scope.createFailed', { error: err?.message || '' }),
-        'error',
-      );
-      return;
-    }
-    this._projects = null;              // forza la rilettura da disco
-    showToast(i18n.t('scope.created', { name: clean }), 'success');
+    if (!clean) return;
+    this._list.invalidate();            // forza la rilettura da disco
     /* E ci si entra. Qui c'era `this.open()`: la tendina si riapriva sopra il
        toast e lasciava l'utente nella conversazione personale, con un secondo
        tocco da fare sulla riga appena creata — cioè aver dato un nome e scritto
@@ -769,17 +571,14 @@ export class ScopeChip {
     this.select({ kind: 'project', name: clean });
   }
 
-  /** "2 ore fa" da un mtime unix in secondi. */
+  /** "2 ore fa" da un mtime unix in secondi.
+   *
+   *  Il calcolo e le cinque frasi stanno in `conversation-list.js`, perche' le
+   *  stesse date le stampa anche il pannello della casa. Il traduttore glielo
+   *  passa chi chiama: quel modulo non importa niente, apposta.
+   */
   _ago(modified) {
-    if (!modified) return '';
-    const minutes = Math.floor((Date.now() / 1000 - modified) / 60);
-    if (minutes < 2) return i18n.t('scope.ago.now');
-    if (minutes < 60) return i18n.t('scope.ago.minutes', { n: String(minutes) });
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return i18n.t('scope.ago.hours', { n: String(hours) });
-    const days = Math.floor(hours / 24);
-    if (days === 1) return i18n.t('scope.ago.yesterday');
-    return i18n.t('scope.ago.days', { n: String(days) });
+    return ago(modified, (key, vars) => i18n.t(key, vars));
   }
 }
 

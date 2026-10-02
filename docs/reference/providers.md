@@ -17,27 +17,27 @@ Every provider entry declares one `format`, and that field alone decides which b
 | `anthropic` | Claude via the Anthropic Messages API | `https://api.anthropic.com` | Anthropic direct, or any Anthropic-Messages-compatible proxy |
 | `openai_compat` | OpenAI Chat Completions (and optionally the Responses API) | `https://api.openai.com/v1` | OpenAI, Groq, DeepSeek, Ollama, vLLM, OpenRouter, Together, Fireworks, and any other Chat-Completions-shaped endpoint |
 
-These are the exact hints shown in the onboarding wizard's "Choose your provider format" step: **Anthropic Compatible** — "Claude models via Anthropic Messages API" — and **OpenAI Compatible** — "OpenAI, Groq, DeepSeek, Ollama, vLLM, OpenRouter, Together, Fireworks...". The same two choices reappear in Settings → API keys whenever you add or edit a provider.
+These are the exact hints shown in the onboarding wizard's "Choose your provider format" step: **Anthropic Compatible** — "Claude models via Anthropic Messages API" — and **OpenAI Compatible** — "OpenAI, Groq, DeepSeek, Ollama, vLLM, OpenRouter, Together, Fireworks...". The same two choices reappear in the workshop's **Brain → Who thinks** whenever you add or edit a provider.
 
 Both default base URLs apply only when you leave the base URL field empty. Change it whenever the service isn't the default one — Groq, DeepSeek, OpenRouter, Together, Fireworks, or anything self-hosted all need their own `apiBase` under the `openai_compat` format.
 
 ## Managing providers
 
-Providers live under Settings → **Model** → **API keys** (the same screen the onboarding wizard's "Connect your provider" step writes to). Each entry shown there has:
+Providers are managed in the workshop, under **Brain → Who thinks** (the same list the onboarding wizard's "Connect your provider" step writes to). Which of them answers, and with which model, is chosen right there — each provider's group lists its models, and a tap on one makes it answer — or on the home's **Settings → Who answers** page, which can also add or replace a provider's key. Each provider has:
 
 - **Name** — a free-form label (e.g. "My Claude"), not a service identifier. It's what other config, like model presets, refers to.
 - **Format** — the `anthropic` / `openai_compat` choice above.
 - **API Key** — shown masked, as a 4+4 character hint (first four and last four characters) once one is configured, never displayed in full again.
 - **Base URL** — shown as `(default)` when left empty.
 
-Actions available from this screen: **Add provider**, **Edit**, **Delete**. A few things worth knowing:
+Actions available there: **Add provider** below the list, and **Edit** and **Delete** in the panel that the settings button beside each provider opens. Adding one has a **Use it now** switch (on by default) that makes it the one that answers as soon as it's saved, and while it's on it asks for its **First model**; with the switch off the field goes away and the model is picked when you switch to that brand. A few things worth knowing:
 
-- Saving shows **"Provider saved"**; deleting asks **`Delete provider "{name}"?`** and then confirms **"Provider deleted"**.
+- Saving shows **"Provider saved"** (or **"Saved, and it answers now"** with **Use it now** on); deleting asks **`Delete provider "{name}"?`** and then confirms **"Provider deleted"**.
 - You cannot delete the last remaining provider (**"Cannot delete the last provider"**) — Jenny always needs at least one configured to keep the agent runnable.
 - Both **Name** and **API Key** are required to save (**"Name and API Key are required"**).
-- **Anything you change on this screen hot-reloads immediately** — which provider is active, the key, the base URL, the format, the CA certificate — with no app restart and no "requires restart" prompt. The gateway rebuilds the provider backend in place and swaps it into the running agent for the next turn. If you've read an older doc (or `providers.md`'s previous revision) claiming a provider switch needs a restart, that claim is false as of the current code.
+- **Anything you change in these screens hot-reloads immediately** — which provider is active, the key, the base URL, the format, the CA certificate — with no app restart and no "requires restart" prompt. The gateway rebuilds the provider backend in place and swaps it into the running agent for the next turn. If you've read an older doc (or `providers.md`'s previous revision) claiming a provider switch needs a restart, that claim is false as of the current code.
 - Up to and including **0.11.0** that was only true of the active provider, the model and the base URL. Saving a **CA certificate** or an **API key** on its own left the running agent using the client it had built at startup, so a correct CA could load the model list and still fail every chat message with `[SSL: CERTIFICATE_VERIFY_FAILED]` ([#12](https://github.com/flagdizero/jenny-android-ai-agent/issues/12)). On those versions, force-stop the app and reopen it after saving; the certificate on disk is already correct and is picked up at startup.
-- `apiType`, and the advanced `extraHeaders` / `extraBody` / `extraQuery` fields described below, are **not exposed in Settings at all** — they only exist if you hand-edit `workspace/config.json`. Hand-editing `config.json` directly *does* require restarting the app for the change to take effect; only Settings changes hot-reload.
+- `apiType`, and the advanced `extraHeaders` / `extraBody` / `extraQuery` fields described below, are **not exposed in the UI at all** — they only exist if you hand-edit `workspace/config.json`. Hand-editing `config.json` directly *does* require restarting the app for the change to take effect; only changes made in the UI hot-reload.
 
 ## Provider fields (`config.json`)
 
@@ -49,11 +49,15 @@ The full field set, only reachable by hand-editing `providers.providers[]` in `c
 | `format` | yes | `"anthropic"` or `"openai_compat"`. The only field that picks the backend. |
 | `apiKey` | yes | The gateway refuses to start a provider without one — see the exact error below. Local servers that don't check keys still need a placeholder like `"EMPTY"`. |
 | `apiBase` | no | Full HTTP base URL, version path included where the service expects it (e.g. `/v1`). Omit to use the format's default. |
-| `caBundle` | no | Path to a PEM certificate to trust on top of the default roots — for a server with a certificate signed by your own CA. Relative paths start at the workspace. Also editable in Settings. See [Self-signed certificates](#self-signed-certificates). |
-| `apiType` | no, `openai_compat` only | `"auto"` (default), `"chat_completions"`, or `"responses"`. See [Chat Completions vs. Responses API](#chat-completions-vs-responses-api-openai_compat-only). Config-only — not in Settings. |
+| `caBundle` | no | Path to a PEM certificate to trust on top of the default roots — for a server with a certificate signed by your own CA. Relative paths start at the workspace. Also editable in the workshop. See [Self-signed certificates](#self-signed-certificates). |
+| `apiType` | no, `openai_compat` only | `"auto"` (default), `"chat_completions"`, or `"responses"`. See [Chat Completions vs. Responses API](#chat-completions-vs-responses-api-openai_compat-only). Config-only, not in the UI. |
 | `extraHeaders` / `extraBody` / `extraQuery` | no | Extra request headers, body fields, and query params merged into every request to this provider. Config-only. |
 
 Keys may be written as camelCase or snake_case in the file; Jenny always writes camelCase back when it saves.
+
+### A base URL without its version
+
+The `apiBase` above should carry the version path, but one common slip is forgiven for `openai_compat` providers. If a request gets a `404` and the base has no version segment (a last path segment like `v1`), Jenny retries **once** on `<base>/v1`. If that answers, it adopts the corrected base for the rest of the run and logs `API base URL auto-corrected`; nothing is written to `config.json`, so fix the field in Settings if you want the log line gone. If the retry also returns `404`, the error names both URLs it tried, so it reads as a wrong base and not a wrong key. A base that already ends in a version segment is never retried.
 
 ## Self-signed certificates
 
@@ -67,14 +71,14 @@ Name the CA in the provider instead:
 
 1. Get the PEM file into the workspace. Sending it to Jenny as a chat attachment puts it in
    `workspace/uploads/`; asking her to save the text you paste works too.
-2. Settings → Model → API keys → Edit the provider → **CA certificate**, and enter the path
+2. In the workshop, **Brain → Who thinks** → the provider's settings button → **Edit** → **CA certificate**, and enter the path
    (relative paths start at the workspace, so `uploads/ca.pem` is enough).
 
 The trust is **added**, not swapped: the default roots stay in place, so a provider that also
 talks to a publicly-signed host keeps working. The same trust is used by the model catalog
 probe, so the model list loads too.
 
-If the file is missing, unreadable, or isn't a certificate, Settings refuses the save and says
+If the file is missing, unreadable, or isn't a certificate, the save is refused with a message that says
 which path failed — Jenny never quietly falls back to her own bundle, because that would leave
 you believing you're using your certificate when you aren't. The same check runs at startup: a
 `caBundle` that has gone missing since (a wiped workspace, a restore from backup — the file
@@ -95,7 +99,7 @@ Jenny picks the active provider in this order:
 
 Every `apiKey` value sits in `workspace/config.json` as plain text. The only thing standing between that file and the rest of the world is Android's normal per-app sandbox — there is no separate encryption, keychain, or OS credential store involved.
 
-This matters for one specific reason: the app's manifest sets `allowBackup="true"` with no backup-exclusion rules. Android's automatic cloud backup (Google's built-in backup service) can therefore scoop up app data — including `config.json`, and with it every API key in plaintext — into the user's Google account backup. If you use Google's device backup, treat it as a place your API keys can end up, not just your device. <!-- TODO: verify on-device (O-9): what the auto-backup actually captures under targetSdk 34 without explicit dataExtractionRules --> There's a separate, deliberate encrypted backup for disaster recovery — see [Backup and restore](../using/backup.md) — but that's a different mechanism, and it does not change what `allowBackup` exposes to Google's own backup pipeline.
+This matters for one specific reason: the app's manifest sets `allowBackup="true"` with no backup-exclusion rules. Android's automatic cloud backup (Google's built-in backup service) can therefore scoop up app data — including `config.json`, and with it every API key in plaintext — into the user's Google account backup. If you use Google's device backup, treat it as a place your API keys can end up, not just your device. There's a separate, deliberate encrypted backup for disaster recovery — see [Backup and restore](../using/backup.md) — but that's a different mechanism, and it does not change what `allowBackup` exposes to Google's own backup pipeline.
 
 If you export an unencrypted copy of `config.json` yourself (e.g. by pulling it off the device for debugging), you are exporting your API keys in the clear; handle that file accordingly.
 
@@ -106,11 +110,15 @@ If you export an unencrypted copy of `config.json` yourself (e.g. by pulling it 
 - the base URL points directly at `api.openai.com` (not OpenRouter, not any other gateway), **and**
 - the request either sets a `reasoningEffort` value, or the model is one of OpenAI's reasoning families (o1/o3/o4, or any `gpt-5*` model).
 
-When both hold, Jenny tries the Responses API — and if it starts failing, a small circuit breaker kicks in: after **3 consecutive failures** for that model, it stops trying Responses and falls back to Chat Completions for **5 minutes** before probing Responses again (a single "half-open" retry). This is per-model, automatic, and not configurable beyond forcing `apiType` to `"chat_completions"` or `"responses"` explicitly if you want to skip the auto-detection entirely.
+When both hold, Jenny tries the Responses API — and if it starts failing, a small circuit breaker kicks in: after **3 consecutive failures** for that model and reasoning-effort pair, it stops trying Responses and falls back to Chat Completions for **5 minutes** before probing Responses again (a single "half-open" retry). This is tracked per model *and* reasoning effort (the breaker key is `model:reasoning_effort`, so a failing `high` does not shut out `low`), automatic, and not configurable beyond forcing `apiType` to `"chat_completions"` or `"responses"` explicitly if you want to skip the auto-detection entirely.
 
 For every other endpoint — Groq, DeepSeek, Ollama, OpenRouter, a self-hosted server, anything that isn't `api.openai.com` directly — `auto` always means Chat Completions; the Responses API is never attempted.
 
 That last sentence is about `auto` only. Setting `apiType: "responses"` **explicitly** forces the Responses API on any `openai_compat` base URL, auto-detection included — which is what makes gateways that serve a Responses-shaped endpoint of their own reachable (see [OpenCode Go](#opencode-go) below).
+
+## Session affinity header
+
+Every request from the `openai_compat` provider carries an `x-session-affinity` header: a random ID generated once when the provider is built, so it stays the same for the whole run and changes when the gateway restarts. It exists so that a gateway that routes or caches by session can keep a run's requests together; it carries nothing about you. An `extraHeaders` entry with the same name replaces it. The `anthropic` format does not send it, and OpenCode Go adds its own `x-opencode-session` header on top (see below).
 
 ## Prompt caching: what's actually happening
 
@@ -143,7 +151,7 @@ Go serves the same base URL in three different wire formats, and a provider entr
 
 Set `apiBase` to `https://opencode.ai/zen/go/v1` in all three: the `anthropic` format strips a trailing `/v1` before appending its own path, so one string works everywhere. Switching between model families means switching the active provider, not just the model field — a Go model ID sent to the wrong entry fails the way described under "Model IDs must match the endpoint exactly" below.
 
-Settings only exposes name/format/API key/base URL, so `apiType: "responses"` has to be written into `workspace/config.json` by hand. Editing that provider from Settings afterwards preserves it.
+The provider dialog only exposes name, format, API key, base URL and CA certificate, so `apiType: "responses"` has to be written into `workspace/config.json` by hand. Editing that provider from the workshop afterwards preserves it.
 
 ### `name` is stripped from messages
 
@@ -164,18 +172,18 @@ Jenny sends whatever string you put in the model field straight to the provider.
 |---|---|
 | `Provider '<name>': api_key is required.` | The active provider entry has no `apiKey`. Local/self-hosted servers that ignore auth still need a placeholder value. |
 | `messages[N]: "name" is not supported by this endpoint` (HTTP 400, after the first tool call) | An OpenCode base URL reached by a code path that skips the provider's message sanitiser. See [OpenCode Go](#name-is-stripped-from-messages). |
-| `No provider configured. Add a provider in Settings or edit workspace/config.json...` | `providers.providers` is empty. Add one from Settings → Model → API keys, or by hand-editing `config.json`. |
+| `No provider configured. Add a provider in Settings or edit workspace/config.json...` | `providers.providers` is empty. Add one from the workshop's **Brain → Who thinks → Add provider**, or by hand-editing `config.json`. |
 | 401 / unauthorized | The key is missing, expired, has stray whitespace, or belongs to a different service than the configured base URL. |
 | Model not found | The model ID doesn't exist on the endpoint you configured — check it's the exact ID that endpoint serves, not a name copied from a different provider's docs. |
 | Connection refused | A local/self-hosted server isn't running, or the base URL has the wrong host, port, or path. See [Local models](./local-models.md) if the endpoint is off-device. |
-| Could not fetch models | Settings' model picker probes the endpoint's model list and failed; this doesn't block saving a provider, it just means you'll need to type the model ID manually. |
+| Could not fetch models (on **Who answers**: "The list did not arrive") | The model list probe failed. This doesn't block saving a provider; the model in use stays listed, and a model ID can still be entered by hand as a new provider's **First model**, or in `config.json`. |
 
-The Settings model picker's probe (`GET <apiBase>/models`) is advisory only — a failed probe never blocks you from saving a provider or typing a model ID by hand, and a successful one never changes anything in your config beyond what you explicitly choose.
+The model-list probe used by **Who answers** (`GET <apiBase>/models`) is advisory only: a failed probe never blocks you from saving a provider, and a successful one never changes anything in your config beyond what you explicitly choose.
 
 ## See also
 
 - [Local models](./local-models.md) — self-hosted endpoints (Ollama, vLLM, LM Studio) reachable from the phone.
 - [Configuration](./configuration.md) — full `config.json` reference, including model presets and agent defaults.
-- [Settings](./settings.md) — the Settings UI tour, including the Model section and Advanced parameters.
+- [Settings](./settings.md) — the Settings tour, including **Who answers**, **Who thinks** and **Parameters**.
 - [First run](../start/first-run.md) — the onboarding wizard that writes your first provider entry.
 - [Privacy](../internals/privacy.md) — what leaves the device and when.

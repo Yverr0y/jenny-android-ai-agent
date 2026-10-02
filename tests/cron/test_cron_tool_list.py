@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from support.cron import disable_job
 
 from jenny.agent.tools.context import RequestContext
 from jenny.agent.tools.cron import CronTool
@@ -443,11 +444,35 @@ def test_list_excludes_disabled_jobs(tmp_path) -> None:
         schedule=CronSchedule(kind="cron", expr="0 9 * * *", tz="UTC"),
         message="test",
     )
-    tool._cron.enable_job(job.id, enabled=False)
+    disable_job(tool._cron, job.id)
 
     result = tool._list_jobs()
     assert "Paused job" not in result
     assert result == "No scheduled jobs."
+
+
+async def test_list_shows_a_job_paused_from_the_workshop(tmp_path) -> None:
+    """Un job in pausa non e' sparito: se Jenny non lo vedesse ne creerebbe un
+    doppione, credendo di doverlo rifare. La riga le dice dove si riprende."""
+    service = CronService(tmp_path / "cron" / "jobs.json")
+    service._running = True
+    tool = CronTool(service)
+    try:
+        job = service.add_job(
+            name="Acqua",
+            schedule=CronSchedule(kind="every", every_ms=3_600_000),
+            message="bevi",
+            **_bound_chat(),
+        )
+        service.set_paused(job.id, True)
+
+        result = tool._list_jobs()
+    finally:
+        service.stop()
+
+    assert "Acqua" in result
+    assert "Paused by the user from the workshop" in result
+    assert "Next run" not in result
 
 
 # -- lo stato per-controllo dell'heartbeat --
@@ -458,7 +483,7 @@ class TestThePerCheckStateIsReadable:
 
     ``state.task_checks`` è indicizzato per task, viene salvato e ricaricato dallo
     store da commit, e non raggiungeva **nessuna** superficie: non questo elenco,
-    non la WebUI. "Il controllo delle piante sta funzionando?" si rispondeva solo
+    non la WebUI. "Il controllo della pioggia sta funzionando?" si rispondeva solo
     leggendo logcat sul telefono — che su Android vuol dire non rispondere.
 
     I tre contatori del job sono soltanto il riassunto ("almeno un controllo non è
@@ -477,14 +502,14 @@ class TestThePerCheckStateIsReadable:
         state = CronJobState(
             task_checks={
                 "abc": CronTaskCheckState(
-                    consecutive_could_not_check=4, label="WaterBot: umidità piante"
+                    consecutive_could_not_check=4, label="RainCheck: pioggia nelle città"
                 )
             }
         )
 
         lines = tool._format_state(state, CronSchedule(kind="every", every_ms=1_800_000))
 
-        assert any("WaterBot: umidità piante" in line and "4 consecutive" in line for line in lines)
+        assert any("RainCheck: pioggia nelle città" in line and "4 consecutive" in line for line in lines)
 
     def test_it_says_whether_the_user_has_been_told(self, tmp_path) -> None:
         """La metà che serve di più: rotto e annunciato è un guasto diverso da
@@ -492,12 +517,12 @@ class TestThePerCheckStateIsReadable:
         tool = _make_tool(tmp_path)
         schedule = CronSchedule(kind="every", every_ms=1_800_000)
         quiet = CronJobState(
-            task_checks={"a": CronTaskCheckState(consecutive_could_not_check=4, label="piante")}
+            task_checks={"a": CronTaskCheckState(consecutive_could_not_check=4, label="pioggia")}
         )
         warned = CronJobState(
             task_checks={
                 "a": CronTaskCheckState(
-                    consecutive_could_not_check=4, label="piante", escalated=True
+                    consecutive_could_not_check=4, label="pioggia", escalated=True
                 )
             }
         )

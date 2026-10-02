@@ -1,6 +1,6 @@
 """Il flag della sola lettura: dove vive, da dove arriva, cosa non tocca.
 
-Passi **4.2** e **4.3** di ``roadmap/progetti-passi.md``.
+Passi **4.2** e **4.3** del piano dei progetti.
 
 Due trabocchetti scritti prima di toccare il codice, e sono la ragione per cui
 metà di questo file esiste:
@@ -37,7 +37,7 @@ from jenny.security.workspace_access import (
 
 @pytest.fixture
 def resolver(tmp_path: Path) -> WorkspaceScopeResolver:
-    (tmp_path / "wikis" / "patreon" / "wiki").mkdir(parents=True)
+    (tmp_path / "wikis" / "palestra" / "wiki").mkdir(parents=True)
     return WorkspaceScopeResolver(
         default_workspace=tmp_path, default_restrict_to_workspace=True
     )
@@ -94,26 +94,26 @@ def test_the_two_axes_are_independent() -> None:
 
 def test_a_project_turn_reads_the_flag_from_the_message(resolver) -> None:
     """Il ramo del progetto torna prima dei metadati: la sola lettura si applica dopo."""
-    scope = _turn(resolver, "project:patreon", {WORKSPACE_READONLY_METADATA_KEY: True})
+    scope = _turn(resolver, "project:palestra", {WORKSPACE_READONLY_METADATA_KEY: True})
     assert scope.writable is False
-    assert scope.project_path.name == "patreon", "la cartella resta quella dedotta dalla chiave"
+    assert scope.project_path.name == "palestra", "la cartella resta quella dedotta dalla chiave"
 
 
 def test_the_folder_still_comes_from_the_key_and_not_from_the_message(resolver) -> None:
     """Il flag non è una porta per chiedere un'altra cartella."""
     scope = _turn(
         resolver,
-        "project:patreon",
+        "project:palestra",
         {
             WORKSPACE_READONLY_METADATA_KEY: True,
             "workspace_scope": {"project_path": "/etc", "access_mode": "full"},
         },
     )
-    assert scope.project_path.name == "patreon"
+    assert scope.project_path.name == "palestra"
     assert scope.writable is False
 
 
-@pytest.mark.parametrize("key", ["unified:default", "project:patreon"])
+@pytest.mark.parametrize("key", ["unified:default", "project:palestra"])
 def test_without_the_flag_the_turn_writes(resolver, key: str) -> None:
     assert _turn(resolver, key).writable is True
     assert _turn(resolver, key, {}).writable is True
@@ -170,7 +170,7 @@ def test_another_channel_is_untouched(resolver) -> None:
 
 
 def test_the_flag_reaches_the_tools_through_the_bound_scope(resolver) -> None:
-    scope = _turn(resolver, "project:patreon", {WORKSPACE_READONLY_METADATA_KEY: True})
+    scope = _turn(resolver, "project:palestra", {WORKSPACE_READONLY_METADATA_KEY: True})
     with enter_workspace_scope(scope):
         assert current_turn_is_readonly() is True
     assert current_turn_is_readonly() is False, "lo scope si slega all'uscita"
@@ -178,6 +178,6 @@ def test_the_flag_reaches_the_tools_through_the_bound_scope(resolver) -> None:
 
 def test_the_payload_tells_the_client_which_mode_it_got(resolver) -> None:
     """Il client disegna l'interruttore: se il payload non lo dice, non lo sa."""
-    scope = _turn(resolver, "project:patreon", {WORKSPACE_READONLY_METADATA_KEY: True})
+    scope = _turn(resolver, "project:palestra", {WORKSPACE_READONLY_METADATA_KEY: True})
     assert scope.payload()["writable"] is False
-    assert _turn(resolver, "project:patreon").payload()["writable"] is True
+    assert _turn(resolver, "project:palestra").payload()["writable"] is True

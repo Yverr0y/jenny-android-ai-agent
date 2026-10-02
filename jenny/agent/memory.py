@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import threading
 from collections.abc import Callable
@@ -23,17 +22,17 @@ from jenny.agent.memory_archive import archive_dir
 from jenny.session.keys import (
     DREAM_SESSION_PREFIX,
     internal_session_kind,
-    is_internal_session_key,
     is_personal_session_key,
     is_project_session_key,
     session_kind,
 )
 from jenny.utils.helpers import (
+    CHARS_PER_TOKEN,
     ensure_dir,
     strip_think,
     truncate_text,
 )
-from jenny.utils.path import atomic_write
+from jenny.utils.path import append_lines_durable, atomic_write
 from jenny.utils.prompt_templates import render_template
 
 # Separatore fra il template di Dream e il batch di storia, dentro il prompt che
@@ -43,6 +42,16 @@ from jenny.utils.prompt_templates import render_template
 # sola ne prende fra un quarto e tre quarti, quindi due passaggi in piu' sono il
 # punto in cui la curva si appiattisce. Zero disattiva la finestra.
 _DREAM_PROJECT_REPLAY = 3
+
+# Il tetto in caratteri della storia di un batch di Dream, a voci intere (v.
+# ``MemoryStore.build_dream_prompt``). Prima c'era un taglio a 500 caratteri per
+# voce su 20 voci, cioe' al piu' 10.000 caratteri: questo tetto ne tiene lo stesso
+# ordine di grandezza senza buttare la coda di nessuna voce, e basta a far stare
+# da solo anche il dump grezzo piu' lungo (``_RAW_ARCHIVE_MAX_CHARS``).
+_DREAM_BATCH_MAX_CHARS = 16_000
+# Lo stesso, per le voci gia' consumate che la finestra di progetto rimostra: e'
+# contesto in piu', quindi una voce che non ci sta si lascia fuori intera.
+_DREAM_REPLAY_MAX_CHARS = 8_000
 
 
 class DreamBatch(NamedTuple):
@@ -58,6 +67,14 @@ class DreamBatch(NamedTuple):
     prompt: str
     cursor: int
     scope: str
+    # L'altro tipo presente nella stessa finestra, ``None`` se la finestra ne ha
+    # uno solo: e' il segnale per il secondo batch del run. E
+    # ``window_cursor`` e' la fine della finestra, dove il cursore puo' andare
+    # quando atterrano entrambi. ``cursor`` resta quel che il batch **da solo**
+    # puo' dichiarare digerito. Default per i doppi dei test che costruiscono
+    # un batch a tre campi.
+    rest_scope: str | None = None
+    window_cursor: int | None = None
 
 
 # ``MemoryStore.build_dream_prompt`` incolla. È una costante perché lo legge anche
@@ -101,6 +118,7 @@ def is_gardener_session_key(key: str | None) -> bool:
     documentato come "pure file I/O for memory files": è la lezione di T7.3.
     """
     return internal_session_kind(key or "") == "gardener"
+
 
 # Il blocco "già registrato" che la fase 4 del piano aggiunge al prompt del
 # Consolidator. Tre numeri, e nessuno è arbitrario:
@@ -186,7 +204,7 @@ def _pack_entries(entries: list[str], budget_chars: int | None) -> tuple[list[st
 
 
 def iter_fact_lines(text: str) -> list[tuple[str, str]]:
-    """I fatti annotati dentro una voce di history, come ``(mark, fatto)``.
+    """I fatti annotati dentro una voce di history, come ``(mark, fact)``.
 
     Serve a due chiamanti con lo stesso bisogno da lati opposti: il blocco
     "già registrato" li legge per dire cosa è in attesa, e la misura della
@@ -497,7 +515,7 @@ class MemoryStore:
             "",
         ])
 
-        budget = (max_tokens * 4 - len(head)) if max_tokens > 0 else None
+        budget = (max_tokens * CHARS_PER_TOKEN - len(head)) if max_tokens > 0 else None
         if budget is not None and budget <= 0:
             return head.rstrip() + "\n"
 
@@ -540,17 +558,21 @@ class MemoryStore:
         content more tightly; this default only exists to catch unintentional
         large writes (e.g. an LLM echoing its input back as a "summary").
 
-        **Una sessione di progetto scrive qui, con la propria chiave** (08/09/2026,
-        v. ``.agent/project-memory-plan.md``). Fino a quel giorno questo metodo
+        **Una sessione di progetto scrive qui, con la propria chiave** (dall'08/09/2026).
+        Fino a quel giorno questo metodo
         rifiutava una chiave ``project:`` e ritornava ``0``, e l'isolamento di un
         progetto era un'*assenza*. Adesso e' **una chiave piu' una destinazione**,
         ed e' un confine piu' stretto e non piu' largo: la chiave tiene la voce
-        fuori da ogni prompt (:meth:`read_recent_history_for_prompt`), e a valle
-        Dream puo' scriverne solo in ``USER.md`` (:meth:`build_dream_tools`).
+        fuori dal blocco di storia di ogni prompt
+        (:meth:`read_recent_history_for_prompt`), e a valle Dream puo' scriverne
+        solo in ``USER.md`` (:meth:`build_dream_tools`). **Non** la tiene fuori da
+        ``recall_history`` (``tools/memory_recall.py``): dalla chat personale quel
+        tool elenca e apre ogni voce del file, qualunque sia la chiave, quindi
+        anche i diari dei quaderni (progetti).
 
-        Il cancello e' caduto perche' guardava l'asse sbagliato. La riga
-        dichiarata in ``.agent/security.md`` e' «chi sei viaggia, dove altro
-        lavori no»: e' una regola sulla **categoria del fatto**, e questo era un
+        Il cancello e' caduto perche' guardava l'asse sbagliato. La regola del
+        confine fra progetti e' «chi sei viaggia, dove altro lavori no» (v.
+        ``docs/internals/security-model.md``): e' una regola sulla **categoria del fatto**, e questo era un
         cancello sull'**origine della sessione**. Nel verso in uscita le due
         coincidono, perche' esce solo l'identita'; in entrata no — un fatto
         identitario detto dentro un progetto e' identita', cioe' esattamente la
@@ -569,8 +591,7 @@ class MemoryStore:
         ``ContextBuilder`` dalla radice dell'installazione per **ogni** tipo di
         sessione, e ``MemoryRecallTool`` prende l'archivio di quella radice alla
         costruzione ignorando lo scope del workspace. Quel che si chiude sulla
-        sessione e' l'inventario fra progetti, non l'identita'. Il ragionamento
-        intero sta in ``.agent/security.md``.
+        sessione e' l'inventario fra progetti, non l'identita'.
 
         ``prompt_visible=False`` scrive la voce **per Dream e non per i prompt**:
         :meth:`read_recent_history_for_prompt` la salta. Serve a ``/new``, che
@@ -581,8 +602,9 @@ class MemoryStore:
         aggiornare dopo, perche' l'archiviazione gira in background: qualunque
         seconda scrittura arriverebbe a sessione ormai ricaricata, e salvare
         l'oggetto vecchio vorrebbe dire riscrivere sopra i messaggi del turno
-        intanto arrivato. Dream continua a vederla: e' la sola cosa che questo
-        flag non tocca.
+        intanto arrivato. Il flag tocca solo quel blocco: Dream continua a
+        vederla, e ``recall_history`` la elenca e la apre dalla chat personale
+        come ogni altra voce.
         """
         limit = max_chars if max_chars is not None else _HISTORY_ENTRY_HARD_CAP
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -619,10 +641,7 @@ class MemoryStore:
             # sempre comportate le voci gia' su disco.
             if not prompt_visible:
                 record["prompt_visible"] = False
-            with open(self.history_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            append_lines_durable(self.history_file, [json.dumps(record, ensure_ascii=False)])
             # Small full-file replacement each append: use the same atomic
             # temp-file+fsync+rename helper as every other on-disk cursor/state
             # file in this codebase (cron store, session manager, sidebar
@@ -727,23 +746,10 @@ class MemoryStore:
         return [e for e, c in self._iter_valid_entries() if c > since_cursor]
 
     @classmethod
-    def _is_internal_history_session(cls, session_key: str | None) -> bool:
-        """True se la voce di history viene da lavoro interno, non dall'utente.
-
-        Il vocabolario e' quello unico di :mod:`jenny.session.keys`: qui resta
-        solo la guardia su ``None``/stringa vuota, che il predicato canonico non
-        ha perche' lavora su chiavi di sessione sempre presenti, mentre il
-        ``session_key`` di una voce di history e' opzionale.
-        """
-        if not session_key:
-            return False
-        return is_internal_session_key(session_key)
-
-    @classmethod
     def _is_personal_history_session(cls, session_key: str | None) -> bool:
         """True se la voce di history appartiene alla conversazione personale.
 
-        Whitelist, e non la negazione di :meth:`_is_internal_history_session`,
+        Whitelist, e non la negazione di :func:`jenny.session.keys.is_internal_session_key`,
         per la ragione spiegata in :func:`jenny.session.keys.is_personal_session_key`:
         chi la usa decide cosa entra nella memoria di lungo periodo, e per quella
         decisione l'elenco giusto è quello di chi *può*, non quello di chi non può.
@@ -799,10 +805,10 @@ class MemoryStore:
         Gli ultimi due rami sono la stessa riga, perche' il secondo membro della
         condizione e' la whitelist e non "non e' interna": la differenza si vede
         solo su una voce di progetto, che con la negazione sarebbe entrata in ogni
-        prompt. Oggi nessuna voce di progetto puo' esistere — la scrittura e'
-        chiusa in ``append_history`` — e questo e' il secondo giro di chiave, non
-        una ridondanza inutile: chiude anche le voci scritte da una versione
-        precedente o a mano.
+        prompt. E le voci di progetto esistono: dall'08/09/2026 una sessione di
+        progetto scrive in ``append_history`` con la propria chiave (v. li'), e
+        a tenerle fuori dal prompt personale e' proprio questa whitelist — il
+        primo ramo le toglie al progetto stesso, questo a tutti gli altri.
 
         **Perche' il giardiniere e' l'eccezione fra gli interni** (T7.8, misurato
         il 23/08). Il ramo interno esiste perche' un job rilegga *i propri* run;
@@ -824,8 +830,8 @@ class MemoryStore:
 
         **E la restrizione e' un cancello davanti a un tool, non una tenda**: la
         passata puo' comunque *chiedere* la memoria personale — ``recall`` e i tre
-        file di identita' restano dove sono, per la ragione scritta in
-        ``.agent/security.md``. Questo ramo toglie quel che arrivava **non
+        file di identita' restano dove sono, perche' chi sei viaggia fra
+        progetti, dove altro lavori no. Questo ramo toglie quel che arrivava **non
         richiesto** dentro il prompt.
         """
         if session_key is not None and is_project_session_key(session_key):
@@ -866,6 +872,18 @@ class MemoryStore:
         and nothing under it re-enters ``append_history`` or ``compact_history``
         (``_read_entries`` / ``_write_entries`` are pure file I/O). No caller
         holds the lock when invoking this method.
+
+        **Non taglia quel che Dream deve ancora leggere**.
+        Il tetto teneva le ultime *max_history_entries* voci senza
+        guardare il cursore di Dream: un Dream indietro — un livelock, o gli ambiti
+        alternati che gli davano batch da una voce — perdeva storia mai
+        consolidata. Ora una voce personale o di progetto oltre il cursore resta
+        anche fuori dal tetto, e il file sfora finché Dream non recupera. È lo
+        scambio giusto: un Dream fermo ha già il suo allarme
+        (``dream_cycle._alert_stuck``), mentre la storia persa in silenzio non ne
+        aveva nessuno. Le voci interne invece si tagliano come prima: Dream non le
+        legge, e trattenerle vorrebbe dire non tagliarle mai su un'installazione
+        dove parla solo l'heartbeat.
         """
         if self.max_history_entries <= 0:
             return
@@ -873,8 +891,26 @@ class MemoryStore:
             entries = self._read_entries()
             if len(entries) <= self.max_history_entries:
                 return
-            kept = entries[-self.max_history_entries:]
+            dream_cursor = self.get_last_dream_cursor()
+            cut = len(entries) - self.max_history_entries
+            kept = [
+                entry
+                for index, entry in enumerate(entries)
+                if index >= cut or self._awaits_dream(entry, dream_cursor)
+            ]
+            if len(kept) == len(entries):
+                return
             self._write_entries(kept)
+
+    @classmethod
+    def _awaits_dream(cls, entry: dict[str, Any], dream_cursor: int) -> bool:
+        """True se *entry* è una voce che Dream leggerà e non ha ancora letto."""
+        cursor = cls._valid_cursor(entry.get("cursor"))
+        if cursor is None or cursor <= dream_cursor:
+            return False
+        if not cls._valid_history_payload(entry):
+            return False
+        return cls._history_entry_scope(entry.get("session_key")) != "internal"
 
     # -- JSONL helpers -------------------------------------------------------
 
@@ -894,20 +930,38 @@ class MemoryStore:
         return entries
 
     def _read_last_entry(self) -> dict[str, Any] | None:
-        """Read the last entry from the JSONL file efficiently."""
+        """Read the last entry from the JSONL file efficiently.
+
+        Legge all'indietro a blocchi **finché non trova l'inizio della voce**, e
+        non un blocco fisso. Con i soli ultimi 4096 byte una voce più lunga — un
+        riassunto del Consolidator arriva a 8.000 caratteri, un dump grezzo a
+        16.000 — arrivava tagliata, il JSON non si decodificava e
+        :meth:`_next_cursor` restava col solo ``.cursor``: che dopo un kill fra
+        l'append e la sua riscrittura è indietro di uno, cioè un cursore
+        duplicato. Lo split sui byte ``\\n`` è
+        sicuro in UTF-8: quel byte non compare mai dentro un carattere multibyte.
+        """
+        block = 4096
         try:
             with open(self.history_file, "rb") as f:
                 f.seek(0, 2)
-                size = f.tell()
-                if size == 0:
+                pos = f.tell()
+                buf = b""
+                while pos > 0:
+                    step = min(block, pos)
+                    pos -= step
+                    f.seek(pos)
+                    buf = f.read(step) + buf
+                    tail = buf.rstrip()
+                    if not tail:
+                        continue
+                    newline = tail.rfind(b"\n")
+                    if newline >= 0:
+                        return json.loads(tail[newline + 1:].decode("utf-8"))
+                tail = buf.strip()
+                if not tail:
                     return None
-                read_size = min(size, 4096)
-                f.seek(size - read_size)
-                data = f.read().decode("utf-8")
-                lines = [line for line in data.split("\n") if line.strip()]
-                if not lines:
-                    return None
-                return json.loads(lines[-1])
+                return json.loads(tail.decode("utf-8"))
         except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
             return None
 
@@ -951,6 +1005,20 @@ class MemoryStore:
             return 0
         return counter
 
+    def _read_review_state(self) -> dict[str, Any]:
+        """Il contenuto di ``.dream_review``, o ``{}`` se non si riesce a leggerlo.
+
+        Una lettura sola per i tre getter, che la ripetevano ognuno a modo suo:
+        uno lasciava uscire un ``UnicodeDecodeError`` (un file troncato in mezzo a
+        un carattere multibyte), gli altri due no. File assente, byte che non sono
+        UTF-8, JSON rotto e radice non-dict danno tutti ``{}``.
+        """
+        try:
+            data = json.loads(self._review_state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):  # ValueError include JSONDecodeError e UnicodeDecodeError
+            return {}
+        return data if isinstance(data, dict) else {}
+
     def get_review_state(self) -> tuple[int, int]:
         """Return ``(runs_since_review, stuck_runs)`` for the Dream review pass.
 
@@ -969,16 +1037,7 @@ class MemoryStore:
         rimacinare per sempre lo stesso batch). Entrambi i contatori li consuma
         il chiamante: qui c'è solo lo stato su disco.
         """
-        try:
-            raw = self._review_state_file.read_text(encoding="utf-8")
-        except OSError:
-            return (0, 0)
-        try:
-            data = json.loads(raw)
-        except ValueError:  # include JSONDecodeError
-            return (0, 0)
-        if not isinstance(data, dict):
-            return (0, 0)
+        data = self._read_review_state()
         return (
             self._review_counter(data.get("runs_since_review")),
             self._review_counter(data.get("stuck_runs")),
@@ -1004,13 +1063,7 @@ class MemoryStore:
         lettura giusta: il vecchio ``stuck_runs`` si eredita come *no room*, che è
         il ramo che tiene armata la via d'uscita dal livelock.
         """
-        try:
-            data = json.loads(self._review_state_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return 0
-        if not isinstance(data, dict):
-            return 0
-        return self._review_counter(data.get("nothing_new_runs"))
+        return self._review_counter(self._read_review_state().get("nothing_new_runs"))
 
     def get_review_forced_at_stuck(self) -> int:
         """A quale valore di ``stuck_runs`` il review è stato forzato l'ultima volta.
@@ -1034,13 +1087,7 @@ class MemoryStore:
         :meth:`set_review_state` lo azzera insieme al contatore: sopravvivergli lo
         trasformerebbe da freno in blocco — v. il commento lì.
         """
-        try:
-            data = json.loads(self._review_state_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return 0
-        if not isinstance(data, dict):
-            return 0
-        return self._review_counter(data.get("forced_at_stuck"))
+        return self._review_counter(self._read_review_state().get("forced_at_stuck"))
 
     def set_review_state(
         self,
@@ -1104,6 +1151,9 @@ class MemoryStore:
 
     def build_dream_prompt(
         self, *, max_entries: int = 20, gauge: str = "",
+        max_chars: int = _DREAM_BATCH_MAX_CHARS,
+        scope: str | None = None,
+        until_cursor: int | None = None,
     ) -> "DreamBatch | None":
         """Build the Dream prompt with unprocessed history context.
 
@@ -1118,6 +1168,15 @@ class MemoryStore:
         sta nel chiamante di proposito: ``MemoryStore`` è uno strato di I/O
         puro e dargli qui la config per misurare il budget lo legherebbe al
         modulo che quel budget lo impone.
+
+        *max_chars* è il tetto in caratteri della storia del batch, a voci
+        intere; *max_entries* resta il tetto in numero di voci. Vale il primo
+        dei due che si raggiunge. I due tetti delimitano la *finestra*, che puo'
+        contenere voci di entrambi i tipi; il batch ne prende quelle di un tipo.
+
+        *scope* e *until_cursor* chiedono il **secondo** batch di un run: le voci
+        di tipo *scope* nella finestra che finisce a *until_cursor* (il
+        ``window_cursor`` del primo). Senza, il batch e' quello di testa.
         """
         last_cursor = self.get_last_dream_cursor()
         # **Il filtro che tiene personale il diario personale.** Dream è l'unico
@@ -1134,35 +1193,78 @@ class MemoryStore:
         # — costa la rilettura di poche righe, mentre saltare in avanti
         # rischierebbe di consumare una voce personale senza averla mai letta.
         pending = [
-            (entry, scope)
+            (entry, kind)
             for entry in self.read_unprocessed_history(since_cursor=last_cursor)
-            if (scope := self._history_entry_scope(entry.get("session_key"))) != "internal"
+            if (kind := self._history_entry_scope(entry.get("session_key"))) != "internal"
         ]
         if not pending:
             return None
 
-        # **Un batch, un tipo solo.** Si prende la sequenza iniziale dello stesso
-        # tipo e ci si ferma al primo cambio: le due categorie hanno prompt
-        # diversi, cassette diverse e destinazioni diverse, quindi mescolarle in
-        # un batch vorrebbe dire scegliere quale delle due regole applicare a
-        # materiale dell'altra.
-        #
-        # Il prezzo e' un batch corto quando i tipi si alternano, e si paga con un
-        # run in piu' — il cursore avanza comunque a ogni giro, quindi non c'e'
-        # nessuno stallo, solo qualche ciclo di Dream in piu' per drenare. E'
-        # il prezzo giusto: l'alternativa che tiene i batch grandi e' un cursore
-        # per tipo, cioe' due filigrane che possono divergere su un file
-        # append-only riscritto anche a mano.
-        scope = pending[0][1]
-        batch_entries = []
+        # **Voci intere, e un tetto in caratteri sulla finestra**.
+        # Fino al 26/09 ogni voce passava da un taglio a 500
+        # caratteri e il cursore avanzava oltre: quel che un riassunto diceva dopo
+        # non arrivava mai in memoria. Ora una voce lunga costa voci in meno nello
+        # stesso run, non fatti in meno: il cursore si ferma all'ultima voce
+        # passata *per intero*, e quella che non ci sta apre il run seguente. La
+        # prima voce entra sempre, anche se da sola supera il tetto — spezzarla
+        # vorrebbe dire un cursore a meta' voce, e fermarsi un batch vuoto per
+        # sempre.
+        if until_cursor is not None:
+            pending = [item for item in pending if item[0]["cursor"] <= until_cursor]
+        window: list[tuple[dict[str, Any], str]] = []
+        used = 0
         for entry, entry_scope in pending[:max_entries]:
-            if entry_scope != scope:
+            cost = len(entry["content"])
+            if window and used + cost > max_chars:
                 break
-            batch_entries.append(entry)
+            window.append((entry, entry_scope))
+            used += cost
+        if not window:
+            return None
+
+        # **Un batch, un tipo solo.** Le due categorie hanno prompt diversi,
+        # cassette diverse e destinazioni diverse, quindi mescolarle in un batch
+        # vorrebbe dire scegliere quale delle due regole applicare a materiale
+        # dell'altra.
+        #
+        # Ma la finestra si divide per tipo invece di fermarsi al primo cambio:
+        # con la chat personale e un quaderno
+        # usati a turno, fermarsi lì dava batch da una voce, e il diario cresceva
+        # piu' in fretta di quanto Dream lo digerisse. Il batch di testa porta
+        # tutte le voci del suo tipo nella finestra; quelle dell'altro tipo le
+        # porta un secondo batch sulla **stessa** finestra
+        # (``scope=rest_scope, until_cursor=window_cursor``), e
+        # ``dream_cycle.run_dream_turn`` sposta il cursore a fine finestra solo
+        # quando atterrano entrambi. Da solo, il batch di testa puo' dichiarare
+        # digerita solo la sua testa omogenea: e' ``cursor``. Le voci del suo tipo
+        # che seguono tornano al run dopo, e ritrovate su disco rispondono
+        # «already present» — costa una rilettura, non un fatto.
+        #
+        # Resta un cursore solo, di proposito: un cursore per tipo sono due
+        # filigrane che possono divergere su un file append-only riscritto anche
+        # a mano.
+        head_scope = scope if scope is not None else window[0][1]
+        batch_entries = [entry for entry, entry_scope in window if entry_scope == head_scope]
+        if not batch_entries:
+            return None
+        window_cursor = window[-1][0]["cursor"]
+        other = next((s for _, s in window if s != head_scope), None)
+        if scope is not None:
+            # Il secondo batch: il cursore e' la fine della finestra, e vale solo
+            # se il batch dell'altro tipo sulla stessa finestra e' atterrato.
+            cursor = window_cursor
+            rest_scope = None
+        else:
+            cursor = window[0][0]["cursor"]
+            for entry, entry_scope in window:
+                if entry_scope != head_scope:
+                    break
+                cursor = entry["cursor"]
+            rest_scope = other
+        scope = head_scope
 
         history_text = "\n".join(
-            f"[{e['timestamp']}] {truncate_text(e['content'], 500)}"
-            for e in batch_entries
+            f"[{e['timestamp']}] {e['content']}" for e in batch_entries
         )
         if scope == "project":
             template = render_template(
@@ -1180,7 +1282,7 @@ class MemoryStore:
                 budget_gauge=gauge,
             )
         prompt = f"{template}{DREAM_HISTORY_HEADER}{history_text}"
-        return DreamBatch(prompt, batch_entries[-1]["cursor"], scope)
+        return DreamBatch(prompt, cursor, scope, rest_scope, window_cursor)
 
     def _with_project_replay(self, history_text: str, last_cursor: int) -> str:
         """La storia del batch, preceduta dalle ultime voci di progetto gia' consumate.
@@ -1209,17 +1311,26 @@ class MemoryStore:
         """
         if _DREAM_PROJECT_REPLAY <= 0:
             return history_text
-        seen = [
+        candidates = [
             entry
             for entry, cursor in self._iter_valid_entries()
             if cursor <= last_cursor
             and self._history_entry_scope(entry.get("session_key")) == "project"
         ][-_DREAM_PROJECT_REPLAY:]
+        # Voci intere anche qui, dalla piu' recente e dentro un tetto: una voce
+        # tagliata a meta' rimostrerebbe proprio la meta' che il primo passaggio
+        # aveva gia' visto, cioe' toglierebbe alla finestra la sua ragione.
+        seen: list[dict[str, Any]] = []
+        used = 0
+        for entry in reversed(candidates):
+            cost = len(entry["content"])
+            if used + cost > _DREAM_REPLAY_MAX_CHARS:
+                break
+            seen.insert(0, entry)
+            used += cost
         if not seen:
             return history_text
-        replay = "\n".join(
-            f"[{e['timestamp']}] {truncate_text(e['content'], 500)}" for e in seen
-        )
+        replay = "\n".join(f"[{e['timestamp']}] {e['content']}" for e in seen)
         return "\n".join([
             "### Already processed, shown again",
             "",
@@ -1267,7 +1378,7 @@ class MemoryStore:
         """Build the restricted tool registry used by Dream runs.
 
         *scope* dice **su che tipo di batch** gira questo run, e cambia la
-        cassetta invece del prompt (08/09/2026, v. ``.agent/project-memory-plan.md``):
+        cassetta invece del prompt (08/09/2026):
 
         - ``"personal"`` — il default e il comportamento di sempre: i quattro tool
           file sui tre file di memoria piu' ``skills/``, e il tool per voci su
@@ -1277,7 +1388,7 @@ class MemoryStore:
 
         **Perche' togliere i tool invece di dirlo nel prompt.** La regola che
         questo run deve rispettare — da un progetto puo' uscire identita', mai
-        inventario — e' la stessa che ``.agent/security.md`` dichiara, e finora
+        inventario — e' la regola di confine fra progetti, e finora
         era garantita da un'*assenza* (un progetto non scriveva in ``history``).
         Aperta quella porta, la garanzia deve stare da qualche parte, e un
         paragrafo in un template non e' una garanzia: e' una richiesta. Con la

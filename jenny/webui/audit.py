@@ -2,6 +2,14 @@
 
 Handles serialization, anchor computation, and ID generation
 for markdown-based audit files with YAML frontmatter.
+
+**Scrive e non legge**, dal 22/09/2026. C'era un ``from_markdown``, e i suoi due
+chiamanti — l'elenco degli audit e la loro chiusura — se ne sono andati con le
+rotte che li esponevano: dal telefono una segnalazione si apre e basta, e chi la
+legge e la chiude e' Jenny, con i suoi strumenti file e lo script della skill
+(``llm-wiki/scripts/audit_review.py``, che il frontmatter se lo analizza da
+solo). Un lettore Python senza lettori sarebbe stato codice morto con un banco
+sopra a tenerlo in vita.
 """
 
 from __future__ import annotations
@@ -15,12 +23,10 @@ from datetime import datetime
 
 _CONTEXT_CHARS = 80
 
-_VALID_SEVERITIES: tuple[str, ...] = ("info", "suggest", "warn", "error")
 _VALID_SOURCES: tuple[str, ...] = ("obsidian-plugin", "web-viewer", "manual")
 _VALID_STATUSES: tuple[str, ...] = ("open", "resolved")
 
-_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{4}$")
-_FRONTMATTER_RE = re.compile(r"^---\n([\s\S]*?)\n---\n?([\s\S]*)$")
+_ID_RE = re.compile(r"\A\d{8}-\d{6}-[0-9a-f]{4}\Z")
 
 
 # ── Schema ──────────────────────────────────────────────────────────────────
@@ -35,13 +41,23 @@ class _Anchor:
 
 @dataclass
 class AuditEntry:
+    """Un riscontro umano ancorato a un punto di una pagina.
+
+    **Niente ``severity``, e non e' una dimenticanza** (tolta il 22/09/2026).
+    Erano quattro livelli — info/suggest/warn/error — che chi segnala doveva
+    scegliere prima di scrivere: un campo nato per una coda di smistamento,
+    cioe' per una squadra. Qui chi segnala, chi corregge e chi possiede il
+    quaderno sono la stessa persona, e nessuno vuole dare un voto alla propria
+    lamentela. Quel che resta e' l'ordine di arrivo, che e' la fila di una coda
+    vera.
+    """
+
     id: str
     target: str
     target_lines: tuple[int, int]
     anchor_before: str
     anchor_text: str
     anchor_after: str
-    severity: str
     author: str
     source: str
     created: str
@@ -56,8 +72,6 @@ class AuditEntry:
             raise ValueError("target is required")
         if not self.anchor_text:
             raise ValueError("anchor_text is required")
-        if self.severity not in _VALID_SEVERITIES:
-            raise ValueError(f"severity must be one of {_VALID_SEVERITIES}")
         if self.source not in _VALID_SOURCES:
             raise ValueError(f"source must be one of {_VALID_SOURCES}")
         if self.status not in _VALID_STATUSES:
@@ -129,7 +143,6 @@ def to_markdown(entry: AuditEntry) -> str:
         "anchor_before": entry.anchor_before,
         "anchor_text": entry.anchor_text,
         "anchor_after": entry.anchor_after,
-        "severity": entry.severity,
         "author": entry.author,
         "source": entry.source,
         "created": entry.created,
@@ -146,42 +159,6 @@ def to_markdown(entry: AuditEntry) -> str:
     )
     body_text = entry.body.strip() if entry.body.strip() else _default_body()
     return f"---\n{yml}---\n\n{body_text}\n"
-
-
-def from_markdown(text: str) -> AuditEntry:
-    """Parse audit markdown back into AuditEntry."""
-    m = _FRONTMATTER_RE.match(text)
-    if not m:
-        raise ValueError("audit file missing YAML frontmatter")
-    import yaml
-
-    try:
-        front_raw = yaml.safe_load(m.group(1))
-    except yaml.YAMLError as e:
-        raise ValueError(f"invalid YAML in audit frontmatter: {e}") from e
-    if not isinstance(front_raw, dict):
-        raise ValueError("audit frontmatter must be a YAML mapping")
-    body = m.group(2).lstrip("\n")
-    target_lines_raw = front_raw.get("target_lines", [0, 0])
-    if not isinstance(target_lines_raw, list) or len(target_lines_raw) != 2:
-        raise ValueError("target_lines must be a list of 2 integers")
-    target_lines = (int(target_lines_raw[0]), int(target_lines_raw[1]))
-    entry = AuditEntry(
-        id=front_raw.get("id", ""),
-        target=front_raw.get("target", ""),
-        target_lines=target_lines,
-        anchor_before=front_raw.get("anchor_before", ""),
-        anchor_text=front_raw.get("anchor_text", ""),
-        anchor_after=front_raw.get("anchor_after", ""),
-        severity=front_raw.get("severity", "warn"),
-        author=front_raw.get("author", ""),
-        source=front_raw.get("source", "web-viewer"),
-        created=front_raw.get("created", datetime.now().isoformat()),
-        status=front_raw.get("status", "open"),
-        body=body,
-    )
-    entry.validate()
-    return entry
 
 
 def _default_body() -> str:

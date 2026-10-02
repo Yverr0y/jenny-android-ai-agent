@@ -16,7 +16,6 @@ events); qui resta solo il turn-id nei metadata inbound per correlare le righe.
 from __future__ import annotations
 
 import asyncio
-import hmac
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -30,6 +29,8 @@ from loguru import logger
 from jenny.bus.events import COORDINATION_FLAGS, InboundMessage, OutboundMessage
 from jenny.bus.queue import MessageBus
 from jenny.bus.runtime_events import TurnRunStatusChanged
+from jenny.channels.http_utils import secret_matches
+from jenny.channels.non_streaming import NonStreamingChannelMixin
 from jenny.channels.telegram_api import TelegramAPI, TelegramAPIError
 from jenny.channels.telegram_format import markdown_to_telegram_html, split_message
 from jenny.channels.telegram_media import (
@@ -233,11 +234,10 @@ class _TypingHeartbeat:
         logger.debug("Telegram: typing heartbeat expired on its own cap")
 
 
-class TelegramChannel:
+class TelegramChannel(NonStreamingChannelMixin):
     """Canale bot Telegram con pairing a codice singolo owner."""
 
     name = "telegram"
-    display_name = "Telegram"
     send_progress = False
     send_tool_hints = False
     show_reasoning = False
@@ -309,16 +309,23 @@ class TelegramChannel:
         # L'ordine conta: il canale viene *ricostruito* a ogni reload delle
         # impostazioni Telegram, e un handler lasciato appeso continuerebbe a
         # scrivere su una ``TelegramAPI`` già chiusa a ogni turno.
+        # E ogni passo avviene anche se uno prima fallisce: un'eccezione nello
+        # stop del typing lasciava vivo il poller, cioè un secondo long polling
+        # accanto a quello del canale nuovo.
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
-        await self._typing.stop()
-        if self._poll_task is not None:
-            self._poll_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._poll_task
-            self._poll_task = None
-        await self.api.close()
+        try:
+            await self._typing.stop()
+        finally:
+            try:
+                if self._poll_task is not None:
+                    self._poll_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await self._poll_task
+                    self._poll_task = None
+            finally:
+                await self.api.close()
 
     async def _poll_loop(self) -> None:
         """Long-poll di ``getUpdates`` con backoff su errori di rete.
@@ -404,12 +411,29 @@ class TelegramChannel:
         text = message.get("text")
 
         if not self._paired_chat_id:
+            if chat.get("type") != "private":
+                # Solo da una chat privata. Abbinato a un gruppo, ogni membro
+                # avrebbe pilotato l'agente col solo fatto di scriverci. Niente
+                # risposta: il gruppo non deve sapere che la finestra è aperta.
+                logger.info("Telegram: ignoring pairing attempt from non-private chat {}", chat_id)
+                return
             await self._maybe_pair(chat_id, sender, text)
             return
         if chat_id != str(self._paired_chat_id):
             # Mittente estraneo: silenzio totale, nessun oracle sull'esistenza
             # del bot o dello stato di pairing.
             logger.info("Telegram: ignoring message from unpaired chat {}", chat_id)
+            return
+        if str(sender.get("id", "")) != str(self._paired_chat_id):
+            # In una chat privata l'id della chat è l'id della persona: chi
+            # scrive deve essere lei. Copre un abbinamento fatto a un gruppo
+            # prima che il pairing li rifiutasse — lì parlava ogni membro — e
+            # i messaggi senza mittente (post di un canale).
+            logger.warning(
+                "Telegram: ignoring message in paired chat {} from another sender; "
+                "a group pairing must be redone from a private chat",
+                chat_id,
+            )
             return
         if isinstance(text, str) and text.strip() and self._parse_start(text) is not None:
             # /start dal proprietario: guida rapida di servizio, non un turno
@@ -670,8 +694,8 @@ class TelegramChannel:
     async def _maybe_pair(self, chat_id: str, sender: dict[str, Any], text: Any) -> None:
         """Onboarding in finestra di pairing: solo il codice esatto accoppia.
 
-        Senza ``pairing_code`` attivo il bot resta muto (regola no-oracle,
-        vedi ``.agent/security.md``). In finestra risponde con prompt/feedback
+        Senza ``pairing_code`` attivo il bot resta muto (regola no-oracle:
+        un bot che risponde a chiunque conferma di esistere). In finestra risponde con prompt/feedback
         entro un budget per chat; una chat oltre il cap (o oltre il bound del
         dict, fail-closed) è ineleggibile al pairing anche col codice giusto.
         """
@@ -691,7 +715,11 @@ class TelegramChannel:
             logger.warning("Telegram: pairing attempt table full, ignoring chat {}", chat_id)
             return
 
-        if candidate and hmac.compare_digest(candidate, self._pairing_code):
+        # ``secret_matches`` e non ``hmac.compare_digest`` sui ``str``: quello
+        # solleva ``TypeError`` appena uno dei due non è ASCII, e un messaggio
+        # qualunque («ciao è») scritto durante la finestra di pairing abbatteva
+        # la gestione dell'update. Il confronto condiviso lavora sui byte.
+        if candidate and secret_matches(candidate, self._pairing_code):
             username = sender.get("username")
             self._paired_chat_id = chat_id
             self._pairing_code = None
@@ -834,21 +862,3 @@ class TelegramChannel:
         except Exception:
             logger.exception("Telegram: service reply failed")
 
-    # ------------------------------------------------------------------ #
-    # No-op per il contratto dispatcher (nessuno streaming su Telegram)  #
-    # ------------------------------------------------------------------ #
-
-    async def send_delta(self, *args: Any, **kwargs: Any) -> list[Any]:
-        return []
-
-    async def send_reasoning_delta(self, *args: Any, **kwargs: Any) -> list[Any]:
-        return []
-
-    async def send_reasoning_end(self, *args: Any, **kwargs: Any) -> list[Any]:
-        return []
-
-    async def send_file_edit_events(self, *args: Any, **kwargs: Any) -> list[Any]:
-        return []
-
-    def discard_stream_buffer(self, *args: Any, **kwargs: Any) -> None:
-        return None

@@ -3,15 +3,27 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # Every branch, not only main: a branch pushed for weeks before its PR would
+  # otherwise meet CI for the first time at the PR. Kotlin is still not
+  # compiled here.
   push:
-    branches: [main]
+    branches: ["**"]
+
+# A PR branch gets two runs per push (push + pull_request); a newer push cancels
+# the stale run of the same kind instead of letting both finish.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Enforces the DCO sign-off promised in CONTRIBUTING.md. Deliberately an
   # inline check instead of a third-party action: it is ~15 lines of git, and a
   # marketplace action would add a supply-chain dependency to every PR.
+  # On a PR it checks the PR range; on a push to any other branch, the commits
+  # the branch adds on top of main. Not on a push to main itself: main's older
+  # history predates the rule and carries no sign-offs.
   dco:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -26,7 +38,12 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bash scripts/check_dco.sh "$BASE_SHA" "$HEAD_SHA"
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA="$(git merge-base origin/main HEAD)"
+            HEAD_SHA="$(git rev-parse HEAD)"
+          fi
+          bash scripts/check_dco.sh "$BASE_SHA" "$HEAD_SHA"
 
   lint:
     runs-on: ubuntu-latest
@@ -42,12 +59,13 @@ jobs:
         with:
           node-version: "24"
       # CI validates the Android code path on a host runner; Android is the only supported runtime target.
-      - run: pip install -e .
-      - run: pip install ruff pytest pytest-asyncio
+      # The `dev` extra pins pytest, pytest-asyncio, ruff and the test-only
+      # backends to exact versions (pyproject.toml).
+      - run: pip install -e ".[dev]"
       - run: ruff check jenny/ tests/
       # pyright is a static check only (zero runtime impact); config in pyrightconfig.json.
       # BLOCKING: restricted to the already-error-clean subset — must stay green.
-      - run: npx --yes pyright@1.1.411 jenny/bus jenny/command jenny/runtime jenny/session
+      - run: npx --yes pyright@1.1.411 jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py
       # NON-BLOCKING visibility: full perimeter, surfaces residual errors without failing CI.
       - run: npx --yes pyright@1.1.411 || true
 
@@ -73,24 +91,25 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      # jsdom non e' una dipendenza del repo (non e' un progetto npm), quindi si
-      # installa qui e si rende risolvibile via NODE_PATH: e' il comando che la
-      # docstring di tests/webui/test_graph_search_contract.py indica. Senza,
-      # quel file — l'unico che copre la maschera di ricerca contro i nodi
-      # davvero disegnati — non gira mai, ne' qui ne' in locale.
-      - run: npm install --no-save jsdom
-      - run: echo "NODE_PATH=$PWD/node_modules" >> "$GITHUB_ENV"
       # CI validates the Android code path on a host runner; Android is the only supported runtime target.
-      - run: pip install -e .
-      - run: pip install ruff pytest pytest-asyncio
-      # Backend crypto dev/test per i test del backup cifrato (su Android si
-      # usa javax.crypto: `cryptography` NON va mai nei requirements Android).
-      - run: pip install cryptography
-      # Stesso trattamento: il backend SSH desktop (`ssh_backends/dev.py`) alza
-      # un server asyncssh in-process per la suite. Su Android il client è jsch
-      # via bridge nativo e `asyncssh` NON va mai nei requirements Android.
-      # Senza questa riga i tre moduli di test SSH fallivano in collection.
-      - run: pip install asyncssh
+      # L'extra `dev` porta, a versione esatta, pytest, pytest-asyncio, ruff e
+      # i backend dei soli test: `cryptography` per il backup cifrato (su
+      # Android javax.crypto), `asyncssh` per il server SSH in-process di
+      # `ssh_backends/dev.py` (su Android jsch; senza, i tre moduli di test SSH
+      # si saltano con `importorskip`, in verde: nessun guard li protegge, a
+      # differenza di node/jsdom/Pillow), `pillow` per test_mascot_layer_sources.py.
+      # Nessuno dei tre va mai nei requirements Android.
+      - run: pip install -e ".[dev]"
+      # jsdom non è una dipendenza del repo, ma le suite che montano la casa
+      # intera (`tests/support/home_dom.py`) e il contratto del grafo lo
+      # richiedono, e senza si saltano in verde. `--no-save`: niente
+      # package.json. NODE_PATH (sotto) perché `require` lo trovi da ogni
+      # cartella; tests/webui/test_node_is_available.py fallisce in CI se manca.
+      # Versione esatta, come le dipendenze Python dell'extra `dev`: senza, ogni
+      # giro prendeva l'ultima uscita, e un jsdom nuovo poteva cambiare l'esito
+      # delle suite senza che il repo cambiasse. È quella su cui girano in
+      # locale; vuole node ^24.15 (v. `engines`), e il job usa il 24.
+      - run: npm install --no-save jsdom@30.1.1
       # NON aggiungere `--cov` qui, e non reinstallare `pytest-cov`: la misura
       # perturba ciò che misura. La sandbox di `python_exec` intercetta *tutte*
       # le operazioni su path del processo per la durata di una `execute`,
@@ -109,3 +128,5 @@ jobs:
       # vederlo in locale: `pytest -q --cov=jenny`, sapendo che quelle prove
       # della sandbox falliranno e che il motivo è questo.
       - run: pytest -q
+        env:
+          NODE_PATH: ${{ github.workspace }}/node_modules

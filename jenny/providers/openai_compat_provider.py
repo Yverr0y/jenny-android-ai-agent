@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import ssl
 import time
 import uuid
@@ -25,8 +24,10 @@ from jenny.providers.base import (
     ProviderHTTPError,
     StreamTimeout,
     describe_exc,
+    stream_timeout_response,
     tool_arguments_json_for_replay,
 )
+from jenny.providers.endpoint_budget import read_timeout_s
 from jenny.providers.openai_compat_helpers import (
     _ALLOWABLE_MSG_KEYS,
     _DEFAULT_OPENROUTER_HEADERS,
@@ -53,9 +54,11 @@ from jenny.providers.openai_compat_helpers import (
 )
 from jenny.providers.openai_compat_parsing import ResponseParsingMixin
 from jenny.providers.openai_responses import (
+    ResponsesStreamError,
     consume_sse_with_reasoning,
     convert_messages,
     convert_tools,
+    iter_sse,
     parse_response_output,
 )
 from jenny.providers.opencode import message_keys as opencode_message_keys
@@ -109,9 +112,17 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         self._responses_failures: dict[str, int] = {}
         self._responses_tripped_at: dict[str, float] = {}
 
+    def _timeout(self) -> httpx.Timeout:
+        """Timeout httpx: connect/write/pool stretti, read lunga quanto il
+        budget del primo token (v. ``endpoint_budget.read_timeout_s``)."""
+        return httpx.Timeout(
+            _openai_compat_timeout_s(local=self._is_local),
+            read=read_timeout_s(local=self._is_local),
+        )
+
     def _build_http_client(self) -> None:
         """Create a plain httpx client for the SDK-free path."""
-        timeout_s = _openai_compat_timeout_s(local=self._is_local)
+        timeout_s = self._timeout()
         # Senza CA di provider resta ``True``, che e' esattamente il default di
         # httpx: la fiducia di default non la ridefiniamo noi.
         verify = self._ssl_context or True
@@ -186,7 +197,7 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
             "POST", url,
             headers=self._auth_headers(),
             json=body,
-            timeout=_openai_compat_timeout_s(local=self._is_local),
+            timeout=self._timeout(),
             params=self._extra_query or None,
         )
         response = await self._http_client.send(request, stream=stream)
@@ -400,10 +411,18 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
 
         GPT-5 family and reasoning models (o1/o3/o4) reject temperature
         when reasoning_effort is set to anything other than ``"none"``.
+
+        Un effort impostato spegneva la temperatura per **ogni** modello, e
+        siccome il default è ``"medium"`` non partiva mai: nemmeno per un gpt-4o
+        o un Llama in loopback, che la accettano. Ora la tolgono solo i modelli
+        reasoning OpenAI (sempre, come prima) e quelli col thinking nativo
+        acceso (``_model_thinking_style``: Kimi in thinking la fissa lui).
         """
-        if reasoning_effort and reasoning_effort.lower() != "none":
+        if is_openai_reasoning_model(model_name):
             return False
-        return not is_openai_reasoning_model(model_name)
+        effort = (reasoning_effort or "").lower()
+        thinking_on = bool(effort) and effort not in ("none", "minimal", "minimum")
+        return not (thinking_on and _model_thinking_style(model_name))
 
     def _build_kwargs(
         self,
@@ -640,86 +659,30 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
 
         return body
 
-    @classmethod
-    def _extract_error_metadata(cls, e: Exception) -> dict[str, Any]:
-        response = getattr(e, "response", None)
-        # Gli header stanno sull'eccezione (``ProviderHTTPError``, che se li porta
-        # dietro perché la risposta a quel punto è già chiusa) oppure sulla
-        # risposta appesa dall'SDK. Nell'ordine: l'eccezione vince, è la fonte
-        # più vicina al punto in cui l'errore è stato costruito.
-        headers = getattr(e, "headers", None)
-        if headers is None:
-            headers = getattr(response, "headers", None)
-        payload = (
-            getattr(e, "body", None)
-            or getattr(e, "doc", None)
-            or getattr(response, "text", None)
-        )
-        if payload is None and response is not None:
-            response_json = getattr(response, "json", None)
-            if callable(response_json):
-                try:
-                    payload = response_json()
-                except Exception:
-                    payload = None
-        error_type, error_code = LLMProvider._extract_error_type_code(payload)
-
-        status_code = getattr(e, "status_code", None)
-        if status_code is None and response is not None:
-            status_code = getattr(response, "status_code", None)
-
-        should_retry: bool | None = None
-        if headers is not None:
-            raw = headers.get("x-should-retry")
-            if isinstance(raw, str):
-                lowered = raw.strip().lower()
-                if lowered == "true":
-                    should_retry = True
-                elif lowered == "false":
-                    should_retry = False
-
-        error_kind: str | None = None
-        error_name = e.__class__.__name__.lower()
-        if "timeout" in error_name:
-            error_kind = "timeout"
-        elif "connection" in error_name:
-            error_kind = "connection"
-
-        return {
-            "error_status_code": int(status_code) if status_code is not None else None,
-            "error_kind": error_kind,
-            "error_type": error_type,
-            "error_code": error_code,
-            "error_retry_after_s": cls._extract_retry_after_from_headers(headers),
-            "error_should_retry": should_retry,
-        }
-
     @staticmethod
     def _handle_error(
         e: Exception,
         *,
         partial_content: str | None = None,
     ) -> LLMResponse:
+        # Il corpo si legge **una volta**, con la lettura protetta della base, e
+        # lo stesso valore va ai metadati: prima qui c'era una seconda lettura a
+        # mano, in un altro ordine (``doc`` prima di ``body``).
+        payload = LLMProvider._error_payload(e)
         if isinstance(e, ProviderHTTPError):
             # Il suo messaggio nomina già status, URL e un estratto del corpo, che
             # è più di quanto direbbe il solo corpo: non va riscritto.
             msg = f"Error calling LLM: {describe_exc(e)}"
         else:
-            try:
-                body = (
-                    getattr(e, "doc", None)
-                    or getattr(e, "body", None)
-                    or getattr(getattr(e, "response", None), "text", None)
-                )
-            except Exception:
-                body = None
-            body_text = body if isinstance(body, str) else str(body) if body is not None else ""
+            body_text = (
+                payload if isinstance(payload, str)
+                else str(payload) if payload is not None
+                else ""
+            )
             msg = f"Error: {body_text.strip()[:500]}" if body_text.strip() else f"Error calling LLM: {describe_exc(e)}"
 
-        headers = getattr(e, "headers", None)
-        if headers is None:
-            headers = getattr(getattr(e, "response", None), "headers", None)
-        retry_after = LLMProvider._extract_retry_after_from_headers(headers)
+        metadata = LLMProvider._error_metadata(e, payload=payload)
+        retry_after = metadata["error_retry_after_s"]
         if retry_after is None:
             retry_after = LLMProvider._extract_retry_after(msg)
         return LLMResponse(
@@ -727,7 +690,7 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
             finish_reason="error",
             retry_after=retry_after,
             partial_content=partial_content or None,
-            **OpenAICompatProvider._extract_error_metadata(e),
+            **metadata,
         )
 
     # ------------------------------------------------------------------
@@ -757,37 +720,14 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
     async def _iter_chat_completion_sse(
         response: httpx.Response,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        """Yield parsed Chat Completions SSE events as dicts."""
-        buffer: list[str] = []
+        """Yield parsed Chat Completions SSE events as dicts.
 
-        def _flush() -> dict[str, Any] | None:
-            data_lines = [line[5:].strip() for line in buffer if line.startswith("data:")]
-            buffer.clear()
-            if not data_lines:
-                return None
-            data = "\n".join(data_lines).strip()
-            if not data or data == "[DONE]":
-                return None
-            try:
-                return json.loads(data)
-            except Exception:
-                logger.warning(
-                    "Failed to parse chat completion SSE JSON: {}", data[:200]
-                )
-                return None
-
-        async for line in response.aiter_lines():
-            if line == "":
-                event = _flush()
-                if event is not None:
-                    yield event
-                continue
-            buffer.append(line)
-
-        if buffer:
-            event = _flush()
-            if event is not None:
-                yield event
+        Lo stesso parser della Responses API (``openai_responses.parsing.iter_sse``):
+        erano due copie che differivano solo nel testo del log. Il metodo resta
+        perché i test lo sostituiscono per simulare uno stream che si ferma.
+        """
+        async for event in iter_sse(response):
+            yield event
 
     async def _http_chat_stream(
         self,
@@ -834,6 +774,11 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
                 chunks.append(chunk)
                 if not isinstance(chunk, dict):
                     continue
+                if chunk.get("error"):
+                    # Il gateway ha chiuso la risposta con un errore: quello che
+                    # segue (se segue) non fa parte di nessuna risposta buona.
+                    # ``_parse_chunks`` lo trasforma nell'errore da restituire.
+                    break
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
@@ -896,6 +841,12 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
                     if partial:
                         exc.partial_content = partial
             raise
+        finally:
+            # httpx chiude da sé solo lo stream letto fino in fondo. Su uno
+            # stallo, un'eccezione, un ``/stop`` (cancellazione) o un chunk
+            # d'errore la connessione restava aperta e l'upstream continuava a
+            # generare — e a fatturare — una risposta che nessuno leggeva.
+            await self._release(response)
         return self._parse_chunks(chunks)
 
     async def _http_responses_chat(
@@ -935,11 +886,28 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         )
         body["stream"] = True
         response = await self._http_request("/responses", body, stream=True)
-        content, tool_calls, finish_reason, usage, reasoning_content = await consume_sse_with_reasoning(
-            response,
-            on_content_delta=on_content_delta,
-            on_tool_call_delta=on_tool_call_delta,
-        )
+        # Gli stessi due budget del ramo Chat Completions: senza, uno stream
+        # Responses muto restava appeso fino alla read timeout di httpx.
+        idle_timeout_s = resolve_stream_idle_timeout_s()
+        try:
+            content, tool_calls, finish_reason, usage, reasoning_content = (
+                await consume_sse_with_reasoning(
+                    response,
+                    on_content_delta=on_content_delta,
+                    on_tool_call_delta=on_tool_call_delta,
+                    idle_timeout_s=idle_timeout_s,
+                    first_output_timeout_s=max(
+                        resolve_first_output_timeout_s(local=self._is_local), idle_timeout_s,
+                    ),
+                )
+            )
+        except ResponsesStreamError as failure:
+            # Non è un errore dell'endpoint (niente ripiego su Chat Completions):
+            # è la risposta d'errore già classificata.
+            return failure.response
+        finally:
+            # Come per Chat Completions: chiusa anche se lo stream non finisce.
+            await self._release(response)
         return LLMResponse(
             content=content or None,
             tool_calls=tool_calls,
@@ -1035,17 +1003,7 @@ class OpenAICompatProvider(ResponseParsingMixin, LLMProvider):
         except asyncio.TimeoutError as e:
             waited_s = e.waited_s if isinstance(e, StreamTimeout) else idle_timeout_s
             saw_output = e.saw_output if isinstance(e, StreamTimeout) else True
-            return LLMResponse(
-                content=(
-                    f"Error calling LLM: stream stalled for more than "
-                    f"{waited_s:g} seconds"
-                    if saw_output
-                    else f"Error calling LLM: no output from the model within "
-                    f"{waited_s:g} seconds"
-                ),
-                finish_reason="error",
-                error_kind="timeout",
-            )
+            return stream_timeout_response(waited_s, saw_output)
         except Exception as e:
             return self._handle_error(
                 e, partial_content=getattr(e, "partial_content", None),

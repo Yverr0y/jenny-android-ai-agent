@@ -21,6 +21,11 @@ lot.
 We aim to acknowledge reports within 72 hours. Jenny is maintained by one
 person, so please allow reasonable time for a fix before disclosing.
 
+## Supported versions
+
+Security fixes go into the latest 1.x release only. Releases before 1.0 get none: the update
+check inside the app offers the newest release, and that is the way to get a fix.
+
 ## Trust model
 
 Two sentences that matter more than the rest of this file:
@@ -63,10 +68,13 @@ Filesystem tools (`read_file`, `write_file`, `edit_file`, `list_dir`,
 `apply_patch`) resolve paths through the workspace path resolver, which enforces
 containment under the active workspace when `restrict_to_workspace` is enabled.
 
-Extra roots are capability-specific by design: `extra_read_allowed_dirs` for
-read-only roots, `extra_write_allowed_dirs` only where a write-capable tool is
-intentionally allowed, and exact-file allowlists where only specific files may
-change. Keep `restrict_to_workspace` on unless you have a concrete reason.
+Extra roots are capability-specific by design, and they are not user
+configuration: they are constructor arguments of the filesystem tool classes
+(`extra_read_allowed_dirs` for read-only roots, `extra_write_allowed_dirs` only
+where a write-capable tool is intentionally allowed, and exact-file allowlists
+where only specific files may change), set in code where a tool is built. The
+only user-facing switch is `restrict_to_workspace`: keep it on unless you have a
+concrete reason.
 
 ## Network access (SSRF)
 
@@ -76,11 +84,12 @@ CGNAT, link-local, and cloud metadata endpoints including `169.254.169.254`.
 The only escape hatch is `security.ssrf_whitelist`.
 
 **Jenny Apps use a second, deliberately more permissive policy.** An app's
-`http` action goes through `validate_app_server_target`, which *allows* RFC1918
-and IPv6 ULA on purpose: an app server is a LAN device the user declared and
-approved in the manifest. Loopback, link-local/metadata, `0.0.0.0/8` and CGNAT
-stay blocked, so an app manifest cannot use the proxy as a bridge to the
-gateway's own API, and redirects are never followed.
+`http` action goes through `validate_app_server_target`, which *allows* RFC1918,
+IPv6 ULA **and** CGNAT (`100.64.0.0/10`, the range Tailscale assigns) on purpose:
+an app server is a LAN or tailnet device the user declared and approved in the
+manifest. Loopback, link-local/metadata and `0.0.0.0/8` stay blocked, so an app
+manifest cannot use the proxy as a bridge to the gateway's own API, and
+redirects are never followed.
 
 ## App updates and self-install
 
@@ -95,7 +104,9 @@ outbound connection the user did not switch on, so it belongs in this list.
   the user or the device is transmitted.
 - **What GitHub can infer** is what any HTTP server infers from a request: an IP
   address and a timestamp. A daily request from the same address is a weak
-  signal that the app is installed. `updates.enabled: false` stops it.
+  signal that the app is installed. `updates.enabled: false` stops the periodic
+  check; the **Check now** button in Settings makes a single request when the
+  user presses it, whatever that switch says.
 - **Installing** needs three manifest permissions — `REQUEST_INSTALL_PACKAGES`,
   `UPDATE_PACKAGES_WITHOUT_USER_ACTION`, `REQUEST_DELETE_PACKAGES`. None of them
   bypasses the user: the per-app "Install unknown apps" switch is still yours to
@@ -113,21 +124,27 @@ The SSH tools are in a scope of their own (`remote`) that **no agent loads by
 default**; only the `sysadmin` subagent type asks for it. Host targets go
 through `validate_ssh_target`, a third policy distinct from the two above: it
 allows RFC1918, IPv6 ULA **and** CGNAT (`100.64.0.0/10`), blocking only
-`0.0.0.0/8`, loopback and link-local/metadata. CGNAT is opened here rather than
-through `security.ssrf_whitelist` on purpose — the whitelist is global, so
-widening it for a Tailscale host would also open CGNAT to `web_fetch` and to
-Jenny Apps. What backs the extra room is not that SSH is safer: it is that an
-SSH host is typed by the user in Settings and host-key pinned before any
-connection.
+`0.0.0.0/8`, loopback and link-local/metadata. Jenny Apps' server policy opens
+CGNAT the same way. It is opened in these two policies rather than through
+`security.ssrf_whitelist` on purpose — the whitelist is global, so widening it
+for a Tailscale host would also open CGNAT to `web_fetch` and the other tools
+whose targets the model picks. What backs the extra room is not that SSH is safer: it
+is that an SSH host is typed by the user in Settings and host-key pinned before
+any connection.
 
 ## WebUI
 
 The SPA is served from the gateway to a local WebView. Defenses, in order of
 what they stop:
 
-- **Content-Security-Policy** enforced on `index.html`:
+- **Content-Security-Policy** enforced on the shell documents (`index.html`,
+  `workshop.html` and `onboarding.html`):
   `default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'`,
-  with `connect-src` limited to self plus WebSocket. No inline scripts.
+  plus `style-src 'self' 'unsafe-inline'`, `img-src 'self' data: blob:`,
+  `font-src 'self'`, `connect-src 'self'` (which covers the WebSocket to the
+  same host and port, and nothing else) and `frame-src 'self' http://127.0.0.1:*`
+  (for a Jenny App's external view, served by the local proxy on an ephemeral
+  port). No inline scripts.
 - **Model output is sanitized** with DOMPurify before it reaches `innerHTML`,
   and it **fails safe**: if the sanitizer did not load, the markdown is rendered
   as escaped plain text rather than injected as HTML.
@@ -145,7 +162,8 @@ fully privileged API token.
 A per-install `websocket.token_issue_secret` is generated on first run and
 persisted in `workspace/config.json` (private to the app's UID). The gateway
 binds `127.0.0.1` by default. If you bind `0.0.0.0`, a token issue secret is
-required — the code warns when you do this without one.
+required — the configuration refuses to validate without one, so the gateway
+never starts unauthenticated on all interfaces.
 
 ## Telegram channel
 
@@ -177,9 +195,10 @@ persisted code.
   fields, not to arbitrary conversation text.
 - **Your LLM provider sees your prompts.** That is the one unavoidable outbound
   flow; review your provider's privacy policy. Jenny sends no telemetry of its
-  own. When using OpenRouter, Jenny sends the standard `HTTP-Referer` and
-  `X-OpenRouter-Title` attribution headers, which identify the app (not you) to
-  that provider.
+  own (the update check described above only fetches a public file). When
+  using OpenRouter, Jenny sends the `HTTP-Referer`, `X-OpenRouter-Title` and
+  `X-OpenRouter-Categories` attribution headers, which identify the app (not you)
+  to that provider.
 
 ## Operational advice
 

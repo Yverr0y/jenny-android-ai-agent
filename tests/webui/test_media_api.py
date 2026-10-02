@@ -130,6 +130,89 @@ def test_sign_or_stage_copies_outside_file_into_websocket_channel(
     assert staged_files[0].read_bytes() == b"jpeg-bytes"
 
 
+def test_sign_or_stage_copies_a_file_once_across_renders(
+    tmp_path: Path, media_root: Path
+) -> None:
+    """Ogni render della chat ricopiava l'allegato, disco senza limite.
+
+    La copia ha un nome stabile per percorso + mtime + dimensione: un secondo
+    render trova la copia e firma lo stesso URL.
+    """
+    outside = tmp_path / "attachment.jpg"
+    outside.write_bytes(b"jpeg-bytes")
+    provider = _media_dir(media_root)
+
+    first = sign_or_stage_media_path(outside, secret=_SECRET, media_dir=provider)
+    for _ in range(5):
+        again = sign_or_stage_media_path(outside, secret=_SECRET, media_dir=provider)
+        assert again == first
+
+    assert len(list((media_root / "websocket").iterdir())) == 1
+
+
+def test_sign_or_stage_restages_a_file_that_changed(tmp_path: Path, media_root: Path) -> None:
+    import os
+
+    outside = tmp_path / "attachment.jpg"
+    outside.write_bytes(b"jpeg-bytes")
+    provider = _media_dir(media_root)
+    first = sign_or_stage_media_path(outside, secret=_SECRET, media_dir=provider)
+
+    outside.write_bytes(b"other-jpeg-bytes, longer")
+    st = outside.stat()
+    os.utime(outside, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+    second = sign_or_stage_media_path(outside, secret=_SECRET, media_dir=provider)
+
+    assert second is not None and first is not None
+    assert second["url"] != first["url"]
+    staged = sorted(p.read_bytes() for p in (media_root / "websocket").iterdir())
+    assert b"other-jpeg-bytes, longer" in staged
+
+
+def test_sign_or_stage_keeps_the_staging_dir_within_its_budget(
+    tmp_path: Path, media_root: Path, monkeypatch
+) -> None:
+    """Come ``remote/``: un budget LRU sulla cartella delle copie."""
+    import os
+    import time
+
+    monkeypatch.setattr("jenny.webui.media_api.STAGED_MEDIA_BUDGET_BYTES", 250)
+    provider = _media_dir(media_root)
+    staged_dir = media_root / "websocket"
+    results = []
+    for i in range(5):
+        src = tmp_path / f"f{i}.png"
+        src.write_bytes(bytes([i]) * 100)
+        results.append(sign_or_stage_media_path(src, secret=_SECRET, media_dir=provider))
+        # mtime crescenti e distinti anche su filesystem a grana grossa.
+        for staged in staged_dir.iterdir():
+            if staged.name.endswith(f"-f{i}.png"):
+                t = time.time() - 100 + i
+                os.utime(staged, (t, t))
+
+    assert all(r is not None for r in results)
+    names = sorted(p.name.rsplit("-", 1)[-1] for p in staged_dir.iterdir())
+    total = sum(p.stat().st_size for p in staged_dir.iterdir())
+    assert total <= 250
+    # Le più vecchie se ne vanno, l'ultima copiata resta sempre.
+    assert names == ["f3.png", "f4.png"]
+
+
+def test_sign_or_stage_never_evicts_the_copy_it_just_made(
+    tmp_path: Path, media_root: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("jenny.webui.media_api.STAGED_MEDIA_BUDGET_BYTES", 10)
+    src = tmp_path / "big.png"
+    src.write_bytes(b"x" * 100)
+
+    result = sign_or_stage_media_path(src, secret=_SECRET, media_dir=_media_dir(media_root))
+
+    assert result is not None
+    assert [p.name.rsplit("-", 1)[-1] for p in (media_root / "websocket").iterdir()] == [
+        "big.png"
+    ]
+
+
 def test_sign_or_stage_returns_none_for_missing_file(tmp_path: Path, media_root: Path) -> None:
     missing = tmp_path / "nope.png"
 
@@ -281,7 +364,14 @@ def test_serve_signed_media_svg_gets_extra_csp_header(media_root: Path) -> None:
     response = serve_signed_media(sig, payload, secret=_SECRET, media_dir=_media_dir(media_root))
 
     assert response.status_code == 200
-    assert "sandbox" in response.headers["Content-Security-Policy"]
+    # Il valore esatto, non «contiene sandbox»: un ``script-src *`` o un
+    # ``sandbox allow-scripts`` aggiunti passerebbero un controllo a sottostringa.
+    assert response.headers["Content-Security-Policy"] == (
+        "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox"
+    )
+    assert response.headers.get_all("Content-Security-Policy") == [
+        response.headers["Content-Security-Policy"]
+    ]
 
 
 def _range_request(range_value: str) -> WsRequest:

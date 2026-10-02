@@ -1,15 +1,44 @@
 /** Mobile Chat Controller — full-featured chat with markdown, thinking, tool calls. */
 
 import { wsManager } from './shared/ws-manager.js';
+import { HistoryPager } from './shared/history-pager.js';
+import { describeWireError } from './shared/wire-error.js';
 import { api } from './shared/api-client.js';
 import { copyToClipboard, escapeHtml, showToast } from './shared/utils.js';
 import { sessionManager } from './shared/session-manager.js';
 import { scopeChip } from './shared/scope-chip.js';
+import { botName } from './shared/bot-name.js';
 import { writeSwitch } from './shared/write-switch.js';
 import { ImageHandler } from './shared/image-handler.js';
 import { openImageLightbox } from './shared/image-lightbox.js';
+import {
+  contentLinkHref,
+  contentLinkOf,
+  contentLinkTarget,
+  findContentAnchor,
+  openOutsideWebView,
+} from './shared/content-link.js';
+/* Formule e diagrammi dentro una bolla appena disegnata.
+ *
+ *  Era `renderKaTeX`, e chiamava KaTeX per conto proprio. Il 21/09/2026 le
+ *  librerie sono state cancellate «perche' le usava solo la wiki» — falso:
+ *  questi quattro punti le usavano — e la funzione, che cominciava con «se la
+ *  libreria c'e'», ha smesso di fare qualcosa **senza dirlo**. Adesso il come
+ *  sta in un posto solo (`shared/rich-content.js`), condiviso col lettore delle
+ *  pagine e con la chat di casa: e' l'unica forma in cui una libreria non puo'
+ *  perdere meta' dei suoi lettori senza che nessuno se ne accorga.
+ *
+ *  **Niente `$...$` in riga, qui.** In chat si parla di prezzi, e «costa $5,
+ *  forse $10» diventerebbe un tentativo di matematica. Nelle pagine della wiki,
+ *  dove la skill impone `$f(x)$`, il lettore lo accende. Qui quindi ogni
+ *  chiamata è `renderRich(container)`, senza opzioni: fino al 24/09/2026 lo
+ *  garantiva un involucro, ora `test_chat_rich_has_no_inline_dollar.py`.
+ */
+import { renderRich } from './shared/rich-content.js';
+import { workspacePathIn } from './shared/conversation-list.js';
+import { MARKED_OPTIONS, renderMarkdown as renderSafeMarkdown } from './shared/markdown.js';
 import { i18n } from './shared/i18n.js';
-import { getProviderBrand } from './shared/provider-brand.js';
+import { brandLabel, getProviderBrand } from './shared/provider-brand.js';
 import { confirmDialog, detailDialog } from './shared/dialog.js';
 import { commandsChip } from './shared/commands-chip.js';
 import { isTypeAheadKey } from './shared/type-ahead.js';
@@ -30,6 +59,10 @@ const TOOL_ICONS = {
   end: 'ti-check',
   error: 'ti-x',
 };
+
+/* Quante ancore chiede una pagina all'indietro. La *prima* pagina ne chiede 160
+   e quel numero sta nella sua chiamata: v. il commento in `loadInitialHistory`. */
+const HISTORY_PAGE_SIZE = 120;
 
 /* Icona per kind di attività di un subagent. Tabella e non if/else perché è la
    sola cosa che distingue una riga dall'altra a colpo d'occhio: su un telefono
@@ -70,20 +103,19 @@ function initMarked() {
       highlighted = escapeHtml(text);
     }
     const langLabel = language || 'text';
+    /* Il «Copia» qui e' solo un segnaposto: `<button>` e' fra i tag che il
+       sanificatore toglie (`SANITIZE_CONFIG`), e il bottone vero lo rimette
+       `restoreCopyButtons` dopo. */
     return `<div class="chat-code-block">` +
       `<div class="chat-code-header">` +
         `<span class="chat-code-lang">${langLabel}</span>` +
-        `<button class="chat-code-copy" type="button">${i18n.t('chat.copy')}</button>` +
+        COPY_SLOT +
       `</div>` +
       `<pre><code class="hljs language-${langLabel}">${highlighted}</code></pre>` +
     `</div>`;
   };
 
-  marked.setOptions({
-    renderer,
-    gfm: true,
-    breaks: true,
-  });
+  marked.setOptions({ renderer, ...MARKED_OPTIONS });
 
   window._markedReady = true;
 }
@@ -108,42 +140,27 @@ async function copyCodeFromButton(btn) {
   }, 2000);
 }
 
+// C1: il markdown del modello passa dal sanificatore prima di `innerHTML`, e
+// fallisce chiuso — v. `shared/markdown.js`, lo stesso della casa. Qui c'e' in
+// piu' solo la configurazione di marked (highlight.js, «Copia», a capo).
+// I default di DOMPurify tengono gia' le `class` di highlight.js, le tabelle
+// GFM, <a href> (http/https/relative), <img> e <pre class="mermaid">.
 function renderMarkdown(text) {
   initMarked();
-  if (typeof marked !== 'undefined') {
-    try {
-      // C1: sanitize model-generated HTML before it reaches innerHTML.
-      // DOMPurify defaults already preserve highlight.js `class`, GFM tables,
-      // <a href> (http/https/relative), <img>, and <pre class="mermaid">,
-      // so no ADD_TAGS/ADD_ATTR are required.
-      // Fail SAFE, not open: if the sanitizer vendor failed to load, degrade to
-      // escaped plain text rather than injecting unsanitized HTML.
-      if (typeof DOMPurify === 'undefined') return escapeHtml(text);
-      return DOMPurify.sanitize(marked.parse(text));
-    } catch (e) {
-      console.error('Markdown parse error:', e);
-      return escapeHtml(text);
-    }
-  }
-  return escapeHtml(text);
+  return restoreCopyButtons(renderSafeMarkdown(text));
 }
 
-function renderKaTeX(container) {
-  if (typeof renderMathInElement === 'function') {
-    try {
-      renderMathInElement(container, {
-        delimiters: [
-          { left: '$$', right: '$$', display: true },
-          { left: '$', right: '$', display: false },
-          { left: '\\[', right: '\\]', display: true },
-          { left: '\\(', right: '\\)', display: false },
-        ],
-        throwOnError: false,
-      });
-    } catch (e) {
-      console.warn('KaTeX error:', e);
-    }
-  }
+/* Il segnaposto del «Copia» di un blocco di codice, e la sua sostituzione
+   **dopo** la sanificazione. Il bottone che entra e' una stringa fissa — tipo
+   `button`, nessun attributo che venga dal testo — quindi anche un segnaposto
+   scritto a mano dal modello diventa al piu' un altro «Copia», che non manda
+   niente da nessuna parte. */
+const COPY_SLOT = '<span class="chat-code-copy-slot"></span>';
+
+function restoreCopyButtons(html) {
+  if (!html.includes(COPY_SLOT)) return html;
+  const button = `<button class="chat-code-copy" type="button">${escapeHtml(i18n.t('chat.copy'))}</button>`;
+  return html.split(COPY_SLOT).join(button);
 }
 
 export class ChatController {
@@ -187,9 +204,30 @@ export class ChatController {
     this._goalBanner = null;
     this._goalTimer = null;
 
-    this.historyCursor = null;
-    this.isLoadingHistory = false;
-    this.hasMoreHistory = true;
+    /* Cursore, chiavistello e bottone della pagina precedente stanno nel modulo
+       condiviso con la casa (`shared/history-pager.js`): qui restano gli
+       appigli, cioe' le tre cose che i due gusci fanno in modo diverso — dove si
+       ascolta lo scroll, come si chiede una pagina, come la si disegna.
+       `historyCursor` / `hasMoreHistory` / `isLoadingHistory` restano leggibili
+       col loro nome (v. gli accessori sotto): li legge il resync della
+       riconnessione, e i test li nominano. */
+    /* L'ultimo invio, finché il gateway non ha dimostrato di averlo preso.
+       `null` = non c'è niente da riprendere. */
+    this._pendingSend = null;
+    // La bozza che un testo precompilato ha messo da parte (`prefillComposer`).
+    this._draftAfterSend = null;
+    this._pager = new HistoryPager({
+      // Lo scroller e' il documento, ma l'evento `scroll` arriva a `window`:
+      // qui le due cose non coincidono (v. il getter `_scroller`).
+      scroller: () => this._scroller,
+      listenOn: window,
+      container: () => this.chatArea,
+      pageSize: HISTORY_PAGE_SIZE,
+      begin: () => this._beginHistoryPage(),
+      prepend: (messages) => this._renderThreadMessagesToTop(messages),
+      mount: (node) => this._insertAtTop(node),
+      label: () => i18n.t('chat.loadPrevious'),
+    });
     this._initialHistoryLoaded = false;
     /* Un caricamento iniziale è *in volo*, che non è la stessa cosa di
        `_initialHistoryLoaded` (quello è un latch: resta alzato dopo la fine, e
@@ -200,9 +238,19 @@ export class ChatController {
     this._loadingInitialHistory = false;
 
     this.imageHandler = new ImageHandler();
-    this.imageHandler.onChange = (images) => this._renderAttachPreview(images);
-
-    this._voiceTimerInterval = null;
+    this.imageHandler.onChange = (images) => {
+      this._renderAttachPreview(images);
+      // Un allegato da solo e' gia' un messaggio: il tasto manda lo deve sapere.
+      this._updateSendState();
+    };
+    /* Un allegato che sfora i tetti: un toast e non una riga nel filo, perche'
+       non e' un fatto della conversazione — e' una risposta a quel che stai
+       facendo adesso nel composer, e se ne va da sola come il gesto. Le
+       parole sono le stesse di un rifiuto del gateway: e' la stessa cosa
+       detta un istante prima. */
+    this.imageHandler.onReject = (reason) => {
+      showToast(describeWireError({ reason }, (key) => i18n.t(key)).text, 'error');
+    };
 
     this._autoScroll = true;
     this._userTouching = false;
@@ -254,7 +302,6 @@ export class ChatController {
     this._setupSubagentPanel();
 
     i18n.load(i18n.locale).then(() => this._updatePlaceholders());
-    i18n.onLocaleChange(() => this._updatePlaceholders());
 
     this.setupEventListeners();
     this.setupInfiniteScroll();
@@ -269,9 +316,15 @@ export class ChatController {
     const el = document.createElement('div');
     el.className = 'chat-identity';
     el.innerHTML = '<span class="chat-identity-flower">✿</span>' +
-      '<span class="chat-identity-name">' + i18n.t('chat.jenny') + '</span>' +
+      '<span class="chat-identity-name"></span>' +
       '<span class="chat-identity-status"></span>' +
       '<span class="chat-identity-label"></span>';
+    // Il nome di lei come testo, non nell'HTML: e' scelto da chi la usa.
+    el.querySelector('.chat-identity-name').textContent = botName.get();
+    this._offBotName ||= botName.onChange((name) => {
+      const nameEl = this.identityEl?.querySelector('.chat-identity-name');
+      if (nameEl) nameEl.textContent = name;
+    });
     this.chatArea.insertBefore(el, this.chatArea.firstChild);
     this.identityEl = el;
     this.identityStatus = el.querySelector('.chat-identity-status');
@@ -412,7 +465,9 @@ export class ChatController {
       // quindi quando la bolla arriva qui il click ha un padrone. Senza questo
       // controllo "Apri nell'editor" funzionava ma mostrava anche il toast del
       // link inerte, perché `#workspace` non è un'ancora della conversazione.
-      const link = e.target.closest('a[href]');
+      // `contentLinkOf` e non `closest('a[href]')`: anche `<area href>` e il
+      // `<a xlink:href>` di un `<svg>` sono link.
+      const link = contentLinkOf(e.target);
       if (link && this.chatArea.contains(link)) {
         if (!e.defaultPrevented) this._handleContentLink(e, link);
         return;
@@ -423,9 +478,7 @@ export class ChatController {
       // shell è `script-src 'self'`, niente `onclick` inline.
       const msgAction = e.target.closest('.chat-msg-action');
       if (msgAction && this.chatArea.contains(msgAction)) {
-        const bubble = msgAction.closest('.chat-msg');
-        if (msgAction.classList.contains('chat-msg-copy')) this._copyMessage(bubble);
-        else this._showMessageSheet(bubble);
+        this._copyMessage(msgAction.closest('.chat-msg'));
         return;
       }
       // Tap su un'immagine (media allegato o immagine markdown inline) → lightbox.
@@ -441,17 +494,15 @@ export class ChatController {
         WebView, che è quel che fa già il guscio nativo per i link esterni;
       - tutto il resto — href relativi (che risolvono sull'origine del gateway),
         stessa origine, schemi non navigabili — → inerte, con un avviso, perché
-        aprirlo dentro la WebView significherebbe perdere la SPA. */
+        aprirlo dentro la WebView significherebbe perdere la SPA.
+      La regola vive in `shared/content-link.js` dal 26/09/2026: la casa la
+      applica identica, e una regola scritta due volte diverge. */
   _handleContentLink(e, a) {
     e.preventDefault();
-    const raw = a.getAttribute('href') || '';
-    if (raw.startsWith('#')) { this._scrollToChatAnchor(raw.slice(1)); return; }
-    let url = null;
-    try { url = new URL(raw, window.location.href); } catch (_) { url = null; }
-    const scheme = url?.protocol || '';
-    const isWeb = scheme === 'http:' || scheme === 'https:';
-    if ((isWeb && url.origin !== window.location.origin) || scheme === 'mailto:' || scheme === 'tel:') {
-      this._openOutsideWebView(url.href);
+    const target = contentLinkTarget(contentLinkHref(a), window.location);
+    if (target?.kind === 'hash') { this._scrollToChatAnchor(target.id); return; }
+    if (target?.kind === 'external') {
+      if (!openOutsideWebView(target.href)) showToast(i18n.t('common.linkNotOpenable'), 'error');
       return;
     }
     showToast(i18n.t('common.linkNotOpenable'), 'info');
@@ -459,35 +510,19 @@ export class ChatController {
 
   /** Scroll a un'ancora della conversazione. La ricerca è ristretta alla chat:
       un id qualsiasi della SPA (dock, drawer, dialog) non è un bersaglio
-      legittimo per un link scritto dal modello. */
+      legittimo per un link scritto dal modello. Gli id del contenuto escono
+      dal sanificatore prefissati (`SANITIZE_NAMED_PROPS`): li cerca
+      `findContentAnchor`, che conosce il prefisso. */
   _scrollToChatAnchor(id) {
     if (!id) return;
-    let target = null;
-    try {
-      target = this.chatArea.querySelector(`#${CSS.escape(id)}, [name="${CSS.escape(id)}"]`);
-    } catch (_) { target = null; }
+    const target = findContentAnchor(this.chatArea, id);
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     else showToast(i18n.t('common.linkNotOpenable'), 'info');
   }
 
-  /** Apre un URL fuori dalla WebView. `window.open` qui non apre una finestra:
-      la WebView non supporta le finestre multiple, quindi la richiesta ricade su
-      `shouldOverrideUrlLoading`, che per un'origine non-gateway apre una Chrome
-      Custom Tab (MainActivity#openExternalUrl) e lascia la SPA dov'è. Il bridge
-      JennyNative oggi non espone un metodo per gli URL esterni: se ne verrà
-      aggiunto uno, va provato qui per primo. */
-  _openOutsideWebView(href) {
-    try {
-      window.open(href, '_blank', 'noopener');
-    } catch (err) {
-      console.warn('Could not open external link:', err);
-      showToast(i18n.t('common.linkNotOpenable'), 'error');
-    }
-  }
-
   /** Overlay fullscreen per un'immagine: tap-per-zoom, tap sullo sfondo / Esc per chiudere. */
   _openLightbox(src, alt) {
-    openImageLightbox(src, { alt, closeLabel: i18n.t('chat.close') || 'Close' });
+    openImageLightbox(src, { alt, closeLabel: i18n.t('chat.close') });
   }
 
   /** Renderer condiviso degli allegati media (live + history), per tipo:
@@ -547,11 +582,13 @@ export class ChatController {
    *  sul chip non produceva niente — nessun viewer, nessun errore, nessun
    *  segno che fosse successo qualcosa. Con il bridge presente il fallimento è
    *  un errore da dire, non da sostituire con un'apertura che non avverrà. */
-  _openMediaFile(entry) {
+  async _openMediaFile(entry) {
     const bridge = window.JennyNative;
     if (bridge && typeof bridge.openFile === 'function') {
       try {
-        if (entry.path && bridge.openFile(entry.path)) return;
+        // Asincrono: `openFile` sta sulla porta che solo la SPA raggiunge (v.
+        // `shared/native-bridge.js`) e risponde con una Promise.
+        if (entry.path && await bridge.openFile(entry.path)) return;
       } catch (e) {
         console.warn('Native openFile failed:', e);
       }
@@ -567,9 +604,12 @@ export class ChatController {
   }
 
   _updateSendState() {
-    const hasText = this.input.value.trim().length > 0;
-    this.sendBtn.disabled = !hasText;
-    if (hasText) {
+    /* Testo o allegati, come `sendMessage` e la casa: col solo testo una foto
+       senza didascalia partiva con Invio e non col tocco sul tasto. */
+    const canSend = this.input.value.trim().length > 0
+      || this.imageHandler.getImages().length > 0;
+    this.sendBtn.disabled = !canSend;
+    if (canSend) {
       this.sendBtn.classList.add('enabled');
     } else {
       this.sendBtn.classList.remove('enabled');
@@ -622,13 +662,7 @@ export class ChatController {
   }
 
   setupInfiniteScroll() {
-    window.addEventListener('scroll', () => {
-      if (this._scroller.scrollTop === 0 &&
-          !this.isLoadingHistory &&
-          this.hasMoreHistory) {
-        this.loadMoreHistory();
-      }
-    });
+    this._pager.bindInfiniteScroll();
   }
 
   async _initOnSessionReady() {
@@ -699,8 +733,8 @@ export class ChatController {
     this.chatArea.innerHTML = '';
     this.identityEl = null;
     this._ensureIdentity();
-    this.historyCursor = null;
-    this.hasMoreHistory = true;
+    this._pager.reset();
+    this._pendingSend = null;
     this._initialHistoryLoaded = false;
   }
 
@@ -775,6 +809,9 @@ export class ChatController {
     const generation = sessionManager.switchGeneration;
     const key = sessionManager.currentKey;
     const superseded = () => generation !== sessionManager.switchGeneration;
+    /* Quel che c'e' nella chat **prima** delle attese: tutto quel che compare
+       dopo lo hanno messo i frame vivi (v. sotto, prima del render). */
+    const earlier = new Set(this.chatArea.children || []);
     try {
       if (!key) {
         this.hasMoreHistory = false;
@@ -783,6 +820,10 @@ export class ChatController {
       await api.bootstrap();
       if (superseded()) return;
       this._initRuntimeModelFromBootstrap();
+      // Il 160 è scritto qui e non in una costante del modulo di proposito: il
+      // corpo di questo metodo viene *ritagliato come testo* ed eseguito in node
+      // da tre test, che non si portano dietro le const del file. Un nome qui
+      // diventa un ReferenceError dentro il try, cioè un fallimento muto.
       const { thread, scope } = await sessionManager.loadThread(key, 160);
       if (superseded()) return;
       // Lo scope mostrato sopra il composer deve venire dal backend, non da un
@@ -797,9 +838,21 @@ export class ChatController {
       // in cima a un thread che c'è (`_renderThreadMessages` accoda, non
       // sostituisce).
       this._clearHistoryError();
+      /* La storia va **sopra** quel che e' arrivato vivo durante le attese.
+         Se Jenny sta rispondendo nella
+         conversazione che si apre — un cambio di chat, una riconnessione, un
+         /new — i suoi delta disegnano la bolla nella chat appena svuotata, e la
+         storia accodata dopo le finiva sotto: la risposta in corso in cima e la
+         domanda a cui risponde in fondo. I nodi vivi si staccano, la storia si
+         disegna, e si rimettono in coda: sono gli stessi nodi, quindi i
+         riferimenti dello stream (`_currentContent`, ...) restano validi.
+         L'intestazione di Jenny non e' un nodo vivo anche se nata adesso. */
+      const live = Array.from(this.chatArea.children || [])
+        .filter((node) => !earlier.has(node) && node !== this.identityEl);
+      for (const node of live) node.remove();
       this._renderThreadMessages(thread.messages || []);
-      this.historyCursor = thread.page?.before_cursor || null;
-      this.hasMoreHistory = thread.page?.has_more_before !== false;
+      for (const node of live) this.chatArea.appendChild(node);
+      this._pager.adopt(thread.page);
       this._ensureHistoryReach();
       this.scrollToBottom(true);
     } catch (err) {
@@ -823,52 +876,41 @@ export class ChatController {
     }
   }
 
-  /* Il modo di raggiungere la pagina precedente **quando non si può scorrere**.
+  /* Lo stato della paginazione vive nel modulo condiviso, ma il suo nome qui è
+     pubblico: `isLoadingHistory` lo legge `_resyncThreadAfterReconnect` per non
+     far partire una fetch sopra un'altra, e `historyCursor` / `hasMoreHistory`
+     li scrive il caricamento iniziale. Tre accessori invece di tre campi: i
+     punti di lettura restano quelli di prima, la verità sta in un posto solo. */
+  get historyCursor() { return this._pager.cursor; }
 
-     `setupInfiniteScroll` aspetta un evento `scroll` con `scrollTop === 0`, e un
-     contenitore che non trabocca non ne emette nessuno: la pagina più vecchia
-     esiste, il client sa che esiste (`hasMoreHistory`), e non c'è gesto che
-     possa chiederla. Prima non si notava perché la prima pagina è lunga; da
-     quando `/new` fa ripartire la chat dal separatore è lo **stato normale
-     subito dopo un reset** — tre righe a schermo e la conversazione di prima
-     irraggiungibile, cioè la stessa cancellazione apparente che questo disegno
-     esiste per non fare.
+  set historyCursor(value) { this._pager.cursor = value || null; }
 
-     Un bottone e non un allungamento artificiale del contenuto: la riga dice
-     cosa c'è sopra, e sparisce da sola appena la chat cresce abbastanza da
-     rendere di nuovo possibile il gesto. */
-  _ensureHistoryReach() {
-    const existing = this.chatArea.querySelector('.chat-history-more');
-    const canScroll = this._scroller.scrollHeight > this._scroller.clientHeight + 4;
-    if (!this.hasMoreHistory || canScroll) {
-      existing?.remove();
-      return;
-    }
-    /* Riancorato in cima **anche quando c'è già**, ed è il difetto che i test
-       non vedevano: la pagina chiesta dal tocco entra da
-       `_renderThreadMessagesToTop`, cioè sopra di lui, e il bottone resta in
-       mezzo — «mostra la conversazione precedente» con quella conversazione
-       stampata sotto, che indica la direzione sbagliata. Succede quando la
-       pagina caricata è corta (due `/new` di fila: un separatore e basta), e
-       allora la chat non trabocca ancora e il bottone non se ne va.
-       `insertBefore` sposta un nodo già attaccato invece di duplicarlo, quindi
-       il `disabled` del giro in corso resta suo. */
-    this._insertAtTop(existing || this._createHistoryReachButton());
+  get hasMoreHistory() { return this._pager.hasMore; }
+
+  set hasMoreHistory(value) { this._pager.hasMore = !!value; }
+
+  get isLoadingHistory() { return this._pager.loading; }
+
+  /* Apre una pagina: quale conversazione, e la guardia contro il cambio di
+     conversazione. Una pagina vecchia arrivata dopo un cambio va buttata, non
+     incollata in cima al thread di un'altra chat — è la stessa regola del
+     caricamento iniziale, e questo è il pezzo che il modulo condiviso non può
+     sapere da sé. */
+  _beginHistoryPage() {
+    if (!sessionManager.currentKey) return null;
+    const generation = sessionManager.switchGeneration;
+    const key = sessionManager.currentKey;
+    return {
+      fetch: async (limit, cursor) => {
+        const { thread } = await sessionManager.loadThread(key, limit, cursor);
+        return thread;
+      },
+      stale: () => generation !== sessionManager.switchGeneration,
+    };
   }
 
-  _createHistoryReachButton() {
-    const btn = document.createElement('button');
-    btn.className = 'chat-history-more';
-    btn.type = 'button';
-    btn.textContent = i18n.t('chat.loadPrevious');
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      await this.loadMoreHistory();
-      // `loadMoreHistory` richiama `_ensureHistoryReach`, che toglie questo
-      // nodo quando non serve più; se serve ancora (pagina corta) va riabilitato.
-      btn.disabled = false;
-    });
-    return btn;
+  _ensureHistoryReach() {
+    this._pager.ensureReach();
   }
 
   /* La riga «storia non caricata», al posto della chat vuota che mentiva.
@@ -885,41 +927,6 @@ export class ChatController {
 
   _clearHistoryError() {
     this.chatArea.querySelectorAll('.chat-history-error').forEach((el) => el.remove());
-  }
-
-  async loadMoreHistory() {
-    if (this.isLoadingHistory || !this.hasMoreHistory) return;
-    if (!sessionManager.currentKey) return;
-    // Stessa regola del caricamento iniziale: una pagina vecchia arrivata dopo
-    // un cambio di conversazione va buttata, non incollata in cima al thread di
-    // un'altra chat.
-    const generation = sessionManager.switchGeneration;
-    const key = sessionManager.currentKey;
-    // Senza cursore la thread API restituisce la pagina *più recente*, non
-    // quella precedente: paginare indietro con before=null riporterebbe in cima
-    // i messaggi già a schermo invece di quelli vecchi. Se il server dichiara
-    // has_more_before senza darci un cursore, non c'è nulla da paginare.
-    if (!this.historyCursor) {
-      this.hasMoreHistory = false;
-      return;
-    }
-    this.isLoadingHistory = true;
-    const scrollHeightBefore = this._scroller.scrollHeight;
-    try {
-      const { thread } = await sessionManager.loadThread(key, 120, this.historyCursor);
-      if (generation !== sessionManager.switchGeneration) return;
-      const messages = thread.messages || [];
-      this._renderThreadMessagesToTop(messages);
-      this.historyCursor = thread.page?.before_cursor || null;
-      this.hasMoreHistory = thread.page?.has_more_before !== false;
-      this._ensureHistoryReach();
-      const scrollHeightAfter = this._scroller.scrollHeight;
-      this._scroller.scrollTop = scrollHeightAfter - scrollHeightBefore;
-    } catch (err) {
-      console.error('Failed to load more history:', err);
-    } finally {
-      this.isLoadingHistory = false;
-    }
   }
 
   // Ricostruisce l'array di turni normalizzati dai messaggi persistiti.
@@ -1028,7 +1035,7 @@ export class ChatController {
     const el = document.createElement('div');
     el.className = 'chat-session-boundary';
     const label = document.createElement('span');
-    label.textContent = text || 'New session started.';
+    label.textContent = text || i18n.t('chat.sessionStarted');
     el.appendChild(label);
     if (toTop) {
       this._insertAtTop(el);
@@ -1061,7 +1068,7 @@ export class ChatController {
       const content = node.querySelector('.chat-content');
       if (content) {
         content.innerHTML = renderMarkdown(turn.content.trim());
-        renderKaTeX(content);
+        renderRich(content);
         this._makeFilePathsClickable(content);
       }
       this._setMessageSource(node, turn.content.trim());
@@ -1107,12 +1114,32 @@ export class ChatController {
     return meta;
   }
 
+  /** La riga in coda alla bolla: il pulsante Copia e i secondi del turno.
+   *
+   *  **Una riga sola.** Erano due nodi impilati — i secondi sopra, i pulsanti
+   *  sotto — e in coda a ogni risposta occupavano due righe per due dati che
+   *  stanno in una. Chi la crea non e' uno solo, e nemmeno sempre lo stesso:
+   *  i secondi arrivano col `turn_end`, il Copia quando il testo e' completo,
+   *  e nella cronologia arrivano insieme. Quindi la riga si prende con questa
+   *  funzione, che la crea se manca e in ogni caso **la rimette in fondo** —
+   *  fra le due chiamate la bolla puo' essersi allungata.
+   */
+  _ensureMsgActions(msg) {
+    let row = msg.querySelector(':scope > .chat-msg-actions');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'chat-msg-actions';
+    }
+    msg.appendChild(row);
+    return row;
+  }
+
   _appendLatency(msg, latencyMs) {
     if (!msg || latencyMs == null || msg.querySelector('.chat-meta')) return;
-    const meta = document.createElement('div');
+    const meta = document.createElement('span');
     meta.className = 'chat-meta';
     meta.textContent = (latencyMs / 1000).toFixed(1) + 's';
-    msg.appendChild(meta);
+    this._ensureMsgActions(msg).appendChild(meta);
   }
 
   /* Registra (accumulando) il sorgente di una bolla. Una bolla AI può contenere
@@ -1150,86 +1177,41 @@ export class ChatController {
     return btn;
   }
 
-  /* La riga di azioni in coda alla bolla. Idempotente e sempre ultima: se c'è
-     già la rimette in fondo invece di aggiungerne una seconda, perché nel
-     percorso vivo `_appendLatency` può appendere la meta-row dopo di lei.
+  /* Il pulsante Copia nella riga in coda alla bolla. Idempotente, e **primo**:
+     i secondi possono essere gia' arrivati (`_handleTurnEnd` li posa prima di
+     chiamare qui), e la riga va letta icona-poi-tempo in tutti e due i casi.
+
      Tre chiamanti — `_handleTurnEnd` (vivo), `_flushPersistedTurn` (storico) e
      il blocco `message` di `_handleMessage` (consegna proattiva): con il solo
-     aggancio vivo, riaprire l'app lascerebbe zero pulsanti Copia. */
+     aggancio vivo, riaprire l'app lascerebbe zero pulsanti Copia.
+
+     Sulle bolle utente non compare: sono corte, la selezione nativa riparata
+     basta, e da qui non esce piu' niente d'altro — il `⋯` che le raggiungeva
+     il foglio delle azioni se n'e' andato col foglio. */
   _appendMsgActions(msg) {
     if (!msg) return;
-    const isUser = msg.classList.contains('chat-msg-user');
+    if (msg.classList.contains('chat-msg-user')) return;
     // Un turno di soli tool non ha niente da copiare.
-    if (!isUser && !this._messageText(msg)) return;
-    const existing = msg.querySelector(':scope > .chat-msg-actions');
-    if (existing) { msg.appendChild(existing); return; }
-
-    const row = document.createElement('div');
-    row.className = 'chat-msg-actions';
-    // Sulle bolle utente niente Copia: sono corte e la selezione nativa
-    // riparata basta. Il `⋯` c'è lo stesso, che è come le raggiunge il foglio.
-    if (!isUser) {
-      row.appendChild(this._buildMsgActionButton('chat-msg-copy', 'ti-copy', i18n.t('chat.copy')));
-    }
-    row.appendChild(
-      this._buildMsgActionButton('chat-msg-more', 'ti-dots', i18n.t('chat.messageActions')));
-    msg.appendChild(row);
+    if (!this._messageText(msg)) return;
+    const row = this._ensureMsgActions(msg);
+    if (row.querySelector('.chat-msg-copy')) return;
+    row.insertBefore(
+      this._buildMsgActionButton('chat-msg-copy', 'ti-copy', i18n.t('chat.copy')),
+      row.firstChild);
   }
 
-  /** Il messaggio come lo leggerebbe un umano: niente `**` né `##`. Specchio di
-      `_messageText`, che invece rende il sorgente. */
-  _messagePlain(msg) {
-    if (!msg) return '';
-    const rendered = [...msg.querySelectorAll('.chat-content')]
-      .map((el) => (el.innerText || '').trim())
-      .filter(Boolean)
-      .join('\n\n');
-    return rendered || this._messageText(msg);
-  }
-
-  async _copyMessage(msg, markdown = true) {
-    const text = markdown ? this._messageText(msg) : this._messagePlain(msg);
+  /* Copia il sorgente, non il reso: le recinzioni dei blocchi di codice e il
+     loro linguaggio sono esattamente cio' che serve quando una risposta si
+     incolla altrove. La scelta fra sorgente e testo nudo era del foglio delle
+     azioni, che non c'e' piu': ne resta una, ed e' questa. */
+  async _copyMessage(msg) {
+    const text = this._messageText(msg);
     if (!text) return;
     if (!(await copyToClipboard(text))) {
       showToast(i18n.t('chat.copyFailed'), 'error');
       return;
     }
     showToast(i18n.t('chat.copied'), 'success');
-  }
-
-  /* Foglio delle azioni di un messaggio. Stesso schema di
-     `showAndroidAppSheet`, finestra di grazia sul backdrop compresa: il tap
-     sintetico che segue una pressione lunga non deve richiudere il foglio
-     appena aperto. */
-  _showMessageSheet(msg) {
-    const sheet = document.getElementById('chat-msg-sheet');
-    const actionsEl = document.getElementById('chat-msg-sheet-actions');
-    if (!sheet || !actionsEl || !msg) return;
-
-    const actions = [
-      { icon: 'ti-copy', label: i18n.t('chat.copyPlain'), run: () => this._copyMessage(msg, false) },
-      { icon: 'ti-markdown', label: i18n.t('chat.copyMarkdown'), run: () => this._copyMessage(msg, true) },
-    ];
-    actionsEl.innerHTML = '';
-    const close = () => sheet.close();
-    for (const a of actions) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'oc-sheet-action';
-      btn.innerHTML = `<i class="ti ${a.icon}"></i>`;
-      btn.appendChild(document.createTextNode(a.label));
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        close();
-        a.run();
-      });
-      actionsEl.appendChild(btn);
-    }
-    const cancelBtn = document.getElementById('chat-msg-sheet-cancel');
-    if (cancelBtn) cancelBtn.onclick = close;
-    const openedAt = Date.now();
-    sheet.onclick = (e) => { if (e.target === sheet && Date.now() - openedAt > 400) close(); };
-    sheet.showModal();
   }
 
   _appendFileEdits(msg, edits) {
@@ -1250,9 +1232,17 @@ export class ChatController {
 
   async _openFileInWorkspace(filePath) {
     try {
-      window.mobileApp.switchMode('workspace');
-      await window.mobileApp.controllers.workspace.ready;
-      await window.mobileApp.controllers.workspace.openFile(filePath);
+      /* Serve il controller, non la sua vista: a portare in `workspace` ci
+         pensa `openFile` (via `_enterEditorView`) solo quando c'e' davvero un
+         editor da mostrare — un'immagine apre la lightbox sopra la chat, un
+         binario l'app di sistema. Qui c'era uno `switchMode('workspace')`
+         fatto *prima*: con l'editor ancora chiuso `activate()` rimandava in
+         Memoria da dentro lo stesso `switchMode`, la entry della chat veniva
+         riscritta come Memoria e `AppState` restava su `workspace`. */
+      const workspace = window.mobileApp.ensureController('workspace');
+      if (!workspace) return;  // ensureController ha gia' avvisato l'utente
+      await workspace.ready;
+      await workspace.openFile(filePath);
     } catch (err) {
       console.error('Failed to open file in workspace:', err);
       showToast(i18n.t('chat.couldNotOpen', { path: filePath }), 'error');
@@ -1267,7 +1257,7 @@ export class ChatController {
     badge.className = 'chat-origin-badge';
     const icon = origin === 'telegram' ? 'ti-brand-telegram' : 'ti-arrows-exchange';
     const label = origin.charAt(0).toUpperCase() + origin.slice(1);
-    badge.innerHTML = `<i class="ti ${icon}"></i>${escapeHtml(label)}`;
+    badge.innerHTML = `<i class="ti ${icon}" aria-hidden="true"></i>${escapeHtml(label)}`;
     msg.insertBefore(badge, msg.firstChild);
   }
 
@@ -1281,7 +1271,7 @@ export class ChatController {
       content.textContent = text;
     } else {
       content.innerHTML = renderMarkdown(String(text || ''));
-      renderKaTeX(content);
+      renderRich(content);
       this._makeFilePathsClickable(content);
     }
     msg.appendChild(content);
@@ -1313,7 +1303,26 @@ export class ChatController {
       this.loadInitialHistory();
     }
 
-    this.input.focus();
+    /* `preventScroll`, e non e' un dettaglio.
+     *
+     *  Entrando in chat da uno scorrimento laterale, la vista sta ancora
+     *  **fuori schermo**: `_animateSlideIn` le mette `translateX(100%)` e poi la
+     *  riporta a zero in due decimi di secondo. Finche' e' spostata, la pagina
+     *  e' larga il doppio — e in chat lo scroller **e' il documento**.
+     *
+     *  Mettere a fuoco un campo che sta fuori dallo scrollport fa una cosa
+     *  sola, e la fa bene: il browser **scorre per raggiungerlo**. Di lato.
+     *  Trascinandosi dietro tutto il guscio.
+     *
+     *  Misurato sul banco il 22/09/2026: vista a `translateX(100%)`, larghezza
+     *  del documento da 590 a 1180, `focus()` → `.app` a **x -384**; con
+     *  `preventScroll: true` → **x 0**. Sul telefono si vedeva come una pagina
+     *  schiacciata a sinistra e tagliata, col footer ridotto a una voce sola —
+     *  l'ultima, la sola rimasta dentro il pezzo visibile.
+     *
+     *  Ed e' per questo che il difetto aveva un verso solo: uscendo dalla chat
+     *  nessuno mette a fuoco niente. */
+    this.input.focus({ preventScroll: true });
 
     // I messaggi possono essere arrivati mentre la vista era nascosta (scrollHeight=0 rende
     // scrollToBottom() un no-op); riallinea lo scroll ora che la vista è di nuovo visibile.
@@ -1422,7 +1431,7 @@ export class ChatController {
      *conversazioni*, e prima delle sessioni-progetto non c'era niente da
      distinguere — una chat sola, quindi un filtro assente era un filtro
      inutile. Con i progetti diventa il punto in cui la risposta data in
-     `project:patreon` si dipinge nel thread personale: delta, righe di
+     `project:ricette` si dipinge nel thread personale: delta, righe di
      `file_edit` e `turn_end` compresi, sotto un composer che può perfino
      dichiarare un'altra modalità di scrittura.
 
@@ -1482,6 +1491,10 @@ export class ChatController {
 
   handleMessage(msg) {
     if (!this._belongsToOpenChat(msg)) return;
+    /* La prova che l'ultimo invio è entrato: il gateway sta rispondendo di
+       qualcosa che non è un rifiuto. Da qui in poi quella bolla non è più in
+       sospeso, e un errore che arrivasse dopo è un errore di altro. */
+    if (msg.event !== 'error') this._pendingSend = null;
     if (!this._applyTurnBoundary(msg)) return;
     switch (msg.event) {
       case 'delta':
@@ -1525,7 +1538,7 @@ export class ChatController {
         this._handleSubagentUnwatched(msg);
         break;
       case 'error':
-        this._handleError(msg.detail || msg.reason || 'Unknown error');
+        this._handleError(msg);
         break;
       case 'runtime_model_updated':
         // Campi del payload backend (ws_sender.send_runtime_model_updated):
@@ -1557,19 +1570,23 @@ export class ChatController {
   // senza turn_end (oggi coperto da _resetStreamState su send + turn_end
   // garantito dal backend anche su /stop).
   _handleDelta(text) {
-    this._ensureAiMessage();
-
-    if (!this._currentContent) {
-      const content = document.createElement('div');
-      content.className = 'chat-content';
-      this._currentMsg.appendChild(content);
-      this._currentContent = content;
-      this._deltaBuffer = '';
-    }
-
+    this._openContent();
     this._deltaBuffer += text;
     this._deltaDirty = true;
     this._scheduleFlush();
+  }
+
+  /* Il blocco di testo del segmento in corso, nella bolla del turno: lo apre
+     il primo delta, o — se i delta si sono persi tutti — lo `stream_end` che
+     porta il testo intero (v. `_handleStreamEnd`). */
+  _openContent() {
+    this._ensureAiMessage();
+    if (this._currentContent) return;
+    const content = document.createElement('div');
+    content.className = 'chat-content';
+    this._currentMsg.appendChild(content);
+    this._currentContent = content;
+    this._deltaBuffer = '';
   }
 
   /* Programma un flush coalizzato del rendering per il prossimo frame.
@@ -1617,7 +1634,7 @@ export class ChatController {
 
     const header = document.createElement('div');
     header.className = 'chat-thinking-header';
-    header.innerHTML = '<i class="ti ti-brain"></i><span class="chat-thinking-label">' + i18n.t('chat.showThinking') + '</span><i class="ti ti-chevron-down chat-thinking-chevron"></i>';
+    header.innerHTML = '<i class="ti ti-brain" aria-hidden="true"></i><span class="chat-thinking-label">' + i18n.t('chat.showThinking') + '</span><i class="ti ti-chevron-down chat-thinking-chevron"></i>';
     thinking.appendChild(header);
 
     const body = document.createElement('div');
@@ -1631,6 +1648,7 @@ export class ChatController {
     if (!msg || !text) return;
     const { thinking, header, body } = this._buildThinkingBlock(collapsed);
     body.innerHTML = renderMarkdown(text);
+    renderRich(body);
 
     header.addEventListener('click', () => {
       thinking.classList.toggle('collapsed');
@@ -1786,6 +1804,12 @@ export class ChatController {
       this._renderReasoningBody();
       this._reasoningDirty = false;
     }
+    /* Adesso il segmento e' chiuso, quindi formule e diagrammi si possono
+       disegnare: `_renderReasoningBody` gira a ogni frame mentre il testo
+       arriva, e li' una formula e' a meta'. Il ragionamento e' una piega che si
+       apre per guardarci dentro — ed e' il posto dove una formula serve di
+       piu', non di meno. */
+    if (this._currentThinking) renderRich(this._currentThinking);
     this._setThinkingLive(this._currentThinking, false);
     /* Il buffer NON si azzera. `reasoning_end` chiude un *segmento*, non il
        ragionamento del turno: il modello ne apre uno nuovo ogni volta che
@@ -1812,9 +1836,16 @@ export class ChatController {
     // `$$...$$` fino a un riavvio) e niente path cliccabili. Il buffer locale
     // è la stessa cosa, quindi fa da fallback.
     const finalText = fullText || this._deltaBuffer;
+    /* Un segmento che ha perso **tutti** i suoi delta (il bus li scarta sotto
+       backpressure, e allora il gateway rimanda il testo intero nello
+       `stream_end`) non ha un blocco aperto: senza
+       aprirlo qui, la risposta dal vivo non si vedeva affatto. Solo col testo
+       del frame: un segmento di soli tool chiude senza testo, e non deve
+       lasciare una bolla vuota. */
+    if (!this._currentContent && fullText) this._openContent();
     if (this._currentContent && finalText) {
       this._currentContent.innerHTML = renderMarkdown(finalText);
-      renderKaTeX(this._currentContent);
+      renderRich(this._currentContent);
       this._makeFilePathsClickable(this._currentContent);
       this._setMessageSource(this._currentMsg, finalText);
     }
@@ -1942,7 +1973,7 @@ export class ChatController {
       content.className = 'chat-content';
       this._currentMsg.appendChild(content);
       content.innerHTML = renderMarkdown(msg.text);
-      renderKaTeX(content);
+      renderRich(content);
       this._makeFilePathsClickable(content);
       this._setMessageSource(this._currentMsg, msg.text);
       /* Una consegna proattiva può non avere un `turn_end` dietro: la riga di
@@ -2162,7 +2193,10 @@ export class ChatController {
       item.innerHTML = `<i class="ti ti-file-code"></i><span class="chat-file-edit-name">${escapeHtml(path)}</span>${diffHtml}`;
       item.addEventListener('click', async (e) => {
         e.stopPropagation();
-        await this._openFileInWorkspace(path);
+        // Relativo al quaderno, in un quaderno: l'editor apre dalla radice.
+        await this._openFileInWorkspace(
+          workspacePathIn(sessionManager.currentKey, path, scopeChip.projectsDir),
+        );
       });
       body.appendChild(item);
     }
@@ -2176,7 +2210,7 @@ export class ChatController {
       if (!this._goalBanner) {
         this._goalBanner = document.createElement('div');
         this._goalBanner.className = 'chat-goal-banner';
-        this._goalBanner.innerHTML = `<i class="ti ti-loader-2"></i><span>${i18n.t('chat.agentRunning')}</span><span class="chat-goal-timer"></span>`;
+        this._goalBanner.innerHTML = `<i class="ti ti-loader-2" aria-hidden="true"></i><span>${i18n.t('chat.agentRunning')}</span><span class="chat-goal-timer"></span>`;
         this.chatArea.appendChild(this._goalBanner);
       }
       if (this._goalTimer) clearInterval(this._goalTimer);
@@ -2258,7 +2292,6 @@ export class ChatController {
       e.preventDefault();
       this._openSubagentDetail(row.dataset.taskId);
     });
-    i18n.onLocaleChange(() => this._renderSubagents(this._subagentSnapshot));
     // A vista nascosta non c'è nulla da invecchiare: il poll si spegne e riparte
     // con una lettura immediata al ritorno in foreground (v. _syncSubagentPolling).
     document.addEventListener('visibilitychange', () => {
@@ -2808,7 +2841,7 @@ export class ChatController {
       `</div>` +
       `<div class="sa-stream-list" id="sa-stream-list" aria-live="polite"></div>` +
       `<button class="sa-stream-jump" id="sa-stream-jump" type="button" hidden>` +
-        `<i class="ti ti-arrow-down"></i>${t('jump')}</button>` +
+        `<i class="ti ti-arrow-down" aria-hidden="true"></i>${t('jump')}</button>` +
     `</div>`;
   }
 
@@ -3327,15 +3360,54 @@ export class ChatController {
     }
   }
 
-  _handleError(detail) {
-    const el = document.createElement('div');
-    el.className = 'chat-error';
-    el.textContent = i18n.t('chat.error') + ': ' + detail;
-    this.chatArea.appendChild(el);
-    this._autoScroll = true;
-    this.scrollToBottom(true);
+  /* Un rifiuto del gateway. Le parole e la famiglia le decide il modulo
+     condiviso con la casa (`shared/wire-error.js`); qui si decide **dove va a
+     finire**, che è la parte che i due gusci fanno uguale.
 
+     Prima questa riga diceva `Errore: image_rejected`: il nome che quel rifiuto
+     ha nel codice sorgente, mostrato a chi stava mandando una foto. E il motivo
+     vero — `decode`, `size`, `too_many_files` — stava nel frame e veniva
+     scartato, perché `detail || reason` non guarda mai il secondo. */
+  _handleError(frame) {
+    const { text, blocksSend } = describeWireError(frame, (key) => i18n.t(key));
+    // Riprendere il messaggio azzera già lo stream — è un turno che non è mai
+    // cominciato — quindi qui si azzera solo quando non si è ripreso niente.
+    if (!blocksSend || !this._takeBackPendingSend()) this._resetStreamState();
+    this._showChatError(text);
+  }
+
+  /* Il messaggio rifiutato torna indietro: la bolla se ne va e il testo torna
+     nel campo, così puoi correggere invece di riscrivere.
+
+     **Gli allegati no**, ed è voluto: l'allegato *è* la cosa che è stata
+     rifiutata, e rimetterlo lì inviterebbe a rimandare lo stesso file che
+     fallirà di nuovo. Il server rifiuta il lotto intero senza dire quale file
+     fosse, quindi non c'è nemmeno modo di restituire solo i buoni.
+
+     Torna `false` quando non c'è niente da riprendere (il rifiuto è arrivato
+     tardi, o dopo un ricaricamento): in quel caso resta la sola riga. */
+  _takeBackPendingSend() {
+    const pending = this._pendingSend;
+    this._pendingSend = null;
+    if (!pending?.node?.isConnected) return false;
+    pending.node.remove();
+    /* Se nel frattempo hai già scritto altro, quello vince: non si sovrascrive
+       mai il campo con del testo vecchio.
+
+       Un campo che contiene **solo la bozza** tornata con l'invio non conta
+       come «scritto altro»: e' `sendMessage` che ce l'ha rimessa, appena
+       partito un testo precompilato (`prefillComposer`). Senza questo caso un
+       rifiuto lasciava la bozza e perdeva il testo rifiutato. Il testo torna
+       nel campo e la bozza torna da parte, per il prossimo invio riuscito. */
+    const onlyDraft = pending.draft != null && this.input.value === pending.draft;
+    if ((!this.input.value.trim() || onlyDraft) && pending.text) {
+      if (onlyDraft && !this._draftAfterSend) this._draftAfterSend = pending.draft;
+      this.input.value = pending.text;
+      this._updateSendState();
+      this._updateActions();
+    }
     this._resetStreamState();
+    return true;
   }
 
   _renderAttachPreview(items) {
@@ -3347,9 +3419,11 @@ export class ChatController {
     }
     preview.style.display = 'flex';
     // Immagini → thumbnail; qualsiasi altro file → chip con icona e nome.
+    // `kind`, il secchio di `ImageHandler`: c'era `item.isImage`, un campo che
+    // l'handler non scrive piu' da `2e42db88`, e ogni foto era un chip «file».
     preview.innerHTML = items.map((item, i) => {
       const remove = `<button class="attach-remove" data-idx="${i}"><i class="ti ti-x"></i></button>`;
-      if (item.isImage) {
+      if (item.kind === 'image') {
         return `<div class="attach-thumb" data-idx="${i}">
             <img src="${item.data_url}" alt="${escapeHtml(item.name)}">${remove}
           </div>`;
@@ -3382,18 +3456,36 @@ export class ChatController {
       return;
     }
     if (spec.arg_hint) {
-      this.input.value = `${command} `;
-      this.input.focus();
-      // Il cursore in fondo: `focus()` da solo lo mette dove capita quando il
-      // valore è stato appena riscritto.
-      const end = this.input.value.length;
-      this.input.setSelectionRange(end, end);
-      this._autoResize();
-      this._updateSendState();
-      this._updateActions();
+      this.prefillComposer(`${command} `);
       return;
     }
     this._sendCommandLine(command);
+  }
+
+  /* Scrive *text* nel composer **senza mandarlo** e senza buttare quel che
+   * c'era.
+   *
+   * Lo usano i comandi con un argomento (`/model `) e «Chiedi a Jenny» delle
+   * altre viste (`MobileApp.sendInChat`). Prima riscrivevano il campo, e la
+   * domanda che stavi scrivendo spariva. Qui la bozza si mette da parte e
+   * torna nel campo appena il testo precompilato parte (v. `sendMessage`):
+   * la stessa promessa di `_sendCommandLine`, che la mantiene per i comandi
+   * che partono subito. Una bozza gia' da parte non si sovrascrive con un
+   * precompilato che nessuno ha mandato. */
+  prefillComposer(text) {
+    const draft = this.input.value;
+    if (draft.trim() && !this._draftAfterSend && draft.trim() !== String(text).trim()) {
+      this._draftAfterSend = draft;
+    }
+    this.input.value = text;
+    this.input.focus();
+    // Il cursore in fondo: `focus()` da solo lo mette dove capita quando il
+    // valore è stato appena riscritto.
+    const end = this.input.value.length;
+    this.input.setSelectionRange?.(end, end);
+    this._autoResize();
+    this._updateSendState();
+    this._updateActions();
   }
 
   /* Una riga di comando, senza portarsi via quel che c'era nel composer.
@@ -3449,6 +3541,23 @@ export class ChatController {
 
     sessionManager.ensureAttached();
 
+    // Ogni invio apre una bolla AI nuova: se il turn_end del turno precedente
+    // è andato perso (turno cancellato, riconnessione), la risposta non deve
+    // accodarsi alla bolla vecchia.
+    this._resetStreamState();
+
+    /* **Prima si spedisce, poi si disegna.** Prima era il contrario: la bolla
+       compariva, il campo si svuotava, gli allegati si buttavano, e *poi* si
+       provava a mandare — così un socket chiuso ti lasciava una bolla che
+       sembrava partita, un errore di fianco, e il testo perduto. Una bolla che
+       compare e un messaggio che non arriva sono la stessa cosa vista da due
+       parti, e la prima fa credere alla seconda. */
+    if (!wsManager.sendToChat(sessionManager.currentKey, text, media)) {
+      this._showChatError(i18n.t('chat.wsError'));
+      this.input.focus();
+      return;
+    }
+
     const msg = document.createElement('div');
     msg.className = 'chat-msg chat-msg-user';
     const content = document.createElement('div');
@@ -3468,21 +3577,34 @@ export class ChatController {
     if (attachments) this.imageHandler.clear();
     this.input.value = '';
     this.input.style.height = 'auto';
+    /* La bozza messa da parte da `prefillComposer` torna adesso: il testo
+       precompilato e' partito. Non sulla strada dei comandi, che rimette gia'
+       la sua (`_sendCommandLine`) e la scriverebbe sopra. */
+    let draft = null;
+    if (attachments && this._draftAfterSend) {
+      draft = this._draftAfterSend;
+      this.input.value = draft;
+      this._draftAfterSend = null;
+      this._autoResize();
+    }
     this._updateSendState();
     this._updateActions();
     this.input.focus();
 
-    // Ogni invio apre una bolla AI nuova: se il turn_end del turno precedente
-    // è andato perso (turno cancellato, riconnessione), la risposta non deve
-    // accodarsi alla bolla vecchia.
-    this._resetStreamState();
+    /* Partito non vuol dire entrato: il gateway può ancora rifiutarlo (un
+       allegato che non riesce ad aprire). Finché non arriva niente che dimostri
+       il contrario, questa bolla è "in sospeso" — ed è così che un rifiuto sa
+       *quale* bolla togliere, senza bisogno di un identificativo sul filo. */
+    this._pendingSend = { node: msg, text, draft };
+  }
 
-    if (!wsManager.sendToChat(sessionManager.currentKey, text, media)) {
-      const el = document.createElement('div');
-      el.className = 'chat-error';
-      el.textContent = i18n.t('chat.wsError');
-      this.chatArea.appendChild(el);
-    }
+  _showChatError(text) {
+    const el = document.createElement('div');
+    el.className = 'chat-error';
+    el.textContent = text;
+    this.chatArea.appendChild(el);
+    this._autoScroll = true;
+    this.scrollToBottom(true);
   }
 
   /* Lo scroller della chat è il **documento**, non `.chat-area`
@@ -3490,7 +3612,7 @@ export class ChatController {
      di selezione Chromium ri-deriva l'estremo fermo con un hit-test che
      ignora solo il ritaglio del viewport, mai quello di uno scroller interno;
      con la chat in un `div` scrollabile, l'estremo uscito di vista finiva sul
-     composer e la selezione si prendeva tutto (v. .agent/chat-selection-root-plan.md).
+     composer e la selezione si prendeva tutto.
      Ogni lettura e scrittura di scroll passa da qui: un solo punto da cambiare. */
   get _scroller() {
     return document.scrollingElement || document.documentElement;
@@ -3545,7 +3667,7 @@ export class ChatController {
 
     previewEl = document.createElement('div');
     previewEl.className = 'file-preview';
-    previewEl.innerHTML = `<div class="file-preview-header"><i class="ti ti-loader-2 spin"></i> ${i18n.t('common.loading')}</div>`;
+    previewEl.innerHTML = `<div class="file-preview-header"><i class="ti ti-loader-2 spin" aria-hidden="true"></i> ${i18n.t('common.loading')}</div>`;
     container.appendChild(previewEl);
 
     try {
@@ -3582,7 +3704,7 @@ export class ChatController {
         </div>
         <div class="file-preview-content"><div class="file-preview-code">${numberedLines}</div></div>
         <div class="file-preview-actions">
-          <a class="file-preview-action" href="#workspace" data-path="${escapeHtml(filePath)}"><i class="ti ti-external-link"></i> ${i18n.t('chat.openInEditor')}</a>
+          <a class="file-preview-action" href="#workspace" data-path="${escapeHtml(filePath)}"><i class="ti ti-external-link" aria-hidden="true"></i> ${i18n.t('chat.openInEditor')}</a>
         </div>
       `;
 
@@ -3592,9 +3714,13 @@ export class ChatController {
 
       const editorLink = previewEl.querySelector('.file-preview-action');
       if (editorLink) {
+        /* L'editor apre dalla radice del workspace, mentre `filePath` e' com'e'
+           scritto in chat: in un quaderno relativo al progetto, e spesso alla
+           sua `wiki/`. Il server risolve e rimanda il percorso dal workspace. */
+        const openPath = data.workspace_path || filePath;
         editorLink.addEventListener('click', async (e) => {
           e.preventDefault();
-          await this._openFileInWorkspace(filePath);
+          await this._openFileInWorkspace(openPath);
         });
       }
     } catch (err) {
@@ -3621,14 +3747,18 @@ export class ChatController {
         if (match.index > lastIdx) {
           frag.appendChild(document.createTextNode(text.slice(lastIdx, match.index)));
         }
+        // Il percorso si fissa qui: `match` e' la variabile del `while`, e al
+        // momento del clic vale gia' `null` (fine del ciclo). Leggerla dal
+        // gestore rompeva ogni link con un TypeError.
+        const path = match[1];
         const link = document.createElement('a');
         link.className = 'chat-file-path-link';
-        link.textContent = match[1];
+        link.textContent = path;
         link.href = '#';
         link.addEventListener('click', (e) => {
           e.preventDefault();
           const msgEl = link.closest('.chat-msg');
-          if (msgEl) this._renderFilePreview(match[1], msgEl);
+          if (msgEl) this._renderFilePreview(path, msgEl);
         });
         frag.appendChild(link);
         lastIdx = match.index + match[0].length;
@@ -3639,8 +3769,6 @@ export class ChatController {
       node.parentNode.replaceChild(frag, node);
     }
   }
-
-  handleAction(action) {}
 
   _initSessionInfo() {
     this._ensureIdentity();
@@ -3660,12 +3788,15 @@ export class ChatController {
     const popover = document.createElement('div');
     popover.className = 'session-info-popover';
 
-    const channel = 'websocket';
-    const sessionId = 'default';
+    /* La conversazione aperta, com'e' davvero: la chiave del gateway e il suo
+       spazio (`websocket` per la personale, `project` per un quaderno). Erano
+       «default» e «websocket» scritti fissi, anche dentro un quaderno. */
+    const sessionId = sessionManager.currentKey || sessionManager.personalKey;
+    const channel = sessionId.includes(':') ? sessionId.slice(0, sessionId.indexOf(':')) : sessionId;
 
     const brand = model ? getProviderBrand(model.provider) : null;
     const modelLabel = model
-      ? `${brand?.label || model.provider || i18n.t('chat.unknown')} / ${model.model || '—'}`
+      ? `${brandLabel(brand, (k) => i18n.t(k)) || model.provider || i18n.t('chat.unknown')} / ${model.model || '—'}`
       : '—';
     const modelColor = brand?.color || 'var(--text-faint)';
 
@@ -3680,7 +3811,7 @@ export class ChatController {
 
     popover.innerHTML = `
       <div class="session-info-header">
-        <span><i class="ti ti-info-circle"></i> ${i18n.t('session.info')}</span>
+        <span><i class="ti ti-info-circle" aria-hidden="true"></i> ${i18n.t('session.info')}</span>
         <button class="session-info-close"><i class="ti ti-x"></i></button>
       </div>
       <div class="session-info-section">
@@ -3718,7 +3849,7 @@ export class ChatController {
           <span class="session-info-label">${i18n.t('session.status')}</span>
           <span class="session-info-value" id="si-status-value">
             ${isRunning
-              ? `<span style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-loader-2 spin"></i> ${i18n.t('session.running')} <span class="session-info-timer" id="si-timer"></span></span>`
+              ? `<span style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-loader-2 spin" aria-hidden="true"></i> ${i18n.t('session.running')} <span class="session-info-timer" id="si-timer"></span></span>`
               : `<span style="color:var(--text-faint)">${i18n.t('session.idle')}</span>`}
           </span>
         </div>
@@ -3782,7 +3913,7 @@ export class ChatController {
     if (!el || !this._runtimeModel) return;
     const { provider, model } = this._runtimeModel;
     const brand = getProviderBrand(provider);
-    el.textContent = `${brand.label || provider || i18n.t('chat.unknown')} / ${model || '—'}`;
+    el.textContent = `${brandLabel(brand, (k) => i18n.t(k)) || provider || i18n.t('chat.unknown')} / ${model || '—'}`;
     el.style.color = brand.color;
   }
 

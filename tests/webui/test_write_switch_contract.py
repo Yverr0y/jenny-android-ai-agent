@@ -1,6 +1,6 @@
 """L'interruttore scrittura / sola lettura, dal lato del client.
 
-Passo **4.5** di ``roadmap/progetti-passi.md``.
+Passo **4.5** del piano dei progetti.
 
 Risponde alla seconda metà della stessa domanda del chip — *cosa farà quel che
 sto per mandare* — e per questo sta nella stessa riga: un messaggio partito
@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+
+from support import css_levels
 
 UI = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui"
 ASSETS = UI / "assets"
@@ -120,7 +122,7 @@ def test_the_preference_is_per_conversation() -> None:
 
 def test_the_switch_sits_in_the_chip_row() -> None:
     """Nel popover Info sessione c'era già, e non contava come «si vede»."""
-    html = (UI / "index.html").read_text(encoding="utf-8")
+    html = (UI / "workshop.html").read_text(encoding="utf-8")
     row = re.search(r'<div class="compose-scope">(.*?)</div>\s*<div id="input-row"',
                     html, re.S)
     assert row, "riga .compose-scope non trovata"
@@ -161,23 +163,33 @@ def test_reduced_motion_covers_the_switch_too() -> None:
     """L'interruttore è nato dopo il blocco `prefers-reduced-motion`, e c'era rimasto fuori.
 
     Ha la stessa transizione del chip e lo stesso ``scale(0.98)`` al tocco. La
-    transizione la spegne comunque la regola ``*`` in fondo al file
+    transizione la spegne comunque la regola ``*`` della sezione «Reduced Motion»
     (``transition-duration: 0.01ms !important``); il ``transform`` di uno stato
     ``:active`` **no** — non è né un'animazione né una durata — quindi il
     rimpicciolimento al tocco era l'unica cosa che restava, ed è la parte che
     quella preferenza chiede di togliere.
     """
     css = (ASSETS / "mobile-style.css").read_text(encoding="utf-8")
-    blocks = re.findall(
-        r"@media \(prefers-reduced-motion: reduce\) \{(.*?)^\}", css, re.S | re.M
-    )
-    assert blocks, "blocco prefers-reduced-motion non trovato"
-    covered = "\n".join(blocks)
-    assert re.search(r"\.write-switch:active \{[^}]*transform:\s*none", covered), (
+    # Dal 25/09/2026 il rimpicciolimento lo spegne per tutti un blocco solo, in
+    # fondo al foglio, che raggruppa i selettori: si leggono le regole intere
+    # (v. anche `test_reduced_motion_contract.py`).
+    off = {
+        " ".join(s.split())
+        for selectors, body, ctx in css_levels.rules(css)
+        if any("prefers-reduced-motion: reduce" in at for at in ctx)
+        and "transform: none" in body
+        for s in selectors.split(",")
+    }
+    assert off, "blocco prefers-reduced-motion non trovato"
+    assert ".write-switch:active" in off, (
         "il tocco rimpicciolisce l'interruttore anche a movimento ridotto"
     )
-    # Il fratello nella stessa riga resta coperto: erano nello stesso blocco.
-    assert re.search(r"\.scope-chip:active \{[^}]*transform:\s*none", covered)
+    # I fratelli nella stessa riga restano coperti. Il chip dei comandi ne era
+    # rimasto fuori come l'interruttore prima di lui (pulizia 3.10).
+    assert ".scope-chip:active" in off
+    assert ".commands-chip:active" in off, (
+        "il tocco rimpicciolisce il chip dei comandi anche a movimento ridotto"
+    )
 
 
 def test_the_placeholder_shortens_a_long_project_name() -> None:

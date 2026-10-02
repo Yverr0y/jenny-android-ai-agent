@@ -10,7 +10,6 @@ Also houses shared HTTP utility functions used by both this module and
 from __future__ import annotations
 
 import datetime
-import json
 import mimetypes
 import re
 import time
@@ -63,7 +62,15 @@ from jenny.channels.http_utils import (
     safe_host_header as _safe_host_header,
 )
 from jenny.config.paths import get_workspace_path
-from jenny.session.keys import UNIFIED_SESSION_KEY, is_project_session_key
+from jenny.security.workspace_policy import is_path_within
+from jenny.session.keys import (
+    PROJECT_SESSION_PREFIX,
+    UNIFIED_SESSION_KEY,
+    is_project_session_key,
+    is_valid_project_name,
+    webui_chat_id,
+    webui_transcript_key,
+)
 from jenny.session.webui_turns import websocket_turn_wall_started_at
 from jenny.webui.android_apps_api import (
     launch_android_app,
@@ -72,10 +79,6 @@ from jenny.webui.android_apps_api import (
     webui_android_apps_payload,
 )
 from jenny.webui.file_preview import WebUIFilePreviewError, file_preview_payload
-from jenny.webui.hidden_android_apps import (
-    read_hidden_android_apps,
-    write_hidden_android_apps,
-)
 from jenny.webui.media_gateway import WebUIMediaGateway
 from jenny.webui.transcript import build_webui_thread_response
 from jenny.webui.workspaces import WebUIWorkspaceController
@@ -89,13 +92,59 @@ if TYPE_CHECKING:
 
 def _decode_api_key(raw_key: str) -> str | None:
     key = unquote(raw_key)
-    _api_key_re = re.compile(r"^[A-Za-z0-9_:.-]{1,128}$")
+    _api_key_re = re.compile(r"\A[A-Za-z0-9_:.-]{1,128}\Z")
     if _api_key_re.match(key) is None:
         return None
     return key
 
 
-_ANDROID_PACKAGE_RE = re.compile(r"^[A-Za-z0-9_.]{1,255}$")
+_ANDROID_PACKAGE_RE = re.compile(r"\A[A-Za-z0-9_.]{1,255}\Z")
+
+# I documenti-guscio della WebUI: le pagine che *ospitano* una SPA, non i suoi
+# asset. Le interfacce sono due — la casa (``index.html``, cioe' l'ingresso: e'
+# quel che il guscio nativo carica) e l'officina (``workshop.html``) — piu' il
+# primo avvio (``onboarding.html``), a cui rimandano entrambe finche' non c'e' un
+# provider. Tutto cio' che vale a livello di pagina (oggi la CSP) deve valere per
+# ciascuno.
+#
+# Il perche' di un insieme invece del confronto con un nome solo: la CSP era
+# legata alla stringa ``index.html``, quindi un secondo guscio sarebbe nato
+# senza policy e se la sarebbe presa addosso tutta insieme il giorno in cui i
+# due file si scambiano il nome — cioe' alla fine, cioe' nel momento in cui una
+# violazione costa di piu' e si spiega di meno.
+_SHELL_DOCUMENTS = frozenset({"index.html", "workshop.html", "onboarding.html"})
+
+
+def _is_foreign_navigation(headers: Any) -> bool:
+    """Una navigazione verso la WebUI partita da un documento che non e' il gateway?
+
+    Il caso che la motiva e' la **vista esterna** di una Jenny App: un iframe con
+    ``allow-scripts allow-same-origin`` sull'origine del proxy
+    (``127.0.0.1:<porta effimera>``). All'apertura e' un'altra origine e la
+    same-origin policy la tiene fuori dalla SPA. Ma i flag di sandbox restano
+    all'iframe, non al documento: se la pagina remota (o un suo redirect, che il
+    proxy passa al browser) porta l'iframe su ``http://127.0.0.1:18790/...``,
+    quel documento gira **con l'origine del gateway e con allow-same-origin** —
+    cioe' con ``parent.document``, lo storage e il token della SPA. Serve che li'
+    ci sia HTML che esegua qualcosa di pilotabile (un file fuori manifest in
+    ``workspace/ui/``, che i tool dell'agente sanno scrivere, e' servito dal
+    disco): e' una catena, ma chiuderla costa una riga.
+
+    Fetch Metadata dice chi ha avviato la navigazione. ``none`` e' il guscio
+    nativo (``loadUrl``), ``same-origin`` la SPA stessa (casa ↔ officina); una
+    pagina su un'altra porta di loopback e' ``same-site``, un'origine opaca
+    ``cross-site``. Senza l'header (client che non lo manda) non si decide
+    niente: la regola aggiunge un rifiuto, non toglie un accesso che c'era.
+    """
+    get = getattr(headers, "get", None)
+    if get is None:
+        return False
+    mode = (get("Sec-Fetch-Mode") or "").strip().lower()
+    site = (get("Sec-Fetch-Site") or "").strip().lower()
+    if mode != "navigate" or not site:
+        return False
+    return site not in {"same-origin", "none"}
+
 
 def _default_model_name_from_config() -> str | None:
     try:
@@ -177,7 +226,6 @@ class GatewayHTTPHandler:
         get_subagent_manager: Callable[[], Any | None] | None = None,
         get_cron_service: Callable[[], Any | None] | None = None,
         log: Any = logger,
-        onboarding_event: Any | None = None,
         on_settings_changed: Callable[[], None] | None = None,
         on_telegram_changed: Callable[[], None] | None = None,
         on_jobs_changed: Callable[[str], None] | None = None,
@@ -212,8 +260,6 @@ class GatewayHTTPHandler:
             parse_query=_parse_query,
             json_response=_http_json_response,
             error_response=_http_error,
-            session_manager=session_manager,
-            onboarding_event=onboarding_event,
             on_settings_changed=on_settings_changed,
             on_telegram_changed=on_telegram_changed,
             on_jobs_changed=on_jobs_changed,
@@ -253,6 +299,8 @@ class GatewayHTTPHandler:
             check_api_token=self.check_api_secret,
             get_workspace_root=lambda: self._get_workspace_root(),
             log=self._log,
+            check_app_token=self.check_app_secret,
+            get_secret=lambda: self.config.token_issue_secret.strip(),
         )
 
         from jenny.webui.backup_routes import BackupRoutes
@@ -262,6 +310,13 @@ class GatewayHTTPHandler:
         self.backup_routes = BackupRoutes(
             check_api_token=self.check_api_secret,
             get_backup_manager=self._get_backup_manager,
+            log=self._log,
+        )
+
+        from jenny.webui.home_routes import HomeRoutes
+
+        self.home_routes = HomeRoutes(
+            check_api_token=self.check_api_secret,
             log=self._log,
         )
 
@@ -310,6 +365,14 @@ class GatewayHTTPHandler:
         from jenny.channels.http_utils import check_api_secret as _check
 
         return _check(request.headers, request.path, self.config.token_issue_secret.strip())
+
+    def check_app_secret(self, request: WsRequest, slug: str) -> bool:
+        """Il segreto, **o** il token della Jenny App *slug*: solo per le sue route."""
+        from jenny.channels.http_utils import check_app_secret as _check
+
+        return _check(
+            request.headers, request.path, self.config.token_issue_secret.strip(), slug
+        )
 
     # -- Main dispatch ------------------------------------------------------
 
@@ -366,6 +429,10 @@ class GatewayHTTPHandler:
 
         # Static SPA serving
         if self.static_dist_path is not None:
+            # Solo il gateway e il guscio nativo navigano fin qui: v.
+            # _is_foreign_navigation (la vista esterna che si porta sulla SPA).
+            if _is_foreign_navigation(request.headers):
+                return _http_error(403, "Forbidden")
             response = self._serve_static(got)
             if response is not None:
                 return response
@@ -421,8 +488,6 @@ class GatewayHTTPHandler:
             }
         )
 
-
-
     def _bootstrap_ws_url(self, request: Any) -> str:
         headers = getattr(request, "headers", {}) or {}
         host = _safe_host_header(_case_insensitive_header(headers, "Host"))
@@ -474,7 +539,11 @@ class GatewayHTTPHandler:
                 return _http_error(400, "invalid limit")
         before = _query_first(query, "before")
         data = build_webui_thread_response(
-            decoded_key,
+            # La trascrizione sta sotto ``websocket:<chat_id>``, anche per un
+            # progetto che il client chiede come ``project:<nome>``: v.
+            # ``webui_transcript_key``. La sessione invece si legge con
+            # ``core_key``, qui sopra.
+            webui_transcript_key(decoded_key),
             augment_user_media=self.media.augment_transcript_media,
             augment_assistant_media=self.media.augment_transcript_media,
             augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
@@ -485,13 +554,22 @@ class GatewayHTTPHandler:
             limit=limit,
             before=before,
             # Un progetto appena creato non ha ancora scambiato un messaggio, e
-            # la sua chat deve aprirsi lo stesso: vuota, non con un 404.
-            allow_empty=is_project_session_key(core_key),
+            # la sua chat deve aprirsi lo stesso: vuota, non con un 404. Vale
+            # anche per la conversazione personale su un workspace nuovo: senza
+            # file di sessione il client, al primo avvio, direbbe di non
+            # riuscire a leggerla. Solo la conversazione unica: le chiavi
+            # ``websocket:<altro>`` legacy restano un 404 se non hanno niente.
+            allow_empty=is_project_session_key(core_key) or core_key == UNIFIED_SESSION_KEY,
         )
         if data is None:
             return _http_error(404, "webui thread not found")
+        # Il client non legge ``sessionKey``, ma la risposta resta indirizzata con
+        # la chiave che ha chiesto.
+        data["sessionKey"] = decoded_key
         data["workspace_scope"] = scope.payload()
-        started_at = websocket_turn_wall_started_at("default")
+        # Il turno in corso e' della conversazione aperta: per un quaderno il
+        # ``chat_id`` e' ``project:<nome>``, non ``default``.
+        started_at = websocket_turn_wall_started_at(webui_chat_id(decoded_key))
         if started_at is not None:
             data["run_started_at"] = started_at
         return _http_json_response(data)
@@ -510,6 +588,7 @@ class GatewayHTTPHandler:
             payload = file_preview_payload(
                 path,
                 scope=self.workspaces.scope_for_session_key(core_key),
+                workspace_root=get_workspace_path(),
             )
         except WebUIFilePreviewError as e:
             return _http_error(e.status, e.message)
@@ -553,10 +632,6 @@ class GatewayHTTPHandler:
             return await self._handle_webui_android_app_info(request, m.group(1))
         if got == "/api/webui/commands":
             return self._handle_webui_commands(request)
-        if got == "/api/webui/hidden-apps":
-            return self._handle_webui_hidden_apps(request)
-        if got == "/api/webui/hidden-apps/update":
-            return self._handle_webui_hidden_apps_update(request)
         if got == "/api/client-log":
             return self._handle_client_log(request)
         apps_response = await self.apps_routes.dispatch(request, got)
@@ -566,6 +641,10 @@ class GatewayHTTPHandler:
         backup_response = await self.backup_routes.dispatch(request, got)
         if backup_response is not None:
             return backup_response
+
+        home_response = await self.home_routes.dispatch(request, got)
+        if home_response is not None:
+            return home_response
 
         # Stato della programmazione (delegato a CronRoutes)
         cron_response = await self.cron_routes.dispatch(request, got)
@@ -698,35 +777,6 @@ class GatewayHTTPHandler:
             {"commands": [spec.as_dict() for spec in visible_specs(session_key)]}
         )
 
-    def _handle_webui_hidden_apps(self, request: WsRequest) -> Response:
-        if not self.check_api_secret(request):
-            return _http_error(401, "Unauthorized")
-        return _http_json_response(read_hidden_android_apps())
-
-    def _handle_webui_hidden_apps_update(self, request: WsRequest) -> Response:
-        if not self.check_api_secret(request):
-            return _http_error(401, "Unauthorized")
-        query = _parse_query(request.path)
-        raw_state = _query_first(query, "state")
-        if raw_state is None:
-            return _http_error(400, "missing state")
-        try:
-            decoded = json.loads(raw_state)
-        except json.JSONDecodeError:
-            return _http_error(400, "state must be JSON")
-        if not isinstance(decoded, dict):
-            return _http_error(400, "state must be an object")
-        try:
-            state = write_hidden_android_apps(decoded)
-        except ValueError as e:
-            return _http_error(400, str(e))
-        except OSError:
-            self._log.exception("failed to write hidden android apps state")
-            return _http_error(500, "failed to write hidden apps state")
-        return _http_json_response(state)
-
-    # -- Wiki routes --------------------------------------------------------
-
     def _get_workspace_root(self) -> Path:
         """Get workspace root directory."""
         from jenny.config.paths import get_workspace_path
@@ -761,19 +811,23 @@ class GatewayHTTPHandler:
 
     def _serve_static(self, request_path: str) -> Response | None:
         assert self.static_dist_path is not None
-        rel = request_path.lstrip("/")
-        if not rel:
-            rel = "index.html"
+        # Forma canonica prima di tutto: senza segmenti vuoti né ``.``. Il
+        # filesystem legge ``assets//x.js`` e ``assets/./x.js`` come
+        # ``assets/x.js``, il confronto col manifest no: con il path grezzo la
+        # copia su disco (scrivibile) di un asset attivo veniva servita al posto
+        # dei byte canonici. Lo stesso ``rel`` serve poi anche il disco.
+        segments = [s for s in request_path.split("/") if s not in ("", ".")]
+        if ".." in segments:
+            return _http_error(403, "Forbidden")
         # Strip html-mobile/ prefix — JS imports use /html-mobile/assets/...
         # but files live at templates/ui/assets/...
-        if rel.startswith("html-mobile/"):
-            rel = rel[len("html-mobile/"):]
-        if ".." in rel.split("/") or rel.startswith("/"):
-            return _http_error(403, "Forbidden")
-        candidate = (self.static_dist_path / rel).resolve()
-        try:
-            candidate.relative_to(self.static_dist_path)
-        except ValueError:
+        if segments[:1] == ["html-mobile"]:
+            segments = segments[1:]
+        rel = "/".join(segments) or "index.html"
+        # Il percorso grezzo: lo risolve ``is_path_within``, e un loop di symlink
+        # (``RuntimeError`` su Python 3.11) e' un 403 invece di un'eccezione.
+        candidate = self.static_dist_path / rel
+        if not is_path_within(candidate, self.static_dist_path):
             return _http_error(403, "Forbidden")
         served_rel = rel
         if not candidate.is_file():
@@ -812,16 +866,23 @@ class GatewayHTTPHandler:
         ]
         # M1 (migliorie/webui.md): defense-in-depth CSP for the SPA shell,
         # ENFORCING dal 18 lug 2026 dopo smoke test pulito (era Report-Only).
-        # Applied only to index.html (the document that hosts the SPA); the
-        # individual assets don't need a page-level policy. The inline
+        # Applied only to the shell documents (the pages that host a SPA — v.
+        # _SHELL_DOCUMENTS); the individual assets don't need a page-level policy. The inline
         # <script> blocks were already extracted to assets/bootstrap.js so
         # script-src 'self' holds.
-        if candidate.name == "index.html":
+        if candidate.name in _SHELL_DOCUMENTS:
             extra_headers.append((
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-                "font-src 'self'; connect-src 'self' ws: wss:; "
+                "font-src 'self'; "
+                # Solo 'self': in CSP3 ``'self'`` copre anche ws:/wss: verso lo
+                # stesso host:porta (misurato in Chromium 152: la WS dello
+                # stesso host si apre, un'altra porta di 127.0.0.1 e
+                # ``localhost`` sono bloccate). La shell apre solo quella
+                # (``ws-manager.js::_makeUrl`` usa ``location.host``); i vecchi
+                # ``ws: wss:`` aprivano un canale verso qualunque host.
+                "connect-src 'self'; "
                 # La vista esterna di una Jenny App e' servita dal proxy su
                 # loopback (``apps/proxy.py``) su una porta EFFIMERA, quindi e'
                 # un'altra origine e non e' 'self'. Senza questa direttiva
@@ -838,7 +899,9 @@ class GatewayHTTPHandler:
                 # del telefono non sono un canale di esfiltrazione — sono sulla
                 # stessa macchina su cui gia' gira. Le direttive che contano
                 # contro quello scenario (``script-src``, ``connect-src``,
-                # ``object-src``, ``base-uri``) restano intatte.
+                # ``object-src``, ``base-uri``) restano chiuse su 'self' o
+                # 'none': ``connect-src`` lo e' dal 26/09/2026, prima concedeva
+                # ``ws: wss:`` verso ogni host e questo commento lo taceva.
                 "frame-src 'self' http://127.0.0.1:*; "
                 "object-src 'none'; base-uri 'none'",
             ))
@@ -861,4 +924,11 @@ def _is_webui_readable_session_key(key: str) -> bool:
     ``websocket:``. Con le sessioni-progetto quella forma avrebbe risposto **404
     a ogni progetto**, cioe' la chat di un progetto non si sarebbe potuta aprire.
     """
-    return key.startswith("websocket:") or is_project_session_key(key)
+    if key.startswith("websocket:"):
+        return True
+    # Un progetto e' tale solo se il suo nome lo e': ``project:..`` passava
+    # dal solo prefisso e arrivava al session manager e alla trascrizione come
+    # un quaderno, con un nome che e' un percorso.
+    if is_project_session_key(key):
+        return is_valid_project_name(key[len(PROJECT_SESSION_PREFIX):])
+    return False

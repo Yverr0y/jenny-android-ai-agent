@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from support.aio import drain_nowait
 
 from jenny.agent.subagent import (
     MAX_AUTO_ATTEMPTS,
@@ -59,10 +60,7 @@ def _manager(tmp_path: Path, **kw) -> SubagentManager:
 
 
 def _drain(bus: MessageBus) -> list:
-    out = []
-    while not bus.outbound.empty():
-        out.append(bus.outbound.get_nowait())
-    return out
+    return drain_nowait(bus.outbound)
 
 
 def _record(mgr: SubagentManager, **kw) -> SubagentRecord:
@@ -429,13 +427,13 @@ async def test_publishing_failure_never_kills_the_subagent(tmp_path: Path) -> No
 # è lavoro interno tanto quanto il turno che lo ha lanciato: annunciarlo in chat
 # è la stessa violazione della risposta finale, vista da un'altra uscita.
 # Misurato sul dispositivo: un ciclo heartbeat silenzioso lasciava comunque il
-# chip "What it actually did waterbot-umidita-check" nella conversazione.
+# chip "What it actually did raincheck-pioggia-check" nella conversazione.
 
 
 def _spec_for(session_key: str, *, channel: str = "websocket") -> SubagentSpec:
     return SubagentSpec(
-        task="controlla l'umidità",
-        label="waterbot-umidita-check",
+        task="controlla la pioggia",
+        label="raincheck-pioggia-check",
         agent_type="sysadmin",
         origin_channel=channel,
         origin_chat_id="default",
@@ -474,7 +472,7 @@ def test_an_internal_origin_publishes_no_transition_hint(tmp_path: Path) -> None
     silenzioso non appartiene alla conversazione."""
     mgr = _manager(tmp_path)
 
-    mgr._publish_transition(_spec_for("heartbeat"), "done", "waterbot-umidita-check")
+    mgr._publish_transition(_spec_for("heartbeat"), "done", "raincheck-pioggia-check")
 
     assert _drain(mgr.bus) == []
 

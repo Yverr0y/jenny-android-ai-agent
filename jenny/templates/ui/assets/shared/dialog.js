@@ -40,6 +40,72 @@ function closeThenResolve(dialog, resolve, value) {
   dialog.close();
 }
 
+/** Il markup dei tre modali.
+ *
+ *  **Sta qui e non nel documento** perché i documenti sono due: l'officina e la
+ *  casa. Finché a usarli era un guscio solo, viverci dentro andava bene; dal
+ *  momento in cui anche la casa crea un quaderno — due prompt, una conferma e a
+ *  volte un dettaglio a tre uscite — la seconda copia sarebbe stata una seconda
+ *  cosa da tenere allineata per disegnare la stessa finestra.
+ *
+ *  Gli `id` restano quelli: sono l'interfaccia che le tre funzioni qui sotto
+ *  cercano, e un modulo che monta il proprio markup e poi lo ritrova per `id`
+ *  non è più involuto di uno che se lo tiene in una variabile — è però
+ *  compatibile con chi quegli `id` li conosce già (il pannello subagent, i
+ *  fogli di stile, i banchi).
+ *
+ *  I `data-i18n` servono al giro di traduzioni dell'officina, che cammina sul
+ *  documento: per questo il montaggio è **all'import** e non alla prima
+ *  apertura — un nodo che compare dopo quel giro resterebbe nella lingua
+ *  sbagliata fino al cambio di lingua successivo.
+ */
+const MARKUP = `
+<dialog class="oc-dialog" id="oc-confirm-dialog">
+  <div class="oc-dialog-inner">
+    <p class="oc-dialog-message" id="oc-confirm-message"></p>
+    <div class="oc-dialog-buttons">
+      <button class="oc-btn oc-btn-cancel" id="oc-confirm-cancel" data-i18n="dialog.cancel">Cancel</button>
+      <button class="oc-btn oc-btn-confirm" id="oc-confirm-ok" data-i18n="dialog.confirm">Confirm</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="oc-dialog" id="oc-prompt-dialog">
+  <div class="oc-dialog-inner">
+    <p class="oc-dialog-message" id="oc-prompt-message"></p>
+    <input type="text" class="oc-dialog-input" id="oc-prompt-input" />
+    <p class="oc-dialog-hint" id="oc-prompt-hint" hidden></p>
+    <p class="oc-dialog-error" id="oc-prompt-error" role="alert" hidden></p>
+    <div class="oc-dialog-buttons">
+      <button class="oc-btn oc-btn-cancel" id="oc-prompt-cancel" data-i18n="dialog.cancel">Cancel</button>
+      <button class="oc-btn oc-btn-confirm" id="oc-prompt-ok" data-i18n="dialog.confirm">Confirm</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="oc-sheet oc-detail" id="oc-detail-dialog">
+  <div class="oc-sheet-inner oc-detail-inner">
+    <div class="oc-detail-head">
+      <h2 class="oc-detail-title" id="oc-detail-title"></h2>
+      <button class="oc-detail-close" id="oc-detail-close" type="button" aria-label="Close" data-i18n-aria="common.close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="oc-detail-body" id="oc-detail-body"></div>
+    <div class="oc-dialog-buttons oc-detail-actions" id="oc-detail-actions"></div>
+  </div>
+</dialog>`;
+
+/* Una volta sola, e solo se non c'è già: un secondo import non deve duplicare
+   nulla, e un documento che se li porta da sé (ce ne fosse uno) vince. */
+function mountDialogs() {
+  if (typeof document === 'undefined' || !document.body) return;
+  if (document.getElementById('oc-confirm-dialog')) return;
+  const host = document.createElement('div');
+  host.innerHTML = MARKUP;
+  while (host.firstElementChild) document.body.appendChild(host.firstElementChild);
+}
+
+mountDialogs();
+
 export function confirmDialog(message, okText, cancelText) {
   okText = okText || i18n.t('dialog.confirm');
   cancelText = cancelText || i18n.t('dialog.cancel');
@@ -155,8 +221,17 @@ export function detailDialog({ title = '', bodyHtml = '', actions = [] } = {}) {
   });
 }
 
-/** Prompt con input testuale. Risolve con la stringa inserita, o null se annullato. */
-export function promptDialog(message, { placeholder = '', initial = '', okText, cancelText } = {}) {
+/** Prompt con input testuale. Risolve con la stringa inserita, o null se annullato.
+ *
+ *  `hint` e' una riga sotto il campo, per dire la regola **prima** che la si
+ *  sbagli. `validate(value)` torna `null` se il valore va bene, altrimenti il
+ *  testo dell'errore: il dialog allora resta aperto, col testo scritto e
+ *  l'errore sotto, e Conferma riprova. Senza, un nome sbagliato chiudeva tutto
+ *  con un toast e quel che avevi scritto era perso (collaudo del 27/09/2026).
+ *  Chi non passa `validate` ha il comportamento di sempre. */
+export function promptDialog(message, {
+  placeholder = '', initial = '', okText, cancelText, hint = '', validate = null,
+} = {}) {
   okText = okText || i18n.t('dialog.confirm');
   cancelText = cancelText || i18n.t('dialog.cancel');
   const dialog = document.getElementById('oc-prompt-dialog');
@@ -169,11 +244,25 @@ export function promptDialog(message, { placeholder = '', initial = '', okText, 
   const cancelBtn = document.getElementById('oc-prompt-cancel');
   if (!msgEl || !inputEl || !okBtn || !cancelBtn) return Promise.resolve(null);
 
+  const hintEl = document.getElementById('oc-prompt-hint');
+  const errorEl = document.getElementById('oc-prompt-error');
+
   msgEl.textContent = message;
   inputEl.placeholder = placeholder;
   inputEl.value = initial;
   okBtn.textContent = okText;
   cancelBtn.textContent = cancelText;
+  if (hintEl) {
+    hintEl.textContent = hint;
+    hintEl.hidden = !hint;
+  }
+  const showError = (text) => {
+    if (!errorEl) return;
+    errorEl.textContent = text || '';
+    errorEl.hidden = !text;
+    inputEl.setAttribute('aria-invalid', text ? 'true' : 'false');
+  };
+  showError('');
 
   return new Promise((resolve) => {
     let settled = false;
@@ -183,18 +272,30 @@ export function promptDialog(message, { placeholder = '', initial = '', okText, 
       okBtn.removeEventListener('click', onOk);
       cancelBtn.removeEventListener('click', onCancel);
       inputEl.removeEventListener('keydown', onKey);
+      inputEl.removeEventListener('input', onInput);
       dialog.removeEventListener('close', onClose);
       dialog.removeEventListener('cancel', onCancel);
       closeThenResolve(dialog, resolve, val);
     };
-    const onOk = () => cleanup(inputEl.value);
+    const onOk = () => {
+      const problem = typeof validate === 'function' ? validate(inputEl.value) : null;
+      if (problem) {
+        showError(problem);
+        inputEl.focus();
+        return;
+      }
+      cleanup(inputEl.value);
+    };
     const onCancel = () => cleanup(null);
     const onClose = () => cleanup(null);
     const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); onOk(); } };
+    // L'errore e' di quel che c'era scritto: correggendo, sparisce.
+    const onInput = () => showError('');
 
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
     inputEl.addEventListener('keydown', onKey);
+    inputEl.addEventListener('input', onInput);
     dialog.addEventListener('close', onClose);
     dialog.addEventListener('cancel', onCancel);
 

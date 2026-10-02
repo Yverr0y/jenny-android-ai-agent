@@ -1,6 +1,6 @@
 """I progetti non si archiviano per inattività — e la lunghezza li raggiunge.
 
-Passo **8** di ``roadmap/progetti-passi.md``.
+Passo **8** del piano dei progetti.
 
 Fino al passo 8 i progetti erano salvi **per accidente**: ``check_expired`` aveva
 ``UNIFIED_SESSION_KEY`` cablato dentro, quindi guardava una sessione sola e le
@@ -32,8 +32,7 @@ ha in più della sua cartella.
 
 **E una quarta metà, dall'08/09/2026: sulla stessa sessione scaduta passa ora un
 secondo lavoro, che non è questo.** ``_harvest_project_diary`` legge i messaggi
-nuovi, li riassume nella coda del diario e **non toglie un messaggio** (v.
-``.agent/project-memory-plan.md``). Il recinto qui descritto non lo riguarda: non
+nuovi, li riassume nella coda del diario e **non toglie un messaggio**. Il recinto qui descritto non lo riguarda: non
 difende la sessione dall'essere *letta*, difende i suoi messaggi dall'essere
 *buttati*. Perciò i test di pianificazione qui sotto non chiedono più «non è
 stato schedulato niente» — che confonderebbe i due lavori e farebbe fallire il
@@ -56,7 +55,7 @@ from jenny.agent.gardener import GardenerStore
 from jenny.agent.gardener_state import GardenerState, write_state
 from jenny.session.manager import SessionManager
 
-PROJECT = "project:patreon"
+PROJECT = "project:palestra"
 PERSONAL = "unified:default"
 
 
@@ -80,7 +79,7 @@ def autocompact(tmp_path: Path) -> AutoCompact:
     )
 
 
-def _project_folder(autocompact: AutoCompact, name: str = "patreon") -> Path:
+def _project_folder(autocompact: AutoCompact, name: str = "palestra") -> Path:
     """La cartella del progetto, dedotta come la deduce il codice.
 
     ``SessionManager.workspace`` è la radice del workspace, quindi il progetto
@@ -92,7 +91,7 @@ def _project_folder(autocompact: AutoCompact, name: str = "patreon") -> Path:
     return folder
 
 
-def _promoted(autocompact: AutoCompact, name: str = "patreon") -> Path:
+def _promoted(autocompact: AutoCompact, name: str = "palestra") -> Path:
     """Un progetto con almeno una pagina e nessuna riga di diario da leggere."""
     folder = _project_folder(autocompact, name)
     (folder / "wiki" / "canone.md").write_text(
@@ -101,7 +100,7 @@ def _promoted(autocompact: AutoCompact, name: str = "patreon") -> Path:
     return folder
 
 
-def _unread_journal(autocompact: AutoCompact, name: str = "patreon") -> Path:
+def _unread_journal(autocompact: AutoCompact, name: str = "palestra") -> Path:
     """Un progetto con una voce di diario che il giardiniere non ha ancora letto."""
     folder = _promoted(autocompact, name)
     journal = folder / "raw" / "journal"
@@ -214,9 +213,9 @@ def test_length_based_compaction_runs_for_every_session_including_projects() -> 
     # Nessun ramo sulla chiave fra le due: la finestra è corta apposta, ed è dove
     # un filtro verrebbe aggiunto.
     window = src[start:call]
-    for sospetto in ("is_project_session_key", "project:", "session_kind"):
-        assert sospetto not in window, (
-            f"la compattazione per lunghezza è diventata condizionale ({sospetto}): "
+    for suspect in ("is_project_session_key", "project:", "session_kind"):
+        assert suspect not in window, (
+            f"la compattazione per lunghezza è diventata condizionale ({suspect}): "
             "i progetti non hanno più niente che li contenga"
         )
 
@@ -296,12 +295,12 @@ def test_the_transcript_files_are_not_mistaken_for_sessions(
     tiene tale.
 
     **Si nega la forma, non una chiave.** La prima stesura negava esattamente
-    ``"websocket:project:patreon"`` — e con il glob allargato il transcript entra
-    come ``websocket:project_patreon``, che è una chiave *diversa*: l'asserzione
+    ``"websocket:project:palestra"`` — e con il glob allargato il transcript entra
+    come ``websocket:project_palestra``, che è una chiave *diversa*: l'asserzione
     passava e la mutazione sopravviveva. Quel che va escluso è qualunque
     candidato che non sia una sessione-progetto.
     """
-    _stale(switched_on, "websocket:project:patreon")
+    _stale(switched_on, "websocket:project:palestra")
     _stale(switched_on, PROJECT)
 
     candidates = switched_on._idle_candidates()
@@ -534,7 +533,7 @@ def test_the_shape_measured_on_the_device_is_the_shape_that_defers(
     (folder / "raw" / "journal").mkdir(parents=True)
 
     # Il cancello (a) da solo direbbe si': e' il punto della misura.
-    store = GardenerStore.for_project(switched_on.sessions.workspace, "patreon")
+    store = GardenerStore.for_project(switched_on.sessions.workspace, "palestra")
     assert store is not None
     assert store.read_delta().is_empty is True
 
@@ -561,7 +560,7 @@ def test_a_missing_project_folder_defers_instead_of_compacting(
         switched_on.check_expired(scheduled.append)
 
     assert scheduled == []
-    assert "no project folder at wikis/patreon" in "\n".join(lines)
+    assert "no project folder at wikis/palestra" in "\n".join(lines)
 
 
 def test_the_projects_subdir_is_configurable_and_not_hardcoded(tmp_path: Path) -> None:
@@ -579,7 +578,7 @@ def test_the_projects_subdir_is_configurable_and_not_hardcoded(tmp_path: Path) -
         compact_projects=True,
         projects_subdir="progetti",
     )
-    folder = tmp_path / "progetti" / "patreon"
+    folder = tmp_path / "progetti" / "palestra"
     (folder / "wiki").mkdir(parents=True)
     (folder / "wiki" / "canone.md").write_text("# Canone\n", encoding="utf-8")
 

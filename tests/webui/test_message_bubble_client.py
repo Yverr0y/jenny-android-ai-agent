@@ -13,7 +13,7 @@ sequenza vera dal transcript WebUI, tutta sotto lo stesso `turn_id`
 
     seq 1-2   reasoning_delta / reasoning_end
     seq 3     stream_end        (stream …:0 — iterazione di soli tool, zero delta)
-    seq 4     message           "ciao papi 😏 sono le 20:00 — ora di mollare tutto…"
+    seq 4     message           "ciao boss 😏 sono le 20:00 — ora di mollare tutto…"
     seq 5     message           text vuoto + tool_events del tool `message`
     seq 6-28  delta             "L'ho chiamato. Ora aspetto la sua risposta…"
     seq 29-30 stream_end, turn_end
@@ -30,23 +30,21 @@ testo si perde — e c'è un doppio minimo di `document`/`requestAnimationFrame`
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 # I metodi veri sotto misura: il rendering di un testo completo, quello di un testo
 # che cresce, e la chiusura di segmento che i due condividono.
 _METHODS = (
     "_ensureAiMessage",
+    "_openContent",
     "_handleDelta",
     "_handleMessage",
     "_handleStreamEnd",
@@ -100,7 +98,12 @@ function runFrames() {
 const selectionInside = () => false;
 
 const renderMarkdown = (text) => text;
-const renderKaTeX = () => {};
+/* Formule e diagrammi: il banco guarda le bolle, non il loro contenuto ricco.
+   **E questo finto e' il motivo per cui un difetto e' passato**: quando le
+   librerie sono state cancellate lasciando i chiamanti, qui dentro non e'
+   cambiato niente. Che il chiamante e la libreria stiano insieme lo misura
+   `test_vendor_contract.py`, e come disegnano `test_rich_content_client.py`. */
+const renderRich = () => {};
 
 function makeChat() {
   return {
@@ -151,17 +154,11 @@ function stream(chat, text) {
 
 
 def _run_js(script: str) -> None:
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", _harness() + script],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(_harness() + script)
 
 
-AVVISO = "ciao papi, sono le 20:00 — ora di mollare tutto"
-SERVIZIO = "L'ho chiamato. Ora aspetto la sua risposta"
+NOTICE = "ciao boss, sono le 20:00 — ora di mollare tutto"
+SERVICE = "L'ho chiamato. Ora aspetto la sua risposta"
 
 
 def test_the_real_2000_sequence_keeps_the_alert() -> None:
@@ -171,20 +168,20 @@ def test_the_real_2000_sequence_keeps_the_alert() -> None:
       // seq 3: l'iterazione di soli tool chiude il proprio segmento a vuoto.
       chat._handleStreamEnd();
       // seq 4: la consegna del tool `message`.
-      chat._handleMessage({{ text: {AVVISO!r} }});
+      chat._handleMessage({{ text: {NOTICE!r} }});
       // seq 5: i chip del tool, senza testo.
       chat._handleMessage({{ text: '', tool_events: [{{ phase: 'end', call_id: 'c1' }}], kind: 'progress' }});
       // seq 6-28: la narrazione del modello, nello stesso turno.
-      stream(chat, {SERVIZIO!r});
+      stream(chat, {SERVICE!r});
       // seq 29: chiusura del segmento.
       chat._handleStreamEnd();
 
       const painted = blocks(chat);
       assert.ok(
-        painted.includes({AVVISO!r}),
+        painted.includes({NOTICE!r}),
         "l'avviso consegnato è stato sovrascritto: " + JSON.stringify(painted),
       );
-      assert.deepEqual(painted, [{AVVISO!r}, {SERVIZIO!r}]);
+      assert.deepEqual(painted, [{NOTICE!r}, {SERVICE!r}]);
     """)
 
 
@@ -224,6 +221,32 @@ def test_a_message_does_not_lose_the_tail_of_an_open_stream() -> None:
     _run_js(f"""
       const chat = makeChat();
       chat._handleDelta('testo in volo');  // nessun frame eseguito: buffer sporco
-      chat._handleMessage({{ text: {AVVISO!r} }});
-      assert.deepEqual(blocks(chat), ['testo in volo', {AVVISO!r}]);
+      chat._handleMessage({{ text: {NOTICE!r} }});
+      assert.deepEqual(blocks(chat), ['testo in volo', {NOTICE!r}]);
+    """)
+
+
+def test_a_stream_that_lost_every_delta_still_shows_its_text() -> None:
+    """Lato client: sotto backpressure il bus scarta
+    i delta, e il gateway rimanda il testo intero dello stream nello
+    ``stream_end``. Se il segmento li ha persi **tutti** non c'e' un blocco
+    aperto, e il client ignorava quel testo: dal vivo la risposta non si vedeva.
+    Ora lo ``stream_end`` col testo apre il blocco; senza testo (un segmento di
+    soli tool) no, come nella sequenza del 27/08 qui sopra."""
+    _run_js("""
+      const chat = makeChat();
+      chat._handleStreamEnd('la risposta intera');
+      assert.deepEqual(blocks(chat), ['la risposta intera']);
+      assert.equal(chat._currentContent, null, 'il segmento e\\' chiuso');
+      chat._handleStreamEnd();
+      assert.deepEqual(blocks(chat), ['la risposta intera'], 'a vuoto non apre niente');
+    """)
+
+
+def test_a_bare_stream_end_opens_no_bubble() -> None:
+    _run_js("""
+      const chat = makeChat();
+      chat._handleStreamEnd();
+      assert.equal(chat._currentMsg, null);
+      assert.deepEqual(blocks(chat), []);
     """)

@@ -26,32 +26,19 @@ estraggono dal sorgente e girano in node, come in
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import function, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 DIALOG_JS = ASSETS / "shared" / "dialog.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _source() -> str:
     return DIALOG_JS.read_text(encoding="utf-8")
-
-
-def _function(source: str, name: str) -> str:
-    """Il corpo di una funzione di modulo, preso dal sorgente e non riscritto."""
-    m = re.search(
-        rf"(?ms)^(?:export )?function {re.escape(name)}\(.*?^\}}$",
-        source,
-    )
-    assert m, f"function {name} non trovata"
-    return m.group(0).replace("export function", "function")
 
 
 _HARNESS = """
@@ -147,20 +134,14 @@ __PROMPT_DIALOG__
 def _harness() -> str:
     src = _source()
     return (
-        _HARNESS.replace("__CLOSE_THEN_RESOLVE__", _function(src, "closeThenResolve"))
-        .replace("__PROMPT_DIALOG__", _function(src, "promptDialog"))
+        _HARNESS.replace("__CLOSE_THEN_RESOLVE__", function(src, "closeThenResolve"))
+        .replace("__PROMPT_DIALOG__", function(src, "promptDialog"))
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── Le due domande di `_createProject`, nei due ordini ─────────────────────
@@ -274,8 +255,49 @@ def test_no_modal_resolves_on_a_timer() -> None:
     niente.
     """
     src = _source()
-    body = _function(src, "closeThenResolve")
+    body = function(src, "closeThenResolve")
     assert "setTimeout" not in body, "la risoluzione torna a dipendere dall'ordine di due task source"
     assert "addEventListener('close'" in body and "{ once: true }" in body
     timers = re.findall(r"setTimeout\(\(\) => ([^,]+),", src)
     assert timers == ["inputEl.focus()"], f"timer inattesi: {timers}"
+
+
+# ── La regola detta prima, e l'errore che tiene aperto (collaudo 27/09/2026) ──
+
+
+def test_a_refused_value_keeps_the_dialog_open_with_the_text_and_the_error() -> None:
+    """Un nome non valido chiudeva il dialog e un toast lo diceva dopo: quel
+    che avevi scritto era perso. Con ``validate`` il dialog resta, col testo e
+    l'errore sotto; correggendo l'errore sparisce, e Conferma riprova."""
+    _run_js("""
+      const nodes = mountPrompt(0);
+      for (const id of ['oc-prompt-hint', 'oc-prompt-error']) {
+        nodes[id] = new FakeEl(id);
+        nodes[id].hidden = true;
+      }
+      nodes['oc-prompt-input'].setAttribute = function (k, v) { this[k] = v; };
+      const p = promptDialog('nome', {
+        hint: 'niente spazi',
+        validate: (v) => (v.includes(' ') ? 'ha uno spazio' : null),
+      });
+      assert.equal(nodes['oc-prompt-hint'].textContent, 'niente spazi');
+      assert.equal(nodes['oc-prompt-hint'].hidden, false);
+
+      answer('Prova UI');
+      await sleep(10);
+      assert.equal(nodes['oc-prompt-dialog'].open, true, 'il dialog si e chiuso');
+      assert.equal(nodes['oc-prompt-input'].value, 'Prova UI', 'il testo scritto e perso');
+      assert.equal(nodes['oc-prompt-error'].textContent, 'ha uno spazio');
+      assert.equal(nodes['oc-prompt-error'].hidden, false);
+
+      nodes['oc-prompt-input'].dispatch('input');
+      assert.equal(nodes['oc-prompt-error'].hidden, true, 'l errore resta su un testo corretto');
+      answer('Prova-UI');
+      assert.equal(await within(200, p), 'Prova-UI');
+
+      // Chi non passa niente ha il dialog di sempre: niente riga, niente errore.
+      const q = promptDialog('altro');
+      assert.equal(nodes['oc-prompt-hint'].hidden, true);
+      answer('con spazi');
+      assert.equal(await within(200, q), 'con spazi');
+    """)

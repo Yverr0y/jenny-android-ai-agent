@@ -1,18 +1,26 @@
 # Chat basics
 
-The chat tab is where you talk to Jenny; this page covers how a message goes out, how a reply is built on screen, and what all the small pieces of a response mean.
+This page describes the **Console**, the chat of the workshop: the view where everything under a turn is on show — thoughts, tool calls, the Subagents strip, the files a turn changed. The home's **Jenny** page is a plainer chat (a paperclip, the text box and a send button, and one line saying what she is doing); its behavior is in [the home section of the WebUI tour](webui-tour.md#the-conversation). Wherever a control below is one only the Console has, it says so.
+
+The Console is where you talk to Jenny at full detail; this page covers how a message goes out, how a reply is built on screen, and what all the small pieces of a response mean.
 
 ## Sending a message
 
-Type in the box at the bottom (placeholder "Ask something…") and either:
+Type in the box at the bottom (placeholder "Ask something…"; inside a notebook it reads "Ask something about *name*...", and in read-only "Ask something (read-only)…") and either:
 
 - Press **Enter** to send.
 - Press **Shift+Enter** to insert a line break without sending.
-- Tap the send (arrow) button — it stays disabled until there is text in the box; as soon as you type something, the **Attach** button hides to make room for it.
+- Tap the send (arrow) button — it stays disabled until there is text in the box; as soon as you type something, the **New chat** and **Attach** buttons hide to make room for it.
 
-If you have a hardware keyboard (for example on a Unihertz Titan-style device), you don't have to tap the input first: typing any single printable character while the chat tab is active moves focus into the message box automatically ("type-ahead focus"). This does not trigger on Enter, Escape, arrow keys, spacebar, key combinations with a modifier held down, or while another input/textarea/select/dialog already has focus.
+Around the box sit the Console's other controls:
 
-At the top of the chat there is an identity row, "✿ Jenny" with a small status dot next to it — this scrolls away with the rest of the conversation, it is not a fixed header. The dot reflects only the WebSocket link between the WebUI and the local gateway inside the app, not your internet connection in general:
+- **At the left of the box**, the grid button opens the [app drawer](app-launcher.md) as a sheet over the chat.
+- **Inside the box**, before you type: **New chat**, which asks for confirmation and then sends `/new` (see [Slash commands](slash-commands.md#new--start-a-fresh-conversation)), and the paperclip for [attachments](attachments.md).
+- **In the row above the box**, three chips: the **scope chip** (✿ and her name, or the notebook you are in), which switches conversation — see [Notebooks](projects.md); the **Writes / Read-only** switch, which decides whether the message you are about to send may change anything on the device — see [Notebooks](projects.md#the-switch-beside-the-chip-writes-or-read-only); and **Commands**, the list of slash commands this conversation accepts, one tap each.
+
+If you have a hardware keyboard (for example on a Unihertz Titan-style device), you don't have to tap the input first: typing any single printable character while the Console is active moves focus into the message box automatically ("type-ahead focus"). This does not trigger on Enter, Escape, arrow keys, spacebar, key combinations with a modifier held down, or while another input/textarea/select/dialog already has focus.
+
+At the top of the chat there is an identity row, "✿" and her name ("Jenny" unless you renamed her) with a small status dot next to it — this scrolls away with the rest of the conversation, it is not a fixed header. The dot reflects only the WebSocket link between the WebUI and the local gateway inside the app, not your internet connection in general:
 
 | Dot | Label | Meaning |
 |---|---|---|
@@ -24,25 +32,27 @@ Reconnection is automatic and unlimited: the app retries with a growing delay st
 
 Tapping the identity row opens a "Session Info" popover with details such as the model in use, the workspace path, and whether the agent is currently running; see [Tour of the WebUI](webui-tour.md) for what each line means.
 
-### There is no stop button
+### There is no stop button in the Console
 
-Jenny's chat has no visible stop/cancel control. To interrupt a turn that is in progress, send **`/stop`** as a chat message. `/stop` is processed with priority even while the agent is mid-turn — it doesn't wait in line behind whatever the model is doing — and it always ends the turn cleanly (you'll see something like "Stopped 1 task(s)." or "No active task to stop."). See [Slash commands](slash-commands.md) for the rest of the command list.
+The Console has no dedicated stop/cancel button (in the home, the send button turns into **Stop** while a turn runs and sends `/stop` for you). To interrupt a turn that is in progress here, pick **`/stop`** from the Commands chip, or send it as a chat message. `/stop` is processed with priority even while the agent is mid-turn — it doesn't wait in line behind whatever the model is doing — and it always ends the turn cleanly (you'll see something like "Stopped 1 task(s)." or "No active task to stop."). See [Slash commands](slash-commands.md) for the rest of the command list.
 
 ## Anatomy of a response
 
 A reply is built incrementally, not delivered all at once:
 
+<p align="center"><img src="../img/workshop-console.png" alt="A reply in the Console with its tool pills (one failed call, one successful) and the Show thinking block" width="300"></p>
+
 - **Streaming text.** The response text is re-rendered as markdown as it arrives.
 - **Tool pills.** When the agent uses a tool, a small pill appears with the tool's name and a spinner; the spinner turns into a checkmark or an X depending on whether the call succeeded. Tap a pill to expand it and see the tool's result.
 - **"Show thinking" block.** If the model produces reasoning, it appears above the reply text as a collapsible block with a brain icon and the label **"Show thinking"**. A few things are worth knowing about it:
   - It is always collapsed by default — expand it by tapping its header.
-  - Whether it shows up at all depends entirely on the model, not on a switch you flip: some models (reasoning-oriented ones) return reasoning natively and the block always appears; ordinary models never produce one. Setting "Reasoning Effort" in Settings can request more or less thinking from a model that supports it, but it cannot make a non-reasoning model show this block — see [Settings](../reference/settings.md).
-  - The block's content is plain markdown only — no KaTeX math rendering and no Mermaid diagrams inside it, even though the final reply text supports both.
-  - In a turn that goes through several phases (for example: reasoning → tool call → more reasoning → final answer), what you see live is only the *last* reasoning segment; if you later reload the app, the replayed history instead shows all the segments from that turn concatenated together. Live and replayed can legitimately look different for the same turn.
+  - Whether it shows up at all depends entirely on the model, not on a switch you flip: some models (reasoning-oriented ones) return reasoning natively and the block always appears; ordinary models never produce one. Setting "Reasoning Effort" (in the workshop, **Brain → Parameters**) can request more or less thinking from a model that supports it, but it cannot make a non-reasoning model show this block — see [Settings](../reference/settings.md#parameters).
+  - The block's content is rendered like a reply: markdown, math and Mermaid diagrams included.
+  - In a turn that goes through several phases (for example: reasoning → tool call → more reasoning → final answer), the block collects every reasoning segment of the turn, one after the other, joined the same way the history joins them — so reloading the app does not change what you read.
   - Reasoning is **never shown on Telegram** — it only ever appears in the WebUI, by design.
-  - It is controlled by the config key `websocket.showReasoning` (default `true`), which has no equivalent toggle anywhere in Settings — you can only change it by editing `config.json`. Turning it off doesn't just hide the block: it stops the reasoning from being recorded in history at all, so there is nothing to look back at later. See [Configuration reference](../reference/configuration.md).
-- **Final latency.** Once a turn completes, the response time in seconds is shown under the bubble.
-- **"Agent running" banner.** While a long-running goal is active (see [Scheduling and proactivity](scheduling.md)), a banner reading **"Agent running"** appears with a live timer counting seconds.
+  - It is controlled by the config key `websocket.showReasoning` (default `true`), which has no toggle in the home's Settings or in the workshop — you can only change it by editing `config.json`. Turning it off doesn't just hide the block: it stops the reasoning from being recorded in history at all, so there is nothing to look back at later. See [Configuration reference](../reference/configuration.md).
+- **Final latency and Copy.** Once a turn completes, the response time in seconds is shown under the bubble, next to a **Copy** button that copies the reply's text. A turn made only of tool calls has nothing to copy and gets no button.
+- **"Agent running" banner.** While a turn of the conversation runs — an ordinary message, a turn started from Telegram, or a long-running goal (see [Scheduling and proactivity](scheduling.md)) — a banner reading **"Agent running"** appears with a live timer counting seconds.
 
 ## The Subagents panel
 
@@ -79,14 +89,14 @@ When the agent writes or edits files in your workspace during a turn (using its 
 A few honest caveats:
 
 - If a file is binary, unreadable, or larger than 2 MB, no line-count numbers are shown for it at all (no `+N`/`−N` badge) — the file still appears in the list, just without any diff indicator next to its name.
-- Tapping a file jumps to the Workspace tab and opens it in the file editor there; you can edit and save it from there.
+- Tapping a file jumps to the Memory drawer and opens it in the file editor there (the same one as **The real files**); you can edit and save it from there.
 - The pill is not just a live-session thing: it is persisted in chat history, so it reappears exactly as it was after you close and reopen the app.
 
 ## Clickable file paths in replies
 
 Separately from the "files modified" pill, Jenny turns file-path-looking text inside a reply into clickable links. A string only becomes a link if it looks like a **relative path with a directory prefix and a file extension** — for example `jenny/foo.py` or `./notes.md` work, but a bare `config.json` or an absolute path like `/data/.../file.py` does not.
 
-Tapping such a link opens a read-only inline preview attached to that message: file path, detected language, size, and syntax-highlighted content with line numbers, plus an **"Open in editor"** link that jumps to the Workspace tab with the file loaded there for editing. Tapping the path again (or the close button) closes the preview.
+Tapping such a link opens a read-only inline preview attached to that message: file path, detected language, size, and syntax-highlighted content with line numbers, plus an **"Open in editor"** link that jumps to the Memory drawer (**The real files**) with the file loaded there for editing. Tapping the path again (or the close button) closes the preview.
 
 The preview has a hardcoded cap: it reads at most **384 KB** of the file. If the file is bigger, the content is silently truncated — there is no warning shown in the preview itself, even though the size shown in the header is the file's real, full size. Binary files can't be previewed this way at all; the preview shows **"Failed to load"** instead (the same message is used for a few different underlying errors, including "file not found" and "outside workspace").
 
@@ -95,9 +105,9 @@ The preview has a hardcoded cap: it reads at most **384 KB** of the file. If the
 Assistant replies are rendered as GitHub-flavored markdown (tables, links, inline images, single newlines becoming line breaks) and sanitized before being inserted into the page. A few specifics:
 
 - **Code blocks** get a header with the detected language and a **"Copy"** button that turns into **"Copied!"** for a couple of seconds after you tap it.
-- **Math (KaTeX)** is supported with the delimiters `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` — but only in the final render, once the stream has finished (or when replaying history). While a reply is still streaming, you'll see the raw `$$...$$` source instead of rendered math.
+- **Math (KaTeX)** is supported with the delimiters `$$...$$`, `\(...\)`, and `\[...\]`. A single `$...$` is deliberately *not* math in chat, where "it costs $5, maybe $10" would otherwise turn into a formula; it is on a [wiki](wiki.md) page. Math appears only in the final render, once the stream has finished (or when replaying history). While a reply is still streaming, you'll see the raw `$$...$$` source instead of rendered math.
 - **Inline video** (`.mp4`, `.mov`, `.webm`) plays inline in the chat.
-- **Mermaid diagrams are NOT rendered in chat.** A ` ```mermaid ` code block just stays a plain code block here — Mermaid diagrams only render in the [Wiki](wiki.md) tab. This is easy to be surprised by if you've seen a diagram render elsewhere in the app.
+- **Mermaid diagrams** are drawn: a ` ```mermaid ` code block becomes the diagram, in the chat as on a [wiki](wiki.md) page.
 - **Your own messages are never rendered as markdown.** What you type is shown back to you as plain text, even if it contains markdown syntax.
 - All of the rendering libraries are bundled with the app and work fully offline.
 
@@ -107,18 +117,19 @@ Chat uses a "sticky bottom" behavior, similar to WhatsApp or Telegram: as long a
 
 While detached, a floating round button ("Jump to bottom") appears with a badge counting how many new messages have completed since you scrolled away; tapping it jumps back down and clears the badge. Sending a message of your own, or hitting an error, always scrolls you back to the bottom regardless of where you were.
 
-Scrolling to the very top of the chat automatically loads older history (infinite scroll upward).
+Scrolling to the very top of the chat automatically loads older history (infinite scroll upward). When the conversation on screen is too short to scroll — right after `/new`, for instance — a **Show the previous conversation** button at the top does the same.
 
 ## Common errors
 
 - **"WebSocket not connected. Waiting for reconnection..."** — appears if you try to send a message while the socket is down. Wait for the status dot to turn green, or just try again shortly; reconnection is automatic.
-- **"Error: `<detail>`"** — a generic error line prefixed with "Error:", shown when something goes wrong server-side during a turn (for example, a rejected attachment or a provider failure). The text after the colon is whatever detail the backend reported, which is sometimes a raw internal token rather than a friendly sentence — see [Files and attachments](attachments.md) for a concrete example (`image_rejected`).
+- **A rejected message or attachment** — when the gateway refuses what you sent (too many images, a file over its size cap, a payload that arrived damaged, an empty message) the chat shows a plain sentence in your language, such as "Too many images in one message", and the message counts as not sent: your text goes back into the box. A refusal the app has no wording for reads "Something went wrong" with the code in brackets. See [Files and attachments](attachments.md) for the limits.
+- **A provider failure** — comes back as ordinary text in the chat rather than as an error line.
 
 ## Related pages
 
-- [Tour of the WebUI](webui-tour.md) — the Session Info popover, the dock, and how the chat tab fits into the rest of the app.
+- [Tour of the WebUI](webui-tour.md) — the Session Info popover, the dock, and how the Console fits into the rest of the app, and the home's plainer chat.
 - [Scheduling and proactivity](scheduling.md) — why delegation is the normal path, the six subagent types, and what Jenny can do to a running subagent from her side.
 - [Files and attachments](attachments.md) — sending images/files, attachment limits, and what the agent can actually read from them.
-- [Slash commands](slash-commands.md) — the command list, including `/stop` and `/new`, which commands work where, and the Commands chip that shows the ones this conversation can use.
+- [Slash commands](slash-commands.md) — the command list, including `/stop` and `/new`, which commands work where, and the workshop's Commands chip that shows the ones this conversation can use.
 - [Memory and Dream](memory.md) — the difference between what stays on screen and what the model actually remembers.
-- [Settings](../reference/settings.md) and [Configuration reference](../reference/configuration.md) — where "Reasoning effort" and `websocket.showReasoning` live.
+- [Settings](../reference/settings.md#parameters) and [Configuration reference](../reference/configuration.md) — where "Reasoning effort" and `websocket.showReasoning` live.

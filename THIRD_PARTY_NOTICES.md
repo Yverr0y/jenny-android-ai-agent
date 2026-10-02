@@ -22,7 +22,10 @@ loads, which is why these are vendored in the first place.
 | [Tabler Icons](https://github.com/tabler/tabler-icons) (webfont) | 3.19.0 | MIT | `vendor/@tabler/icons-webfont@3.19.0/LICENSE` |
 
 The KaTeX distribution includes its own web fonts under
-`katex@0.16.10/dist/fonts/`; they are covered by the KaTeX license above.
+`katex@0.16.10/dist/fonts/`; they are covered by the KaTeX license above. Only
+the `.woff2` faces are shipped: the stylesheet lists woff2 first and the Android
+WebView supports it, so the `.ttf` and `.woff` copies were never fetched — 700 kB
+of APK that nothing could open.
 
 ## Bundled fonts
 
@@ -37,9 +40,8 @@ OFL text and the per-font copyright notices are in `vendor/fonts/LICENSE.txt`.
 ## Bundled Python packages
 
 Chaquopy installs the wheels pinned in `requirements-android.lock.txt` into the
-APK at build time: `httpx`, `websockets`, `loguru`, `croniter`, `json-repair`,
-`jinja2`, `filelock`, `markdown`, `pyyaml`, `pypdf`, `typing-extensions`,
-`tzdata`. All are pure-Python and resolve from public PyPI — none is local or
+APK at build time: `httpx`, `websockets`, `loguru`, `json-repair`, `jinja2`,
+`filelock`, `markdown`, `pyyaml`, `pypdf`, `typing-extensions`, `tzdata`. All are pure-Python and resolve from public PyPI — none is local or
 patched. Each is governed by its own license, available in the installed
 wheel's metadata and in its upstream repository.
 

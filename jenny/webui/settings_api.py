@@ -18,7 +18,13 @@ from loguru import logger
 
 from jenny import __version__
 from jenny.agent.token_usage import token_usage_payload
-from jenny.channels.http_utils import FALSY_VALUES, TRUTHY_VALUES, parse_flag
+from jenny.channels.http_utils import (
+    FALSY_VALUES,
+    TRUTHY_VALUES,
+    QueryParams,
+    parse_flag,
+    query_first,
+)
 from jenny.config import store
 from jenny.config.loader import get_config_path, load_config
 from jenny.config.schema import KEEP_AWAKE_MODES, Config, FloatingConfig
@@ -29,9 +35,6 @@ from jenny.security.workspace_access import workspace_sandbox_status
 from jenny.security.workspace_policy import _safe_expanduser
 from jenny.session.keys import UNIFIED_SESSION_KEY
 from jenny.utils.helpers import validate_timezone_name
-
-QueryParams = dict[str, list[str]]
-
 
 # Fasi che il layer di installazione può dichiarare. Serve a non far arrivare
 # alla UI una stringa che nessuna traduzione conosce (`i18n.t` stamperebbe la
@@ -284,7 +287,9 @@ WELCOME_TEMPLATES: dict[str, str] = {
     "en": "Hi, I'm {bot_name} and from today I live on your smartphone. Nice to meet you!",
 }
 
-_CONTEXT_WINDOW_TOKEN_OPTIONS = {65_536, 262_144}
+# Tupla e non `set`: la UI ne fa un menu', e l'ordine di un `set` non e'
+# garantito fra due esecuzioni. Il controllo `in` costa uguale su due voci.
+_CONTEXT_WINDOW_TOKEN_OPTIONS = (65_536, 262_144)
 _ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 # Vocabolario accettato dal layer provider (``openai_compat_provider._build_kwargs``
 # normalizza "minimum" in "minimal"). La select della WebUI ne espone un
@@ -310,20 +315,13 @@ class WebUISettingsError(ValueError):
         self.status = status
 
 
-
-def _query_first(query: QueryParams, key: str) -> str | None:
-    values = query.get(key)
-    return values[0] if values else None
-
-
 def _query_first_alias(query: QueryParams, *names: str) -> str | None:
     """Il primo valore fra più nomi accettati (snake_case e camelCase)."""
     for name in names:
-        value = _query_first(query, name)
+        value = query_first(query, name)
         if value is not None:
             return value
     return None
-
 
 
 # ── Applicatori generici ─────────────────────────────────────────────────────
@@ -396,7 +394,6 @@ def _apply_bool(query: QueryParams, target: Any, attr: str, *names: str) -> bool
         return False
     setattr(target, attr, value)
     return True
-
 
 
 def _apply_str(
@@ -521,7 +518,7 @@ def provider_models_payload(query: QueryParams) -> dict[str, Any]:
     helper deliberately avoids mutating config so probing model lists never
     changes runtime behavior.
     """
-    provider_name = (_query_first(query, "provider") or "").strip()
+    provider_name = (query_first(query, "provider") or "").strip()
     if not provider_name:
         raise WebUISettingsError("provider is required")
 
@@ -532,11 +529,11 @@ def provider_models_payload(query: QueryParams) -> dict[str, Any]:
             provider_config = p
             break
     if provider_config is None:
-        api_key = (_query_first(query, "api_key") or "").strip()
+        api_key = (query_first(query, "api_key") or "").strip()
         if not api_key:
             raise WebUISettingsError("unknown provider")
-        provider_format = (_query_first(query, "format") or "openai_compat").strip()
-        api_base = (_query_first(query, "api_base") or "").strip()
+        provider_format = (query_first(query, "format") or "openai_compat").strip()
+        api_base = (query_first(query, "api_base") or "").strip()
         from jenny.config.schema import ProviderConfig
         provider_config = ProviderConfig(
             name=provider_name,
@@ -567,7 +564,7 @@ def provider_models_payload(query: QueryParams) -> dict[str, Any]:
         }
 
     api_key = _resolve_env_placeholders(provider_config.api_key)
-    override_key = (_query_first(query, "api_key") or "").strip()
+    override_key = (query_first(query, "api_key") or "").strip()
     if override_key:
         api_key = override_key
     if not api_key:
@@ -664,7 +661,10 @@ def _parse_context_window_tokens(value: str | None) -> int | None:
     except ValueError:
         raise WebUISettingsError("context_window_tokens must be an integer") from None
     if parsed not in _CONTEXT_WINDOW_TOKEN_OPTIONS:
-        raise WebUISettingsError("context_window_tokens must be 65536 or 262144")
+        # Dalla tupla, non scritto a mano: una terza opzione non deve lasciare un
+        # messaggio che ne nomina due.
+        allowed = " or ".join(str(v) for v in _CONTEXT_WINDOW_TOKEN_OPTIONS)
+        raise WebUISettingsError(f"context_window_tokens must be {allowed}")
     return parsed
 
 
@@ -796,7 +796,7 @@ async def save_onboarding(
     provider_name = (data.get("provider_name") or "").strip()
     provider_format = (data.get("format") or "openai_compat").strip()
     api_key = (data.get("api_key") or "").strip()
-    api_base = (data.get("api_base") or "").strip()
+    api_base = normalize_api_base(data.get("api_base")) or ""
     model = (data.get("model") or "").strip()
     bot_name = (data.get("bot_name") or "Jenny").strip()
     bot_icon = (data.get("bot_icon") or "✿").strip()
@@ -826,8 +826,11 @@ async def save_onboarding(
         config.agents.defaults.bot_icon = bot_icon
 
         # Persist the user's language preference for future backend-localized messages.
-        locale = (data.get("locale") or "it").strip().lower()
-        config.agents.defaults.language = locale if locale in WELCOME_TEMPLATES else "it"
+        # Senza una lingua nota si ripiega sull'inglese, come ``I18n.detectLocale``
+        # nella WebUI: il saluto finisce nella cronologia, e un ripiego italiano
+        # era la prima riga che un modello in inglese leggeva.
+        locale = (data.get("locale") or "en").strip().lower()
+        config.agents.defaults.language = locale if locale in WELCOME_TEMPLATES else "en"
 
         # Fase 6.7: valida il provider PRIMA di persistere/segnalare. Se la config
         # non produce un provider valido, l'errore torna subito alla WebUI di
@@ -846,7 +849,7 @@ async def save_onboarding(
     # Il saluto di benvenuto finisce nell'unica sessione unificata,
     # la stessa che la chat rilegge all'attach.
     chat_id = "default"
-    greeting_template = WELCOME_TEMPLATES.get(config.agents.defaults.language, WELCOME_TEMPLATES["it"])
+    greeting_template = WELCOME_TEMPLATES.get(config.agents.defaults.language, WELCOME_TEMPLATES["en"])
     greeting = greeting_template.format(bot_name=bot_name)
     if session_manager:
         session = session_manager.get_or_create(UNIFIED_SESSION_KEY)
@@ -917,6 +920,10 @@ def settings_payload(
             "model": effective_preset.model,
             "max_tokens": effective_preset.max_tokens,
             "context_window_tokens": effective_preset.context_window_tokens,
+            # L'elenco accettato, non solo il valore scelto: senza, la UI
+            # dovrebbe ricopiarlo e una modifica qui divergerebbe in
+            # silenzio. Stessa forma di `power.modes`.
+            "context_window_options": list(_CONTEXT_WINDOW_TOKEN_OPTIONS),
             "temperature": effective_preset.temperature,
             "reasoning_effort": effective_preset.reasoning_effort,
             "timezone": defaults.timezone,
@@ -968,6 +975,14 @@ def settings_payload(
             "workspace_sandbox": sandbox_status.as_dict(),
             "ssrf_whitelist_count": len(config.security.ssrf_whitelist),
             "exec_enabled": exec_config.enable,
+        },
+        # Quando l'ultimo backup cifrato è stato salvato davvero (0 = mai), e
+        # se la storia locale degli snapshot è accesa. Sono due cose diverse e
+        # la casa lo dice: la storia locale vive sullo stesso telefono, un
+        # backup esportato no.
+        "backup": {
+            "last_export_at": config.snapshots.last_export_at,
+            "snapshots_enabled": config.snapshots.enabled,
         },
         "requires_restart": requires_restart,
         "version": _version_payload(),
@@ -1072,7 +1087,7 @@ def _apply_agent_settings(config: Config, query: QueryParams) -> tuple[bool, boo
         defaults.max_tokens = max_tokens
         changed = True
 
-    temperature = _parse_temperature(_query_first(query, "temperature"))
+    temperature = _parse_temperature(query_first(query, "temperature"))
     if temperature is not None and defaults.temperature != temperature:
         defaults.temperature = temperature
         changed = True
@@ -1121,18 +1136,60 @@ def _apply_agent_settings(config: Config, query: QueryParams) -> tuple[bool, boo
     return changed, restart_required
 
 
+def normalize_api_base(value: str | None) -> str | None:
+    """L'indirizzo di un provider, controllato prima di scriverlo.
+
+    Vuoto e' ``None`` (l'indirizzo predefinito del formato); un segnaposto
+    d'ambiente ``${...}`` passa com'e' (lo risolve ``_resolve_env_placeholders``);
+    lo schema si porta in minuscolo, e sono accettati solo ``http`` e ``https``
+    con un host. Il resto e' un :class:`WebUISettingsError`: nel collaudo del
+    27/09/2026 l'autocorrezione aveva fatto di ``http://`` un ``Http:/``, e
+    l'indirizzo storpiato era stato salvato senza una parola.
+
+    Si chiama sui valori che arrivano da una richiesta, non su quelli gia' in
+    config: un controllo nello schema girerebbe a ogni caricamento e
+    renderebbe illeggibile una config vecchia.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None
+    if text.startswith("${"):
+        return text
+    from urllib.parse import urlsplit
+
+    scheme, sep, rest = text.partition("://")
+    if not sep:
+        raise WebUISettingsError(
+            f"base URL is not a web address (http:// or https://): {text!r}"
+        )
+    text = scheme.lower() + "://" + rest
+    try:
+        parts = urlsplit(text)
+    except ValueError as exc:
+        raise WebUISettingsError(f"base URL is not a web address: {text!r}") from exc
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise WebUISettingsError(
+            f"base URL is not a web address (http:// or https://): {text!r}"
+        )
+    return text
+
+
 async def update_provider(data: dict[str, Any]) -> dict[str, Any]:
     """Create or update a provider in the providers array."""
     name = (data.get("name") or "").strip()
     if not name:
         raise WebUISettingsError("name is required")
 
-    fmt = data.get("format", "openai_compat")
-    if fmt not in ("openai_compat", "anthropic"):
+    # Assente vuol dire «invariato» su un provider che c'e' gia', e
+    # ``openai_compat`` solo per uno nuovo (v. ``_upsert_provider``). Il
+    # predefinito applicato qui faceva di un provider Anthropic un OpenAI a
+    # ogni chiave salvata dalla casa, che il formato non lo manda.
+    fmt = data.get("format") or None
+    if fmt is not None and fmt not in ("openai_compat", "anthropic"):
         raise WebUISettingsError(f"unknown format: {fmt}")
 
     api_key = (data.get("api_key") or "").strip() or None
-    api_base = (data.get("api_base") or "").strip() or None
+    api_base = normalize_api_base(data.get("api_base"))
     ca_bundle = (data.get("ca_bundle") or "").strip() or None
     # Il campo vuoto non arriva fin qui: ``_postWithQuery`` scarta le stringhe
     # vuote, ed e' quello che fa funzionare "chiave vuota = tieni quella
@@ -1182,19 +1239,23 @@ def _resolved_ca_bundle(
 def _upsert_provider(
     config: Config,
     name: str,
-    fmt: str,
+    fmt: str | None,
     api_key: str | None,
     api_base: str | None,
     *,
     ca_bundle: str | None = None,
     clear_ca_bundle: bool = False,
 ) -> None:
-    """Inserisce o aggiorna il provider *name* dentro *config*."""
+    """Inserisce o aggiorna il provider *name* dentro *config*.
+
+    *fmt* ``None`` lascia il formato di un provider esistente com'e', e ne da'
+    ``openai_compat`` a uno nuovo."""
     providers = config.providers.providers
 
     for p in providers:
         if p.name == name:
-            p.format = fmt
+            if fmt is not None:
+                p.format = fmt
             # Chiave vuota = "tieni quella salvata". Rifiutiamo anche il
             # suggerimento offuscato (`sk-a...j8f9`): un client vecchio che
             # lo pre-compila nel campo lo rimanderebbe qui identico e
@@ -1209,7 +1270,7 @@ def _upsert_provider(
 
         providers.append(ProviderConfig(
             name=name,
-            format=fmt,
+            format=fmt or "openai_compat",
             api_key=api_key,
             api_base=api_base,
             ca_bundle=_resolved_ca_bundle(None, ca_bundle, clear_ca_bundle),
@@ -1303,7 +1364,7 @@ def _apply_web_search_settings(config: Config, query: QueryParams) -> bool:
             setattr(fetch_config, attr, value)
             changed = True
 
-    search_engine = _query_first(query, "search_engine")
+    search_engine = query_first(query, "search_engine")
     if search_engine is not None:
         search_engine = search_engine.strip().lower()
         if search_engine != _ANDROID_WEB_SEARCH_ENGINE:
@@ -1317,7 +1378,7 @@ def _apply_web_search_settings(config: Config, query: QueryParams) -> bool:
             _parse_int(max_results, "max_results", AndroidWebSearchConfig, "max_results"),
         )
 
-    timeout = _query_first(query, "timeout")
+    timeout = query_first(query, "timeout")
     if timeout is not None:
         set_search_value(
             "timeout", _parse_int(timeout, "timeout", AndroidWebSearchConfig, "timeout")
@@ -1346,7 +1407,7 @@ async def update_location_settings(query: QueryParams) -> dict[str, Any]:
 
     def _apply(config: Config) -> bool:
         loc = config.tools.location
-        enabled = _query_first(query, "enabled")
+        enabled = query_first(query, "enabled")
         if enabled is None:
             return False
         value = parse_flag(enabled)

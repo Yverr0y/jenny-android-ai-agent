@@ -30,6 +30,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from support.sessions import FakeSessions
 
 from jenny.agent.loop import AgentLoop
 from jenny.agent.tools.nothing_to_report import NothingToReportTool
@@ -43,37 +44,18 @@ from jenny.providers.base import LLMResponse
 from jenny.runtime.cron_dispatch import CronDispatcher
 from jenny.session.keys import HEARTBEAT_SESSION_KEY
 
-_WATERBOT = "- Ogni ciclo controlla l'umidità delle piante e avvisami sotto il 15%."
-_VITAMINE = "- Alle 9 ricordami le vitamine."
+_RAINCHECK = "- Ogni ciclo controlla la pioggia nelle città e avvisami sopra il 70%."
+_VITAMINS = "- Alle 9 ricordami le vitamine."
 
 _T0_MS = 1_755_000_000_000
 _CYCLE_MS = 1_800_000
-
-
-class _FakeSession:
-    def __init__(self) -> None:
-        self.messages: list[dict] = []
-
-    def retain_recent_legal_suffix(self, keep: int) -> None:
-        pass
-
-
-class _FakeSessions:
-    def __init__(self) -> None:
-        self.by_key: dict[str, _FakeSession] = {}
-
-    def get_or_create(self, key: str) -> _FakeSession:
-        return self.by_key.setdefault(key, _FakeSession())
-
-    def save(self, _session: _FakeSession) -> None:
-        pass
 
 
 class _DelegatingAgent:
     """T0: delega entrambi i task e lo dichiara, come chiede il contratto."""
 
     def __init__(self) -> None:
-        self.sessions = _FakeSessions()
+        self.sessions = FakeSessions()
         self.delegated: dict[int, str] = {}
 
     async def process_direct_outcome(self, prompt: str, **_kwargs: Any) -> TurnOutcome:
@@ -151,7 +133,7 @@ class _Harness:
                 channel="system",
                 sender_id="subagent",
                 chat_id="websocket:default",
-                content="[Subagent 'waterbot-check' completed successfully]\n\nResult:\nok",
+                content="[Subagent 'raincheck-probe' completed successfully]\n\nResult:\nok",
                 metadata={"subagent_task_id": f"sub-{self.announce_count}"},
                 session_key_override=HEARTBEAT_SESSION_KEY,
             )
@@ -170,15 +152,15 @@ class _Harness:
 
 @pytest.fixture
 def one_delegated(tmp_path: Path) -> _Harness:
-    harness = _Harness(tmp_path, _WATERBOT, _VITAMINE)
-    harness.agent.delegated = {1: "leggi l'umidità"}
+    harness = _Harness(tmp_path, _RAINCHECK, _VITAMINS)
+    harness.agent.delegated = {1: "leggi le previsioni"}
     return harness
 
 
 @pytest.fixture
 def two_delegated(tmp_path: Path) -> _Harness:
-    harness = _Harness(tmp_path, _WATERBOT, _VITAMINE)
-    harness.agent.delegated = {1: "leggi l'umidità", 2: "controlla le vitamine"}
+    harness = _Harness(tmp_path, _RAINCHECK, _VITAMINS)
+    harness.agent.delegated = {1: "leggi le previsioni", 2: "controlla le vitamine"}
     return harness
 
 
@@ -203,8 +185,8 @@ class TestABareAbstentionDeclaresNothing:
         await one_delegated.cycle()
         with_tool = one_delegated.entry_for(0)
 
-        silent = _Harness(tmp_path / "b", _WATERBOT, _VITAMINE)
-        silent.agent.delegated = {1: "leggi l'umidità"}
+        silent = _Harness(tmp_path / "b", _RAINCHECK, _VITAMINS)
+        silent.agent.delegated = {1: "leggi le previsioni"}
         silent.abstains = False
         await silent.cycle()
 

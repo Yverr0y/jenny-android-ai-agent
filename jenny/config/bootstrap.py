@@ -36,8 +36,7 @@ def ensure_minimal_config(workspace_path: Path) -> None:
                 "token_issue_secret": secrets.token_urlsafe(32),
             },
         }
-        atomic_write(config_path, json.dumps(minimal, indent=2))
-        restrict_config_permissions(config_path)
+        write_private_file(config_path, json.dumps(minimal, indent=2))
         return
 
     restrict_config_permissions(config_path)
@@ -73,10 +72,9 @@ def _backfill_token_issue_secret(config_path: Path) -> None:
     websocket["token_issue_secret"] = secrets.token_urlsafe(32)
     data["websocket"] = websocket
     try:
-        atomic_write(config_path, json.dumps(data, indent=2))
+        write_private_file(config_path, json.dumps(data, indent=2))
     except OSError:
         return
-    restrict_config_permissions(config_path)
 
 
 def restrict_config_permissions(config_path: Path) -> None:
@@ -89,3 +87,19 @@ def restrict_config_permissions(config_path: Path) -> None:
     Vale anche per il backup, che porta gli stessi segreti."""
     with contextlib.suppress(OSError):
         config_path.chmod(0o600)
+
+
+def write_private_file(path: Path, content: str, *, fsync_dir: bool = True) -> None:
+    """Scrive *path* atomicamente, gia' in ``600`` quando compare col suo nome.
+
+    ``atomic_write`` e poi :func:`restrict_config_permissions` lasciavano una
+    finestra in cui ``config.json`` (o il suo ``.bak``), segreti compresi,
+    esisteva con i permessi di default: il ``chmod`` ora si fa sul temporaneo,
+    prima della rename. Resta best-effort come prima: su un filesystem che
+    rifiuta ``chmod`` (FAT) si riscrive senza, e i permessi si tentano dopo.
+    """
+    try:
+        atomic_write(path, content, fsync_dir=fsync_dir, chmod=0o600)
+    except PermissionError:
+        atomic_write(path, content, fsync_dir=fsync_dir)
+        restrict_config_permissions(path)

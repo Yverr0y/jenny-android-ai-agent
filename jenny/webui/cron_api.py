@@ -3,10 +3,12 @@
 Neutro rispetto al trasporto, come ``skills_api``: costruisce un dizionario e non
 sa niente di HTTP. La route che lo serve sta in ``webui/cron_routes.py``.
 
-**Sincrona e con I/O: il chiamante la mette in un thread.** Legge lo store del
-cron (sotto il lock del file, lo stesso che prende un ``add_job`` del tool), la
-config da disco e ``HEARTBEAT.md``. Sul loop del gateway quel lock bloccherebbe
-la chat e la WebSocket.
+**Sincrona e con I/O: il chiamante la mette in un thread.** Legge la config da
+disco e ``HEARTBEAT.md``. Lo store del cron invece **no**: lo legge il chiamante
+sul loop, con :func:`snapshot_cron`, e qui arriva una copia. ``list_jobs`` in un
+thread ricaricava lo store e riassegnava ``CronService._store`` sotto al loop:
+un giro del timer in corso salvava poi la copia vecchia, e il job appena eseguito
+tornava dovuto e ripartiva.
 
 Il pannello non rende lo store: lo **riconcilia**. Un job di sistema sopravvive
 alla configurazione che lo ha creato — ``register_system_job`` non ha una
@@ -26,7 +28,7 @@ worker appena spento dall'utente.
 
 from __future__ import annotations
 
-import time
+import copy
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -35,7 +37,9 @@ from loguru import logger
 
 from jenny.cron.heartbeat_tasks import parse_heartbeat_tasks
 from jenny.cron.purposes import system_job_purpose
+from jenny.cron.service import next_run_on_resume
 from jenny.cron.types import CronJob
+from jenny.utils.clock import now_ms as _now_ms
 
 # Quanto testo di un promemoria entra nell'elenco. Il resto arriva col dettaglio:
 # una riga di elenco che porta un promemoria intero smette di essere un elenco.
@@ -52,10 +56,6 @@ _WORKER_ENABLED_PATHS: dict[str, tuple[str, ...]] = {
     "heartbeat": ("gateway", "heartbeat", "enabled"),
     "update_check": ("updates", "enabled"),
 }
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
 
 
 def _dig(root: Any, path: tuple[str, ...]) -> Any:
@@ -119,7 +119,7 @@ def _heartbeat_tasks(workspace: Path) -> dict[str, Any]:
     try:
         content = path.read_text(encoding="utf-8")
     except OSError as exc:
-        logger.warning("HEARTBEAT.md illeggibile: {}", exc)
+        logger.warning("HEARTBEAT.md is unreadable: {}", exc)
         return {"file_present": True, "file_readable": False, "tasks": []}
     tasks = parse_heartbeat_tasks(content)
     return {
@@ -214,7 +214,26 @@ def _effective(job: CronJob, *, config: Any, heartbeat: dict[str, Any] | None) -
     return "active"
 
 
-def _job_payload(job: CronJob, *, config: Any, workspace: Path, default_tz: str) -> dict[str, Any]:
+def _job_actions(job: CronJob, now_ms: int) -> list[str]:
+    """Cosa l'officina puo' fare di questo job: le route di ``cron_routes``.
+
+    Solo i job dell'utente: un job di sistema ha il suo interruttore in config,
+    e il servizio lo rifiuterebbe comunque (``protected``). «Riprendi» solo se
+    ``set_paused`` lo accetterebbe; un job spento senza pausa — un ``at`` gia'
+    eseguito, un job senza sessione — si puo' solo togliere.
+    """
+    if _job_kind(job) != "user":
+        return []
+    if job.paused_at_ms is not None:
+        return ["resume", "remove"] if next_run_on_resume(job, now_ms) is not None else ["remove"]
+    if job.enabled:
+        return ["pause", "remove"]
+    return ["remove"]
+
+
+def _job_payload(
+    job: CronJob, *, config: Any, workspace: Path, default_tz: str, now_ms: int
+) -> dict[str, Any]:
     kind = _job_kind(job)
     heartbeat = _heartbeat_block(job, workspace) if job.id == "heartbeat" else None
     message = job.payload.message or ""
@@ -226,6 +245,8 @@ def _job_payload(job: CronJob, *, config: Any, workspace: Path, default_tz: str)
         "protected": kind == "system",
         "enabled": job.enabled,
         "effective": _effective(job, config=config, heartbeat=heartbeat),
+        "paused_at_ms": job.paused_at_ms,
+        "actions": _job_actions(job, now_ms),
         "mode": job.payload.mode,
         "one_shot": job.delete_after_run,
         # Il testo del promemoria e' contenuto dell'utente: l'anteprima
@@ -259,6 +280,39 @@ def _job_payload(job: CronJob, *, config: Any, workspace: Path, default_tz: str)
     }
 
 
+class CronSnapshot:
+    """Una copia di cio' che il payload legge dal servizio cron: stato e job.
+
+    Stessa forma delle due chiamate che :func:`webui_cron_payload` fa al servizio,
+    cosi' il payload non sa se ha in mano l'uno o l'altra.
+    """
+
+    def __init__(self, status: dict[str, Any], jobs: list[CronJob]) -> None:
+        self._status = status
+        self._jobs = jobs
+
+    def status(self) -> dict[str, Any]:
+        return self._status
+
+    def list_jobs(self, include_disabled: bool = False) -> list[CronJob]:
+        return self._jobs if include_disabled else [j for j in self._jobs if j.enabled]
+
+
+def snapshot_cron(cron: Any | None) -> CronSnapshot | None:
+    """Fotografa il servizio **sul loop**, dove girano anche il timer e i suoi gesti.
+
+    Una lettura dello store, sotto il lock del file: la stessa che fa il tool
+    ``cron`` a ogni ``list``. La copia e' profonda perche' il payload si
+    costruisce poi in un thread, mentre il loop continua a mutare i job veri.
+    """
+    if cron is None:
+        return None
+    return CronSnapshot(
+        status=dict(cron.status()),
+        jobs=copy.deepcopy(cron.list_jobs(include_disabled=True)),
+    )
+
+
 def webui_cron_payload(
     cron: Any | None,
     *,
@@ -290,7 +344,7 @@ def webui_cron_payload(
 
     status = cron.status()
     jobs = [
-        _job_payload(job, config=cfg, workspace=workspace, default_tz=default_tz)
+        _job_payload(job, config=cfg, workspace=workspace, default_tz=default_tz, now_ms=stamp)
         # ``include_disabled=True`` e non il default: un job disabilitato e' la
         # prima cosa che si viene a cercare qui, e senza di lui «l'ho disabilitato
         # o l'ho cancellato?» resta senza risposta.

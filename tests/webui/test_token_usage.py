@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
 
 from jenny.agent.hook import AgentHookContext
 from jenny.agent.token_usage import (
     TokenUsageHook,
-    record_response_token_usage,
     record_token_usage,
     token_usage_payload,
 )
@@ -82,19 +80,6 @@ def test_record_token_usage_keeps_source_breakdown(tmp_path, monkeypatch) -> Non
     assert payload["total_tokens"] == 150
 
 
-def test_record_response_token_usage_uses_response_usage(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("jenny.agent.token_usage.get_webui_dir", lambda: tmp_path / "webui")
-    monkeypatch.setattr("jenny.agent.token_usage._local_day", lambda *_, **__: "2026-06-03")
-
-    record_response_token_usage(
-        SimpleNamespace(usage={"prompt_tokens": 20, "completion_tokens": 5}),
-        source="dream",
-    )
-
-    payload = token_usage_payload(now=datetime(2026, 6, 3, tzinfo=timezone.utc))
-    assert payload["total_tokens_30d"] == 25
-
-
 @pytest.mark.asyncio
 async def test_token_usage_hook_classifies_source_from_session_key(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("jenny.agent.token_usage.get_webui_dir", lambda: tmp_path / "webui")
@@ -132,7 +117,7 @@ from jenny.session.keys import HEARTBEAT_SESSION_KEY, UNIFIED_SESSION_KEY  # noq
     [
         ("dream:20260825-120537", "dream"),
         ("dream:review-20260825-060415", "dream"),
-        ("gardener:viaggio-pazzo-20260824-195702", "gardener"),
+        ("gardener:viaggio-lento-20260824-195702", "gardener"),
         ("cron:update_check", "cron"),
         # Le due chiavi senza suffisso vengono dalle **costanti**, non da un
         # letterale: sono confronti per uguaglianza (v. ``_INTERNAL_KIND_BY_KEY``),

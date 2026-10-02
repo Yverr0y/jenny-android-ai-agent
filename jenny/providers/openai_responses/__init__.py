@@ -8,6 +8,7 @@ from jenny.providers.openai_responses.converters import (
 )
 from jenny.providers.openai_responses.parsing import (
     FINISH_REASON_MAP,
+    ResponsesStreamError,
     consume_sse_with_reasoning,
     iter_sse,
     map_finish_reason,
@@ -24,4 +25,5 @@ __all__ = [
     "map_finish_reason",
     "parse_response_output",
     "FINISH_REASON_MAP",
+    "ResponsesStreamError",
 ]

@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from support.subagent_provider_fakes import script_provider
 
 from jenny.agent.agent_types import AGENT_TYPES
 from jenny.agent.subagent import (
@@ -30,7 +31,6 @@ from jenny.bus.queue import MessageBus
 from jenny.config.schema import ToolsConfig
 from jenny.config.tool_schemas import SshConfig, SshHostConfig
 from jenny.providers.base import LLMProvider, LLMResponse
-from tests.agent.subagent_provider_fakes import script_provider
 
 SSH_TOOLS = {"ssh_hosts", "ssh_exec", "ssh_job", "ssh_transfer"}
 
@@ -181,5 +181,5 @@ async def test_the_spawn_tool_turns_the_refusal_into_an_actionable_sentence(tmp_
     text = await tool.execute(task="check disk space", agent_type="sysadmin")
 
     assert "no SSH host is registered" in text
-    assert "Settings > SSH" in text
+    assert "Settings → Workshop → Hands → SSH" in text
     assert "do not retry with another agent type" in text

@@ -62,10 +62,10 @@ Reserved params (auto-added to the action's schema, don't declare them):
   filter** — never declare a param named `limit` to filter records by.
 
 ```json
-{ "name": "annota_cura", "description": "Registra una cura fatta a una pianta",
-  "kind": "storage", "op": "append", "collection": "cure",
-  "params": { "pianta": {"type": "string"}, "nota": {"type": "string"} },
-  "required": ["pianta"] }
+{ "name": "log_care", "description": "Log a care task done on a plant",
+  "kind": "storage", "op": "append", "collection": "care",
+  "params": { "plant": {"type": "string"}, "note": {"type": "string"} },
+  "required": ["plant"] }
 ```
 
 **Response shape.** `jenny.action()` never resolves to a bare array or record — every storage
@@ -86,11 +86,11 @@ as the array:
 
 ```js
 // WRONG — notes is {ok, records, count}; notes.length is undefined, notes.forEach throws
-const notes = await jenny.action('lista');
+const notes = await jenny.action('list_notes');
 notes.forEach(...)
 
 // RIGHT
-const { records: notes } = await jenny.action('lista');
+const { records: notes } = await jenny.action('list_notes');
 notes.forEach(...)
 ```
 
@@ -108,9 +108,9 @@ Params not consumed by path placeholders go into the query string (`GET`/`DELETE
 JSON body (other methods).
 
 ```json
-{ "name": "umidita_pianta", "description": "Umidità corrente di una pianta",
+{ "name": "plant_humidity", "description": "Current humidity of a plant",
   "kind": "http", "method": "GET", "path": "/plants/{id}/humidity",
-  "params": { "id": {"type": "string", "description": "ID della pianta"} },
+  "params": { "id": {"type": "string", "description": "The plant's ID"} },
   "required": ["id"] }
 ```
 
@@ -119,7 +119,7 @@ body — it resolves to `{ok: true, status: 200, data: <parsed body>}` (`ok` fol
 status, `data` is the server's JSON, parsed). Read the payload from `.data`:
 
 ```js
-const { data: piante } = await jenny.action('lista_piante');
+const { data: plants } = await jenny.action('list_plants');
 ```
 
 ## External view (`view: {"kind": "external"}`)
@@ -128,7 +128,7 @@ When the user asks for an app that just **shows an existing web UI on their own 
 is the shape — do not write an `index.html` with an `<iframe>` pointing at it:
 
 ```json
-{ "name": "Telecomando", "description": "Il telecomando del server di casa",
+{ "name": "Remote", "description": "The home server's remote control",
   "icon": "ti-device-tv",
   "server": { "baseUrl": "http://192.168.1.50:8091" },
   "view": { "kind": "external" } }
@@ -154,20 +154,20 @@ Constraints:
 
 ```json
 {
-  "name": "Piante",
-  "description": "Monitoraggio piante di casa: umidità, stato, diario delle cure",
+  "name": "Plants",
+  "description": "Houseplant monitor: humidity, status, care log",
   "icon": "ti-plant",
   "server": { "baseUrl": "http://192.168.1.50:8080" },
   "actions": [
-    { "name": "lista_piante", "description": "Elenco piante con stato",
+    { "name": "list_plants", "description": "List the plants with their status",
       "kind": "http", "method": "GET", "path": "/plants" },
-    { "name": "umidita_pianta", "description": "Umidità corrente di una pianta",
+    { "name": "plant_humidity", "description": "Current humidity of a plant",
       "kind": "http", "method": "GET", "path": "/plants/{id}/humidity",
       "params": { "id": {"type": "string"} }, "required": ["id"] },
-    { "name": "annota_cura", "description": "Registra una cura fatta a una pianta",
-      "kind": "storage", "op": "append", "collection": "cure",
-      "params": { "pianta": {"type": "string"}, "nota": {"type": "string"} },
-      "required": ["pianta"] }
+    { "name": "log_care", "description": "Log a care task done on a plant",
+      "kind": "storage", "op": "append", "collection": "care",
+      "params": { "plant": {"type": "string"}, "note": {"type": "string"} },
+      "required": ["plant"] }
   ]
 }
 ```
@@ -175,8 +175,8 @@ Constraints:
 ## AGENT.md
 
 Context for the agent, loaded when it works with this app. Keep it 5–15 lines. Include: what
-the app is for, user preferences/thresholds ("sotto il 20% il basilico va annaffiato"), and
-conventions for the data ("le note in `cure` sono in italiano, una per intervento"). Do NOT
+the app is for, user preferences/thresholds ("water the basil below 20%"), and
+conventions for the data ("one note in `care` per task, in the user's language"). Do NOT
 repeat the manifest — the agent already sees the actions as tools.
 
 ## UI conventions
@@ -258,11 +258,11 @@ entirely and start the body directly with `<main id="app">`.
 
 ```html
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en"> <!-- the user's language -->
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Piante</title>
+  <title>Plants</title>
   <link rel="stylesheet" href="/html-mobile/assets/apps/jenny-kit.css">
   <script src="/html-mobile/assets/apps/jenny-sdk.js"></script>
   <style>/* app-specific tweaks only — keep minimal */</style>
@@ -270,10 +270,10 @@ entirely and start the body directly with `<main id="app">`.
 <body>
   <!-- No <header class="topbar"><h1>...</h1></header> — the host chrome already shows the
        app name. Add a .topbar only if you need action icons (search, filter, add...). -->
-  <main id="app"><div class="empty">Caricamento...</div></main>
+  <main id="app"><div class="empty">Loading…</div></main>
   <script>
     async function render() {
-      const { data: piante } = await jenny.action('lista_piante');
+      const { data: plants } = await jenny.action('list_plants');
       /* build DOM from data using the kit vocabulary */
     }
     render();
@@ -350,5 +350,5 @@ window.addEventListener('popstate', (e) => {
   (CORS and auth are handled by the gateway proxy).
 - No external hosts anywhere (`https://...` in `src`/`href` fails validation); gateway paths
   (`/html-mobile/assets/...`) are the only allowed shared resources.
-- Hand-off to chat (e.g. a "parlane con Jenny" button on selected content) uses the SDK's
+- Hand-off to chat (e.g. a "Discuss with Jenny" button on selected content) uses the SDK's
   `jenny.discuss(text)`; the reply arrives in chat, never inside the app.

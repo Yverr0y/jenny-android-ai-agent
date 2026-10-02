@@ -102,6 +102,11 @@ class _FakeLoop:
         self.tool_results: list[str] = []
         self.on_turn = None
         self.stop_reason = "completed"
+        self._background_tasks: list[asyncio.Task] = []
+
+    def _schedule_background(self, coro: Any) -> None:
+        # Come ``AgentLoop._schedule_background``: ``cmd_dream`` passa da qui.
+        self._background_tasks.append(asyncio.create_task(coro))
 
     async def _publish(self, message: Any) -> None:
         self.published.append(message)
@@ -467,7 +472,7 @@ class TestReviewPass:
         assert "1 write(s) were refused by their size budget" in content
         # Era "`/dream budget`", comando rimosso il 31/08/2026: la risposta deve
         # mandare alla superficie che esiste.
-        assert "**Settings \u2192 Memory**" in content
+        assert "**Settings \u2192 Workshop \u2192 Memory**" in content
         # E la riga sui caratteri resta: il rifiuto la *spiega*, non la sostituisce.
         assert "nothing was freed" in content
 

@@ -34,39 +34,37 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
 SESSION_JS = ASSETS / "shared" / "session-manager.js"
+PAGER_JS = ASSETS / "shared" / "history-pager.js"
 I18N_DIR = ASSETS / "i18n"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _member(source: str, name: str) -> str:
-    """Il testo vero di un membro, dalla dichiarazione alla chiusura a due spazi."""
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
 _HARNESS = """
 import assert from 'node:assert/strict';
+
+/* La paginazione vive nel modulo condiviso: il caricamento iniziale registra li'
+   dove e' arrivato (`adopt`) e `invalidateHistory` lo riazzera, quindi il finto
+   monta quello vero invece di tre campi sciolti. */
+globalThis.document = globalThis.document || {
+  createElement() {
+    return { className: '', textContent: '', type: '', disabled: false,
+             addEventListener() {}, remove() {} };
+  },
+};
+const { HistoryPager } = await import('__PAGER_URL__');
 
 // ── Doppi ───────────────────────────────────────────────────────────────────
 const UNIFIED_KEY = 'websocket:default';
@@ -124,9 +122,6 @@ function makeChat() {
   const chat = {
     rendered: [],
     identityEl: null,
-    historyCursor: null,
-    hasMoreHistory: true,
-    isLoadingHistory: false,
     _initialHistoryLoaded: false,
     _loadingInitialHistory: false,
     _resyncingThread: false,
@@ -153,9 +148,34 @@ function makeChat() {
     scrollTop: 0,
     appendChild(el) { nodes.push(el); return el; },
     querySelectorAll(selector) { return withClass(selector.replace('.', '')); },
+    querySelector(selector) { return withClass(selector.replace('.', ''))[0] || null; },
     get innerHTML() { return chat.rendered.join('\\n'); },
     set innerHTML(v) { if (v === '') { chat.rendered = []; nodes = []; } },
   };
+  chat._scroller = { scrollHeight: 2000, clientHeight: 400, scrollTop: 0 };
+  chat._pager = new HistoryPager({
+    scroller: () => chat._scroller,
+    listenOn: { addEventListener() {} },
+    container: () => chat.chatArea,
+    pageSize: 120,
+    begin: () => null,
+    prepend() {},
+    mount() {},
+    label: () => 'i18n:chat.loadPrevious',
+  });
+  /* Gli stessi nomi di prima: `isLoadingHistory` lo legge il resync, e i test
+     leggono il cursore per dire dove il caricamento e' arrivato. */
+  Object.defineProperties(chat, {
+    historyCursor: {
+      get: () => chat._pager.cursor,
+      set: (v) => { chat._pager.cursor = v || null; },
+    },
+    hasMoreHistory: {
+      get: () => chat._pager.hasMore,
+      set: (v) => { chat._pager.hasMore = !!v; },
+    },
+    isLoadingHistory: { get: () => chat._pager.loading },
+  });
   return chat;
 }
 
@@ -184,28 +204,23 @@ def _harness() -> str:
     chat = _read(CHAT_JS)
     session = _read(SESSION_JS)
     return (
-        _HARNESS.replace("__CTOR__", _member(session, "constructor"))
-        .replace("__SWITCH_TO__", _member(session, "switchTo"))
-        .replace("__GENERATION__", _member(session, "switchGeneration"))
-        .replace("__LOAD_THREAD__", _member(session, "loadThread"))
-        .replace("__INVALIDATE__", _member(chat, "invalidateHistory"))
-        .replace("__LOAD_INITIAL__", _member(chat, "loadInitialHistory"))
-        .replace("__SHOW_ERROR__", _member(chat, "_showHistoryError"))
-        .replace("__CLEAR_ERROR__", _member(chat, "_clearHistoryError"))
-        .replace("__RESYNC__", _member(chat, "_resyncThreadAfterReconnect"))
-        .replace("__SWITCH_CONVERSATION__", _member(chat, "_switchConversation"))
+        _HARNESS.replace("__CTOR__", member(session, "constructor"))
+        .replace("__SWITCH_TO__", member(session, "switchTo"))
+        .replace("__GENERATION__", member(session, "switchGeneration"))
+        .replace("__LOAD_THREAD__", member(session, "loadThread"))
+        .replace("__INVALIDATE__", member(chat, "invalidateHistory"))
+        .replace("__LOAD_INITIAL__", member(chat, "loadInitialHistory"))
+        .replace("__SHOW_ERROR__", member(chat, "_showHistoryError"))
+        .replace("__CLEAR_ERROR__", member(chat, "_clearHistoryError"))
+        .replace("__RESYNC__", member(chat, "_resyncThreadAfterReconnect"))
+        .replace("__SWITCH_CONVERSATION__", member(chat, "_switchConversation"))
+        .replace("__PAGER_URL__", PAGER_JS.as_uri())
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── 1. Il fallimento si vede ────────────────────────────────────────────────
@@ -320,14 +335,14 @@ def test_a_superseded_failure_paints_no_error_row() -> None:
     """
     _run_js("""
       const chat = makeChat();
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
 
       pending('project:bordi').resolve(thread('bordi', 'da bordi'));
       await tick();
-      pending('project:patreon').reject(new Error('rete'));
+      pending('project:palestra').reject(new Error('rete'));
       await tick();
       await Promise.all([first, second]);
 
@@ -344,12 +359,12 @@ def test_the_open_conversation_still_gets_its_own_error() -> None:
     anche se un'altra, lasciata prima, era andata a buon fine."""
     _run_js("""
       const chat = makeChat();
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
 
-      pending('project:patreon').resolve(thread('patreon', 'da patreon'));
+      pending('project:palestra').resolve(thread('palestra', 'da palestra'));
       await tick();
       pending('project:bordi').reject(new Error('rete'));
       await tick();
@@ -453,7 +468,7 @@ def test_the_row_is_shown_after_the_generation_guard_not_before() -> None:
     Il test eseguito sopra lo misura, ma solo per la corsa che sa costruire.
     Questa è la regola, scritta dove si vede.
     """
-    body = _member(_read(CHAT_JS), "loadInitialHistory")
+    body = member(_read(CHAT_JS), "loadInitialHistory")
     catch = re.search(r"\} catch \(err\) \{(.*?)\n    \} finally \{", body, re.S)
     assert catch is not None, "il catch di loadInitialHistory non è più riconoscibile"
     src = catch.group(1)

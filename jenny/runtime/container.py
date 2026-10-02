@@ -38,13 +38,10 @@ class GatewayContainer:
         self.config = config
         self.port = config.gateway.port
 
-        # Stato di runtime (ex-nonlocal). `agent`/`message_tool` sono riassegnati
-        # dall'onboarding tramite set_agent/set_message_tool.
+        # Stato di runtime (ex-nonlocal). `agent` è riassegnato dall'onboarding
+        # tramite set_agent.
         self._agent: Any = None
-        self._message_tool: Any = None
         self.onboarding_event = asyncio.Event()
-        # Ultimo errore della sync dei template, se c'è stato (vedi _sync_templates).
-        self.template_sync_error: Exception | None = None
 
         # Collaboratori popolati da build().
         self.bus: Any = None
@@ -64,11 +61,19 @@ class GatewayContainer:
 
     # -- accessor late-binding (usati dai getter di CronDispatcher) ----------
 
+    def _busy_session_keys(self) -> tuple[str, ...]:
+        """Le sessioni sotto cui qualcosa scrive adesso (``AgentLoop.busy_session_keys``).
+
+        Un metodo e non un lambda nel costruttore del dispatcher perche' si possa
+        provare: l'agente nasce dopo il gateway (onboarding) e ``set_agent`` lo
+        sostituisce, e senza agente non scrive nessuno.
+        """
+        if self._agent is None:
+            return ()
+        return self._agent.busy_session_keys()
+
     def set_agent(self, new_agent: Any) -> None:
         self._agent = new_agent
-
-    def set_message_tool(self, mt: Any) -> None:
-        self._message_tool = mt
 
     def _webui_runtime_model_name(self) -> str | None:
         if not self._agent:
@@ -108,10 +113,15 @@ class GatewayContainer:
             return
         try:
             from jenny.config.loader import load_config as _reload_config
+            from jenny.config.loader import resolve_config_env_vars
             from jenny.providers.factory import make_provider as _make_provider
             from jenny.providers.factory import provider_fingerprint
 
-            new_config = _reload_config()
+            # Risolti come all'avvio (``gateway_runtime._load_runtime_config``):
+            # senza, il provider nuovo riceveva ``${VAR}`` alla lettera, e
+            # l'impronta — presa all'avvio sul config risolto — non coincideva
+            # mai, quindi ogni salvataggio lo ricostruiva rotto.
+            new_config = resolve_config_env_vars(_reload_config())
             # La guardia confronta *il config*, non l'oggetto provider gia'
             # costruito. Guardare l'oggetto significa scegliere a mano quali
             # attributi contano — ed era il difetto: modello, api_base e
@@ -145,7 +155,14 @@ class GatewayContainer:
             # sparita, una chiave tolta) l'impronta resta quella vecchia e il
             # prossimo salvataggio ritenta invece di credersi allineato.
             self._provider_fingerprint = new_fingerprint
+            old_provider = self.provider
             self.provider = new_provider
+            # Il provider sostituito teneva aperto il suo client httpx: si chiude
+            # in background, e ``aclose`` aspetta un turno ancora in volo con lui.
+            if old_provider is not None and old_provider is not new_provider:
+                aclose = getattr(old_provider, "aclose", None)
+                if aclose is not None:
+                    self._agent._schedule_background(aclose())
             logger.info(
                 "Hot-reloaded after settings change: model={!r} provider={!r}",
                 new_model,
@@ -238,9 +255,9 @@ class GatewayContainer:
 
         Il prezzo è che un refresh fallito diventa invisibile, quindi si paga con
         un log a ERROR (non warning: non è un dettaglio) che nomina la conseguenza
-        vera — i prompt possono essere quelli della versione precedente — e con
-        ``template_sync_error``, così chi vorrà mostrarlo in UI ha da dove
-        leggerlo. Il fallimento *noto* di questo passo (la cartella dei risultati
+        vera — i prompt possono essere quelli della versione precedente. (Fino al
+        24/09/2026 l'errore restava anche in un campo per una UI che non l'ha mai
+        letto.) Il fallimento *noto* di questo passo (la cartella dei risultati
         occupata da un file) è già gestito alla fonte in ``config/paths.py``:
         questo è la rete, non il rimedio.
         """
@@ -255,9 +272,7 @@ class GatewayContainer:
             from jenny.runtime.retired_artifacts import sweep_retired_artifacts
 
             sweep_retired_artifacts(self.config.workspace_path)
-            self.template_sync_error = None
-        except Exception as exc:
-            self.template_sync_error = exc
+        except Exception:
             logger.opt(exception=True).error(
                 "Estrazione degli asset di pacchetto in {} fallita — i prompt di sistema "
                 "potrebbero essere quelli della versione precedente e la WebUI potrebbe "
@@ -414,6 +429,9 @@ class GatewayContainer:
             # e' servita anche prima che ``build`` arrivi in fondo, e ``self.cron``
             # nasce ``None``.
             get_cron_service=lambda: self.cron,
+            # Chi scrive adesso sotto quale sessione, per i comandi della WebUI che
+            # non devono spostarla sotto le sue mani (``project.rename``).
+            get_busy_session_keys=self._busy_session_keys,
             # Telegram ci legge lo stato del turno: e' l'unico segnale di
             # inizio/fine che arriva a un canale che non riceve ne' progress
             # ne' turn_end.
@@ -524,7 +542,6 @@ class GatewayContainer:
         else:
             logger.info("Update check: disabled")
 
-
     def _instantiate_agent(self, config: Config, provider: Any) -> Any:
         """Costruisce e cabla un ``AgentLoop`` (wiring condiviso build/onboarding).
 
@@ -557,7 +574,6 @@ class GatewayContainer:
         message_tool = agent.tools.get("message")
         if isinstance(message_tool, MessageTool):
             message_tool.set_send_callback(self._deliver_to_channel)
-            self.set_message_tool(message_tool)
         # Lo stesso callback passato al ``CronDispatcher``, non un secondo: i due
         # percorsi di Dream — il job periodico e lo slash command ``/dream`` —
         # devono checkpointare la stessa cosa. Il cablaggio sta qui e non accanto
@@ -580,10 +596,12 @@ class GatewayContainer:
 
         try:
             from jenny.config.loader import load_config as _reload_config
+            from jenny.config.loader import resolve_config_env_vars
             from jenny.providers.factory import make_provider as _make_provider
             from jenny.providers.factory import provider_fingerprint
 
-            new_config = _reload_config()
+            # Come all'avvio e nel hot reload: i ``${VAR}`` si risolvono qui.
+            new_config = resolve_config_env_vars(_reload_config())
             provider = _make_provider(new_config)
             # Da qui in poi c'e' un provider vivo: l'impronta e' quella del
             # config che l'ha prodotto, non piu' ``None``.

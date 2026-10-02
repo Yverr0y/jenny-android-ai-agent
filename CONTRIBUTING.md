@@ -30,9 +30,11 @@ This appends a line like:
 Signed-off-by: Your Name <your@email.example>
 ```
 
-The sign-off has to match the commit's own author. Pull requests with unsigned
-commits fail the `dco` job in CI (`scripts/check_dco.sh`, run by
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml)) and cannot be merged.
+The sign-off has to be a real trailer (in the last paragraph of the message)
+matching the commit's own author. Pull requests with unsigned commits fail the
+`dco` job in CI (`scripts/check_dco.sh`, run by
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)) and cannot be merged;
+the same job also runs on every push to a branch, so you find out before the PR.
 
 You can run the same check yourself before pushing:
 
@@ -57,7 +59,30 @@ project name and logo are covered by a separate
 - Match the existing code style of the file you are touching.
 - If your change affects security boundaries (workspace sandbox, network
   guards, credential handling), call it out explicitly in the PR description.
+  The boundaries, and the limits already accepted, are described in
+  [Security model](docs/internals/security-model.md).
 - Test on a real device when possible, and say which one.
+
+## Design rules
+
+- **The core stays small; extend at the edges.** `jenny/agent/loop.py` and
+  `runner.py` are the critical path: a feature that can live in a channel, a
+  tool or a skill goes there.
+- **Duplication over premature abstraction.** Channels and providers may repeat
+  similar logic; do not add base classes only to remove it.
+- **The HTTP surface is for reads.** `/api/` never reads a request body, so its
+  parameters travel in the query string or a header. Anything that writes, or
+  carries content or a secret, is a command over the WebSocket
+  (`jenny/webui/commands.py`, see [WebSocket protocol](docs/reference/websocket.md#commands-rpc)).
+  Do not smuggle a payload into a header.
+- **Every `config.json` write goes through `jenny/config/store.py::mutate()`**
+  (see [`AGENTS.md`](AGENTS.md)); calling `save_config()` directly loses other
+  writers' changes silently.
+- **Explicit over magical.** Configuration is declared in
+  `jenny/config/schema.py`; bad input raises instead of being corrected. The one
+  exception is loading an unusable `config.json`, which falls back loudly (to
+  the `.bak`, or to defaults with the broken file kept) because on a phone a
+  config the gateway refuses is an app nobody can repair.
 
 ## Conduct
 

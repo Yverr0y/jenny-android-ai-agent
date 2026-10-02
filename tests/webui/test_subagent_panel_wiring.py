@@ -14,10 +14,12 @@ import json
 import re
 from pathlib import Path
 
+from support import css_levels
+
 UI_DIR = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui"
 CHAT_JS = UI_DIR / "assets" / "mobile-chat.js"
 DIALOG_JS = UI_DIR / "assets" / "shared" / "dialog.js"
-INDEX_HTML = UI_DIR / "index.html"
+WORKSHOP_HTML = UI_DIR / "workshop.html"
 CSS = UI_DIR / "assets" / "mobile-style.css"
 
 
@@ -107,10 +109,14 @@ def test_the_detail_modal_reuses_the_shared_dialog() -> None:
     assert "'cancel'" in dialog
     assert "oc-detail-close" in dialog
     assert "e.target === dialog" in dialog, "manca la chiusura al tap sul backdrop"
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    # Il markup non sta più in officina.html: se lo porta il modulo, che lo
+    # monta all'import — i gusci che usano questi dialoghi sono due.
     for node_id in ("oc-detail-dialog", "oc-detail-title", "oc-detail-body",
                     "oc-detail-actions", "oc-detail-close"):
-        assert f'id="{node_id}"' in html, node_id
+        assert f'id="{node_id}"' in dialog, node_id
+    assert 'id="oc-detail-dialog"' not in WORKSHOP_HTML.read_text(encoding="utf-8"), (
+        "due copie dello stesso markup: la seconda è quella che resterà indietro"
+    )
 
 
 def test_the_detail_modal_is_a_sheet_like_every_other_detail_surface() -> None:
@@ -120,7 +126,7 @@ def test_the_detail_modal_is_a_sheet_like_every_other_detail_surface() -> None:
     era la sola superficie di dettaglio della UI a non essere un `.oc-sheet`. Il
     margine per lato lo pagavano le righe di attività, che sono monospazio.
     """
-    html = INDEX_HTML.read_text(encoding="utf-8")
+    html = DIALOG_JS.read_text(encoding="utf-8")
     dialog = re.search(r'<dialog[^>]*id="oc-detail-dialog"[^>]*>', html)
     assert dialog, "il <dialog> del dettaglio non è stato trovato"
     classes = dialog.group(0)
@@ -479,10 +485,15 @@ def test_the_digest_takes_the_whole_row_when_open() -> None:
     body = re.search(r"\n\.sa-digest-body\s*\{(.*?)\}", css, re.S)
     assert body and "width: 100%" in body.group(1), "il corpo del digest non prende la riga"
     # La testata resta un chip: se si allargasse anche lei, il fold chiuso
-    # occuperebbe una riga intera per tre parole.
-    head = re.search(r"\n\.sa-digest-head\s*\{(.*?)\}", css, re.S)
-    assert head and "display: inline-flex" in head.group(1)
-    assert "align-self: flex-start" in head.group(1), (
+    # occuperebbe una riga intera per tre parole. Le sue dichiarazioni stanno
+    # in due posti — il gruppo delle testate del turno e la regola sua — quindi
+    # si leggono tutte le regole che la nominano.
+    head = "\n".join(
+        body for selectors, body, _ in css_levels.rules(css)
+        if ".sa-digest-head" in {x.strip() for x in selectors.split(",")}
+    )
+    assert "display: inline-flex" in head
+    assert "align-self: flex-start" in head, (
         "fuori dalla meta-row (chat, flex a colonna) lo stretch allargherebbe la chip"
     )
 

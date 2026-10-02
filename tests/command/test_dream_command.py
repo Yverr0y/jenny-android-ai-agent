@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from support.aio import other_tasks, settle_tasks
 
 from jenny.agent.memory import MemoryStore
 from jenny.bus.events import InboundMessage
@@ -32,7 +33,7 @@ from jenny.utils.helpers import sync_workspace_templates
 # plausibile: è lo stato reale sul device ed è il caso che la conferma deve
 # segnalare.
 _MEMORY_TEXT = "# Memory\n" + "".join(f"- fact number {i}\n" for i in range(40))
-_USER_TEXT = "# User\n- Name: Ludovico\n"
+_USER_TEXT = "# User\n- Name: Marco\n"
 _SOUL_TEXT = "# Soul\n- Helpful, concise.\n"
 
 
@@ -98,6 +99,8 @@ def loop(workspace: Path, memory: MemoryStore, published: list) -> SimpleNamespa
         return SimpleNamespace(content="done", metadata={"_stop_reason": "completed"})
 
     return SimpleNamespace(
+        # Come ``AgentLoop._schedule_background``: ``cmd_dream`` passa da qui.
+        _schedule_background=asyncio.create_task,
         bus=SimpleNamespace(publish_outbound=_publish),
         context=SimpleNamespace(memory=memory, timezone=None),
         sessions=SimpleNamespace(sessions_dir=workspace / "sessions"),
@@ -133,16 +136,7 @@ async def _drain(timeout: float = 30.0) -> None:
     un difetto, e lo dice invece di lasciare fallire un ``assert ([])`` tre righe
     più in là.
     """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    current = asyncio.current_task()
-    while True:
-        pending = [t for t in asyncio.all_tasks() if t is not current and not t.done()]
-        if not pending:
-            return
-        remaining = deadline - loop.time()
-        assert remaining > 0, f"task ancora in volo dopo {timeout}s: {pending}"
-        await asyncio.wait(pending, timeout=remaining)
+    await settle_tasks(other_tasks, timeout=timeout)
 
 
 def _config_path(workspace: Path) -> Path:
@@ -217,6 +211,35 @@ class TestPlainDreamIsUntouched:
         await _drain()
 
         assert _config_path(workspace).stat().st_mtime_ns == before
+
+
+class TestNothingNewToDream:
+    """`/dream` senza storia nuova: un messaggio, e il ciclo si chiude lo stesso.
+
+    Il ramo esce dal ``try`` prima che il turno parta, e il ``finally`` che
+    chiude il ciclo legge lo stato file del turno. Finché quel nome nasceva solo
+    più in basso, il ``finally`` sollevava ``UnboundLocalError``: il ciclo non si
+    chiudeva (``runs_since_review`` fermo, quindi un review pass che non arriva
+    mai per chi ha poca storia) e all'utente arrivava, dopo «niente da fare»,
+    anche un «Dream failed» che parlava di una variabile.
+    """
+
+    @pytest.mark.asyncio
+    async def test_one_message_and_the_cycle_still_closes(
+        self, router, loop, memory, published
+    ):
+        runs_before, _ = memory.get_review_state()
+
+        ack = await router.dispatch(_ctx(loop, "/dream"))
+        await _drain()
+
+        assert ack.content == "Dreaming..."
+        assert loop.prompts == [], "senza storia il turno non deve partire"
+        assert len(published) == 1, [m.content for m in published]
+        assert "no conversation history" in published[0].content
+        assert "failed" not in published[0].content.lower()
+        runs_after, _ = memory.get_review_state()
+        assert runs_after == runs_before + 1
 
 
 class TestTheFormsThatMoved:

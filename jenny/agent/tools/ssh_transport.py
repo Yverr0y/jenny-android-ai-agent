@@ -12,6 +12,7 @@ entrambi i posti ed è coperto dai test.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,43 @@ def is_host_pinned(host: str, port: int) -> bool:
     return pinned_host_key(host, port) is not None
 
 
+def _pad_base64(text: str) -> str:
+    """*text* con il padding ``=`` che il base64 standard vuole, né più né meno."""
+    bare = text.rstrip("=")
+    return bare + "=" * (-len(bare) % 4)
+
+
+def decode_host_key_blob(text: str) -> bytes:
+    """Il blob di una host key da una riga ``known_hosts``, padding o no.
+
+    Versioni vecchie del ponte salvavano il pin senza il ``=`` finale, e
+    ``b64decode`` con ``validate=True`` rifiuta quella forma: l'impronta di un
+    pin così non si poteva ricalcolare. Solleva ``ValueError`` se il testo non
+    è base64 nemmeno col padding rimesso.
+    """
+    return base64.b64decode(_pad_base64(text), validate=True)
+
+
+def _host_key_fields(line: str) -> list[str]:
+    fields = line.split()
+    if len(fields) >= 3:
+        fields[2] = _pad_base64(fields[2])
+    return fields
+
+
+def host_key_lines_match(a: str | None, b: str | None) -> bool:
+    """Vero se *a* e *b* registrano la stessa chiave per lo stesso host.
+
+    Il confronto è per campi e ignora il padding base64 del blob: la stessa
+    chiave salvata senza ``=`` da una versione vecchia e riletta dal probe con
+    il ``=`` non è una chiave cambiata, e trattarla così chiedeva all'utente di
+    decidere su un falso MITM.
+    """
+    if a is None or b is None:
+        return False
+    return _host_key_fields(a) == _host_key_fields(b)
+
+
 def record_host_key(line: str, *, replace: bool = False) -> None:
     """Registra una riga ``known_hosts``, atomicamente.
 
@@ -175,6 +213,10 @@ def record_host_key(line: str, *, replace: bool = False) -> None:
         if fields and fields[0] == name and not existing.lstrip().startswith("#"):
             if existing.strip() == line.strip():
                 return  # già registrata, idempotente
+            if host_key_lines_match(existing, line):
+                # La stessa chiave in un'altra forma (un pin vecchio senza
+                # padding): la riga nuova prende il suo posto, senza chiedere.
+                continue
             if not replace:
                 raise SshHostKeyError(
                     f"host key for {name} is already pinned to a different key; "
@@ -269,7 +311,7 @@ def resolve_target(
     if not is_host_pinned(host_cfg.host, host_cfg.port):
         raise SshHostKeyError(
             f"the host key for {alias!r} has not been accepted yet — open "
-            "Settings > SSH, check the fingerprint and accept it. This is not "
+            "Settings → Workshop → Hands → SSH, check the fingerprint and accept it. This is not "
             "something you can work around from here."
         )
 
@@ -284,13 +326,13 @@ def resolve_target(
         password = host_cfg.password or None
         if password is None:
             raise SshPasswordMissingError(
-                f"no password is set for {alias!r} — open Settings > SSH and set it "
+                f"no password is set for {alias!r} — open Settings → Workshop → Hands → SSH and set it "
                 "for that host. It cannot be set from here, and nobody will show it "
                 "to you"
             )
     elif not key_path.exists():
         raise SshKeyMissingError(
-            f"no private key for {alias!r} — generate one in Settings > SSH and "
+            f"no private key for {alias!r} — generate one in Settings → Workshop → Hands → SSH and "
             "install the public key on the server"
         )
 

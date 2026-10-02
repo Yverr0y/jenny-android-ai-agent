@@ -35,7 +35,9 @@ from jenny.runtime.cron_dispatch import (
     refresh_system_job,
 )
 
-_JOB = SimpleNamespace(name="gardener", id="job-gardener")
+_JOB = SimpleNamespace(
+    name="gardener", id="gardener", payload=SimpleNamespace(kind="system_event")
+)
 
 
 class _FakeAgent:

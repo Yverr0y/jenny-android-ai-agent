@@ -3,7 +3,7 @@
 Un provider è indirizzato **per nome** da due posti — ``providers.default`` e il
 campo ``provider`` di ogni preset di modello — e fino al 24/08/2026 la
 cancellazione ne riparava uno solo. È la forma del difetto dei progetti trovato
-lo stesso giorno (v. ``.agent/stale-name-bindings-plan.md``): un nome torna
+lo stesso giorno: un nome torna
 libero in un deposito e resta occupato in un altro.
 
 Quel campo a runtime oggi non lo legge nessuno, quindi qui non si sta riparando

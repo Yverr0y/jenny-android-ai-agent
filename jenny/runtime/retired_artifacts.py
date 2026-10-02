@@ -12,7 +12,7 @@ installato da mesi. A regime costa uno ``stat`` per voce e zero scritture.
 
 L'elenco e' chiuso e nomina i file uno per uno: qui la parola «atlas» e' un
 **nome di file sul disco dell'utente**, non un concetto del codice, ed e' il
-motivo per cui compare (v. ``.agent/retire-atlas-and-main-plan.md``, D3). Quel
+motivo per cui compare. Quel
 che l'utente ha scritto di suo — ``memory/WIKI_POLICY.md`` — non e' in elenco.
 """
 

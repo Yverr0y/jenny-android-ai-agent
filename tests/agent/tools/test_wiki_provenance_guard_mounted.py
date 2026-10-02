@@ -6,7 +6,7 @@ la passata con **meno** contesto — nomi di pagina, non corpi — era l'unica
 trattenuta, e la conversazione, che ha i corpi, la giornata intera e la libertà
 di ristrutturare, non era trattenuta affatto.
 
-Quel giorno in ``wikis/salute`` una richiesta di sistemare la wiki ha fatto un
+Quel giorno in ``wikis/sartoria`` una richiesta di sistemare la wiki ha fatto un
 buon lavoro e, dentro, ha riscritto la ``source:`` di ``riattivazione-fisica.md``
 come lista YAML a due voci. I due lettori che la interpretano hanno dato due
 risposte diverse — ``_page_frontmatter`` la prima voce **col trattino attaccato**
@@ -56,7 +56,7 @@ def ws(tmp_path: Path):
     la riga non regge.
     """
     root = tmp_path / "workspace"
-    project = root / "wikis" / "salute"
+    project = root / "wikis" / "sartoria"
     (project / "wiki").mkdir(parents=True)
     (project / "raw" / "journal").mkdir(parents=True)
     (project / "raw" / "research").mkdir(parents=True)
@@ -67,12 +67,12 @@ def ws(tmp_path: Path):
     (project / "raw" / "research" / "evidenze.md").write_text(
         "# Evidenze\n\nCopiato verbatim da fuori.\n", encoding="utf-8"
     )
-    (project / "wiki" / "index.md").write_text("# Salute\n\n## Pages\n", encoding="utf-8")
+    (project / "wiki" / "index.md").write_text("# Sartoria\n\n## Pages\n", encoding="utf-8")
     (root / "memory").mkdir()
     return root, project
 
 
-class TestIlMontaggio:
+class TestTheMount:
     """Tutti e tre i tool di scrittura, perché tutti e tre l'hanno fatto.
 
     Il funnel è uno (``_FsTool._check_write_size``), ma è esattamente il genere di
@@ -121,7 +121,7 @@ class TestIlMontaggio:
         assert not page.exists()
 
 
-class TestDoveNonDeveArrivare:
+class TestWhereItMustNotReach:
     """I tre silenzi, e sono la ragione per cui il gancio può essere universale.
 
     Un gancio montato in ``_FsTool`` vede **ogni** scrittura del repo. Se parlasse
@@ -129,7 +129,7 @@ class TestDoveNonDeveArrivare:
     quello lo si scopre in produzione.
     """
 
-    async def test_un_file_fuori_da_un_progetto(self, ws) -> None:
+    async def test_a_file_outside_a_project(self, ws) -> None:
         """Le stesse parole in ``memory/`` non sono una pagina di wiki."""
         root, _ = ws
         target = root / "memory" / "MEMORY.md"
@@ -141,7 +141,7 @@ class TestDoveNonDeveArrivare:
         assert LIST_REFUSED not in result
         assert target.exists()
 
-    async def test_la_mappa(self, ws) -> None:
+    async def test_the_map(self, ws) -> None:
         """``index.md`` non ha ``state:`` e ha un tetto suo: fuori per contratto.
 
         L'esclusione non è scritta qui — è quella di ``wiki_page_rel``, che è la
@@ -155,7 +155,7 @@ class TestDoveNonDeveArrivare:
 
         assert LIST_REFUSED not in result
 
-    async def test_una_source_singola_a_open(self, ws) -> None:
+    async def test_a_single_source_at_open(self, ws) -> None:
         """Il contro-limite: senza questo, il gancio potrebbe rifiutare tutto.
 
         È la forma normale — una pagina appena promossa, ``open``, ancorata a una
@@ -177,17 +177,17 @@ class TestDoveNonDeveArrivare:
         assert page.exists()
 
 
-class TestIlConsiglioPossibile:
+class TestThePossibleAdvice:
     """Un rifiuto su cui non si può agire si riprova identico.
 
     Il 26/08 lo stesso difetto è stato trovato in due lettori: il lint diceva
-    «aggiungi un ``#HH:MM``» a cinque pagine su cinque di ``salute``, la cui
+    «aggiungi un ``#HH:MM``» a cinque pagine su cinque di ``sartoria``, la cui
     ``source:`` è un documento di ``raw/research/`` dove quel minuto non esiste. Il
     gancio in scrittura diceva la stessa cosa. Vanno corretti entrambi, ed è per
     questo che il test è qui e non solo in ``test_lint_wiki.py``.
     """
 
-    async def test_decided_su_un_documento_non_chiede_l_ora(self, ws) -> None:
+    async def test_decided_on_a_document_does_not_ask_for_the_time(self, ws) -> None:
         root, project = ws
 
         result = await WriteFileTool(workspace=root, allowed_dir=root).execute(
@@ -206,7 +206,7 @@ class TestIlConsiglioPossibile:
         # E dice l'unica strada che c'è, invece di lasciare il modello a indovinarla.
         assert "capture it as a journal line first" in result
 
-    async def test_decided_su_un_giorno_nudo_chiede_ancora_l_ora(self, ws) -> None:
+    async def test_decided_on_a_bare_day_still_asks_for_the_time(self, ws) -> None:
         """Il contro-limite del test sopra: dove l'ora **si può** aggiungere, si chiede.
 
         Senza questa asserzione la correzione potrebbe aver tolto il consiglio
@@ -226,7 +226,7 @@ class TestIlConsiglioPossibile:
         assert "names a document copied into `raw/`" not in result
 
 
-async def test_il_gancio_iniettato_parla_prima(ws) -> None:
+async def test_the_injected_hook_speaks_first(ws) -> None:
     """L'ordine, e non è estetico.
 
     Quando il gancio iniettato è la cessione del passo del giardiniere, quel

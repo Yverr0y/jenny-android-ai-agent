@@ -231,9 +231,9 @@ def test_app_server_allows_tailscale_without_the_global_whitelist():
     configure_ssrf_whitelist([])
     with patch(
         "jenny.security.network.socket.getaddrinfo",
-        _fake_resolve("hps", ["100.107.97.244"]),
+        _fake_resolve("pibox", ["100.100.7.7"]),
     ):
-        ok, err = validate_app_server_target("http://hps:8091/")
+        ok, err = validate_app_server_target("http://pibox:8091/")
         assert ok, f"App policy should allow a Tailscale address, got: {err}"
 
 

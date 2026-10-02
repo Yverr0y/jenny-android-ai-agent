@@ -2,10 +2,38 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import socket
 from contextlib import suppress
 from urllib.parse import urlparse
+
+# Indirizzi che non sono mai un server, per nessuna delle tre policy:
+# ``::`` non specificato (su Linux una connessione verso
+# ``::`` arriva all'host stesso, come ``0.0.0.0``), ``::/96`` IPv4-compatibile
+# (deprecato: ``::127.0.0.1`` è il loopback in una forma che ``_normalize_addr``
+# non riconosce, perché non è una IPv4-mapped), multicast e broadcast.
+#
+# Stessa ragione per ``::ffff:0:0:0/96``, la forma «tradotta» di SIIT
+# (``::ffff:0:a.b.c.d``, non una IPv4-mapped: fuori da un traduttore non va da
+# nessuna parte), e per ``64:ff9b:1::/48``, il prefisso NAT64 di uso locale (RFC
+# 8215): la lunghezza del prefisso lì non è fissa, quindi l'IPv4 che porta dentro
+# non si sa estrarre, e un indirizzo così non è mai il server di nessuno.
+_NEVER_A_SERVER = [
+    ipaddress.ip_network("::/96"),             # :: e IPv4-compatibili (::1 compreso)
+    ipaddress.ip_network("::ffff:0:0:0/96"),   # IPv4 tradotto (SIIT)
+    ipaddress.ip_network("64:ff9b:1::/48"),    # NAT64 locale
+    ipaddress.ip_network("224.0.0.0/4"),       # multicast v4
+    ipaddress.ip_network("255.255.255.255/32"),  # broadcast
+    ipaddress.ip_network("ff00::/8"),          # multicast v6
+]
+
+# NAT64 con il prefisso noto (RFC 6052): l'IPv4 negli ultimi 32 bit, e la
+# connessione arriva a lui. Non si blocca il prefisso — su una rete mobile solo
+# IPv6 il DNS64 dà un 64:ff9b:: anche ai siti pubblici — ma lo si legge come
+# l'IPv4 che è (v. ``_normalize_addr``).
+_NAT64_WELL_KNOWN = ipaddress.ip_network("64:ff9b::/96")
+_SIIT_TRANSLATED = ipaddress.ip_network("::ffff:0:0:0/96")
 
 _BLOCKED_NETWORKS = [
     ipaddress.ip_network("0.0.0.0/8"),
@@ -17,7 +45,9 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),          # unique local
+    ipaddress.ip_network("fec0::/10"),         # site-local (deprecato), privato come l'ULA
     ipaddress.ip_network("fe80::/10"),         # link-local v6
+    *_NEVER_A_SERVER,
 ]
 
 # Blocklist for Jenny App `http` actions: app servers are user-declared LAN
@@ -49,6 +79,7 @@ _APP_SERVER_BLOCKED_NETWORKS = [
     ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud metadata
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fe80::/10"),         # link-local v6
+    *_NEVER_A_SERVER,
 ]
 
 # Blocklist for SSH targets. Come quella degli app server, ma senza CGNAT:
@@ -69,6 +100,7 @@ _SSH_BLOCKED_NETWORKS = [
     ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud metadata
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fe80::/10"),         # link-local v6
+    *_NEVER_A_SERVER,
 ]
 
 
@@ -95,9 +127,32 @@ def _normalize_addr(
     ``127.0.0.0/8`` nor ``::1/128``.  Converting it to IPv4 ensures
     blocklist/allowlist checks work correctly.
     """
-    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
-        return addr.ipv4_mapped
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped is not None:
+            return addr.ipv4_mapped
+        # NAT64 con il prefisso noto, e la forma tradotta di SIIT, sono lo
+        # stesso IPv4 in un'altra scrittura.
+        if addr in _NAT64_WELL_KNOWN or addr in _SIIT_TRANSLATED:
+            return ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)
     return addr
+
+
+def _address_forms(
+    addr: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """L'indirizzo com'è, normalizzato, e l'IPv4 che un 6to4 porta nel prefisso.
+
+    Un 6to4 (``2002:AABB:CCDD::/48``) non è una traduzione, è l'indirizzo di un
+    sito il cui gateway è l'IPv4 ``AA.BB.CC.DD``: se quello è il loopback o il
+    link-local dei metadata, l'indirizzo va trattato come loro. La forma com'è
+    resta perché ``_NEVER_A_SERVER`` rifiuta anche prefissi che la
+    normalizzazione trasforma (SIIT). Basta che una forma sia bloccata.
+    """
+    normalized = _normalize_addr(addr)
+    forms = [addr] if normalized == addr else [addr, normalized]
+    if isinstance(normalized, ipaddress.IPv6Address) and normalized.sixtofour is not None:
+        forms.append(normalized.sixtofour)
+    return forms
 
 
 def _is_blocked(
@@ -107,7 +162,7 @@ def _is_blocked(
     normalized = _normalize_addr(addr)
     if _allowed_networks and any(normalized in net for net in _allowed_networks):
         return False
-    return any(normalized in net for net in blocked_networks)
+    return any(form in net for form in _address_forms(addr) for net in blocked_networks)
 
 
 def _validate_target(
@@ -227,12 +282,38 @@ def validate_ssh_target(host: str) -> tuple[bool, str]:
         # sessione SSH verso il telefono stesso, e con essa raggiungere l'API del
         # gateway dall'interno. Il loopback e la sola cosa che questa policy
         # promette senza condizioni: qui non si negozia.
-        if _normalize_addr(addr).is_loopback:
+        # Il non specificato (`0.0.0.0`, `::`) è il telefono tanto quanto il
+        # loopback: una connessione verso di lui arriva all'host stesso.
+        if any(form.is_loopback or form.is_unspecified for form in _address_forms(addr)):
             return False, f"Blocked: {hostname} resolves to the phone itself ({addr})"
         if _is_blocked(addr, _SSH_BLOCKED_NETWORKS):
             return False, f"Blocked: {hostname} resolves to {addr}"
 
     return True, ""
+
+
+# ── Varianti asincrone: il DNS non deve bloccare il loop ───────────────────
+#
+# Le tre policy risolvono il nome con ``socket.getaddrinfo``, che è bloccante:
+# chiamate dal thread del loop, un DNS lento fermava tutto il gateway. Da un
+# chiamante asincrono si usano queste, che fanno la stessa cosa in un thread.
+# Chiamano la funzione sincrona **per nome, al momento della chiamata**: chi la
+# sostituisce nel modulo (i test lo fanno) sostituisce anche queste.
+
+
+async def validate_url_target_async(url: str, *, allow_loopback: bool = False) -> tuple[bool, str]:
+    """:func:`validate_url_target`, con la risoluzione fuori dal loop."""
+    return await asyncio.to_thread(validate_url_target, url, allow_loopback=allow_loopback)
+
+
+async def validate_app_server_target_async(url: str) -> tuple[bool, str]:
+    """:func:`validate_app_server_target`, con la risoluzione fuori dal loop."""
+    return await asyncio.to_thread(validate_app_server_target, url)
+
+
+async def validate_ssh_target_async(host: str) -> tuple[bool, str]:
+    """:func:`validate_ssh_target`, con la risoluzione fuori dal loop."""
+    return await asyncio.to_thread(validate_ssh_target, host)
 
 
 def _is_allowed_loopback_target(

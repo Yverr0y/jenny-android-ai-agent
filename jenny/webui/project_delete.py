@@ -47,6 +47,7 @@ from jenny.session.project_traces import (
 )
 from jenny.utils.wiki_paths import is_wiki_root
 from jenny.webui.wiki_registry import refresh_wiki_registry
+from jenny.webui.workspace_files import os_error_text
 
 
 class ProjectDeleteError(Exception):
@@ -137,7 +138,12 @@ def delete_project(
         except OSError as exc:
             # Le tracce sono gia' andate: lo stato che resta e' «progetto con
             # chat vuota», quello ritentabile. Si dice, e non si finge riuscito.
-            raise ProjectDeleteError(f"could not remove the project folder: {exc}") from exc
+            # Il perche' senza il dove: ``str(exc)`` porta il percorso assoluto
+            # della cartella privata dell'app, e questo messaggio va al client.
+            logger.opt(exception=True).warning("Project folder not removed: {}", name)
+            raise ProjectDeleteError(
+                f"could not remove the project folder: {os_error_text(exc)}"
+            ) from exc
 
     # 4. Solo ora la sorgente e' chiusa: quel che e' nato nella finestra fra 2 e
     #    3 e' qui, e questa e' l'unica passata che lo puo' vedere.

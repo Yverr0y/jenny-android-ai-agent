@@ -200,6 +200,11 @@
   document.addEventListener('DOMContentLoaded', syncDialogs);
 
   window.addEventListener('message', (event) => {
+    /* Solo dal guscio che ci ospita. Senza il
+       controllo, qualunque frame annidato nell'app — una mappa, un video, una
+       pagina esterna — poteva mandare `jenny:ui-query` e ricevere
+       `outerHTML` dell'app intera, o cambiarle tema e navigazione. */
+    if (event.source !== window.parent) return;
     const msg = event.data;
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'jenny:data-changed') {
@@ -226,6 +231,66 @@
       );
     }
   });
+
+  /* ── Lo scorrimento fra le pagine della casa ─────────────────────────────
+     La pagina di una casa e' **tutta** l'app, intestazione compresa: il dito
+     che la tocca non arriva mai al guscio, e cambiare pagina con lo
+     scorrimento — che ovunque altro nella casa funziona — qui dentro non
+     esisteva. Misurato sul telefono il 22/09/2026: in nessuna delle due
+     direzioni, non solo in una.
+
+     **Perche' il riconoscimento sta qui e non di la'.** Solo da dentro si
+     vede il DOM dell'app, quindi solo da qui si puo' dire «questo gesto e' di
+     una tabella larga, non del guscio». Cosa farne lo decide il guscio, che
+     e' l'unico a sapere se una pagina di fianco c'e': di qua si racconta
+     soltanto cos'ha fatto il dito.
+
+     **E perche' e' importato invece che ricopiato.** E' lo stesso modulo che
+     usano la casa e l'officina, soglie comprese: una seconda copia imparerebbe
+     le cose una volta sola. L'import e' dinamico perche' questo file e' un
+     classico — le app lo caricano con un `<script src>`, e farne un modulo le
+     romperebbe tutte. Gli asset del kit escono con `Access-Control-Allow-Origin`
+     proprio per attraversare l'origine opaca di questo frame.
+
+     **E l'indirizzo va calcolato intero, non scritto come percorso.** Questo
+     file arriva da un'altra origine e senza `crossorigin`, quindi per Chromium
+     e' uno «script CORS-cross-origin»: la sua base per `import()` diventa
+     `about:blank`, e un `/qualcosa.js` non si risolve affatto — `Failed to
+     resolve module specifier`. Misurato il 22/09/2026 su Chrome del telefono,
+     che e' lo stesso motore della WebView: col percorso l'import non parte
+     nemmeno, con l'indirizzo intero passa. `location.href` qui e' quello della
+     app, quindi `new URL` ricostruisce l'origine giusta.
+
+     Se l'import non riesce — un guscio piu' vecchio del kit — l'app resta
+     esattamente com'era: niente scorrimento, nessun errore in faccia. */
+  async function armScroll() {
+    let swipe;
+    try {
+      const where = new URL('/html-mobile/assets/shared/horizontal-swipe.js',
+                           location.href);
+      swipe = await import(where.href);
+    } catch {
+      return;
+    }
+    const send = (detail) =>
+      window.parent.postMessage({ type: 'jenny:swipe', slug, ...detail }, '*');
+    /* Sulla finestra e non sulla radice: si ascolta in risalita, e dev'essere
+       **l'ultimo** a sentire il dito — anche dopo chi nell'app ascolta sul
+       `document` — perche' e' da quel che l'app ha fatto (un `preventDefault`
+       mentre si trascina) che si capisce se il gesto era suo. `exclusive`:
+       quando invece e' della pagina, l'app riceve l'annullo e si ferma. */
+    swipe.watchHorizontalSwipe(window, {
+      exclusive: true,
+      onHorizontal: () => send({ phase: 'start' }),
+      onDrag: (dx) => send({ phase: 'move', dx }),
+      onEnd: ({ direction, confirm }) => send({ phase: 'end', direction, confirm }),
+      onCancel: () => send({ phase: 'cancel' }),
+    });
+  }
+  /* Solo in una pagina della casa. Nel velo a tutto schermo (`overlay=1`,
+     v. `frameForApp`) lo scorrimento laterale non lo ascolta nessuno, e
+     prenderselo in esclusiva toglieva il dito all'app a ogni gesto di lato. */
+  if (qs.get('overlay') !== '1') armScroll();
 
   window.jenny = { slug, theme, lang, accent: null, action, discuss, navigate, back };
   applyTokens(qs.get('tokens'));

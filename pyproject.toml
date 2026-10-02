@@ -1,6 +1,6 @@
 [project]
 name = "jenny"
-version = "0.11.0"
+version = "1.0.0"
 description = "Jenny - AI agent framework (fork of nanobot)"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -27,7 +27,6 @@ dependencies = [
     "httpx>=0.28.0,<1.0.0",
     "websockets>=16.0,<17.0.0",
     "loguru>=0.7.3,<1.0.0",
-    "croniter>=6.0.0,<7.0.0",
     "json-repair>=0.57.0,<1.0.0",
     "jinja2>=3.1.0,<4.0.0",
     "filelock>=3.25.2,<4.0.0",
@@ -36,6 +35,22 @@ dependencies = [
     "pyyaml>=6.0,<7.0.0",
     "typing-extensions>=4.0.0,<5.0.0",
     "tzdata>=2025.1",
+]
+
+[project.optional-dependencies]
+# Solo sviluppo e CI (`pip install -e ".[dev]"`), mai nell'APK: Chaquopy installa
+# `requirements-android.lock.txt`, non questo elenco. Versioni esatte perche' un
+# rilascio nuovo di ruff o pytest non cambi l'esito della CI senza un commit.
+# `asyncssh` alza il server SSH in-process dei test (su Android c'e' jsch),
+# `cryptography` fa da backend ai test del backup cifrato (su Android
+# javax.crypto), `pillow` serve a tests/webui/test_mascot_layer_sources.py.
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.15.18",
+    "asyncssh==2.24.0",
+    "cryptography==50.0.1",
+    "pillow==12.2.0",
 ]
 
 [build-system]

@@ -169,8 +169,19 @@ class FileStates:
         """
         self.writes_attempted += 1
 
-    def record_read(self, path: str | Path, offset: int = 1, limit: int | None = None) -> None:
-        """Record that a file was read (called after successful read)."""
+    def record_read(
+        self,
+        path: str | Path,
+        offset: int = 1,
+        limit: int | None = None,
+        content_hash: str | None = None,
+    ) -> None:
+        """Record that a file was read (called after successful read).
+
+        *content_hash*: lo sha256 dei byte appena letti, se il chiamante li ha
+        già — ``read_file`` sì, e senza questo il file si rileggeva solo per
+        farne l'hash.
+        """
         p = str(Path(path).resolve())
         try:
             mtime = os.path.getmtime(p)
@@ -180,7 +191,7 @@ class FileStates:
             mtime=mtime,
             offset=offset,
             limit=limit,
-            content_hash=_hash_file(p),
+            content_hash=content_hash if content_hash is not None else _hash_file(p),
             can_dedup=True,
         )
 

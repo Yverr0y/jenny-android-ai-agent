@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 APP_JS = ASSETS / "mobile-app.js"
@@ -58,7 +60,7 @@ def test_the_shell_hands_every_back_press_to_the_spa() -> None:
     pressione va a lei e a nessun altro": il callback nasce disabilitato e vive
     esattamente quanto la pagina a schermo.
     """
-    kotlin = MAIN_ACTIVITY.read_text(encoding="utf-8")
+    kotlin = read_source(MAIN_ACTIVITY)
     assert "OnBackPressedCallback(false)" in kotlin
     assert "OnBackPressedCallback(true)" not in kotlin
     assert "handleHardwareBack()" in kotlin
@@ -78,11 +80,20 @@ def test_the_layer_list_is_ordered_by_real_stacking() -> None:
     context). Con la minichat aperta sopra una mini-app, il back chiudeva l'app
     *sotto* e a schermo non cambiava niente. L'ordine asserito qui è ora quello
     misurato sul CSS.
+
+    **Lightbox e minichat sono l'unica coppia fuori ordine, e non per sbaglio.**
+    Con D3 (25/09/2026, «Jenny sempre sopra», anche alle immagini) la lightbox è
+    scesa da 1000 a 115, sotto di lei: la minichat (121) le starebbe sopra. Le
+    due però non stanno mai aperte insieme — sopra una lightbox lei non prende
+    tocchi, e mentre la minichat è aperta il suo scrim (119) copre la chat e
+    un'immagine non si apre — quindi fra loro l'ordine della catena non si vede.
+    Il banco controlla quelle due condizioni invece di fingere che l'ordine lo
+    decidano i numeri.
     """
     body = _method(_app(), "_overlayLayers")
     layers = [
         "dialog[open]",                  # top layer: showModal() sta sopra ogni z-index
-        ".image-lightbox",               # z-index 1000
+        ".image-lightbox",               # z-index 115 (v. sotto: mai con la minichat)
         ".jenny-mc.open",                # minichat, z-index 121
         ".app-frame-overlay",            # mini-app, z-index 110
         "this.drawer.activeDrawer",      # drawer
@@ -93,6 +104,24 @@ def test_the_layer_list_is_ordered_by_real_stacking() -> None:
         positions.append(body.index(marker))
     assert positions == sorted(positions), (
         "i livelli non sono in ordine di sovrapposizione reale (vedi z-index in mobile-style.css)"
+    )
+
+    css = (ASSETS / "mobile-style.css").read_text(encoding="utf-8")
+    z = {
+        name: int(re.search(rf"\n{re.escape(name)} \{{[^}}]*?z-index: (\d+);", css).group(1))
+        for name in (".image-lightbox", ".jenny-scrim", ".jenny-mc")
+    }
+    frame = re.search(r"\.app-frame-overlay \{[^}]*?z-index: (\d+);", css)
+    assert frame, "livello della mini-app non trovato"
+    # La lightbox sta sopra la mini-app e sotto lo scrim della minichat.
+    assert int(frame.group(1)) < z[".image-lightbox"] < z[".jenny-scrim"] < z[".jenny-mc"], z
+    # Le due condizioni che tengono lightbox e minichat separate.
+    assert ":root:has(.image-lightbox) .jenny-duo { pointer-events: none; }" in css, (
+        "sopra una lightbox lei aprirebbe la minichat: due livelli insieme, fuori ordine"
+    )
+    scrim_open = re.search(r"\n\.jenny-scrim\.open \{([^}]*)\}", css)
+    assert scrim_open and "pointer-events: auto" in scrim_open.group(1), (
+        "con la minichat aperta un'immagine della chat si aprirebbe da sotto lo scrim"
     )
 
 
@@ -204,7 +233,7 @@ def test_the_layers_are_dismissed_through_public_entry_points() -> None:
     tastiera da abbassare). La shell parla solo con gli ingressi pubblici."""
     layers = _method(_app(), "_overlayLayers")
     assert "this.jenny?.handleBack()" in layers
-    assert "this.controllers.apps?.handleBack()" in layers
+    assert "this._appsActions?.handleBack()" in layers
     assert "this.drawer.closeAll()" in layers
     assert "_setOut(" not in _app(), "la shell non tocca lo stato interno della mascotte"
 
@@ -212,7 +241,7 @@ def test_the_layers_are_dismissed_through_public_entry_points() -> None:
 def test_the_two_dangerous_collaborators_of_the_chain_still_exist() -> None:
     """Gli anelli che il piano ha deciso di **non** ammutolire.
 
-    ``_overlayLayers`` chiama ``this.controllers.apps?.handleBack()`` e
+    ``_overlayLayers`` chiama ``this._appsActions?.handleBack()`` e
     ``this.jenny?.handleBack()``: l'optional chaining copre l'*oggetto* assente
     (controller non ancora istanziato, mascotte spenta), non il *metodo*. Se un
     domani uno dei due metodi sparisce o viene rinominato, la catena solleva un
@@ -234,7 +263,7 @@ def test_the_two_dangerous_collaborators_of_the_chain_still_exist() -> None:
         "l'optional call sul metodo trasformerebbe la rottura in un salto silenzioso di due livelli"
     )
 
-    apps = (ASSETS / "mobile-apps.js").read_text(encoding="utf-8")
+    apps = (ASSETS / "shared" / "apps-actions.js").read_text(encoding="utf-8")
     apps_back = _method(apps, "handleBack")
     assert "if (!open) return false;" in apps_back, (
         "senza mini-app aperta il livello deve lasciar proseguire la catena"
@@ -244,7 +273,9 @@ def test_the_two_dangerous_collaborators_of_the_chain_still_exist() -> None:
     # Il livello mini-app ha anche un `close` per Home: smonta e basta.
     assert "closeApp() {" in apps, "closeApp è il congedo che Home usa sul livello mini-app"
 
-    jenny = (ASSETS / "mobile-jenny.js").read_text(encoding="utf-8")
+    # La minichat e' dei due gusci dal 28/09/2026: il suo Indietro sta nel
+    # modulo condiviso, e l'officina lo eredita.
+    jenny = (ASSETS / "shared" / "jenny-minichat.js").read_text(encoding="utf-8")
     jenny_back = _method(jenny, "handleBack")
     assert "return false;" in jenny_back, (
         "a minichat chiusa il livello deve lasciar proseguire la catena"
@@ -426,64 +457,61 @@ def test_sections_with_their_own_depth_expose_a_back_handler() -> None:
     (v. ``test_unsaved_work_contract.py``).
     """
     workspace = (ASSETS / "mobile-workspace.js").read_text(encoding="utf-8")
+    # Il file aperto è la vista `workspace`, e il suo back la smonta.
     ws_back = _method(workspace, "handleBack")
-    assert "parentPath(this.currentDir)" in ws_back, "il back deve risalire di una cartella"
-    assert "this.viewMode === 'editor'" in ws_back
     assert "this._closeEditor({ hardwareBack: true })" in ws_back, (
         "il back non smonta l'editor per conto suo: passa dal teardown unico"
     )
     close_editor = _method(workspace, "_closeEditor")
     assert "if (hardwareBack) return false;" in close_editor, (
-        "l'editor aperto da un'altra sezione lascia proseguire il back: quella entry è già nello stack"
+        "sotto c'è già la entry di Memoria: il back prosegue e ci arriva da sé"
     )
 
-    onboarding = (ASSETS / "mobile-onboarding.js").read_text(encoding="utf-8")
+    # La cartella, invece, è un livello **dentro Memoria** dal 21/09/2026:
+    # l'esploratore ha lasciato la sua vista ed è una scheda del cassetto. La
+    # regola non è cambiata — risalire viene prima di uscire — ma la pressione
+    # arriva al controller del cassetto, che la gira qui.
+    card_back = _method(workspace, "handleCardBack")
+    assert "parentPath(this.currentDir)" in card_back, "il back deve risalire di una cartella"
+    assert "return true;" in card_back, "risalire è un cambiamento visibile: consuma la pressione"
+    settings_back = _method((ASSETS / "mobile-settings.js").read_text(encoding="utf-8"), "handleBack")
+    assert "handleCardBack" in settings_back, (
+        "il cassetto non gira la pressione al gestore file: da tre cartelle di "
+        "profondità una sola pressione porterebbe fuori dall'intera schermata"
+    )
+
+    onboarding = (ASSETS / "onboarding-wizard.js").read_text(encoding="utf-8")
     onb_back = _method(onboarding, "handleBack")
     assert "_goToStep0()" in onb_back and "_goBackToStep1()" in onb_back
     assert "return true;" in onb_back, "dall'onboarding non si esce col back"
 
 
-def test_leaving_the_workspace_forgets_where_the_editor_came_from() -> None:
-    """``_returnMode`` è una promessa sullo *stack*, non una preferenza.
+def test_the_editor_has_one_origin_and_does_not_remember_it_as_state() -> None:
+    """``_returnMode`` era una promessa sullo *stack*, non una preferenza.
 
-    Vale "sotto la entry dell'editor c'è quella della sezione da cui l'ho
-    aperto". Uscendo dal Workspace con l'editor aperto quella promessa scade —
-    l'utente è andato altrove e la history è cambiata — ma il flag restava
-    valorizzato. Al rientro, una sola pressione di Indietro faceva due cose:
-    ``_closeEditor`` chiudeva l'editor *e*, trovando ``ret`` valorizzato,
-    lasciava proseguire la catena (``hardwareBack`` → ``return false``), che
-    portava fuori dalla sezione. Due cambiamenti visibili per una pressione, che
-    è esattamente ciò che il piano vieta.
+    Valeva "sotto la entry dell'editor c'è quella della sezione da cui l'ho
+    aperto". Uscendo dal Workspace con l'editor aperto quella promessa scadeva
+    — l'utente era andato altrove — ma il flag restava valorizzato, e al
+    rientro una sola pressione di Indietro chiudeva l'editor *e* portava fuori
+    dalla sezione. Due cambiamenti visibili per una pressione. La toppa era
+    azzerarlo in ``deactivate()``.
+
+    Dal 21/09/2026 la domanda non si pone: l'esploratore è la scheda «I file
+    veri» di Memoria, e **nient'altro apre un file**. Un campo con un valore
+    solo non descrive niente, e si porta dietro l'azzeramento che è la vera
+    superficie del difetto. Qui si misura che non torni: non il nome, ma la
+    forma — una destinazione letta da uno stato invece che scritta dove serve.
     """
     workspace = (ASSETS / "mobile-workspace.js").read_text(encoding="utf-8")
-    deactivate = _method(workspace, "deactivate")
-    assert "this._returnMode = null;" in deactivate, (
-        "il flag sopravviveva al cambio sezione e regalava un Indietro che salta due livelli"
+    code = re.sub(r"//.*", "", re.sub(r"/\*.*?\*/", "", workspace, flags=re.S))
+    assert "_returnMode" not in code, "la destinazione è tornata a essere uno stato"
+    # E l'origine unica va *scritta*, o `_closeEditor` non sa dove riportare.
+    assert "navigateBack('memory')" in code, "l'uscita dal file non nomina la sua origine"
+    open = _method(workspace, "_enterEditorView")
+    assert "switchMode('workspace')" in open, (
+        "aprire un file deve impilare la propria schermata: senza, il file si "
+        "disegna sotto la scheda e Indietro non ha niente da togliere"
     )
-
-
-def test_opening_a_skill_in_the_editor_is_not_re_entrant() -> None:
-    """Due ``await`` fra il cambio sezione e l'apertura vera.
-
-    ``_openSkillFile`` cambia sezione, aspetta la ``ready`` del Workspace e poi
-    la lettura del file; solo alla fine posa ``_returnMode``. La scheda skill si
-    chiude *prima* di invocare l'azione, quindi durante quella finestra la
-    griglia è di nuovo sotto il dito: due aperture concorrenti si
-    sovrascrivevano ``currentDir`` e ``_returnMode`` a vicenda, e l'editor
-    poteva restare su un file con il breadcrumb dell'altro.
-
-    Il guard sta qui e non in ``handleBack``: nessuna pressione viene consumata
-    da questo percorso, e spostare la toppa sul tasto Indietro
-    significherebbe rimettere una definizione dei livelli fuori dalla catena.
-    """
-    apps = (ASSETS / "mobile-apps.js").read_text(encoding="utf-8")
-    body = _method(apps, "_openSkillFile")
-    assert "if (this._openingSkill) return;" in body, "manca il guard di apertura in corso"
-    assert "this._openingSkill = name;" in body
-    assert "} finally {" in body and "this._openingSkill = null;" in body, (
-        "senza finally un errore lascia il guard acceso e la skill non si riapre più"
-    )
-    assert "handleBack" not in body
 
 
 def test_the_session_info_popover_is_a_layer_of_its_own() -> None:
@@ -507,42 +535,49 @@ def test_leaving_the_chat_takes_the_popover_with_it() -> None:
     assert "this._hideSessionInfo();" in _method(chat, "deactivate")
 
 
-def test_the_graph_focus_is_reachable_from_the_back_button() -> None:
-    """Il focus su un nodo zooma il grafo e spegne tutto il resto: è una
-    schermata. L'unica uscita era il tap su una zona vuota dell'SVG — che a
-    grafo zoomato può non esistere. L'azzeratore era una closure locale di
-    ``renderWikiGraph``: ora è stato del controller, e va lasciato cadere col
-    grafo che lo possiede (altrimenti consuma una pressione operando su nodi non
-    più a schermo)."""
-    graph = (ASSETS / "mobile-graph.js").read_text(encoding="utf-8")
-    back = _method(graph, "handleBack")
-    assert "this._clearFocus" in back
-    assert "this._clearFocus = () => {" in graph, "l'azzeratore deve essere stato del controller"
-    assert "this._clearFocus = null;" in _method(graph, "_cleanup")
+def test_the_drawers_only_sub_screen_is_the_folder_you_are_in() -> None:
+    """Il catalogo modelli era un livello dentro le impostazioni: ci si
+    arrivava da un pulsante, lo si scorreva, e senza `handleBack` una
+    pressione ne saltava due di schermate. Dal 20/09/2026 quel catalogo e' in
+    casa, dove e' una **stanza** e non un sotto-livello.
 
+    Per un giorno qui non e' rimasto niente da sbucciare. Poi il gestore file
+    e' entrato nella scheda «I file veri» (21/09/2026) e ha portato con se'
+    l'unico sotto-livello che i cassetti abbiano: la cartella in cui si sta.
 
-def test_the_svg_background_click_tolerates_a_missing_clear_focus() -> None:
-    """Il listener sullo sfondo è registrato sul nodo statico ``#graph-svg``:
-    d3 lo attacca all'elemento, non ai figli, quindi sopravvive sia a
-    ``svg.selectAll('*').remove()`` sia al cambio di sezione. ``_cleanup()``
-    invece azzera ``this._clearFocus``, e nessuno riregistra il listener
-    (``renderHomeGraph`` non chiama mai ``svg.on('click', …)``). Il tap su una
-    zona vuota dopo il teardown — o durante la fetch che lo segue — invocava un
-    null: TypeError non gestito, quindi ``window.onerror`` → toast +
-    ``/api/client-log``. L'azzeratore va invocato in modo tollerante al null,
-    perché il listener vive più a lungo dello stato."""
-    graph = (ASSETS / "mobile-graph.js").read_text(encoding="utf-8")
-    assert "svg.on('click', () => { this._clearFocus?.(); });" in graph
-    assert "svg.on('click', () => { this._clearFocus(); });" not in graph
-
-
-def test_the_open_model_catalog_is_a_screen() -> None:
-    """Il catalogo modelli aperto occupa la vista: ci si arriva da un pulsante e
-    lo si scorre. Senza handleBack, una pressione ne saltava due di schermate."""
+    Quel che il banco misura non e' che ci sia un `true`, ma che il `true`
+    arrivi **solo** da li'. Un `handleBack` che consuma per conto suo si
+    mangerebbe la pressione senza chiudere niente, ed e' il difetto che il
+    catalogo modelli aveva reso concreto.
+    """
     settings = (ASSETS / "mobile-settings.js").read_text(encoding="utf-8")
     back = _method(settings, "handleBack")
-    assert "#model-catalog" in back
-    assert "this._toggleModelCatalog()" in back, (
-        "richiudere il catalogo passa dal suo toggle, non da un display scritto a mano"
+    code = re.sub(r"//.*", "", re.sub(r"/\*.*?\*/", "", back, flags=re.S)).strip()
+    returns = re.findall(r"return\b[^;]*;", code)
+    assert sum("handleCardBack" in r for r in returns) == 1
+    assert all(r == "return false;" or "handleCardBack" in r for r in returns), (
+        "il cassetto decide da se' invece di girare la domanda: l'unico altro "
+        "ritorno ammesso e' il `false` dei cassetti senza gestore file"
     )
-    assert "return false;" in back, "a catalogo chiuso il back deve proseguire la catena"
+    assert "?? false" in code, (
+        "senza gestore file agganciato la pressione deve proseguire la catena"
+    )
+    assert "handleCardBack" in code, "l'unico sotto-livello e' la cartella del gestore file"
+    assert "return true" not in back, (
+        "handleBack si tiene una pressione per un livello che non esiste piu'"
+    )
+
+
+def test_the_house_closes_the_minichat_before_the_app_under_it() -> None:
+    """La minichat si apre anche sopra una mini-app aperta dal cassetto (lei e'
+    a 120, l'app a 110). Indietro deve chiudere prima lei: nell'ordine opposto
+    chiudeva l'app sotto e lasciava la minichat a schermo, cioe' una pressione
+    che non cambia quel che guardi. E' l'ordine che l'officina ha gia' nel suo
+    `_overlayLayers`."""
+    home = (ASSETS / "home-app.js").read_text(encoding="utf-8")
+    overlays = _method(home, "_closeOverlays")
+    mini = overlays.find("this.jenny?.handleBack()")
+    app = overlays.find("this._appActions?.handleBack()")
+    assert mini != -1, "Indietro in casa non chiude piu' la minichat"
+    assert app != -1
+    assert mini < app, "in casa Indietro chiuderebbe l'app sotto la minichat"

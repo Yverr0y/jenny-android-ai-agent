@@ -5,12 +5,8 @@ import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.View
-import android.webkit.ConsoleMessage
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.net.Uri
@@ -32,9 +28,6 @@ class AgenticSearchBridge(context: Context) {
         private const val TAG = "AgenticSearchBridge"
         private const val DEFAULT_TIMEOUT_SECONDS = 30L
         private const val MAX_RESULTS_DEFAULT = 10
-        private const val USER_AGENT_MOBILE =
-            "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
 
         @Volatile
         private var debuggingConfigured = false
@@ -81,26 +74,7 @@ class AgenticSearchBridge(context: Context) {
 
     private fun ensureWebView() {
         if (webView != null) return
-        webView = WebView(appContext).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.databaseEnabled = true
-            settings.setSupportZoom(false)
-            settings.builtInZoomControls = false
-            settings.displayZoomControls = false
-            settings.loadsImagesAutomatically = false
-            settings.mediaPlaybackRequiresUserGesture = true
-            settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.userAgentString = USER_AGENT_MOBILE
-            visibility = View.GONE
-            webChromeClient = object : WebChromeClient() {
-                override fun onConsoleMessage(msg: ConsoleMessage?): Boolean {
-                    Log.d(TAG, "JS console [${msg?.sourceId()}:${msg?.lineNumber()}] ${msg?.message()}")
-                    return super.onConsoleMessage(msg)
-                }
-            }
-        }
+        webView = HiddenWebView.create(appContext, TAG, logSource = true)
     }
 
     /**
@@ -198,58 +172,70 @@ class AgenticSearchBridge(context: Context) {
         val errorRef = AtomicReference<String?>(null)
 
         handler.post {
-            Log.d(TAG, "evaluateOnPage: setting up WebViewClient and loading URL")
-            ensureWebView()
-            val wv = webView!!
-            wv.webViewClient = object : WebViewClient() {
-                override fun onReceivedError(
-                    view: WebView?,
-                    request: WebResourceRequest?,
-                    error: WebResourceError?
-                ) {
-                    if (request?.isForMainFrame != false) {
-                        val msg = "WebView error: ${error?.description ?: "unknown"} (${error?.errorCode ?: -1})"
-                        Log.e(TAG, msg)
-                        errorRef.set(msg)
-                        latch.countDown()
+            // Questo blocco gira sul main thread: un'eccezione senza `try`
+            // abbatte il processo, gateway compreso. Il caso vero e' il
+            // costruttore della WebView che solleva mentre Android aggiorna il
+            // provider WebView (lo stesso gia' chiuso nel browser con
+            // `MainHop`). Si registra come errore e si sblocca l'attesa: il
+            // chiamante risponde subito con l'errore invece di aspettare il tetto.
+            try {
+                Log.d(TAG, "evaluateOnPage: setting up WebViewClient and loading URL")
+                ensureWebView()
+                val wv = webView!!
+                wv.webViewClient = object : WebViewClient() {
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?
+                    ) {
+                        if (request?.isForMainFrame != false) {
+                            val msg = "WebView error: ${error?.description ?: "unknown"} (${error?.errorCode ?: -1})"
+                            Log.e(TAG, msg)
+                            errorRef.set(msg)
+                            latch.countDown()
+                        }
                     }
-                }
 
-                override fun onReceivedHttpError(
-                    view: WebView?,
-                    request: WebResourceRequest?,
-                    errorResponse: android.webkit.WebResourceResponse?
-                ) {
-                    if (request?.isForMainFrame != false) {
-                        val status = errorResponse?.statusCode ?: -1
-                        val msg = "WebView HTTP error: $status for ${request?.url ?: url}"
-                        Log.e(TAG, msg)
-                        errorRef.set(msg)
-                        latch.countDown()
+                    override fun onReceivedHttpError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        errorResponse: android.webkit.WebResourceResponse?
+                    ) {
+                        if (request?.isForMainFrame != false) {
+                            val status = errorResponse?.statusCode ?: -1
+                            val msg = "WebView HTTP error: $status for ${request?.url ?: url}"
+                            Log.e(TAG, msg)
+                            errorRef.set(msg)
+                            latch.countDown()
+                        }
                     }
-                }
 
-                override fun onPageStarted(view: WebView?, startedUrl: String?, favicon: android.graphics.Bitmap?) {
-                    Log.d(TAG, "onPageStarted: $startedUrl")
-                }
+                    override fun onPageStarted(view: WebView?, startedUrl: String?, favicon: android.graphics.Bitmap?) {
+                        Log.d(TAG, "onPageStarted: $startedUrl")
+                    }
 
-                override fun onPageFinished(view: WebView?, finishedUrl: String?) {
-                    Log.d(TAG, "onPageFinished: $finishedUrl (error=${errorRef.get()})")
-                    if (errorRef.get() != null) {
-                        latch.countDown()
-                        return
-                    }
-                    Log.d(TAG, "evaluateOnPage: running evaluateJavascript")
-                    view?.evaluateJavascript(js) { value ->
-                        Log.d(TAG, "evaluateJavascript callback: value length=${value?.length ?: 0} null=${value == null}")
-                        ref.set(value ?: "")
-                        latch.countDown()
+                    override fun onPageFinished(view: WebView?, finishedUrl: String?) {
+                        Log.d(TAG, "onPageFinished: $finishedUrl (error=${errorRef.get()})")
+                        if (errorRef.get() != null) {
+                            latch.countDown()
+                            return
+                        }
+                        Log.d(TAG, "evaluateOnPage: running evaluateJavascript")
+                        view?.evaluateJavascript(js) { value ->
+                            Log.d(TAG, "evaluateJavascript callback: value length=${value?.length ?: 0} null=${value == null}")
+                            ref.set(value ?: "")
+                            latch.countDown()
+                        }
                     }
                 }
+                Log.d(TAG, "evaluateOnPage: calling loadUrl($url)")
+                wv.loadUrl(url)
+                Log.d(TAG, "evaluateOnPage: loadUrl returned (post)")
+            } catch (e: Exception) {
+                Log.e(TAG, "evaluateOnPage failed on the main thread", e)
+                errorRef.set("WebView unavailable: ${e.javaClass.simpleName}: ${e.message}")
+                latch.countDown()
             }
-            Log.d(TAG, "evaluateOnPage: calling loadUrl($url)")
-            wv.loadUrl(url)
-            Log.d(TAG, "evaluateOnPage: loadUrl returned (post)")
         }
 
         Log.d(TAG, "evaluateOnPage: waiting on latch...")

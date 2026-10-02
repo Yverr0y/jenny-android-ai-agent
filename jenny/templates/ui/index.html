@@ -1,330 +1,614 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Jenny</title>
-<!-- Pre-render bootstrap (theme + locale). Kept as an external, non-defer
-     script so it runs before the body renders (avoids FOUC) while allowing a
-     script-src 'self' CSP — see M1 in migliorie/webui.md. -->
-<script src="/html-mobile/assets/bootstrap.js"></script>
 
-<!-- Fonts (Inter + Fira Code + per-theme display fonts) -->
+<!-- Il guscio della casa. Serve una conversazione e nient'altro: nel <head>
+     non entrano CodeMirror e highlight.js, che l'officina carica perche' le
+     servono davvero. KaTeX, Mermaid e D3 in casa ci sono, ma **a richiesta**:
+     i primi due li carica `shared/rich-content.js` quando un messaggio o una
+     pagina contengono davvero una formula o un diagramma, il terzo
+     `home-map.js` al primo tocco sulla mappa. La differenza non e' estetica —
+     e' il tempo che passa fra il tocco sull'icona e la prima riga leggibile.
+
+     Vale la stessa CSP dell'officina (`script-src 'self'`, v. _SHELL_DOCUMENTS
+     in jenny/webui/ws_http.py): nessuno script inline, nemmeno per il tema. -->
+
+<!-- Pre-render: tema, lingua e taglia della mascotte prima del primo paint.
+     Senza defer e in <head>, come nell'officina: e' l'unico modo perche' giri
+     prima che il body si disegni. Lo stesso file, non una copia. -->
+<script src="/html-mobile/assets/bootstrap.js"></script>
+<!-- Il ponte col guscio Android, ricomposto in window.JennyNative prima che
+     giri qualunque modulo: v. il commento in testa al file. -->
+<script src="/html-mobile/assets/shared/native-bridge.js"></script>
+
 <link href="/html-mobile/assets/vendor/fonts/google-fonts.css" rel="stylesheet">
 <link href="/html-mobile/assets/vendor/fonts/theme-fonts.css" rel="stylesheet">
-
-<!-- Tabler Icons -->
 <link rel="stylesheet" href="/html-mobile/assets/vendor/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 
-<!-- CodeMirror -->
-<link rel="stylesheet" href="/html-mobile/assets/vendor/codemirror@5.65.16/lib/codemirror.min.css">
-<link rel="stylesheet" id="cm-theme-dark" href="/html-mobile/assets/vendor/codemirror@5.65.16/theme/darcula.min.css" media="all">
-<link rel="stylesheet" id="cm-theme-light" href="/html-mobile/assets/vendor/codemirror@5.65.16/theme/eclipse.min.css" media="not all">
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/lib/codemirror.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/javascript/javascript.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/python/python.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/xml/xml.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/css/css.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/yaml/yaml.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/markdown/markdown.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/go/go.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/addon/mode/simple.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/rust/rust.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/clike/clike.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/codemirror@5.65.16/mode/shell/shell.min.js" defer></script>
-
-<!-- KaTeX -->
-<link rel="stylesheet" href="/html-mobile/assets/vendor/katex@0.16.10/dist/katex.min.css">
-<script src="/html-mobile/assets/vendor/katex@0.16.10/dist/katex.min.js" defer></script>
-<script src="/html-mobile/assets/vendor/katex@0.16.10/dist/contrib/auto-render.min.js" defer></script>
-
-<!-- Mermaid -->
-<!-- Mermaid (3,2 MB, l'asset piu pesante del bundle) NON e caricato qui: serve
-     solo alla wiki, e solo quando una nota contiene un diagramma. Lo inietta
-     `ensureVendor()` da shared/utils.js. L'asset resta servito e resta nel
-     _UI_MANIFEST: cambia solo il momento in cui viene eseguito. -->
-
-<!-- D3 -->
-<script src="/html-mobile/assets/vendor/d3@7/d3.min.js" defer></script>
-
-<!-- Marked.js (Markdown parser) -->
+<!-- Markdown e sanificazione: le risposte di Jenny sono markdown anche in casa.
+     Sono le due sole librerie che il guscio si porta dietro. -->
 <script src="/html-mobile/assets/vendor/marked@15.0.7/marked.min.js" defer></script>
-
-<!-- DOMPurify (HTML sanitizer for model markdown — C1) -->
 <script src="/html-mobile/assets/vendor/dompurify@3/purify.min.js" defer></script>
 
-<!-- Highlight.js (Syntax highlighting) -->
-<link rel="stylesheet" id="hljs-theme-dark" href="/html-mobile/assets/vendor/highlight.js@11.11.1/styles/github-dark.min.css" media="all">
-<link rel="stylesheet" id="hljs-theme-light" href="/html-mobile/assets/vendor/highlight.js@11.11.1/styles/github.min.css" media="not all">
-<script src="/html-mobile/assets/vendor/highlight.js@11.11.1/build/highlight.min.js" defer></script>
-
-<!-- Mobile Styles -->
+<!-- I token di colore dei sette temi stanno in mobile-style.css, che e' anche il
+     foglio dell'officina. La casa ne usa solo le variabili, e disegna il proprio
+     con home-style.css. -->
 <link rel="stylesheet" href="/html-mobile/assets/mobile-style.css">
+<link rel="stylesheet" href="/html-mobile/assets/home-style.css">
 </head>
-<body>
+<body class="home">
 
-<div class="app" id="app">
+<main class="home-shell" data-view="chat" data-page="chat">
 
-  <!-- BODY -->
-  <div class="body">
+  <!-- ── La fila delle pagine ─────────────────────────────────────────────
+       I nomi delle pagine, quella dove sei accesa: prende il posto del titolo
+       «Jenny ⌄», dell'ingranaggio, del bottone del cassetto e dei pallini.
+       La disegna `home-strip.js`; c'e'
+       solo nella conversazione e nelle sue pagine di lato, le stanze hanno
+       l'intestazione qui sotto. Tenere premuto un nome apre la modalita'
+       ordina. -->
+  <div class="home-strip" id="home-strip"></div>
 
-    <!-- MAIN -->
-    <div class="main">
+  <!-- L'intestazione delle stanze — le pagine di un quaderno, il lettore, le
+       stanze delle impostazioni. Nella conversazione non c'e': li' la fila dice
+       gia' dove sei. Qui dice dove sei **e da dove si torna**, e dal 26/09/2026
+       lo dice **nella lingua della fila e alla sua altezza**: una riga sola,
+       freccia, percorso («SETTINGS › UPDATES») e i comandi della stanza a
+       destra. Prima era un occhiello e un titolo in serif, cioe' un'altra
+       intestazione: entrando in una stanza cambiavano carattere e altezza, e
+       il contenuto scendeva di 14 px.
 
-      <!-- BACKDROP -->
-      <div class="drawer-backdrop" id="backdrop"></div>
-
-      <!-- DRAWER: Audit -->
-      <div class="drawer" id="drawer-audit">
-        <div class="drawer-header">
-          <div class="drawer-handle"></div>
-          <div class="drawer-header-row">
-            <span class="drawer-title" data-i18n="header.audits">Audits</span>
-            <button class="drawer-close" data-close aria-label="Close" data-i18n-aria="common.close"><i class="ti ti-x"></i></button>
-          </div>
-        </div>
-        <div class="drawer-body" id="drawer-audit-body"></div>
-      </div>
-
-      <!-- DRAWER: Wiki Files -->
-      <div class="drawer" id="drawer-files">
-        <div class="drawer-header">
-          <div class="drawer-handle"></div>
-          <div class="drawer-header-row">
-            <span class="drawer-title" data-i18n="header.files">Files</span>
-            <button class="drawer-close" data-close aria-label="Close" data-i18n-aria="common.close"><i class="ti ti-x"></i></button>
-          </div>
-        </div>
-        <div class="drawer-body" id="drawer-files-body"></div>
-      </div>
-
-      <!-- VIEW: Workspace -->
-      <div id="view-workspace" class="view" style="display:none;flex-direction:column;height:100%">
-        <div class="loading-overlay" id="workspace-loading"><div class="spinner"></div></div>
-        <div class="view-title-mount" id="title-workspace"></div>
-        <div class="ws-breadcrumb" id="ws-breadcrumb"></div>
-        <div class="ws-explorer" id="ws-explorer">
-          <div class="ws-grid" id="ws-grid"></div>
-          <div class="ws-empty" id="ws-empty" style="display:none">
-            <div class="ws-empty-icon"><i class="ti ti-folder-off"></i></div>
-            <div class="ws-empty-title" data-i18n="workspace.noFiles">No Files</div>
-            <div class="ws-empty-sub" data-i18n="workspace.folderEmpty">This folder is empty</div>
-          </div>
-        </div>
-        <div class="workspace-viewer" id="workspace-viewer">
-          <div id="code-editor-mobile"></div>
-        </div>
-      </div>
-
-      <!-- VIEW: Chat -->
-      <div id="view-chat" class="view" style="display:flex">
-        <div class="chat-area" id="chat-area"></div>
-        <!-- Tutto quello che sta fermo in fondo mentre la chat scorre: il
-             blocco è `position: sticky` (mobile-style.css), quindi resta in
-             flusso e nessuno deve misurarne l'altezza. Il FAB "vai in fondo"
-             vive qui dentro, assoluto sopra il composer, e lo segue da sé. -->
-        <div class="chat-bottom" id="chat-bottom">
-        <button id="chat-scroll-fab" class="chat-scroll-fab" aria-label="Vai in fondo" data-i18n-aria="chat.scrollToBottom">
-          <i class="ti ti-chevron-down"></i>
-          <span class="chat-scroll-fab-badge" style="display:none"></span>
+       Il titolo non apre piu' niente, quindi non e' piu' un bottone: la tendina
+       delle conversazioni e' diventata la pagina Quaderni. -->
+  <header class="home-head">
+    <div class="home-title">
+      <!-- La freccia torna dove si e' venuti (`BACK_TO`); la frase «torna
+           a…» e' la sua etichetta per chi non la vede. -->
+      <button class="home-back" id="home-back" type="button">
+        <i class="ti ti-chevron-left" aria-hidden="true"></i>
+      </button>
+      <!-- Il percorso: la radice dice di che posto e' la stanza e ci porta
+           (Impostazioni, Quaderni, il quaderno); l'ultimo e' dove sei. -->
+      <nav class="home-path" id="home-path">
+        <button class="home-path-root" id="home-path-root" type="button">
+          <span class="home-path-dot" id="home-path-root-dot" aria-hidden="true" hidden></span>
+          <span class="home-path-name" id="home-path-root-name"></span>
         </button>
-        <!-- Subagent panel: fuori da .chat-area così non scorre via mentre
-             cinque job girano. Nascosto quando non c'è nulla da mostrare. -->
-        <div class="subagents" id="subagents" hidden>
-          <button class="subagents-head" id="subagents-head" type="button" aria-expanded="false" aria-controls="subagents-body">
-            <i class="ti ti-users subagents-head-icon"></i>
-            <span class="subagents-head-title" data-i18n="subagents.title">Subagents</span>
-            <span class="subagents-head-count" id="subagents-count"></span>
-            <i class="ti ti-chevron-up subagents-head-chevron"></i>
+        <span class="home-path-sep" aria-hidden="true">›</span>
+        <h1 class="home-path-here">
+          <span class="home-path-dot" id="home-head-dot" aria-hidden="true" hidden></span>
+          <span class="home-head-name home-path-name" id="home-head-name"></span>
+        </h1>
+      </nav>
+    </div>
+    <div class="home-actions">
+      <!-- Nelle pagine di un quaderno: l'interruttore fra la sua chat e le sue
+           pagine, lo stesso che la fila mostra nella chat del quaderno e nello
+           stesso punto. Chat e pagine sono due viste dello stesso posto.
+           Nel lettore non c'e': li' il comando e' «Modifica», e all'elenco
+           delle pagine riporta la freccia. Ha preso il posto di «Parlane», che
+           fino al 26/09/2026 era la strada per la chat da qui. -->
+      <div class="home-view-switch" id="home-view-switch" role="group" hidden>
+        <button class="home-view-seg" id="home-view-chat" type="button" aria-pressed="false">
+          <i class="ti ti-message" aria-hidden="true"></i>
+          <span id="home-view-chat-label"></span>
+        </button>
+        <button class="home-view-seg is-on" id="home-view-pages" type="button" aria-pressed="true">
+          <i class="ti ti-book" aria-hidden="true"></i>
+          <span id="home-view-pages-label"></span>
+          <span class="home-view-count" id="home-view-pages-count"></span>
+        </button>
+      </div>
+      <!-- Dal lettore: correggi tu, adesso. Compare solo li', e sparisce
+           mentre l'editor e' aperto — da quel momento i comandi sono Salva e
+           Annulla, e stanno in basso. -->
+      <button class="home-edit" id="home-edit" type="button" hidden>
+        <i class="ti ti-pencil" aria-hidden="true"></i>
+        <span id="home-edit-label"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── La pista delle pagine ────────────────────────────────────────────
+       La casa e' un launcher: una fila di pagine. **Quattro ci sono sempre**
+       — App, la chat, Quaderni, Impostazioni — e i loro pannelli stanno qui
+       nell'HTML; quelle che l'utente aggiunge le crea `home-pages.js`. Tutte
+       si spostano, la chat compresa, e l'ordine in cui compaiono qui sotto e'
+       solo quello di chi non ha mai spostato niente.
+
+       La fila e l'intestazione restano **fuori** dalla pista, ed e' una
+       scelta: sono cromatura del guscio, e duplicarle in ogni pannello
+       vorrebbe dire tenerne N allineate.
+
+       Le stanze (`home-notebook-pages`, `home-reader`, …) restano sorelle della pista
+       e le passano sopra: entrare in una stanza copre le pagine, non le
+       sposta. -->
+  <div class="home-showcase">
+    <div class="home-track" id="home-track">
+    <!-- La pagina App: il cassetto delle app, che fino al 23/09/2026 era un
+         foglio che saliva dalla barra dove scrivi. Stesso codice
+         (`mobile-launcher.js`, in modalita' incorporata) e stessi id, quindi
+         ricerca, classifica e schede sono quelle di sempre; mancano solo le
+         cose di un foglio — maniglia, velo, ✕. -->
+    <div class="home-page" data-page="app">
+      <div class="home-drawer" id="launcher-sheet" tabindex="-1">
+        <div class="launcher-search-row">
+          <i class="ti ti-search launcher-search-icon" aria-hidden="true"></i>
+          <input class="launcher-search" id="launcher-search" type="text"
+                 autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+                 enterkeyhint="go" role="combobox" aria-controls="launcher-list"
+                 aria-expanded="false" aria-autocomplete="list" aria-haspopup="listbox"
+                 placeholder="Cerca un'app…" data-i18n-placeholder="launcher.searchPlaceholder"
+                 aria-label="Cerca un'app…" data-i18n-aria="launcher.searchPlaceholder">
+          <button class="launcher-search-clear" id="launcher-search-clear" type="button"
+                  aria-label="Pulisci" data-i18n-aria="launcher.clearSearch"><i class="ti ti-x" aria-hidden="true"></i></button>
+        </div>
+        <div class="launcher-status" id="launcher-status" role="status" hidden>
+          <i class="ti ti-alert-triangle launcher-status-icon" aria-hidden="true"></i>
+          <span class="launcher-status-text" data-i18n="launcher.loadFailed">Elenco incompleto: qualcosa non ha risposto.</span>
+          <button class="launcher-status-retry" id="launcher-status-retry" type="button"
+                  data-i18n="launcher.retry">Riprova</button>
+        </div>
+        <div class="launcher-head">
+          <span class="launcher-title" id="launcher-title" data-i18n="launcher.recent">Più usate</span>
+        </div>
+        <div class="launcher-list" id="launcher-list" role="listbox"
+             aria-label="Risultati" data-i18n-aria="launcher.resultsList"></div>
+      </div>
+    </div>
+    <div class="home-page" data-page="chat">
+      <!-- La chat vera, in un involucro solo: e' una, e si **sposta** intera
+           nella pagina di un quaderno quando ci arrivi (v. `home-move.js`).
+           Non si copia mai — i controller la prendono per id — e nelle pagine
+           che non abita c'e' la sua foto. -->
+      <div class="home-chat" id="home-chat">
+      <!-- La conversazione. Un solo filo, dall'alto verso il basso. -->
+      <div class="home-thread" id="home-thread"></div>
+
+      <!-- Lo stato vuoto sta FUORI dal filo, sovrapposto. Dentro sarebbe il primo
+           figlio, e il primo figlio del filo porta il `margin-top:auto` che tiene
+           una conversazione corta appoggiata al fondo: un nodo nascosto se lo
+           prenderebbe lui, e i messaggi resterebbero incollati in cima. -->
+      <div class="home-empty" id="home-empty" hidden>
+        <div class="home-empty-text" id="home-empty-text"></div>
+      </div>
+
+      <!-- La riga di lavoro: cosa sta facendo Jenny, mentre lo fa. Tocco lungo per
+           aprire lo stesso turno in officina, con pensieri, strumenti e tempi. -->
+      <div class="home-activity" id="home-activity" hidden></div>
+
+      <!-- Lo stato del filo: compare solo quando c'e' qualcosa da dire (rete giu',
+           riconnessione). A filo funzionante non occupa spazio. -->
+      <div class="home-wire" id="home-wire" hidden></div>
+
+      <!-- Gli allegati in attesa di partire. Vuoto non occupa spazio. -->
+      <div class="home-pending" id="home-pending" hidden></div>
+
+      <div class="home-composer">
+        <!-- Il quaderno in cui sei, e le sue pagine. Stava in testa, accanto al
+             titolo; la testa e' diventata la fila delle pagine, e la pastiglia e'
+             scesa qui, al posto che era del bottone del cassetto — il cassetto
+             oggi e' la pagina App. Compare solo dentro un quaderno.
+             Dal 26/09/2026 porta **il nome**, col pallino. Resta **solo nelle
+             pagine fissate** su un quaderno: nei Quaderni il nome lo dice il
+             percorso in alto, e alle pagine si va dall'interruttore Chat | Pagine
+             accanto (v. `home-strip.js`) — la strada fra chat e pagine sta in
+             alto, nello stesso punto nei due versi. -->
+        <div class="home-notebook-pill" id="home-notebook-pill" hidden>
+          <button class="home-notebook-pages-open" id="home-notebook-pages-open" type="button">
+            <span class="home-notebook-dot" id="home-notebook-dot" aria-hidden="true"></span>
+            <span class="home-notebook-name" id="home-notebook-name"></span>
+            <span class="home-notebook-count" id="home-notebook-pages-count"></span>
           </button>
-          <div class="subagents-body" id="subagents-body" hidden></div>
         </div>
-        <div class="attach-preview" id="attach-preview" style="display:none"></div>
-        <div id="input-bar">
-          <!-- Scope della conversazione: ancorato sopra il composer perche' e'
-               l'unico punto su cui l'occhio e' posato prima di scrivere. La
-               tendina la costruisce shared/scope-chip.js. -->
-          <div class="compose-scope">
-            <div class="scope-menu" id="scope-menu" role="menu" aria-labelledby="scope-chip"></div>
-            <button class="scope-chip" id="scope-chip" type="button"
-                    aria-haspopup="menu" aria-expanded="false"
-                    aria-label="Cambia scope" data-i18n-aria="scope.change">
-              <span class="scope-chip-mark">✿</span>
-              <span class="scope-chip-path"></span>
-              <i class="ti ti-selector scope-chip-switch"></i>
-            </button>
-            <!-- Seconda meta' della stessa domanda del chip: *cosa fara'* quel
-                 che sto per mandare. Sta nella stessa riga per questo. -->
-            <button class="write-switch" id="write-switch" type="button"
-                    aria-pressed="false"
-                    aria-label="Scrittura o sola lettura" data-i18n-aria="write.change">
-              <i class="write-switch-mark ti ti-pencil"></i>
-              <span class="write-switch-label"></span>
-            </button>
-            <!-- Terza domanda della stessa riga: *cosa posso chiedere*. I
-                 comandi esistevano da sempre e non li vedeva nessuno (issue
-                 #11); la tendina la costruisce shared/commands-chip.js
-                 dall'elenco che serve il backend. -->
-            <div class="commands-menu" id="commands-menu" role="menu" aria-labelledby="commands-chip"></div>
-            <button class="commands-chip" id="commands-chip" type="button"
-                    aria-haspopup="menu" aria-expanded="false"
-                    aria-label="Comandi" data-i18n-aria="commands.aria">
-              <i class="commands-chip-mark ti ti-command"></i>
-              <span class="commands-chip-label"></span>
-            </button>
+        <!-- Un `<div>`, non una `<label>`: una label che avvolge anche la
+             graffetta dava al campo il nome del bottone («Allega», per
+             TalkBack), e una label non puo' contenere un bottone. Il nome del
+             campo e' il suo segnaposto, che `home-app.js` traduce; il margine
+             a sinistra sta sul campo, cosi' un tocco li' ci scrive ancora. -->
+        <div class="home-field">
+          <textarea class="home-input" id="home-input" rows="1" enterkeyhint="send" autocomplete="off"></textarea>
+          <button class="home-attach" id="home-attach" type="button" aria-label="Allega">
+            <i class="ti ti-paperclip" aria-hidden="true"></i>
+          </button>
+        </div>
+        <button class="home-send" id="home-send" type="button" aria-label="Manda">
+          <i class="ti ti-arrow-up" aria-hidden="true"></i>
+        </button>
+      </div>
+      </div>
+    </div>
+    <!-- La pagina Quaderni: «Con chi parli», che era la tendina del titolo. La
+         disegna `home-who.js` qui dentro invece che in un `<dialog>`.
+         Dal 26/09/2026 e' anche **il posto in cui un quaderno si apre**: con un
+         quaderno aperto il pannello porta `data-open`, l'elenco e il + si
+         nascondono, e ci arriva la chat — la stessa, spostata dal trasloco
+         (`home-move.js`), come nelle pagine conversazione. -->
+    <div class="home-page" data-page="notebooks">
+      <div class="home-notebooks" id="home-notebooks"></div>
+      <!-- «Nuovo quaderno»: un + tondo che resta fermo mentre l'elenco scorre.
+           Era una riga in fondo all'elenco, e con tanti quaderni finiva sotto il
+           bordo. Fuori da `#home-notebooks` apposta: quello scorre, e il
+           pannello no. -->
+      <button class="home-notebooks-new" id="home-notebooks-new" type="button"
+              aria-label="Nuovo quaderno">
+        <i class="ti ti-plus" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="home-page" data-page="settings">
+      <!-- La pagina Impostazioni: «Tu e Jenny», che fino al 23/09/2026 era una
+           stanza dietro l'ingranaggio. E' **nell'HTML del pannello** e non
+           prestata a runtime: il prestito delle stanze alle pagine era il pezzo
+           fragile del 22-23/09, e una pagina fissa non ne ha bisogno.
+
+         Le impostazioni di chi la usa, non di chi la costruisce: la tavola
+         `TuEJenny.dc.html`. Righe da 42 px, e ognuna dice a destra **come sta
+         adesso** — una riga che non porta il suo valore e' un collegamento, non
+         un'impostazione.
+
+         **La lingua non c'e', ed e' una decisione.** Quella riga cambierebbe le
+         scritte dei bottoni, non la lingua di Jenny: quella viene da `SOUL.md`,
+         da `USER.md` e dal modello. La segue il sistema, che e' cio' che
+         `i18n.detectLocale()` fa gia' quando nessuno ha scelto. -->
+    <section class="home-you" id="home-you">
+      <div class="home-you-scroll">
+
+        <!-- Il tema non apre una stanza: si tocca e c'e'. E' l'unica impostazione
+             della casa il cui effetto e' tutto a schermo, e mandarla a scegliere
+             altrove vorrebbe dire sceglierla senza vederla. -->
+        <div class="home-card">
+          <div class="home-card-head">
+            <i class="ti ti-palette" aria-hidden="true"></i>
+            <span class="home-card-label" id="home-theme-label"></span>
+            <span class="home-card-value" id="home-theme-value"></span>
           </div>
-          <div id="input-row" class="compose-row">
-            <div class="compose-pill">
-              <textarea id="chat-input" placeholder="Chiedi qualcosa…" rows="1" aria-label="Messaggio" data-i18n-placeholder="chat.placeholder" data-i18n-aria="chat.message"></textarea>
-              <div class="input-actions" id="secondary-actions">
-                <!-- Scorciatoia a un tocco per il comando che la issue #11
-                     chiede per nome. È lo stesso `/new` della tendina, e passa
-                     dalla stessa conferma: sta a un pollice dalla graffetta. -->
-                <button class="input-action" id="btn-new-chat" title="Nuova chat" data-i18n-title="chat.newChat"><i class="ti ti-message-plus"></i></button>
-                <button class="input-action" id="btn-attach" title="Allega" data-i18n-title="chat.attach"><i class="ti ti-paperclip"></i></button>
-              </div>
-            </div>
-            <button id="btn-send" class="compose-send" disabled><i class="ti ti-arrow-up"></i></button>
-          </div>
+          <div class="home-themes" id="home-themes" role="radiogroup"></div>
+          <div class="home-card-note" id="home-theme-desc"></div>
         </div>
+
+        <!-- Lei. La riga dice come sta adesso — «piccola · flottante» — perche'
+             una riga che non porta il suo valore e' un collegamento. -->
+        <div class="home-rows">
+          <!-- Chi risponde. La riga porta la **marca**, non l'id del modello:
+               un id sta fra i venti e i trenta caratteri e in questa riga ci
+               starebbe troncato, che e' l'errore gia' pagato una volta sulle
+               pastiglie dei temi. L'id sta dentro, dove c'e' larghezza. -->
+          <button class="home-row" id="home-row-model" type="button">
+            <i class="ti ti-message-2" aria-hidden="true"></i>
+            <span class="home-row-label" id="home-model-label"></span>
+            <span class="home-row-value" id="home-model-value"></span>
+            <i class="ti ti-chevron-right home-row-go" aria-hidden="true"></i>
+          </button>
+          <button class="home-row" id="home-row-jenny" type="button">
+            <i class="ti ti-flower" aria-hidden="true"></i>
+            <span class="home-row-label" id="home-jenny-label"></span>
+            <span class="home-row-value" id="home-jenny-value"></span>
+            <i class="ti ti-chevron-right home-row-go" aria-hidden="true"></i>
+          </button>
+          <!-- Gli aggiornamenti. La riga porta la versione, quindi la riga muta
+               che la scriveva in fondo alla pagina non serve piu': un numero e
+               basta non e' un'impostazione, e' un'etichetta. -->
+          <button class="home-row" id="home-row-updates" type="button">
+            <i class="ti ti-refresh" aria-hidden="true"></i>
+            <span class="home-row-label" id="home-updates-label"></span>
+            <span class="home-row-value" id="home-updates-value"></span>
+            <i class="ti ti-chevron-right home-row-go" aria-hidden="true"></i>
+          </button>
+          <!-- Il backup. La riga porta **quando l'hai esportato**, non quando il
+               telefono ha fatto l'ultimo snapshot: sono due cose diverse, e
+               quella che la parola promette e' la prima. -->
+          <button class="home-row" id="home-row-backup" type="button">
+            <i class="ti ti-archive" aria-hidden="true"></i>
+            <span class="home-row-label" id="home-backup-label"></span>
+            <span class="home-row-value" id="home-backup-value"></span>
+            <i class="ti ti-chevron-right home-row-go" aria-hidden="true"></i>
+          </button>
         </div>
+
+        <!-- L'officina non sparisce: scende in fondo, come nella tavola. -->
+        <button class="home-workshop" id="home-workshop" type="button">
+          <i class="ti ti-tool" aria-hidden="true"></i>
+          <span class="home-workshop-text">
+            <span class="home-workshop-name" id="home-workshop-name"></span>
+            <span class="home-workshop-hint" id="home-workshop-hint"></span>
+          </span>
+          <i class="ti ti-chevron-right home-row-go" aria-hidden="true"></i>
+        </button>
       </div>
-
-      <!-- VIEW: Apps -->
-      <div id="view-apps" class="view" style="display:none;flex-direction:column;height:100%">
-        <div class="view-title-mount" id="title-apps"></div>
-        <!-- Le tre stanze: il segmento lo riempie AppsController (le etichette
-             sono i18n e la stanza attiva si ricorda fra una visita e l'altra). -->
-        <div class="apps-rooms" id="apps-rooms"></div>
-        <div class="apps-search">
-          <i class="ti ti-search"></i>
-          <input type="text" id="apps-search-input" placeholder="Cerca..." data-i18n-placeholder="apps.search">
-        </div>
-        <div class="apps-content" id="apps-content"></div>
-      </div>
-
-      <!-- VIEW: Settings -->
-      <div id="view-settings" class="view" style="display:none;flex-direction:column;height:100%">
-        <div class="loading-overlay" id="settings-loading"><div class="spinner"></div></div>
-        <div class="view-title-mount" id="title-settings"></div>
-        <div class="settings-content" id="settings-content"></div>
-      </div>
-
-      <!-- VIEW: Wiki -->
-      <div id="view-wiki" class="view" style="display:none;flex-direction:column;height:100%">
-        <div class="loading-overlay" id="wiki-loading"><div class="spinner"></div></div>
-        <div class="view-title-mount" id="title-wiki"></div>
-        <div class="wiki-content" id="wiki-content"></div>
-      </div>
-
-      <!-- VIEW: Graph -->
-      <div id="view-graph" class="view" style="display:none;flex-direction:column;height:100%">
-        <div class="loading-overlay" id="graph-loading"><div class="spinner"></div></div>
-        <div class="view-title-mount" id="title-graph"></div>
-        <div class="graph-wrap" id="graph-wrap">
-          <!-- Ricerca full-text: accende i nodi che corrispondono e spegne gli
-               altri. Sta nel flusso, sopra la tela e sotto i breadcrumb che
-               _renderBreadcrumbs inserisce come primo figlio: sovrapposta
-               coprirebbe i nodi proprio dove si sta guardando. -->
-          <div class="graph-search" id="graph-search" hidden>
-            <i class="ti ti-search graph-search-icon"></i>
-            <input type="search" id="graph-search-input" autocomplete="off"
-                   autocapitalize="off" autocorrect="off" spellcheck="false"
-                   enterkeyhint="search"
-                   placeholder="Cerca nelle pagine…" data-i18n-placeholder="graph.searchPlaceholder"
-                   aria-label="Cerca nelle pagine" data-i18n-aria="graph.searchPlaceholder">
-            <span class="graph-search-count" id="graph-search-count" hidden></span>
-            <button type="button" class="graph-search-clear" id="graph-search-clear" hidden
-                    aria-label="Cancella ricerca" data-i18n-aria="graph.searchClear">
-              <i class="ti ti-x"></i>
-            </button>
-          </div>
-          <svg id="graph-svg"></svg>
-          <div class="graph-legend" id="graph-legend">
-            <div class="legend-row"><div class="legend-dot concepts"></div><span data-i18n="graph.concepts">Concepts</span></div>
-            <div class="legend-row"><div class="legend-dot entities"></div><span data-i18n="graph.entities">Entities</span></div>
-            <div class="legend-row"><div class="legend-dot other"></div><span data-i18n="graph.other">Other</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- VIEW: Onboarding -->
-      <div id="view-onboarding" class="view" style="display:none;flex-direction:column;height:100%">
-        <div class="onboarding-content" id="onboarding-content"></div>
-      </div>
-
-    </div><!-- /main -->
-  </div><!-- /body -->
-
-  <!-- MICRO DOCK — always visible -->
-  <nav class="dock" aria-label="Navigazione" data-i18n-aria="nav.ariaLabel">
-    <!-- Ordine voluto: Chat, Wiki, Apps **al centro**, File, Impostazioni.
-         Apps al centro perché è lo slot più
-         raggiungibile dal pollice, e su uno schermo quadrato il centro del
-         dock è il punto più comodo che ci sia. L'ordine del DOM è anche
-         quello del carosello orizzontale, che `_visibleModes()` deriva da
-         qui: spostare una voce sposta anche lo swipe. -->
-    <div class="dock-item active" data-mode="chat" title="Chat" data-i18n-title="nav.chat"><span class="dock-flower">✿</span></div>
-    <div class="dock-item" data-mode="graph" title="Wiki" data-i18n-title="nav.wiki"><i class="ti ti-topology-star"></i></div>
-    <!-- Lo slot Apps **apre il cassetto**, non cambia vista (v. `openLauncher`
-         in mobile-app.js). `data-mode` gli resta perché il carosello deve
-         continuare a raggiungere la scheda, che è dove si gestisce
-         (disinstalla, nascondi, ripara); dal foglio ci si arriva con
-         «Gestisci». -->
-    <div class="dock-item" data-mode="apps" data-opens="launcher" title="Apps" data-i18n-title="nav.apps"><i class="ti ti-layout-grid"></i></div>
-    <div class="dock-item" data-mode="workspace" title="Workspace" data-i18n-title="nav.workspace"><i class="ti ti-folder"></i></div>
-    <div class="dock-item" data-mode="settings" title="Settings" data-i18n-title="nav.settings"><i class="ti ti-settings"></i></div>
-    <div class="dock-item" data-mode="onboarding" title="Setup" id="nav-onboarding" style="display:none" data-i18n-title="nav.onboarding"><i class="ti ti-rocket"></i></div>
-  </nav>
-
-</div><!-- /app -->
-
-<!-- Mobile App Entry Point -->
-<script type="module" src="/html-mobile/assets/mobile-app.js"></script>
-
-<dialog class="oc-dialog" id="oc-confirm-dialog">
-  <div class="oc-dialog-inner">
-    <p class="oc-dialog-message" id="oc-confirm-message"></p>
-    <div class="oc-dialog-buttons">
-      <button class="oc-btn oc-btn-cancel" id="oc-confirm-cancel" data-i18n="dialog.cancel">Cancel</button>
-      <button class="oc-btn oc-btn-confirm" id="oc-confirm-ok" data-i18n="dialog.confirm">Confirm</button>
+    </section>
+    </div>
     </div>
   </div>
-</dialog>
 
-<dialog class="oc-dialog" id="oc-prompt-dialog">
-  <div class="oc-dialog-inner">
-    <p class="oc-dialog-message" id="oc-prompt-message"></p>
-    <input type="text" class="oc-dialog-input" id="oc-prompt-input" />
-    <div class="oc-dialog-buttons">
-      <button class="oc-btn oc-btn-cancel" id="oc-prompt-cancel" data-i18n="dialog.cancel">Cancel</button>
-      <button class="oc-btn oc-btn-confirm" id="oc-prompt-ok" data-i18n="dialog.confirm">Confirm</button>
+  <!-- ── La seconda stanza: le pagine di un quaderno ──────────────────────
+       Wiki, grafo e progetti sono una cosa sola (v. la tavola `Concetto`), e
+       questa e' quella cosa: due linguette sopra la stessa risposta del
+       server — `/api/graph` porta nodi, archi e indice full-text insieme. -->
+  <section class="home-notebook-pages" id="home-notebook-pages">
+    <div class="home-tabs" role="tablist">
+      <button class="home-tab is-on" id="home-tab-list" type="button"
+              role="tab" aria-selected="true" aria-controls="home-notebook-page-list"></button>
+      <button class="home-tab" id="home-tab-map" type="button"
+              role="tab" aria-selected="false" aria-controls="home-map"></button>
     </div>
-  </div>
-</dialog>
 
-<!-- Modale di dettaglio (dialog.js::detailDialog): la card del pannello subagent
-     sta su una riga, il quadro completo — task, tool, esito — sta qui. -->
-<dialog class="oc-sheet oc-detail" id="oc-detail-dialog">
-  <div class="oc-sheet-inner oc-detail-inner">
-    <div class="oc-detail-head">
-      <h2 class="oc-detail-title" id="oc-detail-title"></h2>
-      <button class="oc-detail-close" id="oc-detail-close" type="button" aria-label="Close" data-i18n-aria="common.close"><i class="ti ti-x"></i></button>
+    <!-- Anche qui un `<div>`: la `<label>` vuota (c'era solo la lente) dava al
+         campo un nome vuoto, e il segnaposto tradotto non arrivava a TalkBack.
+         Il campo copre tutta la pastiglia, lente compresa, e il tocco resta. -->
+    <div class="home-search">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input class="home-search-input" id="home-notebook-pages-q" type="search"
+             autocomplete="off" autocapitalize="none" spellcheck="false">
     </div>
-    <div class="oc-detail-body" id="oc-detail-body"></div>
-    <div class="oc-dialog-buttons oc-detail-actions" id="oc-detail-actions"></div>
-  </div>
-</dialog>
 
-<dialog class="oc-sheet" id="ws-context-sheet">
-  <div class="oc-sheet-inner">
-    <div class="oc-sheet-title" id="ws-context-title"></div>
-    <div class="oc-sheet-desc" id="ws-context-desc"></div>
-    <div class="oc-sheet-actions" id="ws-context-actions"></div>
-    <button class="oc-sheet-cancel" id="ws-context-cancel" data-i18n="common.cancel">Cancel</button>
-  </div>
-</dialog>
+    <!-- La nota sta **prima** dell'elenco: l'elenco e' `flex: 1`, quindi da
+         vuoto si prende tutta l'altezza e spingerebbe «nessuna pagina con
+         queste parole» sul bordo inferiore, dove sembra un piede di pagina
+         invece che la risposta alla ricerca appena fatta. -->
+    <div class="home-notebook-pages-note" id="home-notebook-pages-note" hidden></div>
 
+    <div class="home-notebook-page-list" id="home-notebook-page-list" role="tabpanel"
+         aria-labelledby="home-tab-list"></div>
+
+    <div class="home-map" id="home-map" role="tabpanel"
+         aria-labelledby="home-tab-map" hidden>
+      <svg class="home-map-svg" id="home-map-svg" aria-hidden="true"></svg>
+      <div class="home-map-note" id="home-map-note" hidden></div>
+    </div>
+  </section>
+
+  <!-- ── La terza stanza: una pagina ──────────────────────────────────────
+       L'HTML lo rende gia' il server (`/api/page`); qui si sanifica e si
+       cablano i wikilink, che aprono un'altra pagina dello stesso quaderno.
+       Audit, briciole di pane e LaTeX restano dell'officina. -->
+  <section class="home-reader" id="home-reader">
+    <article class="home-reader-body" id="home-reader-body"></article>
+    <!-- Modifica: una textarea, e niente CodeMirror. Sono 200+ kB per colorare
+         del markdown su 590 px, e la casa e' rimasta magra apposta. Il contatore
+         di righe, il fold, la ricerca: nessuna di quelle cose serve a correggere
+         un refuso in una nota che hai scritto tu.
+         `spellcheck` spento come nell'editor dell'officina: sottolinea di rosso
+         meta' di un testo tecnico, e la lingua qui non e' quella del sistema. -->
+    <textarea class="home-reader-edit" id="home-reader-edit" hidden
+              spellcheck="false" autocapitalize="sentences"></textarea>
+    <!-- In basso e non nell'intestazione: sul Titan il pollice sta qui, e
+         «Modifica» lassu' e' la porta d'ingresso, non il comando che si preme
+         due volte. -->
+    <div class="home-reader-bar" id="home-reader-bar" hidden>
+      <button class="home-reader-cancel" id="home-reader-cancel" type="button"></button>
+      <button class="home-reader-save" id="home-reader-save" type="button"></button>
+    </div>
+
+    <!-- «Segnala», e sta **in basso** e non appeso alla selezione. Un
+         bottoncino flottante sopra il testo si contende il tocco con i manici
+         di Chromium, che al trascinamento ri-derivano l'estremo fermo con un
+         hit-test dalle proprie coordinate: se li' sotto c'e' della chrome,
+         vince lei e la selezione salta (v. `shared/selection.js`). Qui il
+         bottone e' fuori dal testo, e il problema non si pone. -->
+    <div class="home-reader-bar home-sel-bar" id="home-sel-bar" hidden>
+      <button class="home-reader-cancel" id="home-sel-report" type="button"></button>
+    </div>
+  </section>
+
+
+  <!-- Il foglio di «Segnala». `<dialog>` e non un pannello: `showModal()` lo
+       mette nel top layer, cioe' sopra la mascotte — che in casa e' l'unico
+       z-index che esista. -->
+  <dialog class="oc-sheet home-audit" id="home-audit-dialog">
+    <div class="oc-sheet-inner home-audit-inner">
+      <h2 class="home-audit-title" id="home-audit-title"></h2>
+      <!-- Il testo scelto, come citazione: e' quel che l'ancora legherà, e
+           vederlo prima di scrivere e' l'unico modo di accorgersi che la
+           selezione ha preso una riga in piu'. -->
+      <blockquote class="home-audit-quote" id="home-audit-quote"></blockquote>
+      <textarea class="home-audit-comment" id="home-audit-comment" rows="3"></textarea>
+      <div class="oc-dialog-buttons">
+        <button class="oc-btn oc-btn-cancel" id="home-audit-cancel" type="button"></button>
+        <button class="oc-btn oc-btn-confirm" id="home-audit-send" type="button"></button>
+      </div>
+    </div>
+  </dialog>
+
+
+  <!-- ── La quinta stanza: «Jenny» ────────────────────────────────────────
+       Com'e' fatta — quanto e' grande, se si vede, se sta sopra le altre app.
+       La classe e' `home-jenny-room` e non `home-jenny`: quella e' lo sprite
+       di lei, che vive nel guscio da prima di questa stanza. -->
+  <section class="home-jenny-room" id="home-jenny-room">
+    <div class="home-you-scroll">
+
+      <!-- Come si chiama. Era l'unica voce della «Personalizzazione»
+           dell'officina che in casa non esistesse gia', e il 21/09/2026 quel
+           gruppo e' sparito: senza questa scheda il nome lo si sarebbe potuto
+           scegliere soltanto al primo avvio, una volta e per sempre.
+           Sta in questa stanza e non in «Tu e Jenny» perche' qui c'e' gia' chi
+           e' — le regole che le hai dato tu — e il nome e' la stessa domanda.
+           Stessa forma della scheda delle regole: il «Salva» compare solo
+           quando c'e' davvero qualcosa da salvare. -->
+      <div class="home-card">
+        <div class="home-card-head">
+          <i class="ti ti-signature" aria-hidden="true"></i>
+          <span class="home-card-label" id="home-name-label"></span>
+          <button class="home-save" id="home-name-save" type="button" hidden></button>
+        </div>
+        <input class="home-rules home-name" id="home-name" type="text" maxlength="40"
+               aria-labelledby="home-name-label"
+               autocapitalize="words" autocomplete="off" spellcheck="false">
+        <div class="home-card-note" id="home-name-note"></div>
+      </div>
+
+      <div class="home-rows">
+        <div class="home-row">
+          <span class="home-row-label" id="home-jenny-visible-label"></span>
+          <button class="home-switch" id="home-jenny-visible" type="button" role="switch"
+                  aria-labelledby="home-jenny-visible-label">
+            <span class="home-switch-knob"></span>
+          </button>
+        </div>
+        <div class="home-row home-row-stack">
+          <span class="home-row-label" id="home-jenny-size-label"></span>
+          <div class="home-seg" id="home-jenny-size" role="radiogroup"></div>
+        </div>
+        <!-- La finestra che sta sopra le altre app. Fuori da Android non puo'
+             esistere, e la riga non c'e': `available` lo dice il server. -->
+        <div class="home-row" id="home-jenny-floating-row" hidden>
+          <span class="home-row-label" id="home-jenny-floating-label"></span>
+          <button class="home-switch" id="home-jenny-floating" type="button" role="switch"
+                  aria-labelledby="home-jenny-floating-label">
+            <span class="home-switch-knob"></span>
+          </button>
+        </div>
+        <!-- La spiegazione sta **dentro** la scheda e non sotto: fuori sarebbe
+             testo nudo, e a taglia grande le finirebbe addosso — le schede le
+             passano davanti perche' sono opache, una riga di testo no. -->
+        <div class="home-card-note" id="home-jenny-floating-note" hidden></div>
+      </div>
+
+      <!-- Chi e'. Non e' `SOUL.md` intero: e' **la tua parte** di quel file.
+           Il resto lo tiene Dream, che lo riscrive circa una volta al giorno
+           (misurato, v. `agent/soul_rules.py`) — quindi quel che scrivi qui
+           vive altrove, in un file che nessuna passata puo' toccare, e dentro
+           `SOUL.md` ne resta una copia rifatta dopo ogni passata. -->
+      <div class="home-card">
+        <div class="home-card-head">
+          <i class="ti ti-quote" aria-hidden="true"></i>
+          <span class="home-card-label" id="home-rules-label"></span>
+          <button class="home-save" id="home-rules-save" type="button" hidden></button>
+        </div>
+        <textarea class="home-rules" id="home-rules" rows="4" maxlength="2000"
+                  autocapitalize="sentences" spellcheck="false"></textarea>
+        <div class="home-card-note" id="home-rules-note"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── La sesta stanza: «Chi risponde» ─────────────────────────────────
+       Le marche configurate, la chiave di quella guardata, e i modelli che
+       quella marca dichiara. La tavola `Modello.dc.html`.
+
+       **Toccare una mattonella non cambia chi risponde**: mostra i suoi
+       modelli. Il cambio e' il tocco su un modello, e salva modello e
+       provider **insieme** — v. `home-model.js`. -->
+  <section class="home-model-room" id="home-model-room">
+    <div class="home-you-scroll">
+
+      <div class="home-card">
+        <div class="home-card-head">
+          <i class="ti ti-message-2" aria-hidden="true"></i>
+          <span class="home-card-label" id="home-providers-label"></span>
+          <span class="home-card-value" id="home-providers-value"></span>
+        </div>
+        <div class="home-brands" id="home-providers" role="radiogroup"></div>
+
+        <!-- La chiave della marca **guardata**. Il suggerimento offuscato
+             arriva dal server; la chiave vera non torna mai al client, quindi
+             il campo parte vuoto e quel che non riscrivi resta com'e'. -->
+        <div class="home-key" id="home-key-row" hidden>
+          <span class="home-key-label" id="home-key-label"></span>
+          <span class="home-key-hint" id="home-key-hint"></span>
+          <button class="home-key-btn" id="home-key-btn" type="button"></button>
+        </div>
+        <div class="home-key-edit" id="home-key-edit" hidden>
+          <input class="home-key-input" id="home-key-input" type="password"
+                 autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+          <button class="home-save" id="home-key-save" type="button"></button>
+        </div>
+      </div>
+
+      <div class="home-card">
+        <div class="home-card-head">
+          <i class="ti ti-cpu" aria-hidden="true"></i>
+          <span class="home-card-label" id="home-models-label"></span>
+        </div>
+        <div class="home-models" id="home-models" role="radiogroup"></div>
+        <div class="home-card-note" id="home-models-note" hidden></div>
+      </div>
+
+      <!-- Alcuni cambi valgono dal turno dopo, altri vogliono un riavvio: lo
+           dice il payload, e va detto invece di lasciarlo indovinare. -->
+      <div class="home-card-note is-warn" id="home-model-restart" hidden></div>
+    </div>
+  </section>
+
+  <!-- ── La settima stanza: «Aggiornamenti» ──────────────────────────────
+       La seconda vista di `shared/update-flow.js`. Il pallino dice il
+       **meccanismo** e non la versione: verde vuol dire «il controllo
+       funziona», non «sei aggiornata» — un manifest irraggiungibile da un mese
+       mostrerebbe altrimenti la stessa schermata di chi lo e' davvero. -->
+  <section class="home-updates-room" id="home-updates-room">
+    <div class="home-you-scroll">
+
+      <div class="home-card">
+        <div class="home-card-head">
+          <span class="home-update-dot is-ok" id="home-update-dot" aria-hidden="true"></span>
+          <span class="home-card-label" id="home-update-headline"></span>
+        </div>
+        <div class="home-card-note" id="home-update-summary" hidden></div>
+        <a class="home-update-notes" id="home-update-notes" target="_blank"
+           rel="noopener" hidden></a>
+
+        <!-- Quel che sta succedendo adesso. La nota sopravvive ai cambi di
+             fase: dice cosa aspettarsi, la fase dice solo a che punto e'. -->
+        <div class="home-update-progress" id="home-update-progress" hidden>
+          <div class="home-card-note" id="home-update-note" hidden></div>
+          <div class="home-update-phase" id="home-update-phase" hidden></div>
+          <div class="home-update-detail" id="home-update-detail" hidden></div>
+          <div class="home-update-track" id="home-update-track" hidden>
+            <span class="home-update-bar" id="home-update-bar"></span>
+          </div>
+        </div>
+
+        <button class="home-save" id="home-update-install" type="button" hidden></button>
+      </div>
+
+      <!-- Il meccanismo che dovrebbe trovarli, e che c'e' sempre — anche,
+           soprattutto, quando non c'e' niente da installare. -->
+      <div class="home-card">
+        <div class="home-update-lines" id="home-update-lines"></div>
+        <button class="home-key-btn" id="home-update-check" type="button"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── L'ottava stanza: «Backup» ───────────────────────────────────────
+       La terza vista di `shared/backup-flow.js` (le altre due: officina e
+       onboarding). L'unica cosa nuova e' la data: «ultimo backup» non aveva
+       nessuna fonte, in nessun file — v. `home-backup.js`. -->
+  <section class="home-backup-room" id="home-backup-room">
+    <div class="home-you-scroll">
+
+      <div class="home-card">
+        <div class="home-card-head">
+          <i class="ti ti-archive" aria-hidden="true"></i>
+          <span class="home-card-label" id="home-backup-when"></span>
+        </div>
+        <div class="home-card-note" id="home-backup-export-note"></div>
+        <button class="home-save" id="home-backup-export" type="button"></button>
+      </div>
+
+      <div class="home-card" id="home-backup-import-card">
+        <div class="home-card-note" id="home-backup-import-note"></div>
+        <button class="home-key-btn" id="home-backup-import" type="button"></button>
+      </div>
+
+      <!-- La storia locale: somiglia abbastanza da essere scambiata per un
+           backup, e non lo e' — vive sullo stesso telefono. -->
+      <div class="home-card-note" id="home-backup-snapshots"></div>
+    </div>
+  </section>
+
+</main>
+
+<script type="module" src="/html-mobile/assets/home-app.js"></script>
+
+<!-- Le schede di una voce del cassetto: tocco lungo su una riga.
+     Stesso markup dell'officina, perche' e' lo stesso codice a riempirle
+     (`shared/apps-actions.js`). Quella delle skill non c'e' piu' da nessuna
+     parte: le skill non si lanciano, quindi nel cassetto non sono mai entrate,
+     e la scheda che le gestiva e' stata cancellata il 21/09/2026. -->
 <dialog class="oc-sheet" id="android-app-sheet">
   <div class="oc-sheet-inner">
     <div class="oc-sheet-title" id="android-app-title"></div>
@@ -333,29 +617,6 @@
   </div>
 </dialog>
 
-<dialog class="oc-sheet" id="skill-sheet">
-  <div class="oc-sheet-inner">
-    <div class="oc-sheet-title" id="skill-sheet-title"></div>
-    <div class="oc-sheet-desc" id="skill-sheet-body"></div>
-    <div class="oc-sheet-actions" id="skill-sheet-actions"></div>
-    <button class="oc-sheet-cancel" id="skill-sheet-cancel" data-i18n="common.cancel">Annulla</button>
-  </div>
-</dialog>
-
-<!-- Azioni di un messaggio di chat, aperte dal `⋯` della sua riga.
-     Figlio diretto di <body> come tutti gli altri, cioè FUORI da `.main`: là
-     dentro il listener di `setupSwipeNav` si prenderebbe il gesto, che è
-     esattamente il conflitto da cui nasce questo foglio. -->
-<dialog class="oc-sheet" id="chat-msg-sheet">
-  <div class="oc-sheet-inner">
-    <div class="oc-sheet-title" data-i18n="chat.messageActions">Azioni messaggio</div>
-    <div class="oc-sheet-actions" id="chat-msg-sheet-actions"></div>
-    <button class="oc-sheet-cancel" id="chat-msg-sheet-cancel" data-i18n="common.cancel">Annulla</button>
-  </div>
-</dialog>
-
-<!-- Superficie di selezione isolata: il messaggio renderizzato, fermo, in un
-     contenitore che nessuno riscrive e nessuno scrolla. -->
 <dialog class="oc-sheet" id="jenny-app-sheet">
   <div class="oc-sheet-inner">
     <div class="oc-sheet-title" id="jenny-app-sheet-title"></div>
@@ -364,113 +625,13 @@
   </div>
 </dialog>
 
-<!-- LAUNCHER SHEET — il cassetto delle app.
-     Vive qui, fuori da `.app`, come `.app-frame-overlay`: così copre anche il
-     dock, resta fuori dall'inerzia che DrawerManager mette allo sfondo, e una
-     mini-app aperta *dal* foglio gli si sovrappone senza trucchi di z-index.
-     Contenuto costruito da assets/mobile-launcher.js. -->
-<div class="launcher-scrim" id="launcher-scrim" aria-hidden="true"></div>
-<div class="launcher-sheet" id="launcher-sheet" role="dialog" aria-modal="true"
-     aria-labelledby="launcher-title" aria-hidden="true" tabindex="-1">
-  <!-- Da qui — maniglia e riga del titolo — si trascina il foglio, e **dalla
-       lista mai** (D7): decide l'origine del tocco, e decide sempre allo stesso
-       modo. Sotto c'è una chat, dove i trascinamenti verticali sono già
-       promessi allo scroller da `setupSwipeNav`; contendere i verticali della
-       propria lista è la ragione per cui i bottom sheet dentro contenuto
-       scrollabile sembrano rotti. V. `LauncherController._setupDrag`. -->
-  <div class="launcher-handle-row" id="launcher-handle-row">
-    <div class="launcher-handle"></div>
-  </div>
-  <div class="launcher-head">
-    <span class="launcher-title" id="launcher-title" data-i18n="launcher.recent">Più usate</span>
-    <button class="launcher-close" id="launcher-close" type="button"
-            aria-label="Chiudi" data-i18n-aria="common.close"><i class="ti ti-x"></i></button>
-  </div>
-  <!-- Il campo di ricerca è il corpo del cassetto, non un accessorio: è la
-       direzione *Digita* del rilievo (su 68 voci, cercare batte scorrere a
-       partire dalla quarta). Niente `autofocus` — alzerebbe la tastiera
-       software e si mangerebbe il foglio (D6); il type-ahead è del passo 4, e
-       così `enterkeyhint="go"`, che promette un ⏎ che qui ancora non apre. -->
-  <div class="launcher-search-row">
-    <i class="ti ti-search launcher-search-icon"></i>
-    <input class="launcher-search" id="launcher-search" type="text"
-           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
-           enterkeyhint="go" role="combobox" aria-controls="launcher-list"
-           aria-expanded="false" aria-autocomplete="list" aria-haspopup="listbox"
-           placeholder="Cerca un'app…" data-i18n-placeholder="launcher.searchPlaceholder"
-           aria-label="Cerca app, skill…" data-i18n-aria="launcher.searchPlaceholder">
-    <button class="launcher-search-clear" id="launcher-search-clear" type="button"
-            aria-label="Pulisci" data-i18n-aria="launcher.clearSearch"><i class="ti ti-x"></i></button>
-  </div>
-  <!-- Passo 4 — la semantica giusta dalla nascita (4.5). La lista è un
-       `listbox` e le righe sono `option`: una lista di risultati con una
-       selezione attiva è quello, non un mucchio di pulsanti. Il campo è il
-       `combobox` che la governa, e la riga selezionata gliela dice
-       `aria-activedescendant` (scritto da JS) — così le frecce muovono la
-       selezione senza spostare il fuoco, che è ciò che tiene il campo
-       scrivibile mentre si scorre. Le righe restano comunque focalizzabili
-       una per una: con TalkBack ci si arriva a scorrimento, non a frecce. -->
-  <!-- Passo 6.2 — l'avviso che distingue "non c'è niente" da "non si è potuto
-       leggere". Serve al caso peggiore, che è quello *parziale*: se il ponte
-       nativo non risponde, le skill e le Jenny App ci sono tutte e mancano solo
-       le app del telefono — nessuno stato vuoto comparirebbe, e il cassetto
-       sembrerebbe un telefono con poche app. `role="status"` e non un dialog:
-       è un'informazione, non una domanda. -->
-  <div class="launcher-status" id="launcher-status" role="status" hidden>
-    <i class="ti ti-alert-triangle launcher-status-icon" aria-hidden="true"></i>
-    <span class="launcher-status-text" data-i18n="launcher.loadFailed">Elenco incompleto: qualcosa non ha risposto.</span>
-    <button class="launcher-status-retry" id="launcher-status-retry" type="button"
-            data-i18n="launcher.retry">Riprova</button>
-  </div>
-  <div class="launcher-list" id="launcher-list" role="listbox"
-       aria-label="Risultati" data-i18n-aria="launcher.resultsList"></div>
-  <!-- D4 / 6.1 — il foglio *lancia*, la scheda *gestisce*. Disinstallare,
-       nascondere, accendere una skill, riparare un manifest e creare una app
-       nuova restano di là, e questa riga è la porta. Non è una `option` della
-       lista: non si apre con ⏎ e non si trova cercando, perché non è una cosa
-       da lanciare — è un altrove. In fondo al foglio e fuori dalla lista, così
-       non contende lo spazio ai risultati e resta ferma mentre scorrono. -->
-  <button class="launcher-manage" id="launcher-manage" type="button">
-    <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
-    <span data-i18n="launcher.manage">Gestisci app e skill</span>
-    <i class="ti ti-chevron-right launcher-manage-chevron" aria-hidden="true"></i>
-  </button>
-</div>
-
-<!-- Wiki feedback popover -->
-<div class="wiki-popover hidden" id="wiki-feedback-popover">
-  <button class="wiki-popover-btn" id="wiki-feedback-trigger">
-    <i class="ti ti-clipboard-list"></i> <span data-i18n="wiki.addAudit">Add audit</span>
-  </button>
-</div>
-
-<!-- Wiki feedback dialog -->
-<dialog class="mobile-dialog" id="wiki-feedback-dialog">
-  <div class="dialog-inner">
-    <h3 data-i18n="wiki.addFeedback">Add Feedback</h3>
-    <div>
-      <label class="field-label" data-i18n="wiki.preview">Preview</label>
-      <div id="wiki-feedback-preview" style="font-size:12px;color:var(--text2);max-height:100px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:var(--radius);border:0.5px solid var(--border);"></div>
-    </div>
-    <form id="wiki-feedback-form">
-      <div>
-        <label class="field-label" data-i18n="wiki.comment">Comment</label>
-        <textarea id="wiki-feedback-comment" placeholder="Describe the issue…" data-i18n-placeholder="wiki.describeIssue"></textarea>
-      </div>
-      <div>
-        <label class="field-label" data-i18n="wiki.severity">Severity</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);"><input type="radio" name="severity" value="info"> <span data-i18n="wiki.severityInfo">info</span></label>
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);"><input type="radio" name="severity" value="suggest"> <span data-i18n="wiki.severitySuggest">suggest</span></label>
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);"><input type="radio" name="severity" value="warn" checked> <span data-i18n="wiki.severityWarn">warn</span></label>
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text);"><input type="radio" name="severity" value="error"> <span data-i18n="wiki.severityError">error</span></label>
-        </div>
-      </div>
-      <div class="dialog-buttons">
-        <button type="button" id="wiki-feedback-cancel" data-i18n="common.cancel">Cancel</button>
-        <button type="submit" class="primary" data-i18n="wiki.submit">Submit</button>
-      </div>
-    </form>
+<!-- La scheda di un quaderno: la pressione lunga nella pagina Quaderni. Gemella di quella qui sopra — stesso markup, stesse classi —
+     perche' e' la stessa cosa detta per un'altra specie (v. home-notebook.js). -->
+<dialog class="oc-sheet" id="home-notebook-sheet">
+  <div class="oc-sheet-inner">
+    <div class="oc-sheet-title" id="home-notebook-sheet-title"></div>
+    <div class="oc-sheet-actions" id="home-notebook-sheet-actions"></div>
+    <button class="oc-sheet-cancel" id="home-notebook-sheet-cancel" data-i18n="common.cancel">Annulla</button>
   </div>
 </dialog>
 

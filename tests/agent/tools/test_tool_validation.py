@@ -52,7 +52,7 @@ class SampleTool(Tool):
 @tool_parameters(
     tool_parameters_schema(
         query=StringSchema(min_length=2),
-        count=IntegerSchema(2, minimum=1, maximum=10),
+        count=IntegerSchema(minimum=1, maximum=10),
         required=["query", "count"],
     )
 )
@@ -73,12 +73,12 @@ def test_schema_validate_value_matches_tool_validate_params() -> None:
     """ObjectSchema.validate_value 与 validate_json_schema_value、Tool.validate_params 一致。"""
     root = tool_parameters_schema(
         query=StringSchema(min_length=2),
-        count=IntegerSchema(2, minimum=1, maximum=10),
+        count=IntegerSchema(minimum=1, maximum=10),
         required=["query", "count"],
     )
     obj = ObjectSchema(
         query=StringSchema(min_length=2),
-        count=IntegerSchema(2, minimum=1, maximum=10),
+        count=IntegerSchema(minimum=1, maximum=10),
         required=["query", "count"],
     )
     params = {"query": "h", "count": 2}
@@ -102,14 +102,14 @@ def test_schema_validate_value_matches_tool_validate_params() -> None:
     expected = _Mini().validate_params(params)
     assert Schema.validate_json_schema_value(params, root, "") == expected
     assert obj.validate_value(params, "") == expected
-    assert IntegerSchema(0, minimum=1).validate_value(0, "n") == ["n must be >= 1"]
+    assert IntegerSchema(minimum=1).validate_value(0, "n") == ["n must be >= 1"]
 
 
 def test_schema_classes_equivalent_to_sample_tool_parameters() -> None:
     """Schema 类生成的 JSON Schema 应与手写 dict 一致，便于校验行为一致。"""
     built = tool_parameters_schema(
         query=StringSchema(min_length=2),
-        count=IntegerSchema(2, minimum=1, maximum=10),
+        count=IntegerSchema(minimum=1, maximum=10),
         mode=StringSchema("", enum=["fast", "full"]),
         meta=ObjectSchema(
             tag=StringSchema(""),
@@ -496,3 +496,27 @@ def test_cast_nullable_param_no_crash() -> None:
     assert result["name"] == "hello"
     result = tool.cast_params({"name": None})
     assert result["name"] is None
+
+
+def test_cast_params_object_for_a_string_becomes_json() -> None:
+    """Un dict o una lista per un parametro ``string``.
+
+    Il modello a volte manda ``write_file(content={...})``. Prima diventava il
+    ``repr`` Python (``{'a': True, 'b': None}``): un file che nessun lettore JSON
+    apre, e il tool rispondeva «Successfully wrote». Ora è il JSON che il modello
+    intendeva.
+    """
+    import json
+
+    tool = CastTestTool(
+        {"type": "object", "properties": {"content": {"type": "string"}}}
+    )
+    value = {"enabled": True, "n": None, "nome": "caffè", "xs": [1, 2]}
+    out = tool.cast_params({"content": value})["content"]
+    assert isinstance(out, str) and json.loads(out) == value
+    assert "caffè" in out
+
+    out = tool.cast_params({"content": [True, None]})["content"]
+    assert out == "[true, null]"
+    # Gli scalari restano come prima.
+    assert tool.cast_params({"content": 5})["content"] == "5"

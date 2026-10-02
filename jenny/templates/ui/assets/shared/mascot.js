@@ -1,26 +1,77 @@
-/** Preferenze della mascotte (JennyCompanion) — visibilità, aspetto e lato.
+/** Preferenze della mascotte (JennyCompanion) — visibilità e aspetto.
  *
- * Stato puramente client-side (localStorage), come tema/lingua/modalità
- * avanzata: non passa mai dal backend. Visibilità e taglia sono scelte
- * dell'utente (Impostazioni → Personalizzazione); il lato invece non è più
- * un'impostazione ma il ricordo di dove l'hai lasciata: lo scrive la
- * companion quando lei atterra dopo un lancio (v. mobile-jenny.js#settle).
+ * Stato puramente client-side (localStorage), come il tema: non passa mai
+ * dal backend. Visibilità e taglia sono scelte dell'utente, nella stanza
+ * «Jenny» della casa (`home-jenny.js`).
+ *
+ * Il lato non c'è più (24/09/2026): Jenny sta **sempre a destra**, in casa e in
+ * officina, e dopo un lancio ci torna a piedi da dovunque l'hai lasciata. A
+ * sinistra il resto dell'interfaccia — testo, fumetti, riga di lavoro — le si
+ * allineava male; e il lato non era una scelta, solo il ricordo dell'ultimo
+ * lancio.
  *
  * Il bianco/nero non c'è più (08/09/2026): l'arte esiste in una sola
- * variante, a colori, col nome piano — v. .agent/mascot-faces-plan.md, F9.
+ * variante, a colori, col nome piano.
  */
 
-const VISIBLE_KEY = 'jenny-mascotte-visible';
-/* Chiave nuova rispetto a 'jenny-mascotte-side': il vecchio valore era una
-   preferenza esplicita, e chi aveva scelto "destra" se la ritroverebbe come
-   posizione di partenza di una feature che quella scelta non ce l'ha più.
-   Ripartono tutti da sinistra; la chiave morta si ripulisce sotto. */
-const SIDE_KEY = 'jenny-mascotte-dock-side';
-const LEGACY_SIDE_KEY = 'jenny-mascotte-side';
-const SIZE_KEY = 'jenny-mascotte-size';
+/* Letture e scritture che non sollevano: con lo storage negato le preferenze
+   tornano ai default e non si salvano, ma la mascotte c'e'.
+   La regola di `readStorage` in `utils.js`, qui a mano
+   perche' questo modulo non importa niente. */
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {
+    /* storage non disponibile */
+  }
+}
+
+const VISIBLE_KEY = 'jenny-mascot-visible';
+const SIZE_KEY = 'jenny-mascot-size';
+/* Visibilita' e taglia si chiamavano `jenny-mascotte-visible` e
+   `jenny-mascotte-size` fino al rinomino in inglese del 25/09/2026. Il valore
+   scelto dall'utente passa al nome nuovo (se quello non c'e' gia'), e il nome
+   vecchio finisce fra le chiavi morte qui sotto. */
+const RENAMED_KEYS = [
+  ['jenny-mascotte-visible', VISIBLE_KEY],
+  ['jenny-mascotte-size', SIZE_KEY],
+];
+for (const [before, after] of RENAMED_KEYS) {
+  try {
+    const value = localStorage.getItem(before);
+    if (value !== null && localStorage.getItem(after) === null) localStorage.setItem(after, value);
+  } catch (_) {
+    /* storage non disponibile */
+  }
+}
 /* Chiavi di preferenze ritirate. Si ripuliscono una volta per caricamento e
-   non una per lettura: non hanno più un getter in cui nascondersi. */
-const DEAD_KEYS = ['jenny-mascotte-color'];
+   non una per lettura: non hanno più un getter in cui nascondersi. Stanno qui
+   anche quelle che non erano della mascotte, perché questo modulo lo caricano
+   tutti e due i gusci:
+   - `jenny-mascotte-color`: il bianco/nero (08/09/2026);
+   - `jenny-mascotte-dock-side`, `jenny-mascotte-side`: il lato (5961d22);
+   - `jenny-mascotte-visible`, `jenny-mascotte-size`: i nomi di prima di
+     `VISIBLE_KEY` e `SIZE_KEY`, copiati qui sopra (25/09/2026);
+   - `jenny-advanced-mode`: la modalità sviluppatore (78ff330);
+   - `jenny-home-view`: la vista di Home scelta dall'utente (3d57980);
+   - `locale`: il selettore di lingua dell'officina (v. shared/i18n.js). */
+const DEAD_KEYS = [
+  'jenny-mascotte-color',
+  'jenny-mascotte-dock-side',
+  'jenny-mascotte-side',
+  ...RENAMED_KEYS.map(([before]) => before),
+  'jenny-advanced-mode',
+  'jenny-home-view',
+  'locale',
+];
 for (const key of DEAD_KEYS) {
   try {
     localStorage.removeItem(key);
@@ -35,51 +86,30 @@ for (const key of DEAD_KEYS) {
 export const MASCOT_SIZES = { sm: 120, md: 160, lg: 210 };
 
 export function mascotVisible() {
-  const v = localStorage.getItem(VISIBLE_KEY);
+  const v = readStorage(VISIBLE_KEY);
   if (v === null) return true; // default: visibile
   return v === '1';
 }
 
 export function setMascotVisible(on) {
-  localStorage.setItem(VISIBLE_KEY, on ? '1' : '0');
+  writeStorage(VISIBLE_KEY, on ? '1' : '0');
   window.dispatchEvent(new CustomEvent('mascotchange', {
-    detail: { visible: on, side: mascotSide() },
+    detail: { visible: on },
   }));
   return on;
 }
 
-export function mascotSide() {
-  try {
-    localStorage.removeItem(LEGACY_SIDE_KEY);
-  } catch (_) {
-    /* storage non disponibile */
-  }
-  const s = localStorage.getItem(SIDE_KEY);
-  return s === 'right' ? 'right' : 'left'; // default: sinistra
-}
-
-/* Diversamente dalle altre preferenze NON emette 'mascotchange': lo scrive la
-   companion mentre lei sta atterrando, e l'evento la farebbe passare da
-   _applyMascotPrefs -> setMode -> _abortFlight, cioè ucciderebbe il volo
-   nell'istante esatto in cui sceglie il bordo. La classe .side-left la
-   applica direttamente chi chiama (v. mobile-jenny.js#_setSide). */
-export function setMascotSide(side) {
-  const normalized = side === 'right' ? 'right' : 'left';
-  localStorage.setItem(SIDE_KEY, normalized);
-  return normalized;
-}
-
 export function mascotSize() {
-  const s = localStorage.getItem(SIZE_KEY);
+  const s = readStorage(SIZE_KEY);
   return s in MASCOT_SIZES ? s : 'sm'; // default: piccola
 }
 
 export function setMascotSize(size) {
   const normalized = size in MASCOT_SIZES ? size : 'sm';
-  localStorage.setItem(SIZE_KEY, normalized);
+  writeStorage(SIZE_KEY, normalized);
   applyMascotSize();
   window.dispatchEvent(new CustomEvent('mascotchange', {
-    detail: { visible: mascotVisible(), side: mascotSide(), size: normalized },
+    detail: { visible: mascotVisible(), size: normalized },
   }));
   return normalized;
 }
@@ -99,3 +129,48 @@ export function applyMascotSize() {
     /* ponte assente */
   }
 }
+
+/* ── Al bordo, o venuta fuori ────────────────────────────────────────────────
+   I due posti in cui Jenny sta ferma, e quanto del suo quadrato resta fuori
+   dallo schermo in ciascuno. Non sono una preferenza — si toccano e cambiano,
+   non si scelgono dalle impostazioni — ma stanno qui perché qui vive tutto il
+   resto della sua geometria, e perché il numero deve esistere una volta sola:
+   lo legge il foglio di stile per ancorarla (uno solo per i due gusci, da quando
+   la Jenny e' una) e `mascot-drag.js` per sapere
+   dove farla arrivare a piedi dopo un lancio. Due dichiarazioni CSS e una
+   moltiplicazione, un numero solo.
+
+   0.469 e 0.25 sono misurati sull'arte, non scelti: **in larghezza** il
+   personaggio occupa il 45% centrale del canvas quadrato (bbox alpha dei webp
+   impacchettati), quindi "al bordo" e "fuori" vogliono dire due scarti precisi
+   e non due impressioni. In altezza il rapporto e' un altro — 73% — e
+   confonderli e' un errore gia' fatto una volta, v. il commento sopra
+   `.jenny-duo` in mobile-style.css. */
+export const DOCK_RATIO = 0.469;
+export const OUT_RATIO = 0.25;
+/** Quanto si sposta l'ancoraggio passando da uno stato all'altro. */
+export const OUT_SHIFT_RATIO = DOCK_RATIO - OUT_RATIO;
+/** Quanto del quadrato occupa il personaggio **in altezza**.
+ *
+ *  L'altro numero (45%) e' la larghezza, ed e' quello da cui vengono i due
+ *  ancoraggi qui sopra: confonderli e' un errore gia' fatto una volta. Questo
+ *  serve a chi deve lasciarle spazio — una pagina di impostazioni non puo'
+ *  finire sotto di lei — e vale la pena che stia qui, accanto agli altri due,
+ *  invece che scritto a mano dentro un `calc()`. */
+export const ART_HEIGHT_RATIO = 0.73;
+
+/** Porta i rapporti al CSS, che di suo non sa moltiplicare costanti JS. */
+export function applyDockAnchors() {
+  const style = document.documentElement.style;
+  style.setProperty('--jenny-dock', String(DOCK_RATIO));
+  style.setProperty('--jenny-out', String(OUT_RATIO));
+  style.setProperty('--jenny-art-h', String(ART_HEIGHT_RATIO));
+}
+
+/* All'import e non nel costruttore delle due companion: `mobile-jenny.js`
+   attacca lo sprite al documento *prima* di chiamare `applyMascotSize()`, e un
+   `calc()` con una variabile che non esiste ancora non è "il valore di prima",
+   è una dichiarazione invalida — Jenny comparirebbe per un frame dove la mette
+   il flusso invece che sul bordo. Un modulo, invece, viene valutato prima che
+   qualunque elemento esista. */
+applyDockAnchors();

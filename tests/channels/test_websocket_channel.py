@@ -102,79 +102,6 @@ async def _http_get(url: str, headers: dict[str, str] | None = None) -> httpx.Re
     )
 
 
-@pytest.mark.asyncio
-async def test_send_session_updated_broadcasts_to_other_webui_connections(bus) -> None:
-    class Conn:
-        remote_address = None
-
-        def __init__(self) -> None:
-            self.sent: list[str] = []
-
-        async def send(self, raw: str) -> None:
-            self.sent.append(raw)
-
-    channel = _ch(bus)
-    active_conn = Conn()
-    other_conn = Conn()
-    channel._attach(active_conn, "chat-a")
-    channel._attach(other_conn, "chat-b")
-    assert sorted(channel._subs) == ["chat-a", "chat-b"]
-    assert sum(len(conns) for conns in channel._subs.values()) == 2
-
-    await channel.send_session_updated("chat-a", scope="thread")
-
-    active_events = [json.loads(raw)["event"] for raw in active_conn.sent]
-    other_events = [json.loads(raw)["event"] for raw in other_conn.sent]
-
-    assert (active_events, other_events) == (
-        ["session_updated"],
-        ["session_updated"],
-    )
-    payload = json.loads(other_conn.sent[0])
-    assert payload == {
-        "event": "session_updated",
-        "chat_id": "chat-a",
-        "scope": "thread",
-    }
-
-
-@pytest.mark.asyncio
-async def test_send_session_updated_one_broken_conn_does_not_block_peers(bus) -> None:
-    """A non-ConnectionClosed failure on one conn must not skip the next one.
-
-    Regression for fix 7: the state-frame senders used to loop with a
-    per-connection send that re-raised on unexpected errors, so a single
-    broken connection prevented later peers from receiving the frame. They now
-    go through ``_fanout``, which attempts every conn exactly once and swallows.
-    """
-    class BrokenConn:
-        remote_address = None
-
-        async def send(self, raw: str) -> None:
-            raise RuntimeError("boom")
-
-    class OkConn:
-        remote_address = None
-
-        def __init__(self) -> None:
-            self.sent: list[str] = []
-
-        async def send(self, raw: str) -> None:
-            self.sent.append(raw)
-
-    channel = _ch(bus)
-    broken = BrokenConn()
-    ok = OkConn()
-    # Attach broken first so it is iterated before the healthy peer.
-    channel._attach(broken, "chat-a")
-    channel._attach(ok, "chat-b")
-
-    # Must not raise even though the first connection errors.
-    await channel.send_session_updated("chat-a", scope="thread")
-
-    assert [json.loads(raw)["event"] for raw in ok.sent] == ["session_updated"]
-
-
 async def _recv_ws_event(client: Any, event: str) -> dict[str, Any]:
     """Receive until a specific websocket event appears."""
     for _ in range(10):
@@ -997,7 +924,7 @@ async def test_proactive_delivery_frames_form_one_closed_turn() -> None:
     # proprio turno — è quello che permette al client di non applicare la
     # chiusura a un turno che non è il suo.
     payloads = _sent_ws_payloads(mock_ws)
-    assert [p["event"] for p in payloads] == ["message", "turn_end", "session_updated"]
+    assert [p["event"] for p in payloads] == ["message", "turn_end"]
     assert [p.get("turn_id") for p in payloads[:2]] == [turn_id, turn_id]
     # Sul disco: un turno solo, aperto dalla risposta e chiuso da `complete`.
     lines = read_transcript_lines("websocket:default")
@@ -1023,7 +950,6 @@ async def test_send_turn_end_emits_turn_end_event() -> None:
 
     assert _sent_ws_payloads(mock_ws) == [
         {"event": "turn_end", "chat_id": "default"},
-        {"event": "session_updated", "chat_id": "default", "scope": "thread"},
     ]
 
 
@@ -1043,7 +969,6 @@ async def test_send_turn_end_includes_latency_ms_when_present() -> None:
 
     assert _sent_ws_payloads(mock_ws) == [
         {"event": "turn_end", "chat_id": "default", "latency_ms": 1500},
-        {"event": "session_updated", "chat_id": "default", "scope": "thread"},
     ]
 
 
@@ -1133,6 +1058,40 @@ async def test_send_mascot_mood_without_subscribers_sends_nothing() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_subagent_wait_is_a_dedicated_frame_never_a_bubble() -> None:
+    """L'attesa dei subagent: un frame suo, solo a quella chat, mai nel transcript.
+
+    Arriva come progress (``bus.progress``), e senza il suo ramo finirebbe nel
+    percorso generico: una riga vuota in chat e nel transcript.
+    """
+    bus = MagicMock()
+    channel = WebSocketChannel({"enabled": True, "allowFrom": ["*"]}, bus, gateway=_basic_handler(bus))
+    ws_here = AsyncMock()
+    ws_other = AsyncMock()
+    channel._attach(ws_here, "project:orto")
+    channel._attach(ws_other, "default")
+    channel._transcripts = MagicMock()
+
+    pending = await channel.send(OutboundMessage(
+        channel="websocket",
+        chat_id="project:orto",
+        content="",
+        metadata={
+            "_progress": True, "_tool_hint": False,
+            "_waiting_for_subagents": 2, "webui_turn_id": "t-3",
+        },
+    ))
+
+    assert pending == []
+    assert json.loads(ws_here.send.await_args.args[0]) == {
+        "event": "turn_waiting", "chat_id": "project:orto",
+        "reason": "subagents", "subagents": 2, "turn_id": "t-3",
+    }
+    ws_other.send.assert_not_awaited()
+    channel._transcripts.prepare_and_append.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_goal_status_idle_omits_started_at() -> None:
     bus = MagicMock()
     channel = WebSocketChannel({"enabled": True, "allowFrom": ["*"]}, bus, gateway=_basic_handler(bus))
@@ -1191,44 +1150,6 @@ async def test_maybe_push_turn_run_wall_clock_replays_running() -> None:
         "status": "running",
         "started_at": 1_700_000_000.0,
     }
-
-
-@pytest.mark.asyncio
-async def test_send_session_updated_emits_session_updated_event() -> None:
-    bus = MagicMock()
-    channel = WebSocketChannel({"enabled": True, "allowFrom": ["*"]}, bus, gateway=_basic_handler(bus))
-    mock_ws = AsyncMock()
-    channel._attach(mock_ws, "default")
-
-    await channel.send(OutboundMessage(
-        channel="websocket",
-        chat_id="default",
-        content="",
-        metadata={"_session_updated": True},
-    ))
-
-    mock_ws.send.assert_awaited_once()
-    body = json.loads(mock_ws.send.await_args.args[0])
-    assert body == {"event": "session_updated", "chat_id": "default"}
-
-
-@pytest.mark.asyncio
-async def test_send_session_updated_includes_scope_when_present() -> None:
-    bus = MagicMock()
-    channel = WebSocketChannel({"enabled": True, "allowFrom": ["*"]}, bus, gateway=_basic_handler(bus))
-    mock_ws = AsyncMock()
-    channel._attach(mock_ws, "default")
-
-    await channel.send(OutboundMessage(
-        channel="websocket",
-        chat_id="default",
-        content="",
-        metadata={"_session_updated": True, "_session_update_scope": "metadata"},
-    ))
-
-    mock_ws.send.assert_awaited_once()
-    body = json.loads(mock_ws.send.await_args.args[0])
-    assert body == {"event": "session_updated", "chat_id": "default", "scope": "metadata"}
 
 
 @pytest.mark.asyncio

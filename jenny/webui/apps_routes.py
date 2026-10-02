@@ -17,6 +17,7 @@ from urllib.parse import unquote
 from websockets.http11 import Request as WsRequest
 from websockets.http11 import Response
 
+from jenny.apps.manifest import ACTION_NAME_RE
 from jenny.apps.manifest import SLUG_RE as APP_SLUG_RE
 from jenny.channels.http_utils import (
     http_error,
@@ -26,7 +27,6 @@ from jenny.channels.http_utils import (
     query_first,
 )
 
-APP_ACTION_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 # Request-line budget is 8192 bytes (websockets); leave headroom for path+token.
 APP_PARAMS_MAX_CHARS = 6000
 # App iframes run with an opaque origin (sandbox without allow-same-origin):
@@ -36,6 +36,15 @@ APP_CORS_HEADERS = [
     ("Access-Control-Allow-Origin", "*"),
     ("Cache-Control", "no-store"),
 ]
+# Il sandbox dell'app detto dal **server**, non solo dall'iframe che la
+# incornicia. `sandbox="allow-scripts"` sulla cornice e' cio' che le da'
+# un'origine opaca, ma vale solo finche' l'app e' caricata da quella cornice: la
+# stessa pagina aperta in un frame con `allow-same-origin` (la vista esterna di
+# un'altra app che ci naviga) o a tutta pagina girerebbe con l'origine del
+# gateway, cioe' col DOM e lo storage della SPA. Con la CSP `sandbox` il
+# documento e' opaco comunque. Stesse restrizioni della cornice, quindi alle app
+# di oggi non cambia niente.
+APP_SANDBOX_CSP = ("Content-Security-Policy", "sandbox allow-scripts")
 
 
 class AppsRoutes:
@@ -45,8 +54,18 @@ class AppsRoutes:
         check_api_token: Callable[[WsRequest], bool],
         get_workspace_root: Callable[[], Path],
         log: Any,
+        check_app_token: Callable[[WsRequest, str], bool] | None = None,
+        get_secret: Callable[[], str] | None = None,
     ) -> None:
         self._check_api_token = check_api_token
+        # Le due route che la cornice di un'app chiama da sé — i suoi file e le
+        # sue azioni — accettano anche il token **di quell'app** (v.
+        # ``jenny/apps/token.py``). Tutte le altre, qui comprese quelle
+        # ``/api/webui/apps`` che chiama la SPA, vogliono il segreto intero.
+        # Senza collaboratore si resta sul solo segreto: chiuso, non aperto.
+        self._check_app_token = check_app_token or (lambda request, _slug: check_api_token(request))
+        # Il segreto da cui si deriva il token di un'app: solo per ``_token``.
+        self._app_token_secret = get_secret or (lambda: "")
         self._get_workspace_root = get_workspace_root
         self._log = log
         # slug -> AppViewProxy vivo. Un solo proxy per app: riaprire la stessa
@@ -101,13 +120,16 @@ class AppsRoutes:
             return self._list(request)
         m = re.match(r"^/api/webui/apps/([^/]+)/delete$", path)
         if m:
-            return self._delete(request, m.group(1))
+            return await self._delete(request, m.group(1))
         m = re.match(r"^/api/webui/apps/([^/]+)/view$", path)
         if m:
             return await self._view(request, m.group(1))
         m = re.match(r"^/api/webui/apps/([^/]+)/view/close$", path)
         if m:
             return await self._view_close(request, m.group(1))
+        m = re.match(r"^/api/webui/apps/([^/]+)/token$", path)
+        if m:
+            return self._token(request, m.group(1))
         m = re.match(r"^/api/apps/([^/]+)/actions/([^/]+)$", path)
         if m:
             return await self._action(request, m.group(1), m.group(2))
@@ -123,7 +145,7 @@ class AppsRoutes:
 
         return http_json_response(list_apps_payload(self._get_workspace_root()))
 
-    def _delete(self, request: WsRequest, raw_slug: str) -> Response:
+    async def _delete(self, request: WsRequest, raw_slug: str) -> Response:
         if not self._check_api_token(request):
             return http_error(401, "Unauthorized")
         disabled = self._check_apps_enabled()
@@ -135,7 +157,7 @@ class AppsRoutes:
         from jenny.webui.apps_api import delete_app
 
         try:
-            return http_json_response(delete_app(self._get_workspace_root(), slug))
+            outcome = delete_app(self._get_workspace_root(), slug)
         except ValueError:
             return http_error(400, "invalid app slug")
         except FileNotFoundError:
@@ -143,6 +165,10 @@ class AppsRoutes:
         except Exception as e:
             self._log.warning("app delete {} failed: {}", slug, e)
             return http_error(500, "internal error")
+        from jenny.webui.home_pages import detach_pages_quietly
+
+        await detach_pages_quietly("app", slug, log=self._log)
+        return http_json_response(outcome)
 
     def _resolve_view_app(self, raw_slug: str) -> tuple[str, str] | Response:
         """``(slug, base_url)`` per una vista esterna, o il ``Response`` d'errore."""
@@ -214,21 +240,44 @@ class AppsRoutes:
             await proxy.close()
         return http_json_response({"ok": True}, extra_headers=APP_CORS_HEADERS)
 
+    def _token(self, request: WsRequest, raw_slug: str) -> Response:
+        """Il token con cui la SPA incornicia l'app *slug* (v. ``frameForApp``).
+
+        Chiede il segreto intero: e' la SPA che lo domanda, per passarlo alla
+        cornice al posto del segreto stesso.
+        """
+        if not self._check_api_token(request):
+            return http_error(401, "Unauthorized")
+        disabled = self._check_apps_enabled()
+        if disabled is not None:
+            return disabled
+        slug = unquote(raw_slug)
+        if not slug or APP_SLUG_RE.match(slug) is None:
+            return http_error(400, "invalid app slug")
+        secret = self._app_token_secret()
+        if not secret:
+            return http_error(503, "no gateway secret configured")
+        from jenny.apps.token import app_token
+
+        return http_json_response(
+            {"token": app_token(secret, slug)}, extra_headers=[("Cache-Control", "no-store")]
+        )
+
     async def _action(self, request: WsRequest, raw_slug: str, raw_action: str) -> Response:
         def respond(payload: dict, status: int) -> Response:
             return http_json_response(payload, status=status, extra_headers=APP_CORS_HEADERS)
 
-        if not self._check_api_token(request):
+        slug = unquote(raw_slug)
+        if not self._check_app_token(request, slug):
             return respond({"ok": False, "error": "Unauthorized"}, 401)
         disabled = self._check_apps_enabled()
         if disabled is not None:
             return respond({"ok": False, "error": "apps are disabled"}, 503)
 
-        slug = unquote(raw_slug)
         action = unquote(raw_action)
         if not slug or APP_SLUG_RE.match(slug) is None:
             return respond({"ok": False, "error": "invalid app slug"}, 400)
-        if not action or APP_ACTION_RE.match(action) is None:
+        if not action or ACTION_NAME_RE.match(action) is None:
             return respond({"ok": False, "error": "invalid action name"}, 400)
 
         raw_params = query_first(parse_query(request.path), "params") or ""
@@ -255,14 +304,14 @@ class AppsRoutes:
         return respond(payload, status)
 
     def _static(self, request: WsRequest, got: str) -> Response:
-        if not self._check_api_token(request):
+        parts = got[len("/apps/") :].split("/", 1)
+        slug = unquote(parts[0])
+        if not self._check_app_token(request, slug):
             return http_error(401, "Unauthorized")
         disabled = self._check_apps_enabled()
         if disabled is not None:
             return disabled
 
-        parts = got[len("/apps/") :].split("/", 1)
-        slug = unquote(parts[0])
         rel = unquote(parts[1]) if len(parts) > 1 and parts[1] else "index.html"
         if not slug or APP_SLUG_RE.match(slug) is None:
             return http_error(400, "invalid app slug")
@@ -271,11 +320,14 @@ class AppsRoutes:
 
         # Only the app/ subfolder is web-reachable: manifest, AGENT.md and
         # data/ stay off the wire — data is only accessible through actions.
-        apps_root = (self._get_workspace_root() / "apps").resolve()
-        candidate = (apps_root / slug / "app" / rel).resolve()
+        # La radice ``app/`` **non** si risolve: se fosse un symlink verso fuori,
+        # il confronto letterale lo rifiuta. ``RuntimeError`` e' un loop di
+        # symlink su Python 3.11, che prima usciva come eccezione.
         try:
+            apps_root = (self._get_workspace_root() / "apps").resolve()
+            candidate = (apps_root / slug / "app" / rel).resolve()
             candidate.relative_to(apps_root / slug / "app")
-        except ValueError:
+        except (OSError, RuntimeError, ValueError):
             return http_error(403, "Forbidden")
         if not candidate.is_file():
             return http_error(404, "Not Found")
@@ -293,5 +345,6 @@ class AppsRoutes:
             body,
             status=200,
             content_type=ctype,
-            extra_headers=[("Cache-Control", "no-store")],
+            extra_headers=[("Cache-Control", "no-store"), APP_SANDBOX_CSP],
         )
+

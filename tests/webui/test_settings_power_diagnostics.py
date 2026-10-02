@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import json
 import re
-import urllib.parse
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from websockets.http11 import Headers
+from support.gateway_http import make_request
+from support.kotlin_source import read_source
 from websockets.http11 import Request as WsRequest
 
 from jenny.channels.http_utils import check_api_secret, http_error, http_json_response, parse_query
@@ -150,10 +150,7 @@ async def test_an_unreadable_history_does_not_take_the_diagnostics_down(workspac
 
 
 def _request(path: str, token: str | None = _SECRET) -> WsRequest:
-    if token is not None and "token=" not in path:
-        sep = "&" if "?" in path else "?"
-        path = f"{path}{sep}token={urllib.parse.quote(token)}"
-    return WsRequest(path=path, headers=Headers())
+    return make_request(path, token)
 
 
 def _router() -> WebUISettingsRouter:
@@ -297,7 +294,7 @@ def test_the_guidance_card_links_to_dontkillmyapp_for_this_phone() -> None:
 
 
 def _kotlin() -> str:
-    return _MAIN_ACTIVITY.read_text(encoding="utf-8")
+    return read_source(_MAIN_ACTIVITY)
 
 
 def _kotlin_fun(name: str) -> str:
@@ -310,10 +307,15 @@ def _kotlin_fun(name: str) -> str:
 def test_the_bridge_exposes_what_the_panel_needs() -> None:
     source = _kotlin()
 
-    for method in ("fun deviceManufacturer()", "fun openBatterySettings()"):
-        index = source.index(method)
-        # L'annotazione sta sulla riga sopra: senza, il metodo non esiste per il JS.
-        assert "@JavascriptInterface" in source[index - 120 : index], method
+    # Una lettura innocua sta sulla porta sincrona: l'annotazione è sulla riga
+    # sopra, e senza il metodo non esiste per il JS.
+    index = source.index("fun deviceManufacturer()")
+    assert "@JavascriptInterface" in source[index - 120 : index]
+    # Aprire una schermata di sistema no: sta sulla porta dei comandi, che solo
+    # il frame principale della SPA raggiunge.
+    assert '"openBatterySettings" -> openBatterySettings()' in source
+    index = source.index("fun openBatterySettings()")
+    assert "@JavascriptInterface" not in source[index - 120 : index]
 
 
 def test_the_worst_offenders_all_have_their_own_screen() -> None:

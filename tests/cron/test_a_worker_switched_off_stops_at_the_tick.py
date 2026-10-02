@@ -33,7 +33,9 @@ from jenny.config.schema import Config
 from jenny.cron.types import CronJob, CronPayload
 from jenny.runtime.cron_dispatch import CronDispatcher
 
-_DREAM_JOB = SimpleNamespace(name="dream", id="dream")
+_DREAM_JOB = SimpleNamespace(
+    name="dream", id="dream", payload=SimpleNamespace(kind="system_event")
+)
 
 
 def _heartbeat_job() -> CronJob:
@@ -48,7 +50,7 @@ _HEARTBEAT_MD = """# Heartbeat
 
 ## Active Tasks
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 """
 
 

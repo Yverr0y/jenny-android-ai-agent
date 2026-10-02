@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import os
 import re
@@ -104,7 +105,47 @@ class _SearchTool(_FsTool):
         if workspace:
             with suppress(ValueError):
                 return target.relative_to(workspace).as_posix()
+            # Fuori dalla base dei percorsi relativi (un progetto che cerca in
+            # `skills/`): un percorso relativo alla radice della *ricerca*
+            # sarebbe risolto da `read_file` dentro il progetto, cioè «File not
+            # found» per un percorso appena restituito. Assoluto, invece,
+            # si apre con lo stesso controllo di lettura.
+            return target.as_posix()
         return target.relative_to(root).as_posix()
+
+    def _query_path(self, target: Path, display_path: str, rel_path: str) -> str:
+        """Il testo su cui si misura il filtro ``query`` di un risultato.
+
+        Di norma quello mostrato. Ma fuori dalla base dei percorsi relativi il
+        risultato si mostra assoluto (v. ``_display_path``), e un filtro misurato
+        sul percorso assoluto faceva passare ogni file per una parola che sta
+        sopra l'installazione — il nome della sua cartella, ``tmp``, ``data``.
+        Lì si misura sul percorso dentro il workspace, che è quello che un
+        risultato interno mostrerebbe; e, se il file sta fuori anche da lui, su
+        quello dentro la radice della ricerca.
+        """
+        if not Path(display_path).is_absolute():
+            return display_path
+        if self._workspace is not None:
+            with suppress(ValueError):
+                return target.relative_to(Path(self._workspace)).as_posix()
+        return rel_path
+
+    def _link_escapes(self, candidate: Path) -> bool:
+        """Un file-symlink il cui bersaglio ``read_file`` rifiuterebbe.
+
+        ``os.walk`` non scende nei link a cartelle, ma i link a file li elenca
+        fra i file: senza questo controllo ``grep`` ne apriva il bersaglio fuori
+        dal confine e ne stampava il contenuto. Stesso giudice di ``read_file``
+        (``_resolve_read``), così i due tool non possono dire cose diverse.
+        """
+        if not candidate.is_symlink():
+            return False
+        try:
+            self._resolve_read(str(candidate))
+        except (OSError, ValueError, RuntimeError):
+            return True
+        return False
 
     def _iter_files(self, root: Path) -> Iterable[Path]:
         if root.is_file():
@@ -115,7 +156,10 @@ class _SearchTool(_FsTool):
             dirnames[:] = sorted(d for d in dirnames if d not in self._IGNORE_DIRS)
             current = Path(dirpath)
             for filename in sorted(filenames):
-                yield current / filename
+                candidate = current / filename
+                if self._link_escapes(candidate):
+                    continue
+                yield candidate
 
 
 class FindFilesTool(_SearchTool):
@@ -200,7 +244,10 @@ class FindFilesTool(_SearchTool):
             if include_dirs and current != root:
                 yield current
             for filename in sorted(filenames):
-                yield current / filename
+                candidate = current / filename
+                if self._link_escapes(candidate):
+                    continue
+                yield candidate
 
     async def execute(
         self,
@@ -245,7 +292,7 @@ class FindFilesTool(_SearchTool):
                     continue
                 if candidate.is_dir() and type:
                     continue
-                if not _matches_query(display_path, query):
+                if not _matches_query(self._query_path(candidate, display_path, rel_path), query):
                     continue
                 try:
                     mtime = candidate.stat().st_mtime
@@ -285,6 +332,9 @@ class GrepTool(_SearchTool):
 
     _MAX_RESULT_CHARS = 128_000
     _MAX_FILE_BYTES = 2_000_000
+    # Sopra questa soglia la lettura esce dal loop; sotto, il salto di thread
+    # costerebbe più della lettura, e un grep attraversa migliaia di file.
+    _OFF_LOOP_BYTES = 256 * 1024
     # Tetto sui risultati in modalita indice. Un elenco di percorsi e piccolo,
     # ma "piccolo per risultato" moltiplicato per un pattern sfortunato non lo e
     # piu, e nella conversazione dell'orchestratore ci resta per sempre.
@@ -544,17 +594,25 @@ class GrepTool(_SearchTool):
                 if not _matches_type(file_path.name, type):
                     continue
 
-                raw = file_path.read_bytes()
-                if len(raw) > self._MAX_FILE_BYTES:
+                # Il tetto si controlla con `stat`, PRIMA di leggere: prima
+                # il file si leggeva per intero e solo dopo si guardava la
+                # lunghezza, cioè 600 MB di RSS per saltare un video.
+                try:
+                    st = file_path.stat()
+                except OSError:
+                    skipped_binary += 1
+                    continue
+                if st.st_size > self._MAX_FILE_BYTES:
                     skipped_large += 1
                     continue
+                if st.st_size > self._OFF_LOOP_BYTES:
+                    raw = await asyncio.to_thread(file_path.read_bytes)
+                else:
+                    raw = file_path.read_bytes()
                 if _is_binary(raw):
                     skipped_binary += 1
                     continue
-                try:
-                    mtime = file_path.stat().st_mtime
-                except OSError:
-                    mtime = 0.0
+                mtime = st.st_mtime
                 try:
                     content = raw.decode("utf-8")
                 except UnicodeDecodeError:

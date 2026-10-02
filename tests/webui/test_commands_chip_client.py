@@ -20,42 +20,22 @@ mano, nemmeno la `t()` di `i18n.js`.
 from __future__ import annotations
 
 import json
-import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import locale, member, requires_node, run_js
 
 from jenny.command.specs import BUILTIN_COMMAND_SPECS
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHIP_JS = ASSETS / "shared" / "commands-chip.js"
 I18N_JS = ASSETS / "shared" / "i18n.js"
-I18N_DIR = ASSETS / "i18n"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _chip() -> str:
     return CHIP_JS.read_text(encoding="utf-8")
-
-
-def _member(source: str, name: str) -> str:
-    """Il corpo di un metodo, dal sorgente e non riscritto."""
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
-def _locale(name: str) -> dict:
-    return json.loads((I18N_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
 def _specs_json() -> str:
@@ -170,18 +150,12 @@ const leftOf = (chip) => parseInt(chip.menu.style.left, 10);
 
 
 def _align_harness() -> str:
-    return _ALIGN_HARNESS.replace("__ALIGN__", _member(_chip(), "_alignToChip"))
+    return _ALIGN_HARNESS.replace("__ALIGN__", member(_chip(), "_alignToChip"))
 
 
 def _run_align(script: str) -> None:
     source = _align_harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── 5. Il pannello sta sopra il suo chip ─────────────────────────────────────
@@ -237,26 +211,20 @@ def test_it_does_nothing_without_a_positioned_row() -> None:
 def _harness() -> str:
     src = _chip()
     return (
-        _HARNESS.replace("__TRANSLATIONS__", json.dumps({"it": _locale("it")}))
-        .replace("__T__", _member(I18N_JS.read_text(encoding="utf-8"), "t"))
+        _HARNESS.replace("__TRANSLATIONS__", json.dumps({"it": locale("it")}))
+        .replace("__T__", member(I18N_JS.read_text(encoding="utf-8"), "t"))
         .replace("__SPECS__", _specs_json())
-        .replace("__LOAD__", _member(src, "_load"))
-        .replace("__RENDER_MENU__", _member(src, "_renderMenu"))
-        .replace("__ITEM__", _member(src, "_item"))
-        .replace("__NOTE__", _member(src, "_note"))
-        .replace("__TEXT__", _member(src, "_text"))
+        .replace("__LOAD__", member(src, "_load"))
+        .replace("__RENDER_MENU__", member(src, "_renderMenu"))
+        .replace("__ITEM__", member(src, "_item"))
+        .replace("__NOTE__", member(src, "_note"))
+        .replace("__TEXT__", member(src, "_text"))
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── 1. L'elenco è quello del backend ─────────────────────────────────────────
@@ -277,7 +245,7 @@ def test_every_command_the_backend_serves_gets_a_row() -> None:
       const names = texts(chip.menu);
       const expected = {json.dumps(expected)};
       assert.equal(rows.length, expected.length,
-                   `righe: ${{rows.length}}, attese: ${{expected.length}}`);
+                   `righe: ${{rows.length}}, expected: ${{expected.length}}`);
       for (const command of expected) {{
         assert.ok(names.some((t) => t.startsWith(command)),
                   `manca la riga di ${{command}}`);
@@ -362,14 +330,14 @@ def test_changing_conversation_asks_again() -> None:
       await chip._load();
       assert.equal(requests.length, 1, 'la stessa conversazione non si richiede');
 
-      sessionManager.currentKey = 'project:patreon';
+      sessionManager.currentKey = 'project:palestra';
       await chip._load();
-      assert.deepEqual(requests, ['websocket:default', 'project:patreon']);
+      assert.deepEqual(requests, ['websocket:default', 'project:palestra']);
     """)
 
 
 def test_the_description_comes_from_the_locale() -> None:
-    it = _locale("it")
+    it = locale("it")
     _run_js(f"""
       const chip = new Chip();
       chip._renderMenu();
@@ -406,7 +374,7 @@ def test_an_untranslated_command_falls_back_to_the_server_text() -> None:
 
 def test_a_failed_load_says_so_instead_of_showing_an_empty_menu() -> None:
     """Una tendina vuota è indistinguibile da «non ci sono comandi», che è falso."""
-    it = _locale("it")
+    it = locale("it")
     _run_js(f"""
       const chip = new Chip();
       chip._commands = [];
@@ -427,7 +395,7 @@ def test_an_empty_list_says_so_instead_of_opening_blank() -> None:
     non passa da `commands-chip.js`, e il difetto che vedrebbe è «la tendina non
     si apre».
     """
-    it = _locale("it")
+    it = locale("it")
     _run_js(f"""
       const chip = new Chip();
       chip._commands = [];

@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, Any, Callable
 from loguru import logger
 
 from jenny.agent.agent_types import AgentType, UnknownAgentTypeError, get_agent_type
-from jenny.agent.hook import AgentHook, AgentHookContext, ToolResultHookContext
+from jenny.agent.hook import (
+    AgentHook,
+    AgentHookContext,
+    CompositeHook,
+    ToolResultHookContext,
+)
 from jenny.agent.runner import AgentRunner, AgentRunSpec
 from jenny.agent.subagent_activity import (
     KIND_ERROR,
@@ -65,7 +70,6 @@ from jenny.security.workspace_access import (
     WorkspaceScope,
     current_workspace_scope,
     enter_workspace_scope,
-    workspace_sandbox_status,
 )
 from jenny.session.turn_visibility import resolve_turn_visibility
 from jenny.utils.helpers import truncate_text
@@ -744,9 +748,17 @@ class SubagentManager:
         *,
         session_manager: "SessionManager | None" = None,
         history_store: SubagentHistoryStore | None = None,
+        usage_hooks: Iterable[AgentHook] = (),
     ):
         defaults = AgentDefaults()
         self.provider = provider
+        # Gli hook di **misura** del loop (oggi ``TokenUsageHook``), montati su
+        # ogni run accanto a ``_SubagentHook``. Senza, un subagent girava nel suo
+        # ``AgentRunner`` e i suoi token non arrivavano mai in
+        # ``token-usage.json``. La spesa si registra
+        # sotto la chiave della sessione che l'ha lanciato: il runner del
+        # subagent porta quella, non una ``subagent:``.
+        self.usage_hooks: list[AgentHook] = list(usage_hooks)
         self.workspace = workspace
         self.bus = bus
         self.model = model or provider.get_default_model()
@@ -949,10 +961,6 @@ class SubagentManager:
             config=cfg,
             workspace=str(root.resolve()),
             file_states=FileStates(),
-            workspace_sandbox=workspace_sandbox_status(
-                restrict_to_workspace=cfg.restrict_to_workspace,
-                workspace=root,
-            ),
             android_context=get_android_context(),
         )
 
@@ -1263,7 +1271,9 @@ class SubagentManager:
                     ),
                     max_iterations=self._type_max_iterations(atype),
                     max_tool_result_chars=self.max_tool_result_chars,
-                    hook=hook,
+                    hook=(
+                        CompositeHook([hook, *self.usage_hooks]) if self.usage_hooks else hook
+                    ),
                     max_iterations_message="Task completed but no final response was generated.",
                     finalize_on_max_iterations=False,
                     error_message=None,
@@ -1318,6 +1328,27 @@ class SubagentManager:
                     task_id, label, task,
                     error_text,
                     origin, "error", origin_message_id,
+                )
+            elif result.stop_reason == "max_iterations":
+                # Il budget di iterazioni finito **non** e' un successo:
+                # cadeva nel ramo buono, e l'annuncio diceva
+                # «completed successfully» con il testo di ripiego del runner come
+                # risultato. Si annuncia per quel che e', con i passi fatti. La
+                # storia Tier-2 si salva come sull'esito buono: la conversazione
+                # e' integra, e continuarla con ``subagent_send`` e' il rimedio.
+                hook.note_error("stopped: iteration budget exhausted")
+                status.state = "failed"
+                status.tool_events = list(result.tool_events)
+                partial = self._format_partial_progress(result)
+                status.result_summary = truncate_text(partial, MAX_RESULT_SUMMARY_CHARS)
+                logger.info("Subagent [{}] stopped at its iteration budget", task_id)
+                self._history.save(
+                    status.lineage_id,
+                    spec.records_key,
+                    getattr(result, "messages", None),
+                )
+                await self._announce_result(
+                    task_id, label, task, partial, origin, "budget", origin_message_id,
                 )
             else:
                 final_result = result.final_content or "Task completed but no final response was generated."
@@ -1476,6 +1507,7 @@ class SubagentManager:
             return
         status_text = {
             "ok": "completed successfully",
+            "budget": "stopped at its iteration budget before finishing",
             "cancelled": "was stopped by the user",
         }.get(status, "failed")
 
@@ -2358,6 +2390,31 @@ class SubagentManager:
     def get_running_count(self) -> int:
         """Return the number of currently running subagents."""
         return len(self._running_tasks)
+
+    def active_origin_session_keys(self) -> tuple[str, ...]:
+        """Le sessioni d'origine con almeno un subagent vivo adesso.
+
+        Un subagent sopravvive al turno che l'ha lanciato, e quando finisce scrive
+        i suoi record e annuncia il risultato **sotto la chiave d'origine**: chi
+        vuole spostare quella sessione (il rinomino di un quaderno) deve saperlo.
+        """
+        return tuple(
+            key for key in self._session_tasks
+            if self.get_running_count_by_session(key) > 0
+        )
+
+    def get_running_ids_by_session(self, session_key: str) -> frozenset[str]:
+        """Gli id dei subagent vivi di una sessione, adesso.
+
+        Serve a chi deve distinguere i subagent nati **dopo** un certo momento da
+        quelli che c'erano gia': ``AgentLoop`` se li fotografa all'inizio del
+        turno, e aspetta solo quelli nuovi.
+        """
+        tids = self._session_tasks.get(session_key, set())
+        return frozenset(
+            tid for tid in tids
+            if tid in self._running_tasks and not self._running_tasks[tid].done()
+        )
 
     def get_running_count_by_session(self, session_key: str) -> int:
         """Return the number of currently running subagents for a session."""

@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from support.kotlin_source import read_source
+
 UI_ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 
 
@@ -81,11 +83,11 @@ def test_the_floating_mascot_takes_its_size_from_the_same_place():
         "flottante resterebbe a quella di prima, in silenzio"
     )
 
-    main_activity = (android / "MainActivity.kt").read_text("utf-8")
+    main_activity = read_source(android / "MainActivity.kt")
     assert "fun setMascotSize(cssPx: Int, dpr: Double)" in main_activity
     assert "FloatingOverlayController.setMascotSize(" in main_activity
 
-    controller = (android / "FloatingOverlayController.kt").read_text("utf-8")
+    controller = read_source(android / "FloatingOverlayController.kt")
     assert "fun setMascotSize(px: Int)" in controller
     # Il ripiego può esistere (serve al primo avvio) ma dev'essere la taglia di
     # default della WebUI, non un numero scelto qui.

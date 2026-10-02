@@ -61,6 +61,64 @@ def test_custom_provider_parse_chunks_deduplicates_parallel_tool_call_ids() -> N
     assert len(set(ids)) == 2
 
 
+def test_parallel_tool_calls_without_index_are_not_merged() -> None:
+    """Chiamate parallele senza ``index``, una per chunk, con id distinti.
+
+    Senza ``index`` il ripiego era la posizione nel chunk, cioè 0 per tutte: gli
+    argomenti delle due chiamate finivano concatenati in una sola, con il nome
+    dell'ultima. Un id nuovo apre una chiamata nuova; un frammento senza id né
+    index continua l'ultima aperta.
+    """
+    def _chunk(tool_call: dict) -> dict:
+        return {"choices": [{"delta": {"tool_calls": [tool_call]}}]}
+
+    chunks = [
+        _chunk({"id": "call_a", "function": {"name": "read_file", "arguments": '{"path":'}}),
+        _chunk({"function": {"arguments": '"a.txt"}'}}),
+        _chunk({"id": "call_b", "function": {"name": "list_dir", "arguments": '{"path":"."}'}}),
+        {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+    ]
+
+    result = OpenAICompatProvider._parse_chunks(chunks)
+
+    assert [(tc.id, tc.name, tc.arguments) for tc in result.tool_calls] == [
+        ("call_a", "read_file", {"path": "a.txt"}),
+        ("call_b", "list_dir", {"path": "."}),
+    ]
+
+    # Due chiamate senza id né index nello stesso chunk: distinte per posizione.
+    same_chunk = [{"choices": [{"delta": {"tool_calls": [
+        {"function": {"name": "a", "arguments": "{}"}},
+        {"function": {"name": "b", "arguments": "{}"}},
+    ]}}]}]
+    names = [tc.name for tc in OpenAICompatProvider._parse_chunks(same_chunk).tool_calls]
+    assert names == ["a", "b"]
+
+
+def test_a_call_opened_with_an_index_continues_by_its_id_alone() -> None:
+    """Il primo chunk ha ``index`` e id, i successivi solo l'id.
+
+    L'id visto col suo ``index`` non era registrato: il chunk dopo, senza
+    index, lo trovava nuovo e apriva una seconda chiamata, spezzando gli
+    argomenti in due metà che nessuna delle due sapeva leggere.
+    """
+    def _chunk(tool_call: dict) -> dict:
+        return {"choices": [{"delta": {"tool_calls": [tool_call]}}]}
+
+    chunks = [
+        _chunk({"index": 0, "id": "c1",
+                "function": {"name": "read_file", "arguments": '{"path":'}}),
+        _chunk({"id": "c1", "function": {"arguments": '"a.txt"}'}}),
+        {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+    ]
+
+    result = OpenAICompatProvider._parse_chunks(chunks)
+
+    assert [(tc.id, tc.name, tc.arguments) for tc in result.tool_calls] == [
+        ("c1", "read_file", {"path": "a.txt"}),
+    ]
+
+
 def test_custom_provider_parse_deduplicates_parallel_tool_call_ids() -> None:
     """Un provider che riusa un id lo fa anche fuori dallo streaming.
 

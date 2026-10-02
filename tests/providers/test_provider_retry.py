@@ -126,7 +126,8 @@ async def test_chat_with_retry_emits_terminal_progress_when_standard_retries_exh
     )
 
     assert response.content == "503 final server error"
-    assert progress[-1] == "Model request failed after 4 retries, giving up."
+    # 4 tentativi: la chiamata e tre ripetizioni. «4 retries» contava male.
+    assert progress[-1] == "Model request failed after 4 attempts, giving up."
 
 
 @pytest.mark.asyncio
@@ -355,6 +356,178 @@ async def test_chat_stream_with_retry_stall_accumulation_ignores_tool_call_fragm
         ToolCallRequest(id="call_1", name="search", arguments={"query": "partial"}),
     ]
     assert response.finish_reason == "tool_calls"
+
+
+_WRITE_ARGS = '{"path": "a.txt", "content": "riga1\\nriga2\\n"}'
+
+
+class _SideOutputProvider(LLMProvider):
+    """Ogni tentativo manda ragionamento e/o frammenti di tool call, poi il copione."""
+
+    def __init__(self, script: list[tuple[bool, bool, LLMResponse]]):
+        super().__init__()
+        self._script = list(script)
+        self.calls = 0
+
+    async def chat(self, *args, **kwargs) -> LLMResponse:
+        raise AssertionError("non-stream path not expected")
+
+    async def chat_stream(self, *args, **kwargs) -> LLMResponse:
+        self.calls += 1
+        thinks, calls_tool, response = self._script.pop(0)
+        if thinks and kwargs.get("on_thinking_delta"):
+            await kwargs["on_thinking_delta"](f"penso {self.calls}")
+        if calls_tool and kwargs.get("on_tool_call_delta"):
+            await kwargs["on_tool_call_delta"]({
+                "index": 0, "call_id": "", "name": "write_file",
+                "arguments_delta": _WRITE_ARGS[:25] if response.finish_reason == "error"
+                else _WRITE_ARGS,
+            })
+        return response
+
+    def get_default_model(self) -> str:
+        return "test-model"
+
+
+_TRANSIENT = LLMResponse(content="Error: server_error: boom", finish_reason="error",
+                         error_status_code=500)
+_WRITE = LLMResponse(content=None, finish_reason="tool_calls", tool_calls=[
+    ToolCallRequest(id="c2", name="write_file", arguments={"path": "a.txt"}),
+])
+
+
+async def _run_side_output(provider: LLMProvider, monkeypatch) -> tuple[LLMResponse, list, list]:
+    async def _fake_sleep(delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("jenny.providers.base.asyncio.sleep", _fake_sleep)
+    thinking: list[str] = []
+    tool_deltas: list[dict] = []
+
+    async def _on_thinking(text: str) -> None:
+        thinking.append(text)
+
+    async def _on_tool(delta: dict) -> None:
+        tool_deltas.append(delta)
+
+    async def _on_delta(_text: str) -> None:
+        return None
+
+    response = await provider.chat_stream_with_retry(
+        messages=[{"role": "user", "content": "hello"}],
+        on_content_delta=_on_delta,
+        on_thinking_delta=_on_thinking,
+        on_tool_call_delta=_on_tool,
+    )
+    return response, thinking, tool_deltas
+
+
+@pytest.mark.asyncio
+async def test_a_retry_does_not_repeat_thinking_and_tool_fragments_already_shown(
+    monkeypatch,
+) -> None:
+    """Un errore passeggero senza testo si ritenta, ma ciò che era sullo schermo resta uno.
+
+    Il ragionamento del primo tentativo si ripeteva sotto il suo doppione, e i
+    frammenti di tool call del secondo si accodavano a quelli del primo nello
+    stesso ``index``: l'anteprima del file leggeva
+    ``{"path": "a.txt", "conten{"path": ...`` al posto degli argomenti.
+    """
+    provider = _SideOutputProvider([(True, True, _TRANSIENT), (True, True, _WRITE)])
+
+    response, thinking, tool_deltas = await _run_side_output(provider, monkeypatch)
+
+    assert provider.calls == 2
+    assert response.finish_reason == "tool_calls"
+    assert thinking == ["penso 1"]
+    assert [d["arguments_delta"] for d in tool_deltas] == [_WRITE_ARGS[:25]]
+
+
+@pytest.mark.asyncio
+async def test_a_retry_forwards_the_kind_the_failed_attempt_never_showed(monkeypatch) -> None:
+    # Il primo tentativo ha solo ragionato: i frammenti di tool call del
+    # secondo non hanno doppioni, e l'anteprima del file li deve vedere.
+    provider = _SideOutputProvider([(True, False, _TRANSIENT), (True, True, _WRITE)])
+
+    _, thinking, tool_deltas = await _run_side_output(provider, monkeypatch)
+
+    assert thinking == ["penso 1"]
+    assert [d["arguments_delta"] for d in tool_deltas] == [_WRITE_ARGS]
+
+
+def _stall(delta: str) -> LLMResponse:
+    stalled = LLMResponse(
+        content="Error calling LLM: stream stalled for more than 30 seconds",
+        finish_reason="error",
+        error_kind="timeout",
+    )
+    stalled._test_stream_delta = delta  # type: ignore[attr-defined]
+    return stalled
+
+
+@pytest.mark.asyncio
+async def test_exhausted_stall_retries_keep_the_error_and_carry_the_text_aside(
+    monkeypatch,
+) -> None:
+    """A retry esauriti il contenuto è l'errore, e il testo visto va in ``partial_content``.
+
+    Prima i segmenti già mostrati si anteponevano al messaggio d'errore: il
+    runner lo pubblicava come finale, e l'utente rivedeva tutto il testo di
+    nuovo con l'errore in coda; ``partial_content`` invece restava vuoto,
+    quindi la history perdeva ciò che era stato mostrato.
+    """
+    provider = ScriptedProvider([_stall("Uno. "), _stall("Due. "), _stall("Tre. "), _stall("Quattro.")])
+
+    async def _fake_sleep(delay: int) -> None:
+        return None
+
+    async def _on_delta(delta: str) -> None:
+        return None
+
+    async def _on_stream_recover() -> None:
+        return None
+
+    monkeypatch.setattr("jenny.providers.base.asyncio.sleep", _fake_sleep)
+
+    response = await provider.chat_stream_with_retry(
+        messages=[{"role": "user", "content": "hello"}],
+        on_content_delta=_on_delta,
+        on_stream_recover=_on_stream_recover,
+    )
+
+    assert response.finish_reason == "error"
+    assert response.content == "Error calling LLM: stream stalled for more than 30 seconds"
+    assert response.partial_content == "Uno. Due. Tre. Quattro."
+
+
+@pytest.mark.asyncio
+async def test_a_failure_after_a_recovered_stall_keeps_both_segments_aside(monkeypatch) -> None:
+    failed = LLMResponse(
+        content="Error: upstream closed", finish_reason="error",
+        error_status_code=400, partial_content="Due.",
+    )
+    failed._test_stream_delta = "Due."  # type: ignore[attr-defined]
+    provider = ScriptedProvider([_stall("Uno. "), failed])
+
+    async def _fake_sleep(delay: int) -> None:
+        return None
+
+    async def _on_delta(delta: str) -> None:
+        return None
+
+    async def _on_stream_recover() -> None:
+        return None
+
+    monkeypatch.setattr("jenny.providers.base.asyncio.sleep", _fake_sleep)
+
+    response = await provider.chat_stream_with_retry(
+        messages=[{"role": "user", "content": "hello"}],
+        on_content_delta=_on_delta,
+        on_stream_recover=_on_stream_recover,
+    )
+
+    assert response.content == "Error: upstream closed"
+    assert response.partial_content == "Uno. Due."
 
 
 @pytest.mark.asyncio

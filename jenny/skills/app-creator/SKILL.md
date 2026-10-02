@@ -3,14 +3,11 @@ name: app-creator
 description: >
   Create or update Jenny Apps (folders in workspace/apps/ with a typed-actions manifest,
   a self-contained HTML UI, and agent context). Use when:
-  - User says "voglio creare una jenny app", "crea un'app", "fammi un'app per...", "create an app"
+  - User asks, in any language, to create or build an app ("create an app", "make me a Jenny App for...")
   - User taps the "+" button in the Jenny Apps grid
   - User wants to connect an external server (REST API) as an app with UI
   Do NOT use for skills (chat-only capabilities, no screen) — use skill-creator for those.
 locked: true
-user_summary:
-  it: "Le Jenny Apps sono piccole app con una loro interfaccia che Jenny costruisce su richiesta (una lista della spesa, un contatore, uno strumento su misura). Basta chiederglielo in chat."
-  en: "Jenny Apps are small apps with their own interface that Jenny builds on request (a shopping list, a counter, a custom tool). Just ask for it in chat."
 ---
 
 # App Creator
@@ -60,6 +57,33 @@ hand-rolled overlay `<div>`. See "Internal navigation and the Android back butto
 </rule>
 
 <rule>
+**A sideways swipe belongs to the home screen, unless the component under the finger is
+dragged sideways.** The user can pin an app as a page of the home, and a left/right swipe
+there changes page — a button never keeps it, a sideways-dragged component always does:
+
+- Buttons act on `click`, never on `pointerdown`/`touchstart`: a press that counts on
+  touch-down has already counted when the finger turns out to be swiping. Hold-to-repeat
+  starts after a delay and stops on `pointercancel` — the app gets one when the page takes
+  the swipe.
+- A component dragged sideways by your own code (carousel, swipe-to-delete row, map,
+  drawing area) declares it with CSS `touch-action: pan-y` (`none` if it also takes
+  vertical drags). `<input type="range">` and `overflow-x: auto` rows need nothing.
+- `touch-action: none` on `body` takes the swipe from the whole app: only for a full-screen
+  game.
+</rule>
+
+<rule>
+**The app speaks the language the user is speaking in this conversation — not the language of
+the examples in this skill.** That covers everything the user sees (the `name` and
+`description` in `app.json`, UI labels, buttons, placeholders, empty and loading states,
+error texts) and everything the agent reads (action and param names, their descriptions,
+collection names, `AGENT.md`). `<html lang>` matches it: `lang="en"` for an English
+conversation. The examples below are in English only because they are examples: an app
+requested in German gets German labels, descriptions and identifiers. If the language is
+unclear (e.g. the user tapped "+" and has written nothing yet), use English.
+</rule>
+
+<rule>
 **Follow the Guided Conversation Flow below.** Ask ONE question at a time. Only write files
 AFTER the user has confirmed name and actions in Phase 3.
 Never write real secrets into app.json or index.html, and never declare `server.auth` at all (see Secrets below).
@@ -72,9 +96,11 @@ go on. Ask the question of the current phase and end the turn.
 
 ## Guided Conversation Flow
 
+The quoted lines show what to ask, not the words to use: ask in the user's language.
+
 ### Phase 1: Understand Purpose
 
-> Certo! Dimmi: cosa dovrebbe fare questa app? Cosa vuoi vedere quando la apri?
+> Sure! Tell me: what should this app do? What do you want to see when you open it?
 
 If the answer is vague, ask ONE clarifying question with a concrete example.
 
@@ -82,7 +108,7 @@ If the answer is vague, ask ONE clarifying question with a concrete example.
 
 Figure out where the data lives and what the app (and the agent) must be able to do:
 
-> I dati stanno su un server esterno (dammi base URL ed endpoint) o li gestiamo noi in locale?
+> Does the data live on an external server (give me the base URL and endpoints), or do we keep it locally?
 
 From the answers, derive the action list. Each thing the UI shows or changes, and each thing
 the agent should be able to do on the user's behalf, becomes one action:
@@ -94,11 +120,11 @@ If an endpoint needs auth, it cannot be used yet — say so (see Secrets).
 
 ### Phase 3: Propose and Confirm
 
-> Ok, propongo:
-> - **Nome:** Piante (`piante`)
-> - **Azioni:** `lista_piante` (http GET /plants), `umidita_pianta` (http GET /plants/{id}/humidity), `annota_cura` (storage append su `cure`)
+> Here is my proposal:
+> - **Name:** Plants (`plants`)
+> - **Actions:** `list_plants` (http GET /plants), `plant_humidity` (http GET /plants/{id}/humidity), `log_care` (storage append to `care`)
 >
-> Ti va bene o cambiamo qualcosa?
+> Does that work, or shall we change something?
 
 Slug rules: lowercase alphanumeric with single hyphens, max 32 chars, folder named exactly
 after the slug. Action names: snake_case, unique within the app — the agent will see them as
@@ -110,7 +136,7 @@ Only after confirmation, create the folder and write, in this order:
 
 1. `apps/<slug>/app.json` — follow [references/manifest.md](references/manifest.md) exactly.
 2. `apps/<slug>/AGENT.md` — 5–15 lines: what the app is for, user preferences and thresholds
-   learned in the conversation (e.g. "sotto il 20% di umidità il basilico va annaffiato"),
+   learned in the conversation (e.g. "water the basil when humidity drops below 20%"),
    anything the agent needs to act well. NOT a copy of the manifest.
 3. `apps/<slug>/app/index.html` — UI built on the Jenny Kit (theme tokens, classless base,
    component vocabulary, chart helpers) following the conventions in the reference. Never
@@ -156,6 +182,6 @@ token in chat, do not echo it and do not write it to any file in the workspace.
   (`storage`/`http` only). If an app needs real server-side logic, it belongs in the app's
   external server behind an `http` action.
 - The app never contacts the agent on its own. The only app→agent path is the user's explicit
-  hand-off to chat. Proactivity ("avvisami se...") is scheduled work on the agent side, offered
+  hand-off to chat. Proactivity ("let me know if...") is scheduled work on the agent side, offered
   as a follow-up after the app works — where it goes is decided by the recurring-work rule, not
   here.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -39,6 +40,11 @@ def _load_asyncssh() -> Any:
             "(pip install asyncssh) — on device the native jsch bridge is used"
         ) from exc
     return asyncssh
+
+
+# Quanto si legge per volta in ``get``: è anche di quanto, al massimo, la copia
+# può chiedere oltre il tetto prima di accorgersene — mai scritto su disco.
+_GET_CHUNK_BYTES = 64 * 1024
 
 
 def _truncate(text: str, limit: int) -> tuple[str, int]:
@@ -217,23 +223,57 @@ class DevSshBackend:
     ) -> int:
         asyncssh = _load_asyncssh()
         conn = await self._connection(target)
+        # Stessa forma del ponte jsch (``SshBridge.get``). La dimensione si
+        # controlla prima di cominciare, così un file troppo grande si rifiuta
+        # senza trasferirne un byte; ma è quella che *dichiara* il server, e il
+        # tetto vale anche per i byte che arrivano davvero: la copia li conta e
+        # si ferma al primo oltre il limite. Si scrive su un temporaneo accanto
+        # alla destinazione e si rinomina solo a copia completa, quindi un
+        # download interrotto — dal tetto o dalla rete — non lascia un file
+        # troncato a metà, indistinguibile da uno buono.
+        #
+        # Il temporaneo ha un nome che prima non c'era (``mkstemp``, come
+        # ``File.createTempFile`` sul ponte): un ``<nome>.part`` fisso poteva
+        # essere un file dell'utente, o il temporaneo di un altro download
+        # verso la stessa destinazione, e questo ramo lo riscriveva e poi lo
+        # cancellava. Nascosto (il punto davanti) come ogni temporaneo.
         try:
-            async with conn.start_sftp_client() as sftp:
-                # La dimensione si controlla PRIMA di scrivere: un cap applicato
-                # durante il trasferimento lascerebbe sul telefono un file
-                # troncato a metà, indistinguibile da uno buono.
-                attrs = await sftp.stat(remote)
-                size = int(attrs.size or 0)
-                if size > max_bytes:
-                    raise SshTransportError(
-                        f"{remote} is {size} bytes, over the {max_bytes} byte limit"
-                    )
-                await sftp.get(remote, str(local))
+            fd, part_name = tempfile.mkstemp(
+                prefix=f".{local.name}.", suffix=".part", dir=local.parent
+            )
+        except OSError as exc:
+            raise SshTransportError(str(exc)) from exc
+        part = Path(part_name)
+        written = 0
+        moved = False
+        try:
+            with os.fdopen(fd, "wb") as out:
+                async with conn.start_sftp_client() as sftp:
+                    attrs = await sftp.stat(remote)
+                    size = int(attrs.size or 0)
+                    if size > max_bytes:
+                        raise SshTransportError(
+                            f"{remote} is {size} bytes, over the {max_bytes} byte limit"
+                        )
+                    async with sftp.open(remote, "rb") as source:
+                        while chunk := await source.read(_GET_CHUNK_BYTES):
+                            written += len(chunk)
+                            if written > max_bytes:
+                                raise SshTransportError(
+                                    f"{remote} grew past the {max_bytes} byte limit"
+                                )
+                            out.write(chunk)
+            os.replace(part, local)
+            moved = True
         except SshTransportError:
             raise
         except (OSError, asyncssh.Error) as exc:
             raise SshTransportError(str(exc)) from exc
-        return size
+        finally:
+            # Anche su una cancellazione del task: il temporaneo non resta mai.
+            if not moved:
+                part.unlink(missing_ok=True)
+        return written
 
     async def generate_key_pair(self, key_path: Path) -> str:
         asyncssh = _load_asyncssh()

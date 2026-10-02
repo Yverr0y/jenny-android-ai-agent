@@ -41,14 +41,14 @@ SCHEDULING_MARKER = "# Recurring Work"
 
 def _project_prompt(root: pathlib.Path, *, instructions: str) -> str:
     """Il prompt di un turno dentro un progetto che ha il suo ``AGENTS.md``."""
-    project = root / "wikis" / "etf-finance"
+    project = root / "wikis" / "etna-guide"
     (project / "wiki").mkdir(parents=True)
     # Non il template: ``_BOOTSTRAP_SKIP_IF_TEMPLATE`` contiene ``AGENTS.md``,
     # quindi un file ancora identico al default non entrerebbe affatto e il test
     # passerebbe senza aver misurato niente.
     (project / "AGENTS.md").write_text(instructions, encoding="utf-8")
     return ContextBuilder(root).build_system_prompt(
-        workspace=project, session_key="project:etf-finance"
+        workspace=project, session_key="project:etna-guide"
     )
 
 
@@ -62,7 +62,7 @@ def test_the_project_block_comes_before_the_projects_own_instructions(tmp_path) 
     prompt = _project_prompt(
         tmp_path,
         instructions=(
-            "# etf-finance\n\nIn questo progetto le pagine si scrivono in inglese, "
+            "# etna-guide\n\nIn questo progetto le pagine si scrivono in inglese, "
             "al contrario della regola generale.\n"
         ),
     )
@@ -82,7 +82,7 @@ def test_the_recurring_work_block_comes_after_them_both(tmp_path) -> None:
     il testo vecchio resta lì, e deve perdere.
     """
     prompt = _project_prompt(
-        tmp_path, instructions="# etf-finance\n\nAppunti di lavoro di questo progetto.\n"
+        tmp_path, instructions="# etna-guide\n\nAppunti di lavoro di questo progetto.\n"
     )
 
     assert SCHEDULING_MARKER in prompt

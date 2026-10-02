@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from support.agent import make_loop
 
 from jenny.config.schema import AgentDefaults
 from jenny.providers.base import LLMResponse, ToolCallRequest
@@ -15,19 +16,8 @@ _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
 
 def _make_loop(tmp_path):
-    from jenny.agent.loop import AgentLoop
-    from jenny.bus.queue import MessageBus
+    return make_loop(tmp_path, bare=True, model=None, context_window_tokens=None, patch_deps=True)
 
-    bus = MessageBus()
-    provider = MagicMock()
-    provider.get_default_model.return_value = "test-model"
-
-    with patch("jenny.agent.loop.ContextBuilder"), \
-         patch("jenny.agent.loop.SessionManager"), \
-         patch("jenny.agent.loop.SubagentManager") as mock_sub_mgr:
-        mock_sub_mgr.return_value.cancel_by_session = AsyncMock(return_value=0)
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path)
-    return loop
 
 @pytest.mark.asyncio
 async def test_loop_max_iterations_message_stays_stable(tmp_path):
@@ -293,7 +283,7 @@ async def test_next_turn_after_llm_error_keeps_turn_boundary(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_subagent_max_iterations_announces_existing_fallback(tmp_path, monkeypatch):
+async def test_subagent_max_iterations_announces_the_budget_stop(tmp_path, monkeypatch):
     from jenny.agent.subagent import SubagentManager, SubagentSpec, SubagentStatus
     from jenny.bus.queue import MessageBus
 
@@ -302,7 +292,7 @@ async def test_subagent_max_iterations_announces_existing_fallback(tmp_path, mon
     provider.get_default_model.return_value = "test-model"
     # Entrambi i path: un subagent chiede lo streaming, quindi il runner passa da
     # ``chat_stream_with_retry``.
-    from tests.agent.subagent_provider_fakes import script_provider
+    from support.subagent_provider_fakes import script_provider
     script_provider(provider, [LLMResponse(
         content="working",
         tool_calls=[ToolCallRequest(id="call_1", name="list_dir", arguments={"path": "."})],
@@ -329,5 +319,7 @@ async def test_subagent_max_iterations_announces_existing_fallback(tmp_path, mon
 
     mgr._announce_result.assert_awaited_once()
     args = mgr._announce_result.await_args.args
-    assert args[3] == "Task completed but no final response was generated."
-    assert args[5] == "ok"
+    # Non un successo, e non il testo di ripiego.
+    assert args[5] == "budget"
+    assert "list_dir" in args[3]
+    assert "Task completed but no final response" not in args[3]

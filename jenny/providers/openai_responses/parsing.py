@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any, AsyncGenerator
@@ -9,7 +10,14 @@ from typing import Any, AsyncGenerator
 import httpx
 from loguru import logger
 
-from jenny.providers.base import LLMResponse, ToolCallRequest, parse_tool_arguments
+from jenny.providers.base import (
+    LLMResponse,
+    StreamTimeout,
+    ToolCallRequest,
+    parse_tool_arguments,
+    stream_error_response,
+    stream_truncated_response,
+)
 
 FINISH_REASON_MAP = {
     "completed": "stop",
@@ -17,6 +25,40 @@ FINISH_REASON_MAP = {
     "failed": "error",
     "cancelled": "error",
 }
+
+
+class ResponsesStreamError(RuntimeError):
+    """Lo stream è finito senza una risposta valida; *response* è l'errore da dare.
+
+    Due casi: il server ha scritto un errore nello stream (``response.failed``,
+    ``error``), o lo stream si è chiuso prima di ``response.completed``. In
+    entrambi *response* ha i metadati per la retry policy e il testo già
+    mostrato in ``partial_content``.
+    """
+
+    def __init__(self, response: LLMResponse) -> None:
+        super().__init__(response.content or "")
+        self.response = response
+
+
+def _stream_error_detail(event: dict[str, Any]) -> dict[str, Any]:
+    """Il corpo dell'errore di un evento ``response.failed`` o ``error``.
+
+    ``response.failed`` lo porta in ``response.error``; l'evento ``error`` ha
+    ``code`` e ``message`` in cima (il suo ``type`` è il nome dell'evento, non
+    il tipo dell'errore), o talvolta sotto ``error``.
+    """
+    if event.get("type") == "response.failed":
+        response_obj = event.get("response") or {}
+        nested = response_obj.get("error") if isinstance(response_obj, dict) else None
+    else:
+        nested = event.get("error")
+    if isinstance(nested, dict):
+        return nested
+    detail = {key: event[key] for key in ("code", "message") if event.get(key)}
+    if not detail.get("message"):
+        detail["message"] = str(nested or "the response failed")[:500]
+    return detail
 
 
 def map_finish_reason(status: str | None) -> str:
@@ -134,8 +176,16 @@ async def consume_sse_with_reasoning(
     response: httpx.Response,
     on_content_delta: Callable[[str], Awaitable[None]] | None = None,
     on_tool_call_delta: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    *,
+    idle_timeout_s: float | None = None,
+    first_output_timeout_s: float | None = None,
 ) -> tuple[str, list[ToolCallRequest], str, dict[str, int], str | None]:
-    """Consume a Responses API SSE stream, including visible reasoning summaries."""
+    """Consume a Responses API SSE stream, including visible reasoning summaries.
+
+    Con *idle_timeout_s* l'attesa di ogni evento ha un tetto, e solleva
+    ``StreamTimeout`` come il ramo Chat Completions: *first_output_timeout_s*
+    (il budget lungo) vale finché non è arrivato niente, poi l'idle.
+    """
     content = ""
     tool_calls: list[ToolCallRequest] = []
     tool_call_buffers: dict[str, dict[str, Any]] = {}
@@ -144,8 +194,11 @@ async def consume_sse_with_reasoning(
     usage: dict[str, int] = {}
     reasoning_content: str | None = None
     streamed_reasoning = False
+    saw_terminal = False
 
-    async for event in iter_sse(response):
+    async for event in _events_with_budget(
+        iter_sse(response), idle_timeout_s, first_output_timeout_s,
+    ):
         event_type = event.get("type")
         if event_type == "response.output_item.added":
             item = event.get("item") or {}
@@ -240,9 +293,16 @@ async def consume_sse_with_reasoning(
                 summary = _extract_reasoning_summary_from_output([item])
                 if summary:
                     reasoning_content = summary
-        elif event_type == "response.completed":
+        elif event_type in {"response.completed", "response.incomplete"}:
+            # ``response.incomplete`` è l'evento terminale al posto di
+            # ``completed`` quando la risposta si ferma al tetto di token: il suo
+            # ``status`` è "incomplete" → ``length``, come nel ramo non-stream, e
+            # porta l'usage. Ignorarlo dava ``stop`` e un usage vuoto.
+            saw_terminal = True
             response_obj = event.get("response") or {}
-            status = response_obj.get("status")
+            status = response_obj.get("status") or (
+                "incomplete" if event_type == "response.incomplete" else None
+            )
             finish_reason = map_finish_reason(status)
             usage = _usage_from_response_obj(response_obj) or usage
             if not reasoning_content:
@@ -250,10 +310,65 @@ async def consume_sse_with_reasoning(
                 if summary:
                     reasoning_content = summary
         elif event_type in {"error", "response.failed"}:
-            detail = event.get("error") or event.get("message") or event
-            raise RuntimeError(f"Response failed: {str(detail)[:500]}")
+            # Lo status si ricava dal corpo (``server_error`` → 500): con un
+            # ``RuntimeError`` nudo la retry policy vedeva solo il testo.
+            raise ResponsesStreamError(stream_error_response(
+                _stream_error_detail(event), partial_content=content or None,
+            ))
 
+    if not saw_terminal:
+        # Chiuso prima della fine: il testo è un frammento, e una tool call
+        # aperta ha argomenti a metà che non vanno eseguiti.
+        raise ResponsesStreamError(stream_truncated_response(content or None))
     return content, tool_calls, finish_reason, usage, reasoning_content
+
+
+async def _events_with_budget(
+    events: AsyncGenerator[dict[str, Any], None],
+    idle_timeout_s: float | None,
+    first_output_timeout_s: float | None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Gli eventi di *events*, ciascuno atteso al più il budget in vigore.
+
+    Senza budget è un passante. Finché il modello non ha prodotto output vale
+    il budget lungo (sta ancora ragionando), dopo l'idle; allo scadere
+    ``StreamTimeout`` dice quale dei due. Gli eventi di servizio che aprono lo
+    stream (``response.created``, ``in_progress``, l'annuncio di un item) non
+    contano: arrivano subito, e un ragionamento muto può durare minuti.
+    """
+    if idle_timeout_s is None:
+        async for event in events:
+            yield event
+        return
+    first_budget = first_output_timeout_s or idle_timeout_s
+    saw_output = False
+    iterator = events.__aiter__()
+    while True:
+        budget = idle_timeout_s if saw_output else first_budget
+        try:
+            event = await asyncio.wait_for(iterator.__anext__(), timeout=budget)
+        except StopAsyncIteration:
+            return
+        except asyncio.TimeoutError as exc:
+            raise StreamTimeout(budget, saw_output=saw_output) from exc
+        if not saw_output:
+            saw_output = _is_output_event(event)
+        yield event
+
+
+def _is_output_event(event: dict[str, Any]) -> bool:
+    """Vero se *event* porta output del modello: testo, ragionamento, tool call."""
+    event_type = str(event.get("type") or "")
+    if event_type == "response.output_item.added":
+        item = event.get("item") or {}
+        return isinstance(item, dict) and item.get("type") == "function_call"
+    if event_type.startswith("response.function_call_arguments."):
+        return True
+    if event_type.endswith(".delta"):
+        return bool(event.get("delta"))
+    if event_type in {"response.output_text.done", "response.reasoning_summary_text.done"}:
+        return bool(event.get("text"))
+    return False
 
 
 def _extract_reasoning_summary_from_output(output: Any) -> str | None:
@@ -311,6 +426,14 @@ def parse_response_output(response: Any) -> LLMResponse:
     usage = _usage_from_response_obj(response)
 
     status = response.get("status")
+    if status == "failed":
+        # Una risposta ``failed`` non e' una risposta vuota ma un errore del
+        # provider, come ``response.failed`` nel ramo stream: stessi metadati per
+        # la retry policy, e un messaggio generico quando ``error`` manca o e'
+        # ``null``. Senza, la turn vedeva un ``finish_reason="error"`` muto.
+        nested = _as_mapping(response.get("error"))
+        detail = nested if nested else {"message": "the response failed"}
+        return stream_error_response(detail, partial_content="".join(content_parts) or None)
     finish_reason = map_finish_reason(status)
 
     return LLMResponse(

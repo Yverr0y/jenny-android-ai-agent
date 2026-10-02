@@ -8,13 +8,11 @@ dispatch per path, 401 senza token, propagazione degli errori applicativi
 
 from __future__ import annotations
 
-import asyncio
 import json
-import urllib.parse
 from unittest.mock import MagicMock
 
 import pytest
-from websockets.http11 import Headers
+from support.gateway_http import make_request
 from websockets.http11 import Request as WsRequest
 
 from jenny.channels.http_utils import check_api_secret, http_error, http_json_response, parse_query
@@ -28,10 +26,7 @@ _SECRET = "s3cr3t-settings"
 
 
 def _request(path: str, token: str | None = _SECRET) -> WsRequest:
-    if token is not None and "token=" not in path:
-        sep = "&" if "?" in path else "?"
-        path = f"{path}{sep}token={urllib.parse.quote(token)}"
-    return WsRequest(path=path, headers=Headers())
+    return make_request(path, token)
 
 
 def _router(**overrides) -> WebUISettingsRouter:
@@ -189,73 +184,26 @@ async def test_settings_update_swallows_on_settings_changed_exception(config_pat
 
 
 # ---------------------------------------------------------------------------
-# /api/settings/provider/update
+# Le quattro rotte con un segreto nella query non ci sono piu'
 # ---------------------------------------------------------------------------
 
 
-async def test_provider_update_requires_auth(config_path) -> None:
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/settings/provider/update?name=p&api_key=sk-segreta",
+        "/api/settings/provider-models?provider=p&api_key=sk-segreta",
+        "/api/telegram/save?token=123:segreto",
+        "/api/settings/ssh/host/save?alias=a&host=h&username=u&password=segreta",
+        "/api/onboarding/save?provider_name=openai&model=gpt-x&api_key=sk-segreta",
+    ],
+)
+async def test_the_routes_that_carried_a_secret_are_gone(config_path, path: str) -> None:
+    """La chiave del provider, il token Telegram e la password SSH viaggiavano
+    nella query, cioe' nella riga di richiesta che log e traceback vedono.
+    Sono comandi RPC: ``tests/webui/test_secret_commands.py``."""
     router = _router()
-    response = await router.dispatch(
-        _request("/api/settings/provider/update", token=None),
-        "/api/settings/provider/update",
-    )
-    assert response.status_code == 401
-
-
-async def test_provider_update_requires_name(config_path) -> None:
-    router = _router()
-    response = await router.dispatch(
-        _request("/api/settings/provider/update?format=openai_compat"),
-        "/api/settings/provider/update",
-    )
-    assert response.status_code == 400
-
-
-async def test_provider_update_success_fires_settings_changed(config_path) -> None:
-    on_changed = MagicMock()
-    router = _router(on_settings_changed=on_changed)
-    response = await router.dispatch(
-        _request("/api/settings/provider/update?name=my-provider&api_key=sk-test"),
-        "/api/settings/provider/update",
-    )
-    assert response.status_code == 200
-    body = _json(response)
-    providers = {p["name"]: p for p in body["providers"]}
-    assert "my-provider" in providers
-    on_changed.assert_called_once()
-
-
-async def test_provider_update_of_an_inactive_provider_changes_nothing(config_path) -> None:
-    """La condizione «solo se e' il default» non serve piu': decide l'impronta.
-
-    Era un'altra cosa da tenere allineata a mano. ``provider_fingerprint``
-    riassume il solo provider **attivo**, quindi toccarne uno inattivo lascia
-    l'impronta identica e la guardia ritorna presto da sola: la callback parte,
-    e il provider vivo non viene ricostruito.
-    """
-    config = load_config(config_path)
-    config.providers.providers.append(
-        ProviderConfig(name="attivo", format="openai_compat", api_key="sk-attivo")
-    )
-    config.providers.providers.append(
-        ProviderConfig(name="dormiente", format="openai_compat", api_key="sk-1")
-    )
-    config.providers.default = "attivo"
-    save_config(config, config_path)
-    before = provider_fingerprint(load_config(config_path))
-
-    on_changed = MagicMock()
-    router = _router(on_settings_changed=on_changed)
-    response = await router.dispatch(
-        _request("/api/settings/provider/update?name=dormiente&api_key=sk-2"),
-        "/api/settings/provider/update",
-    )
-
-    assert response.status_code == 200
-    on_changed.assert_called_once()
-    saved = load_config(config_path)
-    assert {p.name: p.api_key for p in saved.providers.providers}["dormiente"] == "sk-2"
-    assert provider_fingerprint(saved) == before
+    assert await router.dispatch(_request(path), path.split("?", 1)[0]) is None
 
 
 # ---------------------------------------------------------------------------
@@ -289,49 +237,6 @@ async def test_provider_delete_success_fires_settings_changed(config_path) -> No
     on_changed.assert_called_once()
     saved = load_config(config_path)
     assert all(p.name != "to-delete" for p in saved.providers.providers)
-
-
-# ---------------------------------------------------------------------------
-# /api/settings/provider-models
-# ---------------------------------------------------------------------------
-
-
-async def test_provider_models_requires_auth(config_path) -> None:
-    router = _router()
-    response = await router.dispatch(
-        _request("/api/settings/provider-models", token=None),
-        "/api/settings/provider-models",
-    )
-    assert response.status_code == 401
-
-
-async def test_provider_models_settings_error_maps_to_status(config_path, monkeypatch) -> None:
-    from jenny.webui.settings_routes import WebUISettingsError
-
-    def boom(query):
-        raise WebUISettingsError("provider sconosciuto", status=404)
-
-    monkeypatch.setattr("jenny.webui.settings_routes.provider_models_payload", boom)
-    router = _router()
-    response = await router.dispatch(
-        _request("/api/settings/provider-models?provider=openai"),
-        "/api/settings/provider-models",
-    )
-    assert response.status_code == 404
-
-
-async def test_provider_models_unexpected_error_maps_to_500(config_path, monkeypatch) -> None:
-    def boom(query):
-        raise RuntimeError("guasto inatteso")
-
-    monkeypatch.setattr("jenny.webui.settings_routes.provider_models_payload", boom)
-    router = _router()
-    response = await router.dispatch(
-        _request("/api/settings/provider-models?provider=openai"),
-        "/api/settings/provider-models",
-    )
-    assert response.status_code == 500
-    assert b"guasto inatteso" not in response.body
 
 
 # ---------------------------------------------------------------------------
@@ -406,61 +311,6 @@ async def test_web_search_update_unexpected_error_maps_to_500(config_path, monke
     assert b"guasto inatteso" not in response.body
 
 
-# ---------------------------------------------------------------------------
-# /api/onboarding/save
-# ---------------------------------------------------------------------------
-
-
-async def test_onboarding_save_requires_auth(config_path) -> None:
-    router = _router()
-    response = await router.dispatch(
-        _request("/api/onboarding/save", token=None), "/api/onboarding/save"
-    )
-    assert response.status_code == 401
-
-
-async def test_onboarding_save_settings_error_maps_to_400(config_path) -> None:
-    router = _router()
-    response = await router.dispatch(
-        _request(
-            "/api/onboarding/save?provider_name=openai&format=openai_compat&model=gpt-x"
-        ),
-        "/api/onboarding/save",
-    )
-    assert response.status_code == 400
-
-
-async def test_onboarding_save_success(config_path) -> None:
-    router = _router(onboarding_event=asyncio.Event())
-    response = await router.dispatch(
-        _request(
-            "/api/onboarding/save"
-            "?provider_name=openai&format=openai_compat&model=gpt-x&api_key=sk-test-123"
-        ),
-        "/api/onboarding/save",
-    )
-    assert response.status_code == 200
-    body = _json(response)
-    assert body["chat_id"] == "default"
-
-
-async def test_onboarding_save_unexpected_error_maps_to_500(config_path, monkeypatch) -> None:
-    async def boom(*args, **kwargs):
-        raise RuntimeError("kaboom")
-
-    monkeypatch.setattr("jenny.webui.settings_routes.save_onboarding", boom)
-    router = _router()
-    response = await router.dispatch(
-        _request(
-            "/api/onboarding/save"
-            "?provider_name=openai&format=openai_compat&model=gpt-x&api_key=sk-test-123"
-        ),
-        "/api/onboarding/save",
-    )
-    assert response.status_code == 500
-    assert b"kaboom" not in response.body
-
-
 async def test_settings_update_fires_on_settings_changed_for_generation_params(
     config_path,
 ) -> None:
@@ -481,16 +331,15 @@ async def test_settings_update_fires_on_settings_changed_for_generation_params(
 # Il tronco condiviso: nessuna rotta di scrittura fa trapelare un'eccezione
 # ---------------------------------------------------------------------------
 
-# Le cinque rotte che scrivevano passando da un try/except scritto a mano, senza
+# Le rotte che scrivevano passando da un try/except scritto a mano, senza
 # l'``except Exception`` che la docstring del tronco SSH dice di non dimenticare.
-# Tutte e cinque chiamano ``store.mutate()``, cioè il disco: una config corrotta
+# Tutte chiamano ``store.mutate()``, cioè il disco: una config corrotta
 # o un errore di scrittura risaliva oltre ``dispatch`` — che ha solo un
 # ``finally`` — fino all'hook di handshake di ``websockets``.
 _WRITING_ROUTES = [
     ("/api/settings/update", "update_agent_settings"),
     ("/api/settings/memory/update", "update_memory_settings"),
     ("/api/settings/workers/update", "update_worker_settings"),
-    ("/api/settings/provider/update?name=p", "update_provider"),
     ("/api/settings/provider/delete?name=p", "delete_provider"),
 ]
 

@@ -1,6 +1,6 @@
 """La raccolta del diario di un progetto: leggere senza accorciare.
 
-**Fase D di ``.agent/project-memory-plan.md``, e la fase senza la quale la
+**Fase D del piano della memoria di progetto, e la fase senza la quale la
 corsia esisteva a vuoto.** Aperta la scrittura di ``append_history`` a una chiave
 ``project:``, il trasporto restava quello della compattazione — un riassunto lo
 produce solo chi compatta — e la compattazione per inattivita' i progetti non li
@@ -29,7 +29,7 @@ from jenny.agent.autocompact import AutoCompact
 from jenny.agent.memory import Consolidator, MemoryStore
 from jenny.session.manager import SessionManager
 
-PROJECT = "project:patreon"
+PROJECT = "project:palestra"
 PERSONAL = "unified:default"
 
 
@@ -82,8 +82,8 @@ def _talked(
     return session
 
 
-class TestLaRaccoltaLegge:
-    async def test_il_riassunto_finisce_nella_coda_con_la_chiave_del_progetto(
+class TestTheHarvestReads:
+    async def test_the_summary_ends_up_in_the_queue_with_the_project_key(
         self, autocompact, store
     ):
         _talked(autocompact, PROJECT)
@@ -97,7 +97,7 @@ class TestLaRaccoltaLegge:
         # personale.
         assert entries[0]["session_key"] == PROJECT
 
-    async def test_la_sessione_non_perde_un_messaggio(self, autocompact):
+    async def test_the_session_does_not_lose_a_message(self, autocompact):
         """La differenza con la compattazione, detta come asserzione.
 
         Un progetto puo' stare fermo tre settimane e riprendere dove era: e' il
@@ -112,7 +112,7 @@ class TestLaRaccoltaLegge:
 
         assert autocompact.sessions.get_or_create(PROJECT).messages == before
 
-    async def test_non_tocca_last_summary(self, autocompact):
+    async def test_does_not_touch_last_summary(self, autocompact):
         """``_last_summary`` e' il meccanismo della compattazione, non di questo.
 
         E' quel che ``prepare_session`` reinietta quando una sessione riparte:
@@ -126,8 +126,8 @@ class TestLaRaccoltaLegge:
         assert "_last_summary" not in autocompact.sessions.get_or_create(PROJECT).metadata
 
 
-class TestLIndiceNonRilegge:
-    async def test_una_seconda_passata_senza_messaggi_nuovi_non_fa_niente(
+class TestTheIndexDoesNotReread:
+    async def test_a_second_pass_without_new_messages_does_nothing(
         self, autocompact, store
     ):
         _talked(autocompact, PROJECT)
@@ -137,7 +137,7 @@ class TestLIndiceNonRilegge:
 
         assert len(store.read_unprocessed_history(since_cursor=0)) == 1
 
-    async def test_la_seconda_passata_riassume_solo_il_nuovo(
+    async def test_the_second_pass_summarizes_only_the_new(
         self, autocompact, consolidator
     ):
         _talked(autocompact, PROJECT, turns=2, tag="vecchio")
@@ -154,7 +154,7 @@ class TestLIndiceNonRilegge:
         assert "messaggio vecchio0" not in payload
         assert "messaggio nuovo0" in payload
 
-    async def test_sotto_la_soglia_non_spende_una_chiamata(
+    async def test_under_the_threshold_does_not_spend_a_call(
         self, autocompact, consolidator
     ):
         """Una sessione senza niente di nuovo non deve costare un turno di LLM.
@@ -170,7 +170,7 @@ class TestLIndiceNonRilegge:
 
         consolidator.provider.chat_with_retry.assert_not_called()
 
-    async def test_un_indice_oltre_la_fine_non_rilegge_tutto(self, autocompact, store):
+    async def test_an_index_past_the_end_does_not_reread_everything(self, autocompact, store):
         """Se qualcuno compatta in mezzo, l'indice resta indietro rispetto ai
         messaggi ma **avanti** rispetto a quel che e' rimasto.
 
@@ -186,8 +186,8 @@ class TestLIndiceNonRilegge:
         assert store.read_unprocessed_history(since_cursor=0) == []
 
 
-class TestIlGiroPianificaLaRaccolta:
-    def test_un_progetto_scaduto_viene_raccolto(self, autocompact):
+class TestTheRoundSchedulesTheHarvest:
+    def test_an_expired_project_is_harvested(self, autocompact):
         _talked(autocompact, PROJECT)
 
         scheduled: list = []
@@ -197,7 +197,7 @@ class TestIlGiroPianificaLaRaccolta:
         for coro in scheduled:
             coro.close()
 
-    def test_un_progetto_ancora_attivo_non_viene_raccolto(self, autocompact):
+    def test_a_still_active_project_is_not_harvested(self, autocompact):
         """La sessione su cui l'utente sta scrivendo adesso resta fuori: il
         riassunto di una conversazione a meta' e' una conversazione a meta'."""
         _talked(autocompact, PROJECT, stale=False)
@@ -207,7 +207,7 @@ class TestIlGiroPianificaLaRaccolta:
 
         assert scheduled == []
 
-    def test_una_sessione_in_corso_di_turno_resta_fuori(self, autocompact):
+    def test_a_session_mid_turn_stays_out(self, autocompact):
         _talked(autocompact, PROJECT)
 
         scheduled: list = []
@@ -215,7 +215,7 @@ class TestIlGiroPianificaLaRaccolta:
 
         assert scheduled == []
 
-    def test_con_la_manopola_accesa_non_si_raccoglie_due_volte(self, consolidator):
+    def test_with_the_knob_on_it_is_not_harvested_twice(self, consolidator):
         """Chi compatta riassume gia', e quel riassunto va nella stessa coda.
 
         Con ``compact_projects_when_idle`` acceso i due lavori si sovrapporrebbero
@@ -232,10 +232,100 @@ class TestIlGiroPianificaLaRaccolta:
 
         assert PROJECT not in compacting._diary_candidates()
 
-    def test_con_la_manopola_spenta_il_progetto_e_un_candidato(self, autocompact):
+    def test_with_the_knob_off_the_project_is_a_candidate(self, autocompact):
         _talked(autocompact, PROJECT)
 
         assert autocompact._diary_candidates() == (PROJECT,)
         # E la conversazione personale non passa di qui: ha Dream che la legge
         # dalla sua coda, non un progetto da raccogliere.
         assert PERSONAL not in autocompact._diary_candidates()
+
+
+class TestTheIndexFollowsTheSession:
+    """L'indice segue la sessione, e segna solo quel che e' entrato.
+
+    Era una posizione assoluta nei messaggi: dopo ``/new`` restava al valore di
+    prima, e i messaggi nuovi — meno di quelli vecchi — non entravano mai nel
+    diario. La prima raccolta ripartiva da zero anche sul prefisso gia'
+    consolidato per lunghezza (che nella coda c'e' gia'), e un giro oltre il
+    budget di input del Consolidator segnava letti anche i messaggi che il
+    troncamento aveva lasciato fuori dal riassunto.
+    """
+
+    async def test_after_new_the_new_messages_are_harvested(self, autocompact, consolidator):
+        _talked(autocompact, PROJECT, turns=20, tag="vecchio")
+        await autocompact._harvest_project_diary(PROJECT)
+        # ``/new``, come lo fa ``cmd_new``.
+        session = autocompact.sessions.get_or_create(PROJECT)
+        session.clear()
+        autocompact.sessions.save(session)
+        autocompact.sessions.invalidate(PROJECT)
+        _talked(autocompact, PROJECT, turns=5, tag="nuovo")
+
+        await autocompact._harvest_project_diary(PROJECT)
+
+        assert consolidator.provider.chat_with_retry.await_count == 2
+        payload = consolidator.provider.chat_with_retry.await_args.kwargs["messages"][-1][
+            "content"
+        ]
+        assert "messaggio nuovo0" in payload
+
+    async def test_the_prefix_already_consolidated_is_not_summarized_again(
+        self, autocompact, consolidator
+    ):
+        _talked(autocompact, PROJECT, turns=5, tag="consolidato")
+        _talked(autocompact, PROJECT, turns=2, tag="fresco")
+        session = autocompact.sessions.get_or_create(PROJECT)
+        session.last_consolidated = 10
+        autocompact.sessions.save(session)
+
+        await autocompact._harvest_project_diary(PROJECT)
+
+        payload = consolidator.provider.chat_with_retry.await_args.kwargs["messages"][-1][
+            "content"
+        ]
+        assert "consolidato" not in payload
+        assert "messaggio fresco0" in payload
+
+    async def test_a_session_over_the_budget_is_read_in_chunks(self, tmp_path, store):
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(
+            return_value=MagicMock(content="- fatto", finish_reason="stop")
+        )
+        small = Consolidator(
+            store=store, sessions=SessionManager(tmp_path), provider=provider, model="m",
+            context_window_tokens=8_000, build_messages=MagicMock(return_value=[]),
+            get_tool_definitions=MagicMock(return_value=[]), max_completion_tokens=100,
+        )
+        ac = AutoCompact(sessions=small.sessions, consolidator=small, session_ttl_minutes=30)
+        session = ac.sessions.get_or_create(PROJECT)
+        for i in range(60):
+            session.messages.append({"role": "user", "content": f"msg-{i:02d} " + "y" * 900})
+        session.updated_at = datetime.now() - timedelta(hours=6)
+        ac.sessions.save(session)
+
+        await ac._harvest_project_diary(PROJECT)
+
+        payloads = [
+            call.kwargs["messages"][-1]["content"]
+            for call in provider.chat_with_retry.await_args_list
+        ]
+        assert len(payloads) > 1
+        assert not any("(truncated)" in text for text in payloads)
+        seen = {i for i in range(60) for text in payloads if f"msg-{i:02d}" in text}
+        mark = ac.sessions.get_or_create(PROJECT).metadata[AutoCompact._DIARY_HARVEST_KEY]
+        # Letto vuol dire riassunto: l'indice copre esattamente quel che e' partito.
+        assert seen == set(range(mark))
+        assert mark == 60
+
+    async def test_a_failed_call_leaves_the_index_where_it_was(
+        self, autocompact, consolidator, store
+    ):
+        consolidator.provider.chat_with_retry = AsyncMock(side_effect=RuntimeError("giu'"))
+        _talked(autocompact, PROJECT, turns=3)
+
+        await autocompact._harvest_project_diary(PROJECT)
+
+        session = autocompact.sessions.get_or_create(PROJECT)
+        assert AutoCompact._DIARY_HARVEST_KEY not in session.metadata
+        assert store.read_unprocessed_history(since_cursor=0) == []

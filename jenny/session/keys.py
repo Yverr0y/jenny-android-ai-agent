@@ -26,6 +26,8 @@ __all__ = [
     "session_key_for_channel",
     "session_kind",
     "subagent_session_key",
+    "webui_chat_id",
+    "webui_transcript_key",
 ]
 
 UNIFIED_SESSION_KEY = "unified:default"
@@ -52,12 +54,13 @@ PROJECT_SESSION_PREFIX = "project:"
 # nel dialogo del chip e, appena dopo, in ogni ``chat_id`` — e i due punti devono
 # rispondere alla stessa domanda: il controllo nel dialogo e' cortesia, questi
 # sono i caratteri che possono diventare una sessione e una cartella.
-_PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_PROJECT_NAME_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 
 
 def is_valid_project_name(name: str) -> bool:
     """True se *name* puo' essere il nome di un progetto."""
     return bool(_PROJECT_NAME_RE.match(name)) and ".." not in name
+
 
 # Prefisso delle sessioni Tier-2 dei subagent (``subagent:<lineage_id>``).
 # Sono storia di lavoro interno, non conversazioni: non devono comparire in
@@ -114,7 +117,7 @@ _INTERNAL_KIND_BY_KEY: dict[str, str] = {HEARTBEAT_SESSION_KEY: "heartbeat"}
 # incontrano solo rileggendo un ``jobs.json`` scritto prima della sessione unica —
 # **e le voci di ``history.jsonl``** scritte allora, che a Dream servono ancora.
 #
-# **Elenco chiuso, e non un pattern.** Un pattern "``<parola>:<parola>``"
+# **Elenco chiuso, e non un pattern.** Un pattern "``<word>:<word>``"
 # prenderebbe anche ``project:<id>``, che e' una sessione vera: collassarla sulla
 # conversazione personale farebbe girare un job di progetto nella chat personale,
 # cioe' esattamente la confusione che le sessioni-progetto esistono per evitare.
@@ -252,6 +255,18 @@ def is_project_session_key(key: str) -> bool:
     return session_kind(key) == "project"
 
 
+def is_project_chat_id(chat_id: str) -> bool:
+    """True se il ``chat_id`` di un frame della WebUI nomina un progetto.
+
+    Guarda solo il prefisso, e non passa da :func:`is_project_session_key`: un
+    ``chat_id`` non e' una session key, e classificarlo come tale faceva avvisare
+    ``session_kind`` che ``"default"`` (la chat personale) non sta in nessun
+    vocabolario — un WARNING falso a ogni avvio. Se il nome dopo il prefisso sia
+    un progetto possibile lo decide :func:`is_valid_project_name`.
+    """
+    return chat_id.startswith(PROJECT_SESSION_PREFIX)
+
+
 def is_personal_session_key(key: str) -> bool:
     """True se la session key e' la conversazione personale con l'utente.
 
@@ -277,6 +292,37 @@ def project_session_key(project_id: str) -> str:
     lato che la scrive e quello che la classifica non possono divergere.
     """
     return f"{PROJECT_SESSION_PREFIX}{project_id}"
+
+
+def webui_chat_id(key: str) -> str:
+    """Il ``chat_id`` di una conversazione della WebUI, dalla chiave che usa il client.
+
+    Il client indirizza le conversazioni in due forme (``shared/session-manager.js``):
+    ``websocket:default`` per quella personale e ``project:<nome>`` per un progetto.
+    Il ``chat_id`` e' cio' che viaggia nei frame e con cui si registra il turno
+    in corso: ``default`` nel primo caso, la chiave intera nel secondo — lo
+    stesso calcolo di ``chatIdOf`` in ``shared/ws-manager.js``.
+    """
+    prefix = f"{WEBUI_CHANNEL}:"
+    if key.startswith(prefix):
+        return key[len(prefix):]
+    return key
+
+
+def webui_transcript_key(key: str) -> str:
+    """La chiave con cui sta su disco la trascrizione WebUI di una conversazione.
+
+    Chi scrive la trascrizione la registra sotto ``websocket:<chat_id>``
+    (``webui/transcript_recorder.py``), e per un progetto il ``chat_id`` e'
+    ``project:<nome>``: il file e' ``websocket_project_<nome>.jsonl``. La forma
+    con cui il client *chiede* un progetto invece e' ``project:<nome>``, senza
+    canale. Fino al 26/09/2026 la route del thread cercava proprio quella, non
+    trovava niente e ripiegava sulla storia ricostruita dalla sessione: le chat
+    dei quaderni si aprivano senza tool ne' ragionamento, e con i vecchi rientri
+    dei subagent disegnati come messaggi dell'utente. Chi legge o sposta quei file
+    passa di qui, cosi' la forma sta in un punto solo.
+    """
+    return f"{WEBUI_CHANNEL}:{webui_chat_id(key)}"
 
 
 def normalize_user_session_key(key: str) -> str:
@@ -316,7 +362,7 @@ def session_key_for_channel(channel: str, chat_id: str) -> str:
     la conversazione personale. Un progetto e' una sessione di lavoro alla
     tastiera, e la vita "fuori" di Jenny — Telegram, cron, avvisi — non ci entra.
     """
-    if channel == WEBUI_CHANNEL and is_project_session_key(chat_id):
+    if channel == WEBUI_CHANNEL and is_project_chat_id(chat_id):
         if is_valid_project_name(chat_id[len(PROJECT_SESSION_PREFIX):]):
             return chat_id
     return UNIFIED_SESSION_KEY

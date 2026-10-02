@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from loguru import logger as loguru_logger
+from support.sessions import FakeSessions
 
 from jenny.agent.turn_types import TurnOutcome
 from jenny.cron.heartbeat_tasks import active_section_text, parse_heartbeat_tasks
@@ -41,37 +42,13 @@ _HEARTBEAT_MD = """# Heartbeat
 
 ## Active Tasks
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 """
-
-
-class _FakeSession:
-    def __init__(self) -> None:
-        self.retained: list[int] = []
-        # Il ramo heartbeat legge la sessione unificata per sapere se l'utente
-        # si è fatto vivo dopo un avviso (v. ``last_user_message_ms``): vuota,
-        # qui, che è il caso di ogni test di questo file.
-        self.messages: list[dict] = []
-
-    def retain_recent_legal_suffix(self, keep: int) -> None:
-        self.retained.append(keep)
-
-
-class _FakeSessions:
-    def __init__(self) -> None:
-        self.session = _FakeSession()
-        self.saved = 0
-
-    def get_or_create(self, _key: str) -> _FakeSession:
-        return self.session
-
-    def save(self, _session: _FakeSession) -> None:
-        self.saved += 1
 
 
 class _FakeAgent:
     def __init__(self) -> None:
-        self.sessions = _FakeSessions()
+        self.sessions = FakeSessions(shared=True)
         self.calls: list[dict] = []
 
     async def process_direct_outcome(self, prompt: str, **kwargs) -> TurnOutcome:
@@ -140,7 +117,7 @@ class TestTheHeartbeatTurnIsSilent:
         await disp.dispatch(_heartbeat_job())
 
         assert agent.sessions.session.retained == [8]
-        assert agent.sessions.saved == 1
+        assert agent.sessions.save_count == 1
 
     async def test_a_file_without_active_tasks_runs_no_turn(self, tmp_path: Path) -> None:
         (tmp_path / "HEARTBEAT.md").write_text("# Heartbeat\n\nnothing here\n", "utf-8")
@@ -176,7 +153,7 @@ async def _prompt_for(workspace: Path, content: str) -> str:
 # quel che sta fuori dalla sezione dei task.
 _BARE = """## Active Tasks
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 - Alle 8:00 dimmi se ci sono scadenze oggi.
 """
 
@@ -203,7 +180,7 @@ Completed tasks should be deleted, not kept.
 Un commento su più righe: è il caso che una regex ingenua si perde.
 -->
 
-- Ogni ciclo, controlla l'umidità del suolo e avvertimi solo sotto il 15%.
+- Ogni ciclo, controlla la probabilità di pioggia e avvertimi solo sopra il 70%.
 - Alle 8:00 dimmi se ci sono scadenze oggi.
 """
 
@@ -212,8 +189,16 @@ _TITAN2 = (Path(__file__).parent / "fixtures" / "heartbeat_titan2_2026-08-16.md"
 )
 
 # Gli id che ``parse_heartbeat_tasks`` produce oggi sul file del Titan 2,
-# calcolati **prima** di questo lavoro. V. il test che li usa.
-_TITAN2_TASK_IDS = ["903dabc442ff", "8aa2cef88085", "113dc0426e58", "ff28e76dc65c"]
+# calcolati **prima** di questo lavoro. V. il test che li usa. Il quarto e'
+# stato ricalcolato il 26/09/2026, quando il nome di un host reale nel testo
+# del task e' stato sostituito con uno inventato: l'hash e' lo stesso di
+# prima (sul testo originale dava ancora ``ff28e76dc65c``), e' cambiato il
+# testo che hasha. I primi tre, lo stesso giorno e per la stessa ragione: il
+# controllo reale dell'utente e' diventato un "RainCheck" inventato. Sul testo
+# precedente la funzione da' ancora ``903dabc442ff``, ``8aa2cef88085`` e
+# ``113dc0426e58``; il quarto bullet non e' stato toccato e il suo id e' quello
+# di prima.
+_TITAN2_TASK_IDS = ["8b2808ab834a", "8ef5a6515bba", "d734634b0fd9", "cc9811ac7f4c"]
 
 
 class TestThePromptCarriesTheTasksAndNotTheFile:
@@ -267,20 +252,20 @@ class TestThePromptCarriesTheTasksAndNotTheFile:
         """Il file vero del Titan 2, che è il solo input che conta davvero.
 
         I quattro bullet non si reggono da soli: "notifica una sola volta per
-        pianta" non dice di quali piante senza il titolo che ha scritto l'utente,
+        città" non dice di quali città senza il titolo che ha scritto l'utente,
         e togliere quel titolo insieme ai nostri commenti sarebbe stata una
         regressione sull'unico dispositivo installato.
         """
         prompt = await _prompt_for(tmp_path / "titan2", _TITAN2)
 
-        assert "### WaterBot: monitoraggio umidità piante" in prompt
+        assert "### RainCheck: allerta pioggia nelle città" in prompt
         assert "gateway.heartbeat.enabled=true" not in prompt
         assert "Add your periodic tasks below this line" not in prompt
         for bullet in (
-            "segui la skill `waterbot`",
-            "Avverti l'utente SOLO se almeno una pianta",
-            "Anti-spam: notifica una sola volta per pianta",
-            "Se hps/Tailscale è irraggiungibile",
+            "segui la skill `raincheck`",
+            "Avverti l'utente SOLO se almeno una città",
+            "Anti-spam: notifica una sola volta per città",
+            "Se pibox/Tailscale è irraggiungibile",
         ):
             assert bullet in prompt
 
@@ -451,13 +436,13 @@ class TestThePreambleContract:
         assert "Those lines reach nobody" in text
 
     def test_an_instructed_silent_skip_still_writes_the_line(self) -> None:
-        """Il task WaterBot reale dice "se hps è irraggiungibile salta il ciclo in
+        """Il task RainCheck del Titan 2 dice "se pibox è irraggiungibile salta il ciclo in
         silenzio", e questo preambolo diceva che quello skip non è un guasto.
 
         Misurato sul Titan 2 il 2026-08-16, con Tailscale spento apposta: il run
         delle 09:18 ha letto quella frase, ha saltato il controllo senza scrivere
         nessun marcatore, e la voce è stata potata — sequenza di guasti di nuovo
-        a zero, con hps irraggiungibile da un'ora. L'istruzione dell'utente
+        a zero, con pibox irraggiungibile da un'ora. L'istruzione dell'utente
         riguarda il **messaggio**, non la contabilità: la riga non raggiunge
         nessuno, ed è l'unico motivo per cui qualcuno si accorgerà mai che
         quel controllo è morto da ore.

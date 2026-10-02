@@ -1,13 +1,13 @@
 # Scheduling and proactivity
 
-Jenny can remind you of things, watch a checklist in the background, work a long task across many turns, and delegate side work to a helper agent — all by asking in chat, no separate scheduling screen involved.
+Jenny can remind you of things, watch a checklist in the background, work a long task across many turns, and delegate side work to a helper agent — all set up by asking in chat. The workshop shows your reminders and the heartbeat, and lets you pause, resume or delete the reminders you created.
 
 ## The one thing to know before you rely on this
 
 **Everything in this page lives inside the app's own gateway process.** There is no server in the cloud keeping time for you. If Android kills the app (or you swipe it away, or the battery optimizer freezes it) at the moment a reminder was supposed to fire, here is what actually happens:
 
 - A **one-shot reminder** ("remind me at 6pm") whose time passed while the app was dead now fires **late, once**, shortly after the app comes back. Before 0.6.6 it was lost forever and silently: recomputing the next run of a one-shot whose time had already passed came back empty, and the job sat there enabled but unrunnable — never retried, never reported missed, nothing telling you it hadn't happened. Late delivery is deliberate: for a reminder, hours late beats never.
-- A **recurring reminder** ("every 30 minutes", "every day") keeps its deadline across restarts, and *does* catch up: a daily reminder that came due at 9am while the app was dead fires shortly after the app comes back, not 24 hours later. Before 0.6.0 this was not the case — every restart reset the interval to "now + interval", so on a phone that restarts the app often, a long interval could go indefinitely without ever firing. The same fix covers the three built-in jobs below.
+- A **recurring reminder** ("every 30 minutes", "every day") keeps its deadline across restarts, and *does* catch up: a daily reminder that came due at 9am while the app was dead fires shortly after the app comes back, not 24 hours later. Before 0.6.0 this was not the case — every restart reset the interval to "now + interval", so on a phone that restarts the app often, a long interval could go indefinitely without ever firing. The same fix covers the built-in jobs below.
 - **Catch-up is not the same as punctuality**, and until 0.6.6 it wasn't even close. A foreground service keeps the *process* alive, not the *processor*: with the screen off the phone suspends, and the timer a job was sleeping on stops advancing along with the CPU. It didn't run late because anything was slow — the clock had stopped. On a test device a 30-minute job was observed firing between 30 and 83 minutes apart for exactly that reason.
 
 ### What 0.6.6 changed, and what it didn't
@@ -15,7 +15,7 @@ Jenny can remind you of things, watch a checklist in the background, work a long
 Two mechanisms address the frozen-clock problem directly:
 
 - **The deadline now lives on Android's clock, not on Jenny's.** Alongside the in-process timer, the scheduler asks the OS to wake the phone at the next job's real deadline (`power.alarmDrivenCron`, on by default). An OS alarm fires through Doze; a suspended timer does not. So a due job no longer has to wait for the phone to wake up on its own.
-- **The CPU is held awake around the work itself.** By default (`power.keepAwake: "turns"`) Jenny takes a wake lock for the duration of a turn, a scheduled job or an SSH command, and releases it straight after. Without it a job could fire on time and then freeze halfway through — mid-provider-call, mid-tool, mid-write.
+- **The CPU is held awake around the work itself.** By default (`power.keepAwake: "turns"`, shown as **While working** in the workshop's **Brain → Background activity → Keep the CPU awake**, where the other choices are **Never** and **Always**) Jenny takes a wake lock for the duration of a turn, a scheduled job or an SSH command, and releases it straight after. A change there applies from the next Jenny restart, and the same card shows whether the CPU is being held awake right now. Without it a job could fire on time and then freeze halfway through — mid-provider-call, mid-tool, mid-write.
 
 And when the process is killed rather than merely frozen, several nets try to bring it back: a self-chaining watchdog alarm (`power.watchdogEnabled`, base 15 minutes, spaced out in Doze), a 15-minute periodic worker, an 8-hourly alarm-clock wake-up, plus opportunistic restarts when the network returns or you open the app. The gateway also comes back by itself after an app update, which it previously did not — it used to stay down until you next opened Jenny by hand.
 
@@ -24,8 +24,8 @@ What none of that fixes, and you should plan around:
 - **A missed cron-expression occurrence is still dropped.** A `0 9 * * *` job that came due while the app was dead is recomputed from now, so that morning's run is skipped without a word; the next one arrives normally. Only one-shot and interval schedules catch up.
 - **A recovered one-shot arrives with no sense of how late it is.** It fires whenever the app next comes up — hours or days after the fact — and the message is the one you wrote, unchanged. If that would be worse than silence for a particular reminder, a one-shot is the wrong tool for it.
 - **After a reboot, nothing runs until you unlock the phone.** Jenny's workspace, config and runtime live in storage that Android keeps encrypted until the first unlock, so the gateway cannot start before it — deliberately, since the alternative is keeping your API keys and memory outside that encryption. A phone that reboots at 3am and sits locked until 8 is a phone with a five-hour hole in it.
-- **Exact alarms can be switched off.** If Android's "Alarms & reminders" permission isn't granted, Jenny falls back to inexact alarms: they still fire in Doze, but they slip. Settings → Background activity tells you which of the two you're getting.
-- **Your phone's own battery manager outranks all of it.** Samsung, Xiaomi/MIUI, Huawei/Honor, Oppo and Vivo kill background apps on their own terms, and no application code can prevent it. What Jenny can now do is *notice*: a stretch of downtime longer than `power.gapWarningMin` (default 60 minutes) is recorded and listed under **Settings → Background activity**, with the manufacturer-specific advice for turning the restriction off.
+- **Exact alarms can be switched off.** If Android's "Alarms & reminders" permission isn't granted, Jenny falls back to inexact alarms: they still fire in Doze, but they slip. The workshop's **Brain → Background activity** tells you which of the two you're getting, and offers a button to grant the permission.
+- **Your phone's own battery manager outranks all of it.** Samsung, Xiaomi/MIUI, Huawei/Honor, Oppo and Vivo kill background apps on their own terms, and no application code can prevent it. What Jenny can now do is *notice*: a stretch of downtime longer than `power.gapWarningMin` (default 60 minutes) is recorded and listed under the workshop's **Brain → Background activity**, with the manufacturer-specific advice for turning the restriction off.
 
 So: intervals are still a floor, not a promise — but the floor moved a long way up. Measured on the development phone (Unihertz Titan 2, Android 16), unplugged and idle for nine hours overnight, with both the battery exemption and the "Alarms & reminders" permission granted: a 30-minute job fired 19 times in a row and **every single interval landed between 30m00s and 30m02s**, including right through an uninterrupted four-hour stretch of deep Doze with no maintenance windows at all. The gateway was never killed and never restarted; the battery went from 80% to 77% over 9.4 hours.
 
@@ -33,15 +33,13 @@ Read that for what it is: one phone, in the configuration where everything is gr
 
 If reminders matter to you, the practical measures are unchanged:
 
-- Grant the battery-optimization exemption Jenny offers during first-run setup (or later from **Settings → Background activity**, or from Android's own battery settings) so the OS is less likely to freeze the background service.
+- Grant the battery-optimization exemption Jenny offers during first-run setup (or later from the workshop's **Brain → Background activity**, or from Android's own battery settings) so the OS is less likely to freeze the background service.
 - Keep the phone charged and connected when a reminder is close to due.
 - Treat "at" reminders as best-effort, not guaranteed alarms — for anything truly time-critical, use your phone's own alarm clock as a backup.
 
-<!-- TODO: verify on-device (O-5): the granted-everything case was measured on the Titan 2 on 2026-08-09 and is written up above. Still unmeasured: the drift of the same job with neither permission granted, whether the watchdog really recovers a gateway that was killed (nothing killed it during the run), and how often the recorded-outage panel finds a gap in normal use. -->
-
 ## Reminders (the `cron` tool)
 
-You don't configure this from a screen — you just ask, in plain language, and Jenny translates it into a scheduled job:
+You don't create these from a screen — you just ask, in plain language, and Jenny translates it into a scheduled job:
 
 - "Remind me to take the pizza out in 20 minutes."
 - "Every day at 9am, ask me how I slept."
@@ -65,7 +63,9 @@ A few smaller things worth knowing:
 
 - A reminder job cannot schedule further jobs from inside its own execution — this only matters if you ask Jenny to "set up a reminder that then sets another reminder" in one step.
 - The job's default name is just the first 30 characters of your reminder's message, unless you give it something more memorable.
-- You can list and remove reminders by asking — there is no dedicated screen for this; it's entirely conversational (e.g. "what reminders do I have?", "remove job xyz").
+- You can list and remove reminders by asking (e.g. "what reminders do I have?", "remove job xyz"). You create them only by asking.
+- In the workshop, **Hands → When she acts on her own** lists them too, and tapping one opens its detail with **Pause** and **Delete**. On a paused one the buttons are **Resume** and **Delete**. Pausing needs no confirmation because resuming undoes it. Deleting asks first. A resumed reminder counts from the moment you resume it and does not catch up on the runs it missed: an hourly one runs an hour later, a daily 8:00 one at the next 8:00. A one-time reminder whose time passed while it was paused can only be deleted, because resuming it would fire it at once, late. System jobs have no buttons, since their switch lives in their own settings. There is no "run now": that would start an agent turn, which costs tokens and may message you.
+- Jenny still sees a paused reminder when she lists them, marked as paused, so she won't set it up again thinking it's gone.
 
 ### Two modes: one that always speaks, one that speaks only if it has to
 
@@ -95,36 +95,38 @@ Monitor mode only makes sense on a repeating schedule, so **it cannot be combine
 
 ### Protected system jobs
 
-When you ask Jenny to list reminders, you'll also see jobs you didn't create: **`dream`**, **`heartbeat`**, and — when they are on — the [gardener](gardener.md) and the update check. These are system-managed and will show up as protected — visible for inspection, but Jenny will refuse to remove them if asked (a removal attempt gets a reply along the lines of "this is a protected system-managed cron job" and cannot be removed). The way to stop one is its config switch, not the reminder list.
+When you ask Jenny to list reminders, you'll also see jobs you didn't create: **`dream`**, **`heartbeat`**, and — when they are on — the [gardener](gardener.md) and the update check. These are system-managed and will show up as protected — visible for inspection, but Jenny will refuse to remove them if asked (a removal attempt gets a reply along the lines of "this is a protected system-managed cron job" and cannot be removed). The way to stop one is its config switch, not the reminder list: Dream's and the gardener's are in the workshop's **Memory** drawer, the heartbeat's and the update check's are in `config.json`.
 
 | Job | Runs | Config | What it costs you |
 |---|---|---|---|
 | `dream` | every **2 hours** | `agents.defaults.dream.enabled` (default on), `agents.defaults.dream.intervalH` (default `2`) | One agent run — a real turn against your provider, several calls if it uses tools — whenever there is new conversation to consolidate. Takes a snapshot first, so a bad run is undoable. |
 | `heartbeat` | every **30 minutes** | `gateway.heartbeat.enabled` (default on), `gateway.heartbeat.intervalS` (default `1800`) | Nothing when `## Active Tasks` is empty; one real turn when it isn't. See below. |
+| `gardener` | every **30 minutes** (how often it *looks*) | `agents.defaults.gardener.enabled` (default on), `agents.defaults.gardener.intervalMin` (default `30`) | Nothing when no notebook has new journal lines, or none has been quiet long enough; otherwise one pass on that notebook, which is a real turn against your provider. See [The gardener](gardener.md). |
+| `update_check` | every **24 hours** | `updates.enabled` (default on), `updates.checkIntervalH` (default `24`) | One small HTTP request to the update manifest; a real turn only on the day a new version is first announced in chat (`updates.notifyInChat`). See [Updates](webui-tour.md#updates). |
 
-`dream` runs the memory-consolidation pass, described in [Memory and Dream](memory.md); `heartbeat` is described next.
+`dream` runs the memory-consolidation pass, described in [Memory and Dream](memory.md); `gardener` is described in [The gardener](gardener.md); `heartbeat` is described next.
 
 ### If the reminder list itself gets damaged
 
 Your reminders live in one file, `cron/jobs.json` inside the workspace, and a phone can leave a file unreadable — storage trouble, or the system killing the process mid-write.
 
-Since 0.6.6 that file is handled the same way as `config.json`. Jenny keeps the previous good copy as `cron/jobs.json.bak` and refreshes it before every save. If the live file can't be read at startup, the backup is used and promoted; if there's no usable backup either, the unreadable file is set aside as `cron/jobs.json.corrupt-<timestamp>` and Jenny starts with **no reminders at all**. Either way the app comes online, and Settings shows a notice saying which of the two happened and where the broken file went.
+Since 0.6.6 that file is handled the same way as `config.json`. Jenny keeps the previous good copy as `cron/jobs.json.bak` and refreshes it before every save. If the live file can't be read at startup, the backup is used and promoted; if there's no usable backup either, the unreadable file is set aside as `cron/jobs.json.corrupt-<timestamp>` and Jenny starts with **no reminders at all**. Either way the app comes online, and the workshop shows a notice at the top of its drawers saying which of the two happened and where the broken file went.
 
 That notice matters more here than it does for settings. A reminder that has stopped existing looks exactly like a reminder that hasn't come due yet, so without being told, you'd find out when it didn't go off. If you see the "started with none" version, your own reminders need recreating — the system jobs above come back on their own.
 
-Settings → **Scheduling** is where you check the outcome: it lists everything scheduled and repeats the recovery notice above the list itself, because further down the screen a short list of reminders looks exactly like a correct one. See [Settings → Scheduling](../reference/settings.md#scheduling).
+The workshop's **Hands → When she acts on her own** is where you check the outcome: it lists your reminders and the heartbeat, and repeats the recovery notice above the list itself, because further down the screen a short list of reminders looks exactly like a correct one. See [Settings → When she acts on her own](../reference/settings.md#when-she-acts-on-her-own).
 
 The single case where Jenny still refuses to start is when the broken file can't be moved aside at all. Starting anyway would mean the next save overwrites it, and that file is the only copy of your reminders left.
 
 ## Heartbeat: a periodic checklist
 
-Heartbeat is Jenny's own background watchdog, driven entirely by one file: `workspace/HEARTBEAT.md` in your workspace. You can edit it directly through the Workspace file browser, or just ask Jenny to add something to it.
+Heartbeat is Jenny's own background watchdog, driven entirely by one file: `workspace/HEARTBEAT.md` in your workspace. You can edit it directly from the workshop's file manager (**Memory → The real files**), or just ask Jenny to add something to it.
 
 Only the section literally named `## Active Tasks` is read — anything you write under a different heading, or outside any heading, is ignored. The file ships with a comment reminding you of this and to delete tasks once they're done rather than leaving them checked off.
 
 Every **30 minutes** by default (`gateway.heartbeat.intervalS`, default `1800` seconds), Jenny reads that section. If it's empty (only headers, blank lines, or HTML comments), the cycle is skipped entirely before any model call happens — so an empty Heartbeat costs you nothing. If there's at least one task line, Jenny runs a real turn to check on it.
 
-**That turn is silent by construction.** Whatever Jenny writes as its answer is not delivered anywhere and nobody reads it; the only way a Heartbeat cycle reaches you is Jenny deciding, during the turn, to send you a message explicitly. So "I set a task and never hear anything" is a real, expected outcome if nothing noteworthy ever comes up, not a bug — and the flip side matters too: a check written as a condition ("…and warn me only if humidity drops below 15%") will not report the uneventful case at all. Before 0.6.6 that same restraint was attempted the other way around: the turn was told to answer "All clear." when it had nothing to say, and a second LLM call then guessed whether to hide it. That guess ran with a small token ceiling and, with a reasoning model, routinely ran out of budget before deciding — falling back to its default instead of judging. It's gone; silence is now a property of the turn, not an opinion about its text. Since 0.9.6 Jenny also has a way to *declare* that silence — a `nothing_to_report` step that delivers nothing and reaches nobody. It exists because "say nothing" is an instruction with nothing to do, and a small model was expressing it by sending you a message containing a placeholder word instead.
+**That turn is silent by construction.** Whatever Jenny writes as its answer is not delivered anywhere and nobody reads it; the only way a Heartbeat cycle reaches you is Jenny deciding, during the turn, to send you a message explicitly. So "I set a task and never hear anything" is a real, expected outcome if nothing noteworthy ever comes up, not a bug — and the flip side matters too: a check written as a condition ("…and warn me only if the chance of rain goes above 70%") will not report the uneventful case at all. Before 0.6.6 that same restraint was attempted the other way around: the turn was told to answer "All clear." when it had nothing to say, and a second LLM call then guessed whether to hide it. That guess ran with a small token ceiling and, with a reasoning model, routinely ran out of budget before deciding — falling back to its default instead of judging. It's gone; silence is now a property of the turn, not an opinion about its text. Since 0.9.6 Jenny also has a way to *declare* that silence — a `nothing_to_report` step that delivers nothing and reaches nobody. It exists because "say nothing" is an instruction with nothing to do, and a small model was expressing it by sending you a message containing a placeholder word instead.
 
 When Heartbeat does decide to speak, the message is delivered proactively to **both** the WebUI chat and, if you've paired a Telegram bot, that chat too — it's not confined to whichever channel you're currently looking at.
 
@@ -132,7 +134,7 @@ The practical rule of thumb: **write tasks under `## Active Tasks`, and delete t
 
 Example of something reasonable to put there: "Check the weather forecast around 7am and warn me if it looks like rain."
 
-**An empty checklist is free, and now it is also visible.** Skipping the cycle costs nothing, but the job still records a normal `ok` on every beat — so from the outside a heartbeat that is checking nothing is indistinguishable from a healthy one, and the only trace was a debug log line. Settings → **Scheduling** says it in words: the tasks it can actually see in `HEARTBEAT.md`, or a notice that there are none. The same panel names a task that has not been carried out for several cycles, and whether Jenny has already told you about it.
+**An empty checklist is free, and now it is also visible.** Skipping the cycle costs nothing, but the job still records a normal `ok` on every beat — so from the outside a heartbeat that is checking nothing is indistinguishable from a healthy one, and the only trace was a debug log line. The workshop's **Hands → When she acts on her own** says it in words: tap the heartbeat and it lists the tasks it can actually see in `HEARTBEAT.md`, or a notice that there are none. The same detail names a task that has not been carried out for several cycles, and whether Jenny has already told you about it.
 
 **Heartbeat has one schedule for the whole file.** Every line under `## Active Tasks` is looked at on the same 30-minute beat; there's no per-task cadence, and adding a second heartbeat job isn't the way to get one. If a particular check needs its own rhythm — every 10 minutes, or only on weekday mornings — that's a monitor job ([Two modes](#two-modes-one-that-always-speaks-one-that-speaks-only-if-it-has-to) above), which gives you an independent schedule and the same "only speaks if it's worth it" behavior. Heartbeat stays the right home for the shared, ambient checklist.
 
@@ -178,7 +180,7 @@ Full tool lists and sampling defaults are in the [Tool reference](../reference/t
 
 ### Watching and steering the work
 
-Because a subagent can run for minutes, the chat gives you a **Subagents panel** just above the message box: one card per running job with its type, elapsed time, idle time and current step, plus **Stop** and **Relaunch** buttons and a tap-through detail sheet showing what it actually did. It appears when work starts and disappears when the turn ends. See [Chat basics](chat.md#the-subagents-panel).
+Because a subagent can run for minutes, the workshop's Console gives you a **Subagents panel** just above the message box (the home's chat shows only the line saying what she is doing): one card per running job with its type, elapsed time, idle time and current step, plus **Stop** and **Relaunch** buttons and a tap-through detail sheet showing what it actually did. It appears when work starts and disappears when the turn ends. See [Chat basics](chat.md#the-subagents-panel).
 
 Jenny has the same controls from her side: she can check on a subagent's status, send it a correction mid-run ("no, use the other table") without restarting it, relaunch a failed one, and cancel one that's going nowhere. Those tools exist only in orchestrator mode and are never given to a subagent — a subagent cannot drive its siblings.
 
@@ -199,12 +201,13 @@ Jenny has the same controls from her side: she can check on a subagent's status,
 None of the proactive messages above are guaranteed to make a sound — whether a notification fires depends entirely on whether the app is in the foreground at the moment the message is delivered:
 
 - **App in the foreground:** no notification at all — you're already looking at the message as it streams in.
-- **App in the background or closed:** a system notification is posted on a dedicated channel named **"Jenny · avvisi"** (the channel name is fixed by the app and not translated). Reminders show a title like `Jenny ⏰ <job name>`, Heartbeat shows `Jenny · monitoraggio`, and anything else uses a plain `Jenny` title. The notification body is the message text collapsed to a single line and capped at **200 characters** (cut off with an ellipsis beyond that).
-- Notifications on this channel use high importance (sound and vibration by default), and you can customize or silence that from Android's own per-app notification settings — there is no volume/sound toggle inside Jenny itself. This channel is separate from the silent, persistent "Jenny ✦ online" notification the foreground service keeps up at all times.
+- **App in the background or closed:** a system notification is posted on a dedicated channel named **"Alerts"** (**"Avvisi"** on a phone set to Italian: the channel name is an Android string resource and follows the phone's language, not Jenny's). The titles are fixed by the gateway and not translated: reminders show `Jenny ⏰ <job name>`, Heartbeat shows `Jenny · monitoraggio`, an announcement of a new version shows `Jenny · aggiornamento`, and anything else uses a plain `Jenny` title. The notification body is the message text collapsed to a single line and capped at **200 characters** (cut off with an ellipsis beyond that).
+- Notifications on this channel use high importance (sound and vibration by default), and you can customize or silence that from Android's own per-app notification settings — there is no volume/sound toggle inside Jenny itself. This channel is separate from the silent, persistent "Jenny is running" notification (*"Jenny è attiva"* in Italian) the foreground service keeps up at all times.
+- **You can answer from the notification.** An alert carries a **Reply** field: what you type there goes to Jenny as an ordinary message in the one conversation, and her answer comes back as a system alert. If she was not running and the reply could not be delivered, a second notification, "Jenny didn't get your message", offers **Send again** with your text kept. The floating mascot has its own bubble; when it already holds a conversation its button reads **Continue in the app** and opens the app on it.
 - Two notifications from the same source (e.g. the same reminder firing twice in a row) replace each other rather than stacking — you'll only ever see the latest one for that job.
-- Tapping a notification opens the app; simply opening the app (bringing it to the foreground) clears any pending Jenny alerts, read or not.
+- Tapping a notification opens the home on Jenny's page, in the personal conversation — where the message is — even if the workshop was the last thing you had open. Pending Jenny alerts are cleared when that conversation is actually on screen: tapping one, or coming back to the app while the personal chat is showing. Opening the app on another page, or on a notebook, leaves them in place.
 - **The chat message is always there regardless.** Whether or not a notification actually rang, the reply from a reminder, Heartbeat, or a completed subagent is written into the chat exactly the same way — the notification is only ever an added ping layered on top of a delivery that already happened.
-- On Android 13 and newer, posting notifications requires the runtime `POST_NOTIFICATIONS` permission, which the app requests automatically the first time it starts. If you deny it, everything above still happens in chat — you simply never get the ringing/vibrating notification for it. <!-- TODO: verify on-device (O-4): confirm exactly when/how the POST_NOTIFICATIONS prompt appears on a real Android 13+ device and what the app does if it's denied and later revisited. -->
+- On Android 13 and newer, posting notifications requires the runtime `POST_NOTIFICATIONS` permission, which the app requests automatically the first time it starts. If you deny it, everything above still happens in chat — you simply never get the ringing/vibrating notification for it.
 
 ## Related pages
 

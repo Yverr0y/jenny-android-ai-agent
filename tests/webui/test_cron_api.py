@@ -15,12 +15,13 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from support.cron import disable_job
 
 from jenny.cron.service import CronService
 from jenny.cron.types import CronJob, CronPayload, CronSchedule, CronTaskCheckState
 from jenny.webui.cron_api import webui_cron_payload
 
-_WATERING = "- Ogni ciclo guarda l'umidita' del vaso e avvisami solo sotto il 15%."
+_RAIN = "- Ogni ciclo guarda la pioggia in citta' e avvisami solo sopra il 70%."
 _PILLS = "- Alle 9 ricordami le gocce."
 
 
@@ -80,7 +81,7 @@ def test_a_disabled_job_is_listed_not_hidden(cron, tmp_path):
     che e' una delle domande per cui il pannello esiste.
     """
     job = cron.add_job("gocce", CronSchedule(kind="every", every_ms=60_000), _PILLS)
-    cron.enable_job(job.id, False)
+    disable_job(cron, job.id)
 
     payload = webui_cron_payload(cron, config=_config(tmp_path))
 
@@ -174,7 +175,7 @@ def test_a_task_file_with_only_headings_is_also_checking_nothing(cron, tmp_path)
 def test_an_unreadable_task_file_is_a_third_state(cron, tmp_path, monkeypatch):
     """Il file che c'e' e non si legge e' un guasto, non un file mai creato."""
     path = tmp_path / "HEARTBEAT.md"
-    path.write_text(_heartbeat_file(_WATERING), encoding="utf-8")
+    path.write_text(_heartbeat_file(_RAIN), encoding="utf-8")
     original = type(path).read_text
 
     def _boom(self, *a, **kw):
@@ -193,7 +194,7 @@ def test_an_unreadable_task_file_is_a_third_state(cron, tmp_path, monkeypatch):
 
 def test_healthy_tasks_are_listed_with_no_check_entries(cron, tmp_path):
     (tmp_path / "HEARTBEAT.md").write_text(
-        _heartbeat_file(_WATERING, _PILLS), encoding="utf-8"
+        _heartbeat_file(_RAIN, _PILLS), encoding="utf-8"
     )
     cron.register_system_job(_system("heartbeat"))
 
@@ -209,7 +210,7 @@ def test_the_join_marks_broken_and_pending_and_leaves_the_rest_ok(cron, tmp_path
     """Le tre specie in una volta: il file dice quali esistono, lo store quali no."""
     from jenny.cron.heartbeat_tasks import parse_heartbeat_tasks
 
-    content = _heartbeat_file(_WATERING, _PILLS)
+    content = _heartbeat_file(_RAIN, _PILLS)
     (tmp_path / "HEARTBEAT.md").write_text(content, encoding="utf-8")
     tasks = parse_heartbeat_tasks(content)
 
@@ -242,7 +243,7 @@ def test_a_check_without_a_task_becomes_an_orphan_not_a_broken_check(cron, tmp_p
     Mostrarla fra i controlli rotti lo accuserebbe di un controllo che ha tolto;
     nasconderla lascerebbe i contatori del job senza causa visibile.
     """
-    (tmp_path / "HEARTBEAT.md").write_text(_heartbeat_file(_WATERING), encoding="utf-8")
+    (tmp_path / "HEARTBEAT.md").write_text(_heartbeat_file(_RAIN), encoding="utf-8")
     cron.register_system_job(_system("heartbeat"))
     job = cron.get_job("heartbeat")
     job.state.task_checks["un-id-che-non-e-piu-nel-file"] = CronTaskCheckState(
@@ -321,7 +322,7 @@ def test_the_display_timezone_is_the_job_s_own_then_the_default(cron, tmp_path):
 def test_the_monitor_mode_travels(cron, tmp_path):
     """Un monitor che tace ha funzionato: senza questo bit il client non lo sa."""
     cron.add_job(
-        "monitor", CronSchedule(kind="every", every_ms=60_000), _WATERING, mode="monitor"
+        "monitor", CronSchedule(kind="every", every_ms=60_000), _RAIN, mode="monitor"
     )
 
     assert webui_cron_payload(cron, config=_config(tmp_path))["jobs"][0]["mode"] == "monitor"
@@ -447,3 +448,64 @@ def test_a_stopped_scheduler_is_reported(cron, tmp_path):
     payload = webui_cron_payload(cron, config=_config(tmp_path))
 
     assert payload["service_running"] is False
+
+
+# ── pausa ed eliminazione dall'officina ─────────────────────────────────────
+
+_BOUND = {"session_key": "websocket:chat-1", "origin_channel": "websocket", "origin_chat_id": "chat-1"}
+
+
+def _row(cron, tmp_path, job_id):
+    payload = webui_cron_payload(cron, config=_config(tmp_path))
+    return next(j for j in payload["jobs"] if j["id"] == job_id)
+
+
+def test_an_active_user_job_can_be_paused_or_removed(cron, tmp_path):
+    job = cron.add_job("gocce", CronSchedule(kind="every", every_ms=60_000), _PILLS, **_BOUND)
+
+    row = _row(cron, tmp_path, job.id)
+
+    assert row["actions"] == ["pause", "remove"]
+    assert row["paused_at_ms"] is None
+
+
+def test_a_paused_job_says_since_when_and_can_be_resumed(cron, tmp_path):
+    job = cron.add_job("gocce", CronSchedule(kind="every", every_ms=60_000), _PILLS, **_BOUND)
+    cron.set_paused(job.id, True)
+
+    row = _row(cron, tmp_path, job.id)
+
+    assert row["actions"] == ["resume", "remove"]
+    assert row["paused_at_ms"] is not None
+    assert row["effective"] == "disabled"
+
+
+def test_a_one_shot_that_expired_while_paused_can_only_be_removed(cron, tmp_path):
+    """La regola e' quella di ``set_paused``: riprenderlo lo farebbe scattare
+    subito, in ritardo. Il pannello non offre un bottone che il server rifiuta."""
+    import time
+
+    at = int(time.time() * 1000) + 60_000
+    job = cron.add_job("dentista", CronSchedule(kind="at", at_ms=at), "vai", **_BOUND)
+    cron.set_paused(job.id, True)
+
+    # Il pannello guardato dopo la scadenza.
+    payload = webui_cron_payload(cron, config=_config(tmp_path), now_ms=at + 1_000)
+    row = next(j for j in payload["jobs"] if j["id"] == job.id)
+    assert row["actions"] == ["remove"]
+    assert _row(cron, tmp_path, job.id)["actions"] == ["resume", "remove"]
+
+
+def test_a_finished_or_unroutable_user_job_can_only_be_removed(cron, tmp_path):
+    job = cron.add_job("gocce", CronSchedule(kind="every", every_ms=60_000), _PILLS)
+
+    row = _row(cron, tmp_path, job.id)
+
+    assert row["enabled"] is False and row["paused_at_ms"] is None
+    assert row["actions"] == ["remove"]
+
+
+def test_a_system_job_offers_no_action(cron, tmp_path):
+    cron.register_system_job(_system("gardener"))
+
+    assert _row(cron, tmp_path, "gardener")["actions"] == []

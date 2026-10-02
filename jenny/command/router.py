@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 if TYPE_CHECKING:
@@ -22,6 +22,12 @@ class CommandContext:
     raw: str
     args: str = ""
     loop: Any = None
+    # Cio' che va fatto **dopo** che la risposta e' uscita. `/stop` e `/new` ci
+    # mettono la chiusura del turno che hanno fermato: emessa dentro l'handler,
+    # arrivava prima della loro risposta, e il client riceveva il messaggio a
+    # turno gia' chiuso — la mascotte restava a pensare per sempre (misurato
+    # il 28/09/2026). Chi pubblica la risposta le esegue in ordine.
+    after_reply: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 
 
 class CommandRouter:

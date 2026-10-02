@@ -47,6 +47,19 @@ def _lock_for(path: Path) -> asyncio.Lock:
     return lock
 
 
+def reset_storage_locks() -> None:
+    """Dimentica i lock per-collezione prima di un nuovo event loop.
+
+    Simmetrico a ``config.store.reset_config_store_state``, e per la stessa
+    ragione: una ``asyncio.Lock`` si lega al loop la prima volta che qualcuno ci
+    si accoda, e il gateway riparte apposta nello stesso processo (retry di
+    ``run_gateway``). Da quel momento ogni append conteso su quella collezione
+    solleva ``RuntimeError: ... is bound to a different event loop``. Va
+    chiamata da ``android_entry.run_gateway`` accanto agli altri ``reset_*``.
+    """
+    _LOCKS.clear()
+
+
 def _collection_path(app_dir: Path, collection: str) -> Path:
     if not COLLECTION_RE.match(collection):
         raise StorageError(f"invalid collection name '{collection}'")
@@ -82,6 +95,19 @@ def _check_size(path: Path, max_bytes: int) -> None:
         raise StorageError(
             f"collection '{path.stem}' exceeds the {max_bytes} byte limit", status=413
         )
+
+
+def _ends_without_newline(path: Path) -> bool:
+    """Il file esiste, non e' vuoto e l'ultimo byte non e' un a capo."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            if f.tell() == 0:
+                return False
+            f.seek(-1, 2)
+            return f.read(1) != b"\n"
+    except FileNotFoundError:
+        return False
 
 
 def _new_record(params: dict) -> dict:
@@ -208,8 +234,13 @@ async def execute_storage_action(
             _check_size(path, max_bytes)
             record = _new_record(params)
             path.parent.mkdir(parents=True, exist_ok=True)
+            # Un append interrotto (processo ucciso) lascia l'ultima riga senza a
+            # capo, e il record nuovo le si attaccava: la riga unita non si legge
+            # piu', e spariva anche lui. L'a capo la chiude; resta una riga rotta
+            # che la lettura salta e segnala, come prima.
+            lead = "\n" if _ends_without_newline(path) else ""
             with open(path, "a", encoding="utf-8") as f:
-                f.write(_dump(record) + "\n")
+                f.write(lead + _dump(record) + "\n")
                 f.flush()
             return {"ok": True, "record": record}
 
@@ -244,6 +275,9 @@ async def execute_storage_action(
             return {"ok": True, "record": replacement}
 
         if action.op == "update":
+            # Come ``set``: senza, aggiornare lo stesso record con un campo
+            # sempre piu' grande faceva crescere la collezione senza tetto.
+            _check_size(path, max_bytes)
             record_id = _require_id(params)
             records = _read_records(path)
             for i, record in enumerate(records):

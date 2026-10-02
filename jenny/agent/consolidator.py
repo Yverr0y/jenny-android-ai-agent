@@ -11,13 +11,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger
 
+from jenny.agent.hook import AgentHook, AgentHookContext
 from jenny.agent.memory import (
     _ARCHIVE_SUMMARY_MAX_CHARS,
     _RAW_ARCHIVE_MAX_CHARS,
@@ -27,8 +30,9 @@ from jenny.agent.memory import (
 from jenny.providers.opencode import conversation_scope
 from jenny.security.workspace_access import WorkspaceScopeResolver
 from jenny.session.keys import PROJECT_SESSION_PREFIX, is_project_session_key
-from jenny.session.manager import Session
+from jenny.session.manager import DIARY_HARVEST_METADATA_KEY, Session
 from jenny.utils.helpers import (
+    CHARS_PER_TOKEN,
     channel_delivery_aware_user_start,
     estimate_message_tokens,
     estimate_prompt_tokens_chain,
@@ -37,6 +41,7 @@ from jenny.utils.helpers import (
     truncate_text,
     truncate_text_to_tokens,
 )
+from jenny.utils.path import append_lines_durable
 from jenny.utils.prompt_templates import render_template
 from jenny.utils.wiki_paths import discover_wiki_roots
 
@@ -73,6 +78,12 @@ _PROJECT_COMPACTED_SUBDIR = "raw/compacted"
 _PROJECTS_SUBDIR = WorkspaceScopeResolver.projects_subdir
 
 
+# La finestra ridotta **di un turno**, per le consolidazioni che partono dal suo
+# task (v. :meth:`Consolidator.reduced_window`). Una ``ContextVar`` e non un
+# attributo: i turni delle altre sessioni girano in altri task e non la vedono.
+_WINDOW_OVERRIDE: ContextVar[int | None] = ContextVar("consolidator_window_override", default=None)
+
+
 def _estimate_tokens(text: str) -> int:
     """Stima in token, con la stessa convenzione di ``truncate_text_to_tokens``.
 
@@ -81,13 +92,21 @@ def _estimate_tokens(text: str) -> int:
     applicato divergerebbero, e la differenza si manifesterebbe come una
     richiesta fuori finestra invece che come un troncamento.
     """
-    return len(text) // 4
+    return len(text) // CHARS_PER_TOKEN
 
 
 class Consolidator:
     """Lightweight consolidation: summarizes evicted messages into history.jsonl."""
 
     _MAX_CONSOLIDATION_ROUNDS = 5
+
+    # Turni di fila con la consolidazione per lunghezza fallita, sulla stessa
+    # sessione, prima di ripiegare sul dump grezzo e avanzare.
+    # Sotto la soglia un fallimento non avanza niente e il turno dopo
+    # riprova; alla soglia si torna al comportamento di prima, perche' un chunk
+    # che il modello rifiuta *per la sua forma* costerebbe altrimenti una
+    # chiamata a ogni turno, per sempre, con la sessione che cresce.
+    _TOKEN_FAILURES_BEFORE_RAW_DUMP = 3
 
     _SAFETY_BUFFER = 1024  # extra headroom for tokenizer estimation drift
 
@@ -104,6 +123,7 @@ class Consolidator:
         consolidation_ratio: float = 0.5,
         session_locks: "SessionLocks | None" = None,
         projects_subdir: str = _PROJECTS_SUBDIR,
+        usage_hooks: Iterable[AgentHook] = (),
     ):
         self.store = store
         self.provider = provider
@@ -126,6 +146,21 @@ class Consolidator:
         from jenny.agent.session_locks import SessionLocks
 
         self._session_locks: SessionLocks = session_locks or SessionLocks()
+        # Il conto di ``_TOKEN_FAILURES_BEFORE_RAW_DUMP``, per sessione. In
+        # memoria e non nei metadata: un riavvio che lo azzera concede al
+        # modello tre tentativi in piu', che e' il verso innocuo dello sbaglio.
+        self._token_failures: dict[str, int] = {}
+        # Il turno che ha contato l'ultimo fallimento, per sessione. Un turno
+        # chiama la consolidazione piu' volte (prima del prompt, dopo il
+        # salvataggio, dopo un overflow): la soglia conta i turni, non le
+        # chiamate, altrimenti due turni di modello giu' bastavano per la resa.
+        self._token_failure_turns: dict[str, str] = {}
+        # Gli hook di misura del loop (oggi ``TokenUsageHook``): la chiamata di
+        # consolidazione va al provider da sé, fuori da ogni ``AgentRunner``, e
+        # senza questi la sua spesa non arrivava in ``token-usage.json``.
+        # Si registra sotto la chiave della sessione
+        # consolidata.
+        self.usage_hooks: list[AgentHook] = list(usage_hooks)
 
     def set_provider(
         self,
@@ -328,9 +363,30 @@ class Consolidator:
         return self._workspace_scopes.for_project(session_key).project_path
 
     @property
+    def _window(self) -> int:
+        """La finestra con cui consolidare adesso: quella ridotta del turno, se c'e'."""
+        override = _WINDOW_OVERRIDE.get()
+        return override if override is not None else self.context_window_tokens
+
+    @contextmanager
+    def reduced_window(self, tokens: int) -> Iterator[None]:
+        """Consolida con *tokens* di finestra, solo dentro il blocco e solo in questo task.
+
+        Lo usa il recupero da un overflow di contesto.
+        Prima il callback scriveva la finestra ridotta in ``context_window_tokens``,
+        e da li' valeva per ogni consolidazione successiva di ogni sessione fino
+        al riavvio.
+        """
+        token = _WINDOW_OVERRIDE.set(tokens)
+        try:
+            yield
+        finally:
+            _WINDOW_OVERRIDE.reset(token)
+
+    @property
     def _input_token_budget(self) -> int:
         """Available input token budget for consolidation LLM."""
-        return self.context_window_tokens - self.max_completion_tokens - self._SAFETY_BUFFER
+        return self._window - self.max_completion_tokens - self._SAFETY_BUFFER
 
     def _truncate_to_token_budget(self, text: str, *, reserved_tokens: int = 0) -> str:
         """Truncate text so it fits within the consolidation LLM's token budget.
@@ -347,6 +403,57 @@ class Consolidator:
             return truncate_text(text, _RAW_ARCHIVE_MAX_CHARS)
         return truncate_text_to_tokens(text, budget)
 
+    def messages_fitting_budget(
+        self, messages: list[dict], *, session_key: str | None = None,
+    ) -> int:
+        """Quanti dei primi *messages* entrano **interi** nell'input di :meth:`archive`.
+
+        :meth:`archive` tronca l'input al budget del modello, e il troncamento
+        taglia la coda: chi segna dei messaggi come riassunti deve sapere quanti
+        ci sono entrati davvero. Il conto e' quello di
+        ``archive``: il budget d'input meno il blocco "già registrato", in
+        caratteri a ``CHARS_PER_TOKEN``. Almeno uno, se ce n'e': un messaggio che
+        da solo sfora si tronca comunque, e zero vorrebbe dire non avanzare mai.
+        """
+        if not messages:
+            return 0
+        known = self.store.get_known_facts_context(session_key=session_key)
+        budget = self._input_token_budget - _estimate_tokens(known)
+        limit = budget * CHARS_PER_TOKEN if budget > 0 else _RAW_ARCHIVE_MAX_CHARS
+        used = 0
+        count = 0
+        for message in messages:
+            cost = len(MemoryStore._format_messages([message]))
+            if cost:
+                cost += 1 if used else 0
+            if count and used + cost > limit:
+                break
+            used += cost
+            count += 1
+        return count
+
+    async def _record_usage(self, response: Any, session_key: str | None) -> None:
+        """Passa l'usage di una chiamata agli hook di misura, come un'iterazione.
+
+        Un hook che solleva non rompe la consolidazione: e' contabilita', e il
+        riassunto conta di piu'.
+        """
+        if not self.usage_hooks:
+            return
+        usage = getattr(response, "usage", None)
+        context = AgentHookContext(
+            iteration=0,
+            messages=[],
+            response=response,
+            usage=dict(usage) if isinstance(usage, dict) else {},
+            session_key=session_key,
+        )
+        for hook in self.usage_hooks:
+            try:
+                await hook.after_iteration(context)
+            except Exception:
+                logger.exception("Usage hook {} failed on a consolidation call", type(hook).__name__)
+
     async def archive(
         self,
         messages: list[dict],
@@ -354,6 +461,7 @@ class Consolidator:
         session_key: str | None = None,
         summary_messages: list[dict] | None = None,
         prompt_visible: bool = True,
+        raw_dump_on_failure: bool = True,
     ) -> str | None:
         """Summarize messages via LLM and append to history.jsonl.
 
@@ -368,6 +476,12 @@ class Consolidator:
         default resta ``True``, che e' il caso normale — l'auto-compattazione
         riassume una conversazione **che continua**, e il modello deve
         continuare a vederne la coda.
+
+        ``raw_dump_on_failure=False`` non scrive niente quando la chiamata
+        fallisce: e' per chi **riprova** (la compattazione per inattivita', quella
+        per lunghezza sotto la soglia dei fallimenti), perche' il dump e' tagliato a
+        ``_RAW_ARCHIVE_MAX_CHARS`` e ogni riprova ne scriverebbe un altro. Chi lo
+        passa non deve dare per consolidati i messaggi quando torna ``None``.
 
         Returns the summary text on success, None if nothing to archive.
         """
@@ -399,6 +513,7 @@ class Consolidator:
                     tools=None,
                     tool_choice=None,
                 )
+            await self._record_usage(response, session_key)
             if response.finish_reason == "error":
                 raise RuntimeError(f"LLM returned error: {response.content}")
             summary = response.content or "[no summary]"
@@ -415,6 +530,12 @@ class Consolidator:
             )
             return summary
         except Exception:
+            if not raw_dump_on_failure:
+                logger.warning(
+                    "Consolidation LLM call failed for {}; nothing written, it will be retried",
+                    session_key or "-",
+                )
+                return None
             logger.warning("Consolidation LLM call failed, raw-dumping to history")
             await asyncio.to_thread(
                 self.store.raw_archive,
@@ -461,7 +582,7 @@ class Consolidator:
         The budget reserves space for completion tokens and a safety buffer
         so the LLM request never exceeds the context window.
         """
-        if self.context_window_tokens <= 0:
+        if self._window <= 0:
             return
 
         lock = self.get_lock(session.key)
@@ -495,7 +616,7 @@ class Consolidator:
                     "Token consolidation idle {}: {}/{} via {}, msgs={}",
                     session.key,
                     estimated,
-                    self.context_window_tokens,
+                    self._window,
                     source,
                     unconsolidated_count,
                 )
@@ -526,15 +647,46 @@ class Consolidator:
                     round_num,
                     session.key,
                     estimated,
-                    self.context_window_tokens,
+                    self._window,
                     source,
                     len(chunk),
                 )
-                summary = await self.archive(chunk, session_key=session.key)
-                # Advance the cursor either way: on success the chunk was
-                # summarized; on failure archive() already raw-archived it as
-                # a breadcrumb. Re-archiving the same chunk on the next call
-                # would just emit duplicate [RAW] entries.
+                # Un riassunto fallito **non** avanza il cursore.
+                # Avanzava sempre, col dump grezzo per briciola: ma il
+                # dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, e i messaggi oltre
+                # ``last_consolidated`` la compattazione per inattivita' li butta —
+                # quindi quel che il taglio lasciava fuori spariva da sessione e
+                # diario. Ora il chunk resta da consolidare, senza dump (niente
+                # doppioni) e il turno dopo riprova; alla soglia dei fallimenti di
+                # fila si torna al dump e all'avanzamento.
+                # Il conto e' per turno: un secondo fallimento nello stesso turno
+                # non avvicina la resa. Fuori da un turno (nessun id legato)
+                # ogni chiamata conta da sola.
+                from jenny.agent.tools.context import current_turn_id
+
+                turn_id = current_turn_id()
+                failures = self._token_failures.get(session.key, 0)
+                same_turn = (
+                    turn_id is not None
+                    and self._token_failure_turns.get(session.key) == turn_id
+                )
+                counted = failures if same_turn else failures + 1
+                give_up = counted >= self._TOKEN_FAILURES_BEFORE_RAW_DUMP
+                summary = await self.archive(
+                    chunk, session_key=session.key, raw_dump_on_failure=give_up,
+                )
+                if not summary and not give_up:
+                    self._token_failures[session.key] = counted
+                    if turn_id is not None:
+                        self._token_failure_turns[session.key] = turn_id
+                    logger.warning(
+                        "Token consolidation for {} failed ({} turns in a row); the chunk "
+                        "stays unconsolidated and the next turn retries",
+                        session.key, counted,
+                    )
+                    break
+                self._token_failures.pop(session.key, None)
+                self._token_failure_turns.pop(session.key, None)
                 if summary:
                     last_summary = summary
                 session.last_consolidated = end_idx
@@ -568,8 +720,17 @@ class Consolidator:
 
         Used by AutoCompact so all session mutation goes through a single
         lock-protected path.  Returns the summary text on success, ``None``
-        if the LLM failed (raw_archive fallback), or ``""`` if there was
-        nothing to archive.
+        if the LLM failed, or ``""`` if there was nothing to archive.
+
+        **A LLM giu' la conversazione personale non si tronca**.
+        Si troncava comunque, con il dump grezzo a fare da copia; ma il
+        dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, e in una conversazione
+        lunga la maggior parte dei messaggi spariva da sessione e diario. Ora
+        niente dump, niente troncatura e niente salvataggio: ``updated_at`` resta
+        vecchio, la sessione resta scaduta e AutoCompact riprova (con il suo
+        intervallo, v. ``AutoCompact._RETRY_AFTER_FAILURE_S``). Un progetto resta
+        com'era: la sua copia integrale in ``raw/compacted/`` rende gia'
+        reversibile la troncatura, e il suo caso ha i suoi test.
         """
         lock = self.get_lock(session_key)
         async with lock:
@@ -601,6 +762,7 @@ class Consolidator:
 
             last_active = session.updated_at
             summary: str | None = ""
+            is_project = is_project_session_key(session_key)
             if messages_to_remove:
                 # Summarize the retained suffix too, but only remove/raw-dump
                 # the messages that are no longer kept in the live session.
@@ -608,9 +770,19 @@ class Consolidator:
                     messages_to_remove,
                     session_key=session_key,
                     summary_messages=messages_to_summarize,
+                    raw_dump_on_failure=is_project,
                 )
 
-            if messages_to_remove and summary is None and is_project_session_key(session_key):
+            if messages_to_remove and summary is None and not is_project:
+                logger.warning(
+                    "Idle-session compact for {} postponed: the summary call failed, so the "
+                    "{} messages stay in the session; retrying at the next idle window",
+                    session_key,
+                    len(messages_to_remove),
+                )
+                return None
+
+            if messages_to_remove and summary is None and is_project:
                 # ``archive()`` ha fallito la chiamata LLM e ha raw-dumpato in
                 # ``history.jsonl``. **Dall'08/09/2026 quel dump viene scritto
                 # anche per un progetto** (``append_history`` non rifiuta più una
@@ -655,6 +827,26 @@ class Consolidator:
                     "text": summary,
                     "last_active": last_active.isoformat(),
                 }
+
+            # L'indice della raccolta del diario di un progetto conta i messaggi
+            # della sessione: dopo la troncatura va riportato sui messaggi
+            # tenuti, come fa ``Session.retain_recent_legal_suffix``. Rimasto
+            # com'era puntava oltre la fine, e la raccolta saltava i messaggi
+            # nuovi finché la sessione non tornava lunga come prima. Con un
+            # riassunto riuscito la coda tenuta è già dentro (il riassunto copre
+            # anche lei, v. ``summary_messages``); senza, restano raccolti solo
+            # i tenuti che lo erano già.
+            harvested = session.metadata.get(DIARY_HARVEST_METADATA_KEY)
+            if isinstance(harvested, int) and not isinstance(harvested, bool):
+                if messages_to_remove and summary:
+                    harvested = len(messages_to_keep)
+                else:
+                    kept = {id(m) for m in messages_to_keep}
+                    harvested = sum(
+                        1 for i, m in enumerate(session.messages)
+                        if i < harvested and id(m) in kept
+                    )
+                session.metadata[DIARY_HARVEST_METADATA_KEY] = harvested
 
             session.messages = messages_to_keep
             session.last_consolidated = 0
@@ -725,11 +917,9 @@ class Consolidator:
         page = directory / f"{datetime.now():%Y%m%d-%H%M%S}.jsonl"
         try:
             directory.mkdir(parents=True, exist_ok=True)
-            with page.open("a", encoding="utf-8") as fh:
-                for message in messages:
-                    fh.write(json.dumps(message, ensure_ascii=False) + "\n")
-                fh.flush()
-                os.fsync(fh.fileno())
+            append_lines_durable(
+                page, [json.dumps(message, ensure_ascii=False) for message in messages],
+            )
         except (OSError, TypeError, ValueError) as exc:
             # ``TypeError``/``ValueError``: un messaggio non serializzabile in
             # JSON. Non è mai capitato — le sessioni si salvano con lo stesso

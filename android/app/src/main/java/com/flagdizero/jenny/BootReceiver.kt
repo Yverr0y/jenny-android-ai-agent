@@ -94,10 +94,12 @@ class BootReceiver : BroadcastReceiver() {
         // dispositivo), quindi la rete resta, più lenta ma viva. `arm` legge il
         // flag dalle prefs e si disarma da sé se l'utente l'ha spenta.
         AlarmClockFallback.arm(context)
-        try {
-            context.startForegroundService(Intent(context, GatewayService::class.java))
-        } catch (e: Exception) {
-            Log.e("Jenny", "Failed to start gateway on $action", e)
+        // Dopo un aggiornamento gli alert gia' in tendina portano ancora
+        // l'intent della versione di prima, che poteva non avere il gettone di
+        // `MainActivity.openChatIntent`: al tocco non aprirebbero la chat.
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            NotifierBridge.refreshAlertTapIntents(context.applicationContext)
         }
+        GatewayStarter.ensureUp(context, reason = "boot/$action")
     }
 }

@@ -14,9 +14,6 @@ description: >-
   (6) processing human feedback from the audit/ directory and applying
   corrections. Not for general note-taking or daily journals.
 locked: true
-user_summary:
-  it: "La wiki è il tuo secondo cervello: usala per fare ingest di articoli, note e ricerche. Jenny compila e collega le pagine per te, e puoi farle domande sui contenuti raccolti."
-  en: "The wiki is your second brain: use it to ingest articles, notes and research. Jenny compiles and links the pages for you, and you can ask her questions about what's inside."
 ---
 
 # LLM Wiki — Karpathy Knowledge Base Pattern
@@ -225,7 +222,7 @@ This keeps the wiki repo git-friendly and portable.
 
 The wiki is AI-written; it will be wrong sometimes. The raw sources are human-written; they will contradict each other. The `audit/` directory is how humans correct both without losing the corrections in chat history.
 
-- Humans (or the agent) file feedback by adding one file to `audit/` with YAML frontmatter (anchor, target, severity) and a markdown body.
+- Humans (or the agent) file feedback by adding one file to `audit/` with YAML frontmatter (anchor, target) and a markdown body.
 - The AI **must** periodically run the `audit` op — never silently ignore `audit/*.md` files.
 - When feedback is applied, the file moves to `audit/resolved/` with a `# Resolution` section appended and a log entry recorded in `log/YYYYMMDD.md`.
 

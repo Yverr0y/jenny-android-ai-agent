@@ -16,8 +16,11 @@
 docs/superpowers/
 docs/plans/
 .claude
-# Piano interno non promesso: resta locale, non è una roadmap pubblica.
-.agent/user_app_skill_marketplace_implementation_plan.md
+# Note di lavoro locali (piani, checklist, note di progetto): restano sul disco
+# di chi ci lavora e non si versionano. Il codice non le cita: la ragione che
+# serve sta nel commento stesso.
+/.agent/
+/plan.md
 
 # Python bytecode & caches
 *.pyc

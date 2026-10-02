@@ -1,40 +1,94 @@
 /** View Title Controller — in-content view headings and actions.
  *
  * Replaces the old fixed 40px header: each view owns a `.view-title-mount`
- * (index.html) where the big scrolling-style title and its action buttons
- * are rendered. Chat and onboarding have no mount (chat renders its own
- * identity line inside the scroll area).
+ * (workshop.html) where the big scrolling-style title and its action buttons
+ * are rendered. Ogni vista ne ha uno: la chat dal 21/09/2026 — v. `chat` in
+ * `modeConfigs`; l'onboarding, che non ne aveva, e' uscito dall'officina.
  */
 
 import { i18n } from './shared/i18n.js';
-import { isOpenableProjectName, scopeChip } from './shared/scope-chip.js';
+import { api } from './shared/api-client.js';
+import { escapeHtml } from './shared/utils.js';
+import { VIEW_OF, titleElement } from './mobile-settings.js';
 
-/** Il tasto che dalla wiki porta nella chat del progetto che la possiede.
+/** Il pill «Jenny»: l'unica porta dell'officina verso la casa.
  *
- *  Il collegamento esisteva in una direzione sola: scegliere un progetto nello
- *  scope chip aggancia le viste wiki e grafo a quella wiki
- *  (`AppState.pinnedWiki`), ma dalla wiki non si tornava alla sua conversazione
- *  se non passando dalla chat e riaprendo la tendina. La destinazione è già a
- *  schermo — un progetto **è** una wiki, e il nome della cartella è il nome
- *  della sessione (`project:<nome>`) — quindi non c'è niente da chiedere a
- *  nessuno.
- *
- *  Nasce spento: lo accende chi sa quale wiki è a schermo
- *  (`_syncProjectAction`, nei due controller). La Home non ne ha uno da aprire
- *  — il grafo di tutte le wiki e l'indice delle wiki *sono* l'elenco dei
- *  progetti, e nessuno di quelli è più aperto degli altri — e una cartella con
- *  un nome che il server non accetta non ne ha uno raggiungibile.
- *
- *  Una funzione e non una costante perché i due elenchi ne prendono uno per
- *  uno: `renderActions` oggi non scrive nelle voci che legge, ma un flag posato
- *  su un literal condiviso comparirebbe anche nell'altra vista.
+ *  Una funzione e non una costante, e la ragione e' la stessa del 21/09/2026:
+ *  **le stringhe qui dentro vanno lette quando si disegna, non quando il file
+ *  si carica.** Il pill e' l'unica azione dell'officina che porta una parola
+ *  visibile invece di una sola icona, quindi e' anche l'unica in cui una
+ *  traduzione letta troppo presto si vede a schermo — e infatti si e' vista:
+ *  «officina.homePill» scritto per esteso dentro il bottone.
  */
-function projectChatAction() {
+function homePill() {
   return {
-    icon: 'ti-message-2',
-    title: i18n.t('header.openProjectChat'),
-    action: 'open-project-chat',
-    hidden: true,
+    icon: 'ti-home',
+    title: i18n.t('home.backHome'),
+    action: 'go-home',
+    pill: i18n.t('workshop.homePill'),
+  };
+}
+
+/** L'intestazione di un cassetto dell'officina.
+ *
+ *  `eyebrow` e `sub` sono le due righe che la tavola mette attorno al nome; il
+ *  bottone `home` e' il pill «Jenny» che riporta in casa — la stessa
+ *  destinazione del tasto in fondo a «Sistema», che da qui in poi e' un
+ *  doppione e se ne va (`_renderSystem`).
+ */
+function drawer(name) {
+  return {
+    eyebrow: i18n.t('workshop.eyebrow'),
+    title: i18n.t(`nav.${name}`),
+    sub: i18n.t(`workshop.sub.${name}`),
+    /* Niente «aggiorna»: la tavola non ce l'ha, e non serve — `activate()`
+       ricarica a ogni apertura del cassetto, e ogni salvataggio ridisegna. Un
+       bottone che rifa' quel che e' appena successo insegna a premerlo per
+       scaramanzia, e occupa il posto accanto all'unico che porta da qualche
+       parte. */
+    actions: [homePill()],
+  };
+}
+
+/** L'intestazione della Console — la chat dell'officina.
+ *
+ *  Quella di un cassetto senza soprascritta ne' sottotitolo (la vista sta gia'
+ *  dentro l'officina, e dirglielo di nuovo non aggiunge niente), e il nome e'
+ *  «Console», la stessa stringa della voce del dock (`nav.console` in
+ *  officina.html) — una parola sola per due posti, cosi' non possono divergere.
+ *
+ *  Come `drawer`, e' una funzione perche' si ricostruisce intera a ogni
+ *  cambio di lingua: riassegnare il solo titolo lasciava il pill con la
+ *  stringa letta al caricamento del file, cioe' la chiave grezza.
+ */
+function consoleConfig() {
+  return {
+    title: i18n.t('nav.console'),
+    actions: [homePill()],
+  };
+}
+
+/* Le due viste rimaste fuori dai cassetti. Funzioni per la stessa ragione di
+   `consoleConfig`: nel costruttore `i18n.load()` non e' ancora tornato, e i titoli
+   delle azioni (che sono tooltip ed etichetta per il lettore di schermo)
+   restavano le chiavi grezze — `_refreshTitles` riscriveva solo `title`. */
+
+/* Questa vista e' **un file aperto**, da quando l'esploratore e' una scheda
+   di Memoria. «Aggiorna» qui non aggiornava gia' niente (il ramo usciva subito
+   in modalita' editor) e «nuovo» crea file nella cartella che si sta
+   guardando, che ora si guarda altrove: il bottone e' andato accanto alle
+   briciole, dentro la scheda. Resta la freccia indietro. */
+function openFile() {
+  return {
+    title: i18n.t('nav.workspace'),
+    actions: [{ icon: 'ti-arrow-left', title: i18n.t('header.back'), action: 'ws-back' }],
+  };
+}
+
+function settings() {
+  return {
+    title: i18n.t('nav.settings'),
+    actions: [{ icon: 'ti-refresh', title: i18n.t('header.refresh'), action: 'refresh' }],
   };
 }
 
@@ -44,60 +98,47 @@ export class ViewTitleController {
     this.titleEl = null;
     this.actionsEl = null;
     this.modeConfigs = {
-      apps: {
-        title: i18n.t('nav.apps'),
-        actions: [
-          { icon: 'ti-eye-off', title: i18n.t('header.showHiddenApps'), action: 'toggle-hidden' }
-        ]
-      },
-      workspace: {
-        title: i18n.t('nav.workspace'),
-        actions: [
-          { icon: 'ti-arrow-left', title: i18n.t('header.back'), action: 'ws-back', hidden: true },
-          { icon: 'ti-refresh', title: i18n.t('header.refresh'), action: 'refresh' },
-          { icon: 'ti-plus', title: i18n.t('header.new'), action: 'ws-new' }
-        ]
-      },
-      wiki: {
-        title: i18n.t('nav.wiki'),
-        actions: [
-          { icon: 'ti-clipboard-list', title: i18n.t('header.audits'), drawer: 'audit' },
-          { icon: 'ti-folder', title: i18n.t('header.files'), drawer: 'files' },
-          { type: 'sep' },
-          { icon: 'ti-topology-star', title: i18n.t('header.graph'), action: 'graph' },
-          projectChatAction()
-        ]
-      },
-      graph: {
-        title: i18n.t('nav.wiki'),
-        actions: [
-          { icon: 'ti-file-text', title: i18n.t('header.pages'), action: 'open-pages' },
-          { icon: 'ti-refresh', title: i18n.t('header.refresh'), action: 'refresh' },
-          projectChatAction()
-        ]
-      },
-      settings: {
-        title: i18n.t('nav.settings'),
-        actions: [
-          { icon: 'ti-refresh', title: i18n.t('header.refresh'), action: 'refresh' }
-        ]
-      }
-    };
+      /* La chat. Fino al 21/09/2026 era l'unica vista dell'officina a partire
+         dal bordo dello schermo: nessun titolo, e nessuna via verso casa che
+         non passasse da un altro cassetto. V. `consoleConfig()`. */
+      chat: consoleConfig(),
+      /* Qui c'era anche `apps`, la scheda uscita il 21/09/2026 col suo
+         «mostra app nascoste»: nessun modo la raggiunge piu'. */
+      workspace: openFile(),
+      settings: settings(),
+      /* I tre cassetti. Stessa vista e stesso mount (`title-settings`, via
+         `VIEW_OF`), titolo e sottotitolo diversi.
 
-    i18n.onLocaleChange(() => this._refreshTitles());
+         Il sottotitolo e' la differenza che si vede di piu' rispetto a prima:
+         un cassetto che si apre su quattro righe chiuse non dice a cosa serve,
+         e «Cervello» da solo nemmeno. La tavola mette una riga sotto il nome —
+         `workshop` sopra, il nome in serif, la riga che spiega — ed e' quella
+         riga a trasformare quattro etichette in una pagina. */
+      brain: { ...drawer('brain') },
+      hands: { ...drawer('hands') },
+      memory: { ...drawer('memory') },
+    };
   }
 
   _refreshTitles() {
-    this.modeConfigs.apps.title = i18n.t('nav.apps');
-    this.modeConfigs.workspace.title = i18n.t('nav.workspace');
-    this.modeConfigs.wiki.title = i18n.t('nav.wiki');
-    this.modeConfigs.graph.title = i18n.t('nav.wiki');
-    this.modeConfigs.settings.title = i18n.t('nav.settings');
+    /* Intera, non il solo titolo: il pill porta una parola visibile, e
+       riassegnare `title` lasciava quella com'era al caricamento del file. */
+    this.modeConfigs.chat = consoleConfig();
+    this.modeConfigs.workspace = openFile();
+    this.modeConfigs.settings = settings();
+    /* I tre cassetti hanno tre stringhe a testa (soprascritta, nome,
+       sottotitolo) piu' il pill: si ricostruiscono interi invece di
+       riassegnarne una per volta, che e' il modo in cui se ne dimentica una. */
+    for (const name of Object.keys(VIEW_OF)) this.modeConfigs[name] = drawer(name);
     if (this.currentMode) this.setMode(this.currentMode);
   }
 
+  /* Il mount di un modo e' `title-<modo>`, **tranne** per i tre cassetti, che
+     condividono la vista delle impostazioni e quindi il suo mount. Senza
+     questa riga `setMode('brain')` cercava `title-cervello`, non lo
+     trovava, e usciva lasciando i cassetti senza intestazione. */
   _mount(mode) {
-    return document.getElementById(`title-${mode}`);
+    return titleElement(mode);
   }
 
   setMode(mode, customTitle = null) {
@@ -110,37 +151,40 @@ export class ViewTitleController {
       return;
     }
 
+    /* `eyebrow` e `sub` sono facoltativi: le viste che non li dichiarano
+       disegnano esattamente l'intestazione di prima. `textContent` e non
+       interpolazione perche' sono stringhe tradotte, non markup. */
     mount.innerHTML = '<div class="view-title">' +
-      '<h1 class="view-title-text"></h1>' +
+      '<div class="view-title-stack">' +
+        '<div class="view-title-eyebrow"></div>' +
+        '<h1 class="view-title-text"></h1>' +
+        '<div class="view-title-sub"></div>' +
+      '</div>' +
       '<div class="view-title-actions"></div>' +
       '</div>';
     this.titleEl = mount.querySelector('.view-title-text');
     this.actionsEl = mount.querySelector('.view-title-actions');
 
+    const eyebrowEl = mount.querySelector('.view-title-eyebrow');
+    const subEl = mount.querySelector('.view-title-sub');
+    eyebrowEl.textContent = config.eyebrow || '';
+    eyebrowEl.hidden = !config.eyebrow;
+    subEl.textContent = config.sub || '';
+    subEl.hidden = !config.sub;
+
     this.titleEl.textContent = customTitle || config.title;
     this.renderActions(config.actions);
   }
 
-  /** Scrive il titolo della vista, ma solo se chi lo scrive è ancora il
-   *  proprietario della modalità corrente.
-   *
-   *  `titleEl` viene ripuntato soltanto da `setMode`, che `switchMode` chiama
-   *  *prima* di `deactivate`/`activate`: un caricamento lento della sezione che
-   *  si sta lasciando riprendeva dopo il cambio e scriveva il proprio titolo nel
-   *  mount della sezione di **destinazione**. Il difetto è intermittente — chat
-   *  e onboarding non hanno mount, quindi lì `titleEl` è null e non si vede
-   *  niente — e per questo era rimasto invisibile.
-   *
-   *  `ownerMode` è opzionale solo per non rompere chiamanti futuri distratti:
-   *  chi scrive un titolo asincrono deve passarlo.
-   */
-  setTitle(title, ownerMode = null) {
-    if (ownerMode && ownerMode !== this.currentMode) return;
-    if (this.titleEl) this.titleEl.textContent = title;
-  }
 
   /** Accende un'azione, ma solo se chi la accende possiede ancora la modalità
-   *  corrente — la stessa guardia di :meth:`setTitle`, e per lo stesso motivo.
+   *  corrente.
+   *
+   *  La stessa guardia stava anche su `setTitle`, che scriveva il titolo della
+   *  vista dopo un `await`. Quel metodo se n'è andato il 21/09/2026 con i suoi
+   *  unici chiamanti — wiki e grafo, usciti dall'officina — e il titolo oggi lo
+   *  scrive solo `setMode`, che è sincrono e non può sbagliare vista. La
+   *  ragione della guardia però è la stessa, ed è questa:
    *
    *  `actionsEl` punta al mount della modalità **a schermo**: un caricamento
    *  lento della sezione che si sta lasciando riprende dopo il cambio e cerca il
@@ -170,16 +214,21 @@ export class ViewTitleController {
       if (action.type === 'sep') {
         return '<div class="sep"></div>';
       }
-      if (action.drawer) {
-        const hiddenStyle = action.hidden ? ' style="display:none"' : '';
-        return `<button class="ibtn ibtn-drawer" data-drawer="${action.drawer}" title="${action.title}"${hiddenStyle}>
-          <i class="ti ${action.icon}"></i>
-        </button>`;
-      }
       const dangerClass = action.danger ? ' ibtn-danger' : '';
       const hiddenStyle = action.hidden ? ' style="display:none"' : '';
-      return `<button class="ibtn ibtn-action${dangerClass}" data-action="${action.action}" title="${action.title}"${hiddenStyle}>
-        <i class="ti ${action.icon}"></i>
+      /* Un'azione con `pill` non e' un'icona nuda ma icona + parola, come il
+         bottone «Jenny» della tavola. Serve quando la destinazione non si
+         indovina dall'icona: una casetta puo' voler dire tante cose, «Jenny»
+         una sola. */
+      if (action.pill) {
+        return `<button class="ibtn ibtn-action ibtn-pill${dangerClass}" data-action="${action.action}" title="${escapeHtml(action.title)}"${hiddenStyle}>
+          <i class="ti ${action.icon}" aria-hidden="true"></i><span>${escapeHtml(action.pill)}</span>
+        </button>`;
+      }
+      /* Solo icona: il nome per il lettore di schermo e' il `title`, detto
+         anche come `aria-label` perche' il `title` da solo non tutti lo leggono. */
+      return `<button class="ibtn ibtn-action${dangerClass}" data-action="${action.action}" title="${escapeHtml(action.title)}" aria-label="${escapeHtml(action.title)}"${hiddenStyle}>
+        <i class="ti ${action.icon}" aria-hidden="true"></i>
       </button>`;
     }).join('');
 
@@ -189,14 +238,6 @@ export class ViewTitleController {
 
   wireActions() {
     if (!this.actionsEl) return;
-    this.actionsEl.querySelectorAll('[data-drawer]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const drawerId = btn.dataset.drawer;
-        window.mobileApp.drawer.toggle(drawerId);
-        this.syncDrawerTabs();
-      });
-    });
-
     this.actionsEl.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => {
         const action = btn.dataset.action;
@@ -205,102 +246,12 @@ export class ViewTitleController {
     });
   }
 
-  syncDrawerTabs() {
-    if (!this.actionsEl) return;
-    const activeDrawer = window.mobileApp.drawer.activeDrawer;
-    this.actionsEl.querySelectorAll('[data-drawer]').forEach(btn => {
-      const isActive = btn.dataset.drawer === activeDrawer;
-      btn.classList.toggle('active-tab', isActive);
-      const icon = btn.querySelector('i');
-      if (icon && btn.dataset.drawer === 'files') {
-        icon.classList.toggle('ti-folder', !isActive);
-        icon.classList.toggle('ti-folder-open', isActive);
-      }
-    });
-  }
-
   handleAction(action) {
     const app = window.mobileApp;
-    if (action === 'graph') {
-      if (app.currentMode === 'graph') {
-        const wiki = app.controllers.graph?.currentWiki;
-        if (wiki) {
-          const lastPage = app.controllers.wiki?.lastWikiPage?.[wiki];
-          app.switchMode('wiki', false);
-          app.controllers.wiki.loadWikiPage(wiki, lastPage || 'index.md', true);
-        } else {
-          app.switchMode('wiki', false);
-          app.controllers.wiki.loadHome(true);
-        }
-      } else {
-        // Sorgente unica: la vista voluta si deposita e la carica
-        // `GraphController.activate()`. Prima qui c'era
-        // `switchMode('graph'); loadGraph(...)`, e activate() aveva già
-        // caricato per conto suo — due fetch e due settleSimulation sincroni.
-        const wiki = app.controllers.wiki?.currentWiki;
-        app.requestGraph(wiki || null, true);
-      }
-      return;
-    }
-    if (action === 'open-pages') {
-      // Apre la vista file/pagina dalla vista grafo (landing di default).
-      const wiki = app.controllers.graph?.currentWiki;
-      if (wiki && wiki !== '_home') {
-        const lastPage = app.controllers.wiki?.lastWikiPage?.[wiki];
-        app.switchMode('wiki', false);
-        app.controllers.wiki.loadWikiPage(wiki, lastPage || 'index.md', true);
-      } else {
-        app.switchMode('wiki', false);
-        app.controllers.wiki.loadHome(true);
-      }
-      return;
-    }
-    if (action === 'open-project-chat') {
-      /* La wiki a schermo la sa la vista che è a schermo, e le due la tengono
-         in un campo con lo stesso nome. Si legge da lì e non da `pinnedWiki`:
-         dentro un progetto le due risposte coincidono, ma il tasto serve
-         soprattutto **fuori**, dalla personale, dove il pin è null ed è
-         l'unica strada per entrare.
-
-         Il nome viene ricontrollato qui e non solo quando il tasto si accende:
-         fra l'accensione e la pressione la vista può essere cambiata sotto
-         (cambio progetto, link a un'altra wiki), e questo è l'ultimo punto
-         prima di cambiare conversazione — che è il solo guasto irrecuperabile
-         del disegno delle sessioni-progetto. */
-      const wiki = app.currentMode === 'graph'
-        ? app.controllers.graph?.currentWiki
-        : app.controllers.wiki?.currentWiki;
-      if (!wiki || !isOpenableProjectName(wiki)) return;
-      /* Prima la vista, poi lo scope, e l'ordine conta. `select` pubblica
-         l'aggancio, e le due viste si riagganciano solo se sono **quella a
-         schermo**: farlo da dentro la sezione wiki significa un grafo
-         ricaricato per essere buttato un istante dopo, o — peggio — la pagina
-         che si stava leggendo sostituita dall'indice del progetto un attimo
-         prima di lasciarla. Da 'chat' i due ascoltatori si limitano a segnarsi
-         il cambio e ricalcolano al rientro. */
-      app.switchMode('chat');
-      // Il primo avvio dirotta ogni navigazione sull'onboarding: se non ci
-      // siamo arrivati lo scope non si tocca. Stessa verifica di `openChat`.
-      if (app.currentMode !== 'chat') return;
-      /* E si aspetta che la chat sia pronta. `scopeChip.onSwitch` lo installa
-         lei dopo `sessionManager.init()`, che è asincrono, e alla **prima**
-         apertura della chat il controller nasce proprio in questo `switchMode`:
-         un `select()` sincrono qui cambierebbe l'etichetta del chip e nient'
-         altro — nessuno starebbe ascoltando — e il caricamento della
-         conversazione personale, arrivando dopo, rimetterebbe il chip com'era
-         con la sua `syncFromSession`. Cioè il tasto portava in chat, ma nella
-         chat sbagliata. Dalla seconda volta in poi `ready` è già risolta e
-         questo è un microtask.
-
-         `select` fa tutto il seguito — chip, placeholder, aggancio delle viste
-         e cambio di conversazione — e non fa niente se quello è già lo scope
-         aperto: da dentro il progetto questo tasto è solo la via più corta
-         verso la chat. Il thread non si legge due volte: `loadInitialHistory`
-         chiude il proprio latch da sé, e la generazione di `switchTo` scavalca
-         il caricamento della conversazione di prima. */
-      Promise.resolve(app.controllers.chat?.ready).then(() => {
-        scopeChip.select({ kind: 'project', name: wiki });
-      });
+    /* La stessa destinazione del vecchio tasto in fondo a «Sistema»: la casa e'
+       un documento a parte, quindi si naviga, non si cambia vista. */
+    if (action === 'go-home') {
+      api.navigate('/html-mobile/index.html');
       return;
     }
     const controller = app.controllers[app.currentMode];

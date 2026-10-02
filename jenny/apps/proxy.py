@@ -24,6 +24,15 @@ Il proxy e' trasparente a livello di byte: riscrive la prima riga e l'``Host``,
 poi ristreamma. Quindi ogni metodo, i body, il chunked e l'upgrade WebSocket
 passano senza casi speciali.
 
+**Una richiesta per connessione.** Riscrivere vale solo per la testa che si e'
+letta: su una connessione keep-alive la seconda richiesta passava come byte
+grezzi, con il cookie-capability e l'``Host`` del proxy, al server dell'utente.
+Quindi al server si chiede ``Connection: close``, al browser si risponde
+``Connection: close`` (non riusa la connessione) e dopo il body dichiarato della
+prima richiesta non si inoltra piu' niente di quel che il client manda. Fanno
+eccezione l'upgrade WebSocket, che dopo il 101 non e' piu' HTTP, e un body
+``chunked``, che senza un parser non si delimita (i browser non ne mandano).
+
 Superficie e cosa la limita
 ---------------------------
 - bind su ``127.0.0.1`` e porta effimera, mai su un'interfaccia esterna;
@@ -102,7 +111,7 @@ class AppViewProxy:
 
     async def start(self) -> str:
         """Valida il target, apre il listener, torna l'URL d'ingresso."""
-        ok, error = validate_app_server_target(self.base_url)
+        ok, error = await asyncio.to_thread(validate_app_server_target, self.base_url)  # DNS fuori dal loop
         if not ok:
             raise AppViewProxyError(f"blocked server target: {error}")
 
@@ -237,10 +246,13 @@ class AppViewProxy:
             return
 
         upstream_path = self._prefix + path if self._prefix else path
+        upgrade = _is_upgrade(header_lines)
         out_head = _rebuild_head(
             method, upstream_path, version, header_lines,
             host=f"{self._host}:{self._port}" if self._port != 80 else self._host,
+            upgrade=upgrade,
         )
+        body_length = None if upgrade else _body_length(header_lines)
 
         try:
             up_reader, up_writer = await asyncio.open_connection(self._host, self._port)
@@ -250,12 +262,29 @@ class AppViewProxy:
             return
 
         try:
-            up_writer.write(out_head + rest)
-            await up_writer.drain()
-            await asyncio.gather(
-                self._pump(up_reader, writer),
-                self._pump(reader, up_writer),
-            )
+            if upgrade:
+                up_writer.write(out_head + rest)
+                await up_writer.drain()
+                await asyncio.gather(
+                    self._pump(up_reader, writer),
+                    self._pump(reader, up_writer),
+                )
+            elif body_length is None:
+                # ``chunked``: il body non si delimita senza un parser.
+                up_writer.write(out_head + rest)
+                await up_writer.drain()
+                await asyncio.gather(
+                    self._pump_response(up_reader, writer),
+                    self._pump(reader, up_writer),
+                )
+            else:
+                first = rest[:body_length]
+                up_writer.write(out_head + first)
+                await up_writer.drain()
+                await asyncio.gather(
+                    self._pump_response(up_reader, writer),
+                    self._forward_body_then_drain(reader, up_writer, body_length - len(first)),
+                )
         finally:
             _close_quietly(up_writer)
 
@@ -290,6 +319,57 @@ class AppViewProxy:
             if name.lower() == "cookie" and _cookie_value(value, COOKIE_NAME) == self._cap:
                 return True, None
         return False, None
+
+    async def _forward_body_then_drain(
+        self, reader: asyncio.StreamReader, up_writer: asyncio.StreamWriter, remaining: int
+    ) -> None:
+        """Inoltra i *remaining* byte di body ancora da leggere, poi **scarta** il resto.
+
+        Quel che il client manda dopo il body e' un'altra richiesta, che non passa
+        dalla riscrittura: non va inoltrata. Si continua pero' a leggere fino
+        all'EOF, perche' e' la chiusura del client a dire che la risposta e'
+        arrivata anche quando il server non chiude da se'.
+        """
+        try:
+            while remaining > 0:
+                chunk = await reader.read(min(remaining, 65536))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                self._touch()
+                up_writer.write(chunk)
+                await up_writer.drain()
+            while await reader.read(65536):
+                pass
+        except (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError):
+            pass
+        finally:
+            _close_quietly(up_writer)
+
+    async def _pump_response(
+        self, src: asyncio.StreamReader, dst: asyncio.StreamWriter
+    ) -> None:
+        """Come :meth:`_pump`, con ``Connection: close`` nella testa della risposta."""
+        buf = bytearray()
+        try:
+            while _CRLF2 not in buf and len(buf) <= MAX_HEADER_BYTES:
+                chunk = await src.read(4096)
+                if not chunk:
+                    break
+                buf.extend(chunk)
+        except (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError):
+            pass
+        if _CRLF2 in buf:
+            head, _, rest = bytes(buf).partition(_CRLF2)
+            dst.write(_close_response_head(head) + rest)
+        else:
+            dst.write(bytes(buf))
+        self._touch()
+        try:
+            await dst.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            return
+        await self._pump(src, dst)
 
     async def _pump(self, src: asyncio.StreamReader, dst: asyncio.StreamWriter) -> None:
         try:
@@ -336,13 +416,62 @@ def _parse_head(head: bytes) -> tuple[tuple[str, str, str], list[tuple[str, str]
     return (parts[0], parts[1], parts[2]), headers
 
 
+# Header di connessione (hop-by-hop): il proxy decide lui come finisce la
+# connessione, v. «Una richiesta per connessione» nel docstring del modulo.
+_HOP_HEADERS = {"connection", "keep-alive", "proxy-connection"}
+
+
+def _is_upgrade(headers: list[tuple[str, str]]) -> bool:
+    """Richiesta di upgrade (WebSocket): ``Upgrade`` e ``Connection: upgrade``."""
+    has_upgrade = any(name.lower() == "upgrade" for name, _ in headers)
+    return has_upgrade and any(
+        name.lower() == "connection" and "upgrade" in value.lower()
+        for name, value in headers
+    )
+
+
+def _body_length(headers: list[tuple[str, str]]) -> int | None:
+    """Byte di body dichiarati; ``None`` se ``chunked`` (non delimitabile qui)."""
+    length = 0
+    for name, value in headers:
+        low = name.lower()
+        if low == "transfer-encoding" and "chunked" in value.lower():
+            return None
+        if low == "content-length":
+            try:
+                length = max(0, int(value))
+            except ValueError:
+                return None
+    return length
+
+
+def _close_response_head(head: bytes) -> bytes:
+    """La testa di una risposta con ``Connection: close`` al posto dei suoi header
+    di connessione. Un 101 resta com'e': dopo non e' piu' HTTP."""
+    lines = head.decode("latin-1").split("\r\n")
+    if lines and " 101 " in f"{lines[0]} ":
+        return head + _CRLF2
+    kept = [lines[0]] + [
+        line for line in lines[1:]
+        if line and line.partition(":")[0].strip().lower() not in _HOP_HEADERS
+    ]
+    kept.append("Connection: close")
+    return ("\r\n".join(kept) + "\r\n\r\n").encode("latin-1")
+
+
 def _rebuild_head(
-    method: str, path: str, version: str, headers: list[tuple[str, str]], *, host: str
+    method: str,
+    path: str,
+    version: str,
+    headers: list[tuple[str, str]],
+    *,
+    host: str,
+    upgrade: bool = False,
 ) -> bytes:
     out = [f"{method} {path} {version}"]
     for name, value in headers:
         low = name.lower()
-        if low == "host":
+        if low == "host" or low in _HOP_HEADERS:
             continue
         if low == "cookie":
             # La capability non deve raggiungere il server dell'utente: e' un
@@ -353,6 +482,7 @@ def _rebuild_head(
             value = cleaned
         out.append(f"{name}: {value}")
     out.append(f"Host: {host}")
+    out.append("Connection: Upgrade" if upgrade else "Connection: close")
     return ("\r\n".join(out) + "\r\n\r\n").encode("latin-1")
 
 

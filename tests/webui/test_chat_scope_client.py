@@ -1,7 +1,7 @@
 """Un frame appartiene a *una* conversazione, e si rende solo in quella.
 
 ``mobile-chat.js`` filtrava i frame live per ``turn_id`` e mai per ``chat_id``:
-il turno di un'altra conversazione — la risposta data in ``project:patreon``,
+il turno di un'altra conversazione — la risposta data in ``project:palestra``,
 l'avviso proattivo consegnato sulla chat personale — si dipingeva nel thread che
 in quel momento era a schermo, delta, righe di ``file_edit`` e ``turn_end``
 compresi. Finché di conversazioni ce n'era una il filtro assente era un filtro
@@ -27,21 +27,19 @@ nei rispettivi docstring.
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
-JENNY_JS = ASSETS / "mobile-jenny.js"
+JENNY_JS = ASSETS / "shared" / "jenny-mascot.js"
+MINICHAT_JS = ASSETS / "shared" / "jenny-minichat.js"
 SESSION_JS = ASSETS / "shared" / "session-manager.js"
 WS_JS = ASSETS / "shared" / "ws-manager.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _read(path: Path) -> str:
@@ -101,26 +99,20 @@ function frame(event, chat_id, turn_id) {{
 
 def _run_js(script: str) -> None:
     source = _harness() + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── Il filtro ───────────────────────────────────────────────────────────────
 
 
 def test_a_turn_of_another_conversation_is_not_rendered() -> None:
-    """Il difetto: con la personale a schermo, un turno di ``project:patreon``
+    """Il difetto: con la personale a schermo, un turno di ``project:palestra``
     si dipingeva qui — testo, file toccati e chiusura."""
     _run_js("""
       const chat = makeChat();
       for (const ev of ['delta', 'reasoning_delta', 'stream_end', 'message',
                         'file_edit', 'turn_end', 'user', 'goal_status']) {
-        assert.equal(route(chat, frame(ev, 'project:patreon', 'p:1')), false,
+        assert.equal(route(chat, frame(ev, 'project:palestra', 'p:1')), false,
                      ev + " di un'altra conversazione è stato reso");
       }
     """)
@@ -135,10 +127,10 @@ def test_the_open_conversation_is_rendered_whichever_it_is() -> None:
         assert.equal(route(chat, frame(ev, 'default', 'a:1')), true, ev);
       }
 
-      sessionManager.currentChatId = 'project:patreon';
+      sessionManager.currentChatId = 'project:palestra';
       const other = makeChat();
       for (const ev of ['delta', 'message', 'file_edit', 'turn_end']) {
-        assert.equal(route(other, frame(ev, 'project:patreon', 'b:1')), true, ev);
+        assert.equal(route(other, frame(ev, 'project:palestra', 'b:1')), true, ev);
       }
       assert.equal(route(other, frame('delta', 'default', 'c:1')), false,
                    'con un progetto aperto la personale non deve dipingere qui');
@@ -173,7 +165,7 @@ def test_out_of_band_frames_are_never_filtered_by_chat() -> None:
       for (const ev of ['subagent_status', 'subagent_activity', 'subagent_unwatched',
                         'runtime_model_updated', 'error', 'app_data_changed',
                         'apps_list_changed', 'ui_query']) {
-        assert.equal(chat._belongsToOpenChat(frame(ev, 'project:patreon')), true,
+        assert.equal(chat._belongsToOpenChat(frame(ev, 'project:palestra')), true,
                      ev + ' è stato filtrato per chat: non è di una conversazione');
       }
     """)
@@ -194,7 +186,7 @@ def test_a_dropped_turn_leaves_no_turn_half_open() -> None:
 
       // Un intero turno di un'altra conversazione atterra in mezzo.
       for (const ev of ['message', 'file_edit', 'delta', 'stream_end', 'turn_end']) {
-        route(chat, frame(ev, 'project:patreon', 'altro:1'));
+        route(chat, frame(ev, 'project:palestra', 'altro:1'));
       }
       assert.equal(chat.resets, 0, 'un turno scartato ha azzerato la bolla in corso');
       assert.equal(chat._currentTurnId, 'mio:1', 'un turno scartato si è preso il turno corrente');
@@ -217,7 +209,7 @@ def test_filtering_after_the_turn_boundary_would_reopen_the_defect() -> None:
       chat._applyTurnBoundary(frame('delta', 'default', 'mio:1'));
 
       // L'ordine sbagliato: prima il confine di turno.
-      chat._applyTurnBoundary(frame('message', 'project:patreon', 'altro:1'));
+      chat._applyTurnBoundary(frame('message', 'project:palestra', 'altro:1'));
       assert.equal(chat._currentTurnId, 'altro:1');
       assert.equal(chat._applyTurnBoundary(frame('turn_end', 'default', 'mio:1')), false,
                    'questo test descrive il difetto: se passa, il difetto non c\\'è più ' +
@@ -296,14 +288,28 @@ def test_discarding_the_view_closes_the_turn_in_flight() -> None:
 def test_the_mascot_releases_its_turn_on_a_switch() -> None:
     """La mascotte anima un turno alla volta e resta sul proprio: al cambio di
     chat il ``turn_end`` di quel turno non arriverà mai, e senza questo resta a
-    pensare per sempre."""
+    pensare per sempre.
+
+    Vale per tutti e due i gusci: l'ascolto e il rilascio stanno nella mascotte
+    condivisa, e l'officina ci aggiunge solo la minichat in volo."""
     jenny = _read(JENNY_JS)
     assert "sessionManager.addEventListener('chat:switch'" in jenny
     assert "_releaseTrackedTurn()" in jenny
     body = re.search(r"\n  _releaseTrackedTurn\(\) \{(.*?)\n  \}", jenny, re.S)
     assert body, "_releaseTrackedTurn non trovato"
-    head = body.group(1)
-    for field in ("_turnActive = false", "_pendingTurn = false", "_streamTurnId = null",
-                  "awaiting = false"):
-        assert field in head, f"_releaseTrackedTurn non azzera {field}"
+    assert "this._forgetTurnState();" in body.group(1)
+    # Lo stesso oblio lo usa il filo caduto (`_onWireClose`): sta in un punto solo.
+    forget = re.search(r"\n  _forgetTurnState\(\) \{(.*?)\n  \}", jenny, re.S)
+    assert forget, "_forgetTurnState non trovato"
+    head = forget.group(1)
+    for field in ("_turnActive = false", "_pendingTurn = false", "_streamTurnId = null"):
+        assert field in head, f"_forgetTurnState non azzera {field}"
+
+    companion = _read(MINICHAT_JS)
+    body = re.search(r"\n  _releaseTrackedTurn\(\) \{(.*?)\n  \}", companion, re.S)
+    assert body, "la minichat non si dimentica piu' al cambio di chat"
+    assert "this._resetReply();" in body.group(1)
+    assert "super._releaseTrackedTurn()" in body.group(1), (
+        "la minichat ha riscritto il rilascio invece di aggiungerci il suo"
+    )
     assert "chat:switch" in _read(SESSION_JS), "switchTo non annuncia il cambio"

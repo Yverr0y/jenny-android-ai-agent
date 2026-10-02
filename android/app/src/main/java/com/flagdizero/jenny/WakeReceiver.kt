@@ -20,7 +20,11 @@ import android.util.Log
  * Avviare un FGS da background è vietato da Android 12, ma una sveglia
  * `setExactAndAllowWhileIdle` mette l'app in allowlist temporanea proprio per
  * la durata di questa callback — ed è il motivo per cui il riavvio passa da un
- * alarm e non da un job differito.
+ * alarm e non da un job differito. **Solo una sveglia esatta.** Senza
+ * `SCHEDULE_EXACT_ALARM` le sveglie arrivano da `setAndAllowWhileIdle`, la cui
+ * allowlist esclude il FGS (v. `GatewayStarter.ALARM_FALLBACK_DELAY_MS`): qui
+ * l'avvio del service viene rifiutato, e la sveglia rimette su il gateway solo
+ * se l'app è esente dall'ottimizzazione batteria.
  *
  * Il ri-armo delle catene al cambio di permesso ha DUE porte d'ingresso, e non
  * è ridondanza gratuita: la broadcast di sistema (qui sotto) e
@@ -51,10 +55,14 @@ class WakeReceiver : BroadcastReceiver() {
             // one-shot, quindi l'ultima rete morirebbe al primo scatto, in
             // silenzio e proprio nel caso in cui è l'unica rimasta.
             AlarmClockFallback.REQUEST_CODE -> AlarmClockFallback.onAlarm(context)
-            PowerBridge.REQUEST_CODE_SERVICE_RESTART -> ensureGatewayUp(context, wakeTick = false)
+            PowerBridge.REQUEST_CODE_SERVICE_RESTART ->
+                GatewayStarter.ensureUp(context, reason = "wake-alarm/restart")
             // Tutto il resto è una sveglia di LAVORO armata da Python (request
             // code sotto 9000): una scadenza cron da onorare adesso.
-            else -> ensureGatewayUp(context, wakeTick = true)
+            // `wakeTick`: v. `GatewayStarter.ensureUp`. Niente `alarmFallback`:
+            // siamo già dentro la finestra di allowlist di una sveglia (col FGS
+            // se era esatta; se no un'altra sveglia non cambierebbe niente).
+            else -> GatewayStarter.ensureUp(context, reason = "wake-alarm/work", wakeTick = true)
         }
     }
 
@@ -163,7 +171,7 @@ class WakeReceiver : BroadcastReceiver() {
             // al massimo lo slittamento di un controllo che gira tre volte al
             // giorno.
             AlarmClockFallback.arm(appContext)
-            ensureGatewayUp(appContext, wakeTick = true)
+            GatewayStarter.ensureUp(appContext, reason = "rearm-chains", wakeTick = true)
         }
 
         /** Parcheggia lo stato appena osservato. `apply()` e non `commit()`:
@@ -177,41 +185,6 @@ class WakeReceiver : BroadcastReceiver() {
                     .apply()
             } catch (e: Exception) {
                 Log.w(TAG, "Could not remember the exact alarm state", e)
-            }
-        }
-
-        /**
-         * Rimette su il gateway (o lo tocca soltanto, se è già vivo).
-         *
-         * `startForegroundService` su un service già vivo è un no-op che passa solo
-         * da `onStartCommand`: una sveglia può quindi scattare a gateway sano senza
-         * fare danni, e il tick viene consegnato lo stesso.
-         *
-         * Con `wakeTick = true` si prende PRIMA il wakelock corto di handoff: senza,
-         * il device può risospendere all'uscita da `onReceive` e il service partire
-         * minuti dopo, cioè esattamente il ritardo che questa sveglia doveva
-         * eliminare. Lo rilascia `GatewayService` a consegna avvenuta; se il service
-         * non parte affatto, ci pensa il timeout del lock.
-         */
-        private fun ensureGatewayUp(context: Context, wakeTick: Boolean) {
-            val appContext = context.applicationContext
-            Log.i(TAG, "Wake alarm fired (wakeTick=$wakeTick): ensuring gateway service is up")
-            if (wakeTick) {
-                PowerBridge.acquireHandoffLock(appContext)
-            }
-            try {
-                val intent = Intent(appContext, GatewayService::class.java)
-                if (wakeTick) {
-                    intent.putExtra(GatewayService.EXTRA_WAKE_TICK, true)
-                }
-                appContext.startForegroundService(intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to start gateway from wake alarm", e)
-                // Il service non partirà, quindi nessuno rilascerà il lock: farlo
-                // qui evita di lasciare la CPU accesa fino allo scadere del timeout.
-                if (wakeTick) {
-                    PowerBridge.releaseHandoffLock()
-                }
             }
         }
 

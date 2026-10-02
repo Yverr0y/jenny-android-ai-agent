@@ -172,7 +172,7 @@ class TestKnownFactsFollowsTheSameVisibility:
         blocco assente.
         """
         store.user_file.write_text(
-            "# User\n- Vede la terapeuta il martedi'\n", encoding="utf-8",
+            "# User\n- Va a nuoto il martedi'\n", encoding="utf-8",
         )
         store.memory_file.write_text(
             "# Memory\n- Piano stipendio: rinegoziare a settembre\n", encoding="utf-8",
@@ -182,7 +182,7 @@ class TestKnownFactsFollowsTheSameVisibility:
         assert store.get_known_facts_context(session_key=PROJECT) == ""
         # Controprova: gli stessi file, la stessa coda, la chiave personale.
         personal = store.get_known_facts_context(session_key=PERSONAL)
-        assert "terapeuta" in personal
+        assert "nuoto" in personal
         assert "rinegoziare a settembre" in personal
 
     def test_a_project_gets_no_block_even_with_an_empty_queue(self, store):

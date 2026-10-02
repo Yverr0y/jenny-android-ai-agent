@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from jenny.webui.skills_api import (
-    delete_workspace_skill,
     update_workspace_skill,
     webui_skills_payload,
 )
@@ -220,18 +219,41 @@ def test_update_workspace_skill_missing_skill_raises_permission_error(tmp_path: 
         update_workspace_skill(tmp_path, "does-not-exist", description="x")
 
 
-# -- delete_workspace_skill -----------------------------------------------------
+# -- le skill che vengono con l'app ---------------------------------------------
+#
+# Le integrate vivono in ``workspace/skills/`` come quelle dell'utente, e
+# ``sync_workspace_templates`` le ri-estrae a ogni avvio sovrascrivendole. Un
+# interruttore su di loro varrebbe fino al riavvio: il payload deve dire quali
+# sono, e l'API rifiutare di toccarle.
 
 
-def test_delete_workspace_skill_removes_directory(tmp_path: Path, skills_dir: Path) -> None:
-    _write_skill(skills_dir, "to-delete")
-    assert (skills_dir / "to-delete").is_dir()
+def test_payload_marks_bundled_skills(tmp_path: Path, skills_dir: Path) -> None:
+    _write_skill(skills_dir, "cron", description="Promemoria")
+    _write_skill(skills_dir, "mia-skill", description="Scritta per me")
 
-    delete_workspace_skill(tmp_path, "to-delete")
+    by_name = {s["name"]: s for s in webui_skills_payload(tmp_path)["skills"]}
 
-    assert not (skills_dir / "to-delete").exists()
+    assert by_name["cron"]["bundled"] is True
+    assert by_name["mia-skill"]["bundled"] is False
 
 
-def test_delete_workspace_skill_missing_skill_raises_permission_error(tmp_path: Path) -> None:
+def test_update_payload_carries_bundled_too(tmp_path: Path, skills_dir: Path) -> None:
+    """Due costruttori dello stesso dizionario: il campo sta in tutti e due."""
+    _write_skill(skills_dir, "mia-skill")
+
+    payload = update_workspace_skill(tmp_path, "mia-skill", disabled=True)
+
+    assert payload["bundled"] is False
+
+
+def test_update_refuses_a_bundled_skill_without_touching_it(
+    tmp_path: Path, skills_dir: Path
+) -> None:
+    skill_file = _write_skill(skills_dir, "cron", description="Promemoria")
+    before = skill_file.read_bytes()
+
     with pytest.raises(PermissionError):
-        delete_workspace_skill(tmp_path, "does-not-exist")
+        update_workspace_skill(tmp_path, "cron", disabled=True)
+
+    assert skill_file.read_bytes() == before
+

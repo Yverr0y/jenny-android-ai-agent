@@ -6,8 +6,8 @@ hit-test dalle sue coordinate di schermo (``OnDragBegin`` →
 viewport (``kIgnoreClipping`` allarga l'area al documento, ma
 ``PaintLayerClipper`` salta il clip soltanto per il root layer). Il testo
 scrollato fuori da uno scroller interno è irraggiungibile: la base finiva sul
-composer e la selezione si prendeva tutto. Misurato con tre pagine di prova in
-``.agent/selection-rig``; ragionamento in ``.agent/chat-selection-root-plan.md``.
+composer e la selezione si prendeva tutto. Misurato con tre pagine di prova sul
+telefono.
 
 Le condizioni sono tutte proprietà del sorgente, quindi si verificano qui:
 in ``mode-chat`` scorre ``html`` e nessun antenato del testo ritaglia; la chrome
@@ -26,9 +26,10 @@ UI = ROOT / "jenny" / "templates" / "ui"
 ASSETS = UI / "assets"
 APP_JS = (ASSETS / "mobile-app.js").read_text(encoding="utf-8")
 CHAT_JS = (ASSETS / "mobile-chat.js").read_text(encoding="utf-8")
+PAGER_JS = (ASSETS / "shared" / "history-pager.js").read_text(encoding="utf-8")
 CSS = (ASSETS / "mobile-style.css").read_text(encoding="utf-8")
 SELECTION_JS = (ASSETS / "shared" / "selection.js").read_text(encoding="utf-8")
-INDEX_HTML = (UI / "index.html").read_text(encoding="utf-8")
+WORKSHOP_HTML = (UI / "workshop.html").read_text(encoding="utf-8")
 
 _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input",
          "link", "meta", "param", "source", "track", "wbr"}
@@ -78,7 +79,7 @@ class _Ancestry(HTMLParser):
 
 def _parsed() -> _Ancestry:
     parser = _Ancestry()
-    parser.feed(INDEX_HTML)
+    parser.feed(WORKSHOP_HTML)
     return parser
 
 
@@ -220,4 +221,12 @@ def test_scroll_and_touch_listeners_moved_with_the_scroller() -> None:
     assert "this.chatArea.addEventListener('scroll'" not in CHAT_JS
     assert "document.getElementById('view-chat')" in listeners
     assert "visualViewport?.addEventListener('resize'" in listeners
-    assert "window.addEventListener('scroll'" in _method(CHAT_JS, "setupInfiniteScroll")
+    # Lo scorrimento infinito è passato al modulo condiviso con la casa, ma il
+    # contratto è lo stesso e qui resta la metà che riguarda l'officina: chi
+    # *emette* l'evento è `window`, chi si *misura* è il documento. Sono due
+    # oggetti diversi e scambiarli è il difetto che questo file esiste per
+    # prendere — `.chat-area` non emette scroll e non ha le misure giuste.
+    pager = _method(CHAT_JS, "constructor")
+    assert "listenOn: window," in pager
+    assert "scroller: () => this._scroller," in pager
+    assert "this._host.listenOn.addEventListener('scroll'" in PAGER_JS

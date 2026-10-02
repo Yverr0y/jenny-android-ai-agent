@@ -1,11 +1,11 @@
 """``wiki_lint`` deve girare da dentro un progetto, ed è il cancello di una skill.
 
-Il difetto, misurato sul telefono il 26/08/2026. Dentro `project:salute` ogni
-forma di ``wiki_lint`` — ``'wikis/salute'``, ``'.'``, ``''`` — veniva rifiutata
+Il difetto, misurato sul telefono il 26/08/2026. Dentro `project:sartoria` ogni
+forma di ``wiki_lint`` — ``'wikis/sartoria'``, ``'.'``, ``''`` — veniva rifiutata
 identica:
 
     WorkspaceBoundaryError: Path /data/user/0/…/files/workspace is outside
-    allowed directory /data/data/…/workspace/wikis/salute
+    allowed directory /data/data/…/workspace/wikis/sartoria
     WORKSPACE BOUNDARY: 2 path operation(s) refused: os.mkdir …; os.stat …
 
 **Non dipendeva dall'argomento.** La causa è che :func:`get_workspace_path` — un
@@ -52,6 +52,26 @@ _BOUNDARY_ERROR = "WorkspaceBoundaryError"
 # carichi ed esegua** da dentro un progetto, non cosa stampa. Uno script finto
 # rende il test veloce e indipendente dal contenuto del lint.
 _FAKE_LINT = "def lint(root):\n    print(f'linted {root}')\n    return 0\n"
+_FAKE_SCAFFOLD = "def scaffold(root, title):\n    print(f'scaffolded {root}')\n"
+
+
+@pytest.fixture(autouse=True)
+def fake_scripts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lo script finto si inietta nella copia **impacchettata**.
+
+    Gli script si leggono dal pacchetto, mai dal workspace, perché quella
+    cartella la scrive il modello: scriverli in ``<workspace>/skills`` non li
+    farebbe più girare.
+    """
+    from jenny.agent.tools import python_exec_builtins as builtins_mod
+
+    real = builtins_mod._read_packaged_wiki_script
+    fakes = {"lint_wiki.py": _FAKE_LINT, "scaffold.py": _FAKE_SCAFFOLD}
+    monkeypatch.setattr(
+        builtins_mod,
+        "_read_packaged_wiki_script",
+        lambda name: fakes[name].encode() if name in fakes else real(name),
+    )
 
 
 @pytest.fixture
@@ -66,11 +86,10 @@ def scoped_project(tmp_path: Path):
     provare altro).
     """
     ws = tmp_path / "workspace"
-    project = ws / "wikis" / "salute"
+    project = ws / "wikis" / "sartoria"
     scripts = ws / "skills" / "llm-wiki" / "scripts"
     for d in (project / "wiki", project / "raw" / "journal", scripts):
         d.mkdir(parents=True)
-    (scripts / "lint_wiki.py").write_text(_FAKE_LINT, encoding="utf-8")
 
     previous = None
     try:
@@ -122,7 +141,7 @@ async def test_wiki_lint_runs_from_inside_a_project(scoped_project) -> None:
     """
     ws, _project = scoped_project
 
-    out = await _tool(ws).execute(code="print(wiki_lint('wikis/salute'))")
+    out = await _tool(ws).execute(code="print(wiki_lint('wikis/sartoria'))")
 
     assert _BOUNDARY_ERROR not in out, f"il lint è ancora irraggiungibile: {out!r}"
     assert "linted" in out, f"lo script non ha girato: {out!r}"
@@ -137,9 +156,9 @@ async def test_the_project_boundary_is_still_closed(scoped_project) -> None:
     per la ragione sbagliata — confine allargato — cadrebbe qui.
     """
     ws, _project = scoped_project
-    (ws / "wikis" / "etf" / "wiki").mkdir(parents=True)
+    (ws / "wikis" / "etna" / "wiki").mkdir(parents=True)
 
-    out = await _tool(ws).execute(code="print(wiki_lint('wikis/etf'))")
+    out = await _tool(ws).execute(code="print(wiki_lint('wikis/etna'))")
 
     assert _BOUNDARY_ERROR in out, f"il confine si è aperto: {out!r}"
 
@@ -222,11 +241,10 @@ async def test_wiki_lint_runs_when_the_workspace_was_given_by_an_alias(
     """
     real = tmp_path / "real"
     ws = real / "workspace"
-    project = ws / "wikis" / "salute"
+    project = ws / "wikis" / "sartoria"
     scripts = ws / "skills" / "llm-wiki" / "scripts"
     for d in (project / "wiki", scripts):
         d.mkdir(parents=True)
-    (scripts / "lint_wiki.py").write_text(_FAKE_LINT, encoding="utf-8")
     alias = tmp_path / "alias"
     alias.symlink_to(real, target_is_directory=True)
 
@@ -244,7 +262,7 @@ async def test_wiki_lint_runs_when_the_workspace_was_given_by_an_alias(
     )
     token = bind_workspace_scope(scope)
     try:
-        out = await _tool(ws).execute(code="print(wiki_lint('wikis/salute'))")
+        out = await _tool(ws).execute(code="print(wiki_lint('wikis/sartoria'))")
     finally:
         reset_workspace_scope(token)
         _restore(previous)
@@ -317,9 +335,6 @@ async def test_the_bypass_does_not_open_writes(scoped_project) -> None:
     ``_wiki_root``, col confine di scrittura, a fermarlo sul bersaglio.
     """
     ws, project = scoped_project
-    (ws / "skills" / "llm-wiki" / "scripts" / "scaffold.py").write_text(
-        "def scaffold(root, title):\n    print(f'scaffolded {root}')\n", encoding="utf-8"
-    )
 
     out = await _subagent_tool(project).execute(
         code=f"print(wiki_scaffold({str(ws / 'wikis' / 'nuova')!r}, 'Nuova'))"

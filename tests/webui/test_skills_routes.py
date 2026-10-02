@@ -14,25 +14,19 @@ import json
 import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
-from websockets.http11 import Headers
+from support.gateway_http import AUTH_SECRET, make_handler, make_request
 from websockets.http11 import Request as WsRequest
 
 from jenny.webui.ws_http import GatewayHTTPHandler
 
-_AUTH_SECRET = "test-secret"
+
+def _make_request(path_with_query: str, *, token: str | None = AUTH_SECRET) -> WsRequest:
+    return make_request(path_with_query, token, always_append=True)
 
 
-def _make_request(path_with_query: str, *, token: str | None = _AUTH_SECRET) -> WsRequest:
-    if token is not None:
-        sep = "&" if "?" in path_with_query else "?"
-        path_with_query = f"{path_with_query}{sep}token={urllib.parse.quote(token)}"
-    return WsRequest(path=path_with_query, headers=Headers())
-
-
-def _dispatch(handler, path_with_query: str, *, token: str | None = _AUTH_SECRET):
+def _dispatch(handler, path_with_query: str, *, token: str | None = AUTH_SECRET):
     """Dispatcha come fa l'handler reale: path ripulito dalla query per il routing."""
     clean_path = path_with_query.split("?", 1)[0]
     request = _make_request(path_with_query, token=token)
@@ -65,26 +59,11 @@ def _write_skill(
 
 
 def _make_handler(workspace: Path, *, disabled_skills: set[str] | None = None) -> GatewayHTTPHandler:
-    config = SimpleNamespace(
-        workspace=SimpleNamespace(enabled=True),
-        wiki=SimpleNamespace(enabled=True, wikis_dir="wikis"),
-        token_issue_secret=_AUTH_SECRET,
-        verbose=False,
-    )
-    return GatewayHTTPHandler(
-        config=config,
-        session_manager=None,
-        runtime_model_name=lambda: "test-model",
-        bus=MagicMock(),
-        media=MagicMock(),
-        workspaces=MagicMock(),
-        # NB: SkillsLoader (jenny/agent/skills.py) fa workspace_path / "skills"
-        # internamente: qui va passata la root del workspace, NON la cartella
-        # skills già risolta (a differenza del valore fittizio usato in
-        # test_backup_routes.py, dove questo parametro non viene mai usato).
-        skills_workspace_path=workspace,
-        disabled_skills=disabled_skills or set(),
-    )
+    # NB: SkillsLoader (jenny/agent/skills.py) fa workspace_path / "skills"
+    # internamente: qui va passata la root del workspace, NON la cartella
+    # skills già risolta (a differenza del valore fittizio usato in
+    # test_backup_routes.py, dove questo parametro non viene mai usato).
+    return make_handler(workspace, disabled_skills=disabled_skills or set())
 
 
 @pytest.fixture()
@@ -120,12 +99,19 @@ def test_dispatch_returns_none_for_partial_prefix_match(env) -> None:
     assert response is None
 
 
-def test_dispatch_recognizes_update_and_delete_paths(env) -> None:
+def test_dispatch_recognizes_the_update_path(env) -> None:
     _write_skill(env.skills_dir, "foo")
-    update = _dispatch(env.handler, _update_path("foo", description="x"))
+    update = _dispatch(env.handler, _update_path("foo", disabled="1"))
     assert update is not None and update.status_code == 200
-    delete = _dispatch(env.handler, "/api/webui/skills/foo/delete")
-    assert delete is not None and delete.status_code == 200
+
+
+def test_there_is_no_delete_route(env) -> None:
+    """Cancellare una skill non passa dall'HTTP: la UI non lo offre (decisione
+    del 21/09/2026, «si passa dalla chat»), e una capacità senza client
+    è una superficie da difendere per niente. Tolta il 24/09/2026."""
+    _write_skill(env.skills_dir, "foo")
+    assert _dispatch(env.handler, "/api/webui/skills/foo/delete") is None
+    assert (env.skills_dir / "foo").is_dir()
 
 
 # -- autenticazione -----------------------------------------------------------
@@ -138,13 +124,7 @@ def test_list_requires_token(env) -> None:
 
 def test_update_requires_token(env) -> None:
     _write_skill(env.skills_dir, "foo")
-    response = _dispatch(env.handler, _update_path("foo", description="x"), token=None)
-    assert response.status_code == 401
-
-
-def test_delete_requires_token(env) -> None:
-    _write_skill(env.skills_dir, "foo")
-    response = _dispatch(env.handler, "/api/webui/skills/foo/delete", token=None)
+    response = _dispatch(env.handler, _update_path("foo", disabled="1"), token=None)
     assert response.status_code == 401
 
 
@@ -201,16 +181,56 @@ def test_list_unexpected_error_maps_to_500_generic(env, monkeypatch) -> None:
 
 
 def test_update_happy_path(env) -> None:
-    skill_file = _write_skill(env.skills_dir, "foo", description="vecchia")
-    path = _update_path("foo", description="nuova", content="corpo nuovo", disabled="true")
+    _write_skill(env.skills_dir, "foo", description="vecchia")
 
-    response = _dispatch(env.handler, path)
+    response = _dispatch(env.handler, _update_path("foo", disabled="true"))
 
     assert response.status_code == 200
     body = _json(response)
-    assert body["description"] == "nuova"
+    assert body["description"] == "vecchia"
     assert body["disabled"] is True
-    assert "corpo nuovo" in skill_file.read_text(encoding="utf-8")
+
+
+def test_update_writes_no_content_or_description_from_the_query(env) -> None:
+    """``content`` e ``description`` in query non si scrivono più.
+
+    Erano decodificati due volte (``parse_qs`` e poi ``unquote``: un ``%25``
+    del testo diventava altro) e portavano contenuto su una GET, contro
+    la regola per cui ``/api/`` e' per letture e parametri corti (il
+    contenuto viaggia sulla WebSocket). Nessun client li usa:
+    l'unica chiamata, ``api-client.js``, manda solo ``disabled``.
+    """
+    skill_file = _write_skill(env.skills_dir, "foo", description="vecchia", body="corpo\n")
+    before = skill_file.read_bytes()
+
+    only_text = _dispatch(env.handler, _update_path("foo", description="nuova", content="x"))
+    assert only_text.status_code == 400
+    assert skill_file.read_bytes() == before
+
+    mixed = _dispatch(
+        env.handler, _update_path("foo", description="nuova", content="x", disabled="1")
+    )
+    assert mixed.status_code == 200
+    text = skill_file.read_text(encoding="utf-8")
+    assert "nuova" not in text and "vecchia" in text
+    assert "corpo" in text
+
+
+@pytest.mark.parametrize("raw_name", ["%2e%2e", "%2E%2E", ".%2e", "%2e", ".", "..",
+                                      "%2ehidden", "a%00b"])
+def test_update_rejects_a_dot_name_after_decoding(env, raw_name: str) -> None:
+    """``%2e%2e`` supera la regex del path e, decodificato, è ``..``:
+    ``skills/../SKILL.md`` è un file fuori da ``skills/`` che veniva riscritto."""
+    outside = env.workspace / "SKILL.md"
+    outside.write_text('---\ndescription: "fuori"\n---\nfuori\n', encoding="utf-8")
+    before = outside.read_bytes()
+    (env.skills_dir / "SKILL.md").write_text("---\n---\nx\n", encoding="utf-8")
+
+    response = _dispatch(env.handler, f"/api/webui/skills/{raw_name}/update?disabled=1")
+
+    assert response.status_code == 400
+    assert outside.read_bytes() == before
+    assert "disabled" not in (env.skills_dir / "SKILL.md").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("raw", ["on", "ON", " on ", "1", "yes", "TRUE"])
@@ -242,12 +262,12 @@ def test_update_rejects_name_with_encoded_slash(env) -> None:
     # Il path regex esclude "/" letterale, ma il nome viene decodificato con
     # unquote() *dopo* il match: uno slash percent-encoded (%2F) supera il
     # regex e viene poi correttamente rifiutato dal controllo esplicito.
-    response = _dispatch(env.handler, "/api/webui/skills/a%2Fb/update?description=x")
+    response = _dispatch(env.handler, "/api/webui/skills/a%2Fb/update?disabled=1")
     assert response.status_code == 400
 
 
 def test_update_rejects_name_with_backslash(env) -> None:
-    response = _dispatch(env.handler, "/api/webui/skills/a%5Cb/update?description=x")
+    response = _dispatch(env.handler, "/api/webui/skills/a%5Cb/update?disabled=1")
     assert response.status_code == 400
 
 
@@ -264,7 +284,7 @@ def test_update_missing_skill_maps_to_403(env) -> None:
     # del route handler pare irraggiungibile con l'implementazione attuale
     # di SkillsLoader, dato che is_workspace_skill usa la stessa condizione
     # di esistenza già verificata subito dopo).
-    response = _dispatch(env.handler, _update_path("never-created", description="x"))
+    response = _dispatch(env.handler, _update_path("never-created", disabled="1"))
     assert response.status_code == 403
 
 
@@ -277,38 +297,17 @@ def test_update_unexpected_error_maps_to_500_generic(env, monkeypatch) -> None:
         raise RuntimeError("guasto interno inatteso")
 
     monkeypatch.setattr("jenny.webui.skills_routes.update_workspace_skill", boom)
-    response = _dispatch(env.handler, _update_path("foo", description="x"))
+    response = _dispatch(env.handler, _update_path("foo", disabled="1"))
     assert response.status_code == 500
     assert b"guasto interno inatteso" not in response.body
 
 
-# -- delete -----------------------------------------------------------------
+def test_update_of_a_bundled_skill_maps_to_403(env) -> None:
+    """Spegnere una integrata varrebbe fino al riavvio: la rotta lo rifiuta."""
+    skill_file = _write_skill(env.skills_dir, "cron")
+    before = skill_file.read_bytes()
 
+    response = _dispatch(env.handler, _update_path("cron", disabled="1"))
 
-def test_delete_happy_path(env) -> None:
-    _write_skill(env.skills_dir, "foo")
-    response = _dispatch(env.handler, "/api/webui/skills/foo/delete")
-    assert response.status_code == 200
-    assert _json(response) == {"deleted": True}
-    assert not (env.skills_dir / "foo").exists()
-
-
-def test_delete_rejects_invalid_name(env) -> None:
-    response = _dispatch(env.handler, "/api/webui/skills/a%2Fb/delete")
-    assert response.status_code == 400
-
-
-def test_delete_missing_skill_maps_to_403(env) -> None:
-    response = _dispatch(env.handler, "/api/webui/skills/never-created/delete")
     assert response.status_code == 403
-
-
-def test_delete_unexpected_error_maps_to_500(env, monkeypatch) -> None:
-    _write_skill(env.skills_dir, "foo")
-
-    def boom(*_args, **_kwargs):
-        raise RuntimeError("guasto")
-
-    monkeypatch.setattr("jenny.webui.skills_routes.delete_workspace_skill", boom)
-    response = _dispatch(env.handler, "/api/webui/skills/foo/delete")
-    assert response.status_code == 500
+    assert skill_file.read_bytes() == before

@@ -16,8 +16,6 @@ import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from jenny.config.paths import get_workspace_path
-
 if TYPE_CHECKING:
     from jenny.agent.tools.python_exec import PythonNamespace
 
@@ -46,6 +44,27 @@ def _compile_script(code: str, filename: str) -> types.CodeType:
     fosse importato normalmente.
     """
     return compile(code, filename, "exec", dont_inherit=True)
+
+
+# Da dove vengono gli script della skill wiki: il pacchetto, mai il workspace
+# (vedi `_load_wiki_script`). L'ordine di `_WIKI_SCRIPT_SIBLINGS` è quello delle
+# dipendenze: ognuno importa per nome solo quelli che lo precedono.
+_WIKI_SCRIPTS_PACKAGE = "jenny.skills"
+_WIKI_SCRIPTS_REL = "llm-wiki/scripts"
+_WIKI_SCRIPT_SIBLINGS = ("reindex_wikis.py", "lint_wiki.py")
+
+
+def _read_packaged_wiki_script(name: str) -> bytes | None:
+    """I byte impacchettati dello script *name* (``None`` se non ci sono)."""
+    from jenny.utils.android_assets import read_asset
+
+    return read_asset(_WIKI_SCRIPTS_PACKAGE, f"{_WIKI_SCRIPTS_REL}/{name}")
+
+
+def _packaged_wiki_scripts_dir() -> Path:
+    import jenny.skills
+
+    return Path(jenny.skills.__file__).resolve().parent / _WIKI_SCRIPTS_REL
 
 
 def _register_builtin_functions(
@@ -415,62 +434,91 @@ def _register_builtin_functions(
 
     # ── LLM Wiki ──
     def _load_wiki_script(name: str):
-        """Load a script from the llm-wiki skill directory.
+        """Carica uno script della skill ``llm-wiki`` dalla copia **impacchettata**.
 
-        **Il caricamento gira sotto ``_path_guard_bypass()``, e la ragione è che
-        qui non c'è niente da contenere.** Il percorso è fisso —
-        ``<workspace>/skills/llm-wiki/scripts/<nome>.py`` — e *name* arriva da tre
-        call site letterali di questo file (``lint_wiki.py``, ``scaffold.py``,
-        ``audit_review.py``): il modello non lo scrive e non lo influenza. Farlo
-        passare dalla guardia non è un controllo, è un ostacolo, e il 26/08 sul
-        telefono era **l'ostacolo**: dentro un progetto la radice di lettura di un
-        subagent è la cartella del progetto, gli script della skill stanno fuori, e
-        ``wiki_lint``/``wiki_audit``/``wiki_scaffold`` erano irraggiungibili — con
-        loro il «hard gate» della skill, *esegui il lint e incolla il suo output*.
-        Sotto ``orchestratorMode`` l'agente principale non ha ``python_exec``
-        affatto, quindi non restava nessuna strada.
+        Il sorgente viene da ``jenny/skills/llm-wiki/scripts`` (sul telefono
+        l'asset dell'APK, via :func:`read_asset`): gli stessi byte che l'avvio
+        estrae in ``<workspace>/skills``. **Mai dalla copia del workspace**, e
+        la ragione è il bypass qui sotto: quella
+        cartella il modello la scrive con ``write_file``, e caricarla dentro
+        ``_path_guard_bypass()`` eseguiva il suo codice di primo livello senza
+        confine di percorso. Il vecchio commento diceva che qui «non c'è niente
+        da contenere» perché il percorso è fisso: il percorso sì, il contenuto
+        no.
 
-        **Non allarga niente per il codice del modello.** La finestra copre solo
-        queste righe: quel che lo script fa dopo — leggere la wiki, scrivere il
-        proprio stato — gira fuori dal bypass e resta guardato come prima. È lo
-        stesso gesto, con la stessa motivazione, di ``_wiki_root`` qui sotto.
+        **Il bypass resta, e ora copre solo codice nostro.** Leggere il
+        pacchetto (una directory fuori dal workspace, o l'APK) è un'operazione
+        dell'host che la guardia rifiuterebbe; e dentro un progetto la radice di
+        lettura di un subagent è la cartella del progetto, quindi senza bypass
+        ``wiki_lint``/``wiki_audit``/``wiki_scaffold`` erano irraggiungibili (il
+        26/08, sul telefono) — con loro il «hard gate» della skill. Il codice di
+        primo livello degli script definisce funzioni e costanti; quel che fanno
+        dopo — leggere la wiki, scrivere il proprio stato — gira fuori dal
+        bypass e resta guardato come prima.
 
-        L'alternativa era allargare il confine di lettura del sandbox alla radice
-        dell'installazione (il gemello di ``_FsTool._installation_read_root``,
-        passo T4.5). Scartata: cambia una regola di sicurezza per tutto il codice
-        che il modello esegue, mentre il difetto è che tre builtin non riescono ad
-        aprire un file **loro**.
+        Gli script si importano fra loro per nome (``import reindex_wikis``,
+        dopo un ``sys.path.insert`` della propria cartella): i fratelli di
+        ``_WIKI_SCRIPT_SIBLINGS`` si caricano prima, dalla stessa copia, e stanno
+        in ``sys.modules`` solo per la durata del caricamento, così l'``import``
+        non cade sulla prima cartella di ``sys.path`` che ne ha uno.
         """
-        import importlib.util
+        import sys
 
         from jenny.agent.tools.python_exec import _path_guard_bypass
 
         with _path_guard_bypass():
-            skill_dir = get_workspace_path() / "skills" / "llm-wiki" / "scripts"
-            script_path = skill_dir / name
-            if not script_path.exists():
-                raise FileNotFoundError(f"Script not found: {script_path}")
-
-            logger.debug("Loading wiki script via importlib: %s", script_path)
+            previous = {
+                sib.removesuffix(".py"): sys.modules.get(sib.removesuffix(".py"))
+                for sib in _WIKI_SCRIPT_SIBLINGS
+            }
             try:
-                spec = importlib.util.spec_from_file_location(
-                    name.removesuffix(".py"), script_path
-                )
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                return mod
-            except Exception:
-                logger.warning("importlib failed for %s; falling back to exec()", script_path)
-                mod = types.ModuleType(name.removesuffix(".py"))
-                # `__file__` come lo metterebbe importlib: gli script delle skill
-                # ricavano da lì la propria directory
-                # (`sys.path.insert(0, dirname(abspath(__file__)))`), e su questo
-                # ramo il nome non esisteva affatto.
-                mod.__file__ = str(script_path)
-                code = script_path.read_text(encoding="utf-8")
-                # `_compile_script`, non `exec(code, ...)`: vedi lì il perché.
-                exec(_compile_script(code, str(script_path)), mod.__dict__)
-                return mod
+                loaded: dict[str, types.ModuleType] = {}
+                for sib in _WIKI_SCRIPT_SIBLINGS:
+                    if sib == name:
+                        break
+                    loaded[sib] = sys.modules[sib.removesuffix(".py")] = _exec_packaged(sib)
+                return loaded.get(name) or _exec_packaged(name)
+            finally:
+                for mod_name, mod in previous.items():
+                    if mod is None:
+                        sys.modules.pop(mod_name, None)
+                    else:
+                        sys.modules[mod_name] = mod
+
+    def _exec_packaged(name: str) -> types.ModuleType:
+        """Esegue lo script impacchettato *name* in un modulo nuovo (sotto bypass)."""
+        import sys
+
+        rel = f"{_WIKI_SCRIPTS_REL}/{name}"
+        source = _read_packaged_wiki_script(name)
+        if source is None:
+            raise FileNotFoundError(f"Packaged wiki script not found: {rel}")
+        mod_name = name.removesuffix(".py")
+        mod = types.ModuleType(mod_name)
+        # `__file__` nella cartella del pacchetto: gli script ne ricavano la
+        # propria directory (`sys.path.insert(0, dirname(abspath(__file__)))`).
+        # Sul telefono quella cartella non ha i sorgenti, e non serve: i
+        # fratelli sono già in `sys.modules`.
+        script_dir = str(_packaged_wiki_scripts_dir())
+        mod.__file__ = os.path.join(script_dir, name)
+        logger.debug("Loading packaged wiki script %s", rel)
+        # Un `@dataclass` risale a `sys.modules[cls.__module__]` mentre la
+        # classe nasce: il modulo ci sta per la durata dell'exec.
+        before = sys.modules.get(mod_name)
+        sys.modules[mod_name] = mod
+        try:
+            # `_compile_script`, non `exec(code, ...)`: vedi lì il perché.
+            exec(_compile_script(source.decode("utf-8"), mod.__file__), mod.__dict__)
+        finally:
+            if before is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = before
+            # Lo script ha messo la propria cartella in testa a `sys.path`:
+            # toglierla evita che la lista cresca a ogni chiamata.
+            if script_dir in sys.path:
+                sys.path.remove(script_dir)
+        return mod
 
     def _wiki_root(root: str) -> str:
         """Porta *root* alla stessa base degli altri builtin, prima di passarlo.

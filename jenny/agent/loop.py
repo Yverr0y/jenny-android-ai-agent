@@ -19,6 +19,7 @@ from jenny.agent.hook import AgentHook, CompositeHook
 from jenny.agent.loop_provider import ProviderPresetMixin
 from jenny.agent.loop_tasks import LoopTasksMixin
 from jenny.agent.memory import Consolidator
+from jenny.agent.progress_events import on_progress_accepts_subagent_wait
 from jenny.agent.progress_hook import AgentProgressHook
 from jenny.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from jenny.agent.session_locks import SessionLocks
@@ -83,12 +84,13 @@ from jenny.session.history_meta import (
     SUBAGENT_RESULT_EVENT,
 )
 from jenny.session.keys import (
+    CRON_SESSION_PREFIX,
     PROJECT_SESSION_PREFIX,
     is_project_session_key,
     is_valid_project_name,
     session_key_for_channel,
 )
-from jenny.session.manager import Session, SessionManager
+from jenny.session.manager import Session, SessionManager, scrub_lone_surrogates
 from jenny.session.project_rename import (
     follow_renamed_project,
     pending_project_renames,
@@ -382,6 +384,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # directory delle sessioni, e due istanze avrebbero due cache
             # divergenti sugli stessi file.
             session_manager=self.sessions,
+            usage_hooks=self._measuring_hooks(),
         )
         self._max_messages = max_messages if max_messages > 0 else 120
         self._running = False
@@ -401,10 +404,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         # When a session has an active task, new messages for that session
         # are routed here instead of creating a new task.
         self._pending_queues: dict[str, asyncio.Queue] = {}
-        # Per-session monotonic timestamp dell'ultima attività del turno
-        # (progress/stream/reasoning/retry). Alimenta il watchdog di inattività
-        # in ``_dispatch`` che sblocca i turni bloccati (UI ferma su "running").
-        self._turn_activity: dict[str, float] = {}
         self._cron_turns = CronTurnCoordinator(
             publish_inbound=self.bus.publish_inbound,
             dispatch=self._dispatch,
@@ -429,6 +428,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             consolidation_ratio=consolidation_ratio,
             session_locks=self._session_locks,
             projects_subdir=projects_subdir,
+            usage_hooks=self._measuring_hooks(),
         )
         self.auto_compact = AutoCompact(
             sessions=self.sessions,
@@ -507,7 +507,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             **extra,
         )
 
-
     @property
     def tool_scope(self) -> str:
         """Scope con cui viene caricato il registry dell'agente principale."""
@@ -526,7 +525,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             cron_service=self.cron_service,
             sessions=self.sessions,
             timezone=self.context.timezone or "UTC",
-            workspace_sandbox=self.workspace_scopes.sandbox_status,
             runtime_events=self.runtime_events,
             android_context=get_android_context(),
             ui_query_service=self._ui_query,
@@ -721,14 +719,24 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         raw: str,
         dispatch_fn: Callable[[CommandContext], Awaitable[OutboundMessage | None]],
     ) -> None:
-        """Dispatch a command directly from the run() loop and publish the result."""
+        """Dispatch a command directly from the run() loop and publish the result.
+
+        Poi il turno si chiude, sempre e dopo la risposta: con cio' che il
+        comando ha lasciato da fare (``after_reply``, la chiusura del turno che
+        `/stop` e `/new` hanno fermato), o, a sessione ferma, con un
+        ``turn_end`` suo (v. :meth:`_close_if_idle`).
+        """
         ctx = CommandContext(msg=msg, session=None, key=key, raw=raw, loop=self)
         result = await dispatch_fn(ctx)
         if result:
             await self.bus.publish_outbound(result)
         else:
             logger.warning("Command '{}' matched but dispatch returned None", raw)
-
+        if ctx.after_reply:
+            for step in ctx.after_reply:
+                await step()
+        else:
+            await self._close_if_idle(msg, key)
 
     async def _refuse_reincarnated_project(self, msg: InboundMessage, key: str) -> bool:
         """Rifiuta il turno se la cartella al nome di *key* non e' la sua cartella.
@@ -1014,7 +1022,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         **Un nome che non puo' essere una conversazione ferma l'inseguimento**, e
         lo ferma *prima* di ``invalidate`` e prima del giornale. Il rinomino lo fa
         l'utente fuori da Jenny, quindi il nome nuovo non e' passato da nessun
-        controllo: portare la chat su ``project:Ricerca ETF`` la consegnerebbe a
+        controllo: portare la chat su ``project:Ricerca ETNA`` la consegnerebbe a
         una chiave che il canale rifiuta (``session_key_for_channel``) e che il
         chip non elenca — cioe' uno spostamento riuscito verso il nulla, mentre
         sotto il nome vecchio la chat funziona ancora. Il rifiuto e' anche il modo
@@ -1232,7 +1240,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         Il chiamante subito sotto confronta questo valore con ``msg.session_key``
         e, se differiscono, *riscrive il messaggio* con un override: una costante
         qui non ignorava la chiave del messaggio, la sovrascriveva. Un messaggio
-        mandato a ``project:patreon`` finiva percio' nella conversazione
+        mandato a ``project:ricette`` finiva percio' nella conversazione
         personale, e sul telefono si vedeva solo guardando quale file di sessione
         cresceva. Nessun test lo prendeva, perche' tutti provavano gli anelli e
         non la catena.
@@ -1341,6 +1349,18 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 return
             self._set_runtime_checkpoint(session, payload)
 
+        # I subagent gia' vivi quando il turno comincia: sono di un turno
+        # precedente, e ``_drain_pending`` non li aspetta.
+        # Prima l'attesa scattava per **qualunque** subagent vivo della
+        # sessione, e un «ciao» con un subagent di prima in giro teneva il turno
+        # aperto fino a 300 secondi. Il loro risultato non si perde: rientra dalla
+        # coda quando arriva, nel turno in corso se ne sta drenando, o come
+        # messaggio suo.
+        subagents_before = (
+            frozenset(self.subagents.get_running_ids_by_session(session.key))
+            if session is not None else frozenset()
+        )
+
         async def _drain_pending(*, limit: int = _MAX_INJECTIONS_PER_TURN) -> list[dict[str, Any]]:
             """Drain follow-up messages from the pending queue.
 
@@ -1348,13 +1368,18 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             spawned in this dispatch are still running, blocks until at
             least one result arrives (or timeout).  This keeps the runner
             loop alive so subsequent sub-agent completions are consumed
-            in-order rather than dispatched separately.
+            in-order rather than dispatched separately.  Sub-agents that
+            were already running when the dispatch began are not waited for.
             """
             if pending_queue is None:
                 return []
 
             def _to_user_message(pending_msg: InboundMessage) -> dict[str, Any]:
+                # La stessa pulizia di ``_process_message``: un messaggio iniettato
+                # a meta' turno non passa di li'.
                 content = pending_msg.content
+                if isinstance(content, str):
+                    content = scrub_lone_surrogates(content)
                 media = pending_msg.media if pending_msg.media else None
                 if media:
                     content, media = self._prepare_message_media(content, media)
@@ -1389,9 +1414,21 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # Block if nothing drained but sub-agents spawned in this dispatch
             # are still running.  Keeps the runner loop alive so subsequent
             # completions are injected in-order rather than dispatched separately.
-            if (not items
-                    and session is not None
-                    and self.subagents.get_running_count_by_session(session.key) > 0):
+            waiting_for = (
+                frozenset(self.subagents.get_running_ids_by_session(session.key))
+                - subagents_before
+                if not items and session is not None else frozenset()
+            )
+            if waiting_for:
+                # Fino a 300 secondi in cui il turno e' vivo e non manda niente:
+                # la risposta di stato e' gia' uscita, e il suo testo ha spento
+                # la riga di lavoro della casa, che restava spenta finche' un
+                # subagent non tornava (sette minuti, il 30/09/2026). Lo si dice
+                # una volta per attesa, prima di cominciarla: i frame che la
+                # seguono (ragionamento, strumenti, testo) prendono il posto di
+                # questo da soli.
+                if on_progress is not None and on_progress_accepts_subagent_wait(on_progress):
+                    await on_progress("", waiting_for_subagents=len(waiting_for))
                 try:
                     msg = await asyncio.wait_for(pending_queue.get(), timeout=300)
                 except asyncio.TimeoutError:
@@ -1428,6 +1465,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         request_token = bind_request_context(request_ctx)
         workspace_token = bind_workspace_scope(effective_scope)
         # Compute lazily because long_task may create goal metadata during this run.
+
         def _goal_continue() -> str | None:
             _goal_lines = goal_state_runtime_lines(session.metadata if session is not None else None)
             if not _goal_lines:
@@ -1461,22 +1499,30 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         async def _on_context_overflow(new_window: int) -> None:
             """Called by the runner when a context_length error occurs.
 
-            Shrinks the consolidator budget and triggers compaction so the
-            next retry has a chance of fitting within the model's limit.
+            Triggers compaction with the reduced window so the next retry has
+            a chance of fitting within the model's limit.
+
+            La finestra ridotta vale **per questo turno**: la porta lo ``spec``
+            del runner, e la compattazione qui la vede con
+            ``Consolidator.reduced_window``, legata al task del turno. Prima
+            finiva in ``self.context_window_tokens`` e nel Consolidator, cioe' in
+            ogni turno successivo di ogni sessione fino al riavvio:
+            un solo overflow — anche il falso allarme di un
+            provider che non dice il limite — dimezzava per sempre la storia
+            rimandata al modello. Un modello con una finestra davvero piu' piccola
+            si configura (``contextWindowTokens``), non si indovina qui.
             """
-            old_window = self.context_window_tokens
-            self.context_window_tokens = new_window
-            self.consolidator.set_provider(self.provider, self.model, new_window)
             logger.info(
-                "Context window reduced {} -> {}, triggering compaction",
-                old_window, new_window,
+                "Context window reduced {} -> {} for this turn, triggering compaction",
+                self.context_window_tokens, new_window,
             )
             if session is not None:
                 try:
-                    await self.consolidator.maybe_consolidate_by_tokens(
-                        session,
-                        replay_max_messages=self._max_messages,
-                    )
+                    with self.consolidator.reduced_window(new_window):
+                        await self.consolidator.maybe_consolidate_by_tokens(
+                            session,
+                            replay_max_messages=self._max_messages,
+                        )
                 except Exception:
                     logger.debug("Post-overflow compaction failed", exc_info=True)
 
@@ -1550,8 +1596,8 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             # supporto vision) e ha ritentato solo testo: avvisa in chat invece
             # di lasciare che sembri che l'allegato sia stato ignorato.
             notice = (
-                "\n\n⚠️ Le immagini allegate non sono state elaborate: "
-                "il modello attivo non supporta input visivi."
+                "\n\n⚠️ The attached images were not processed: "
+                "the active model does not support image input."
             )
             result.final_content += notice
             if result.messages and result.messages[-1].get("role") == "assistant":
@@ -1589,10 +1635,18 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 now = time.monotonic()
                 if now - self._last_ttl_check >= self._TTL_CHECK_INTERVAL_S:
                     self._last_ttl_check = now
-                    self.auto_compact.check_expired(
-                        self._schedule_background,
-                        active_session_keys=self._pending_queues.keys(),
-                    )
+                    # Siamo dentro un gestore ``except``: un'eccezione qui non
+                    # e' ripresa dall'``except Exception`` gemello e uscirebbe
+                    # da ``run()`` — cioe' il gateway giu' per un file di
+                    # sessione rovinato, e giu' di nuovo a ogni riavvio finche'
+                    # il file resta. Il giro TTL non deve poter spegnere il loop.
+                    try:
+                        self.auto_compact.check_expired(
+                            self._schedule_background,
+                            active_session_keys=self._pending_queues.keys(),
+                        )
+                    except Exception:
+                        logger.exception("Auto-compact TTL check failed; continuing")
                 continue
             except asyncio.CancelledError:
                 # Preserve real task cancellation so shutdown can complete cleanly.
@@ -1608,10 +1662,14 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             effective_key = self._effective_session_key(msg)
             # Prima di tutto il resto, ``/init`` compreso: se la cartella legata
             # non c'e' piu', il turno non parte.
+            # Un rifiuto e' una risposta: il turno si chiude dopo, come quello
+            # di un comando (v. `_close_if_idle`).
             if await self._refuse_missing_project(msg, effective_key):
+                await self._close_if_idle(msg, effective_key)
                 continue
             # La cartella c'e' — ma e' **quella**? Il nome non basta a dirlo.
             if await self._refuse_reincarnated_project(msg, effective_key):
+                await self._close_if_idle(msg, effective_key)
                 continue
             # La cartella c'e': la sessione si annota di chi e', cosi' il giorno
             # che la cartella cambia nome c'e' da dove ripartire (passo 7).
@@ -1619,12 +1677,14 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             if raw == PROJECT_INIT_COMMAND or raw.startswith(f"{PROJECT_INIT_COMMAND} "):
                 expanded = await self._expand_project_init(msg, effective_key)
                 if expanded is None:
+                    await self._close_if_idle(msg, effective_key)
                     continue
                 msg = expanded
                 raw = msg.content.strip()
             if raw == PROJECT_TIDY_COMMAND or raw.startswith(f"{PROJECT_TIDY_COMMAND} "):
                 expanded = await self._expand_project_tidy(msg, effective_key)
                 if expanded is None:
+                    await self._close_if_idle(msg, effective_key)
                     continue
                 msg = expanded
                 raw = msg.content.strip()
@@ -1778,8 +1838,11 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                             meta["_stream_delta"] = True
                             meta["_stream_id"] = _current_stream_id()
                             # Transient live-preview: non bloccante, scartabile
-                            # sotto backpressure (la risposta finale autoritativa
-                            # è pubblicata a parte più sotto).
+                            # sotto backpressure. Il finale del turno è
+                            # ``_streamed`` e alla WebUI non si rispedisce: a
+                            # recuperare un delta perso è il bus, che mette il
+                            # testo intero sullo ``stream_end`` di quello stream
+                            # (v. ``MessageBus.try_publish_outbound``).
                             self.bus.try_publish_outbound(OutboundMessage(
                                 channel=msg.channel, chat_id=msg.chat_id,
                                 content=delta,
@@ -1835,13 +1898,15 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                         error=asyncio.CancelledError(),
                     )
                     logger.info("Task cancelled for session {}", session_key)
-                    # Preserve partial context from the interrupted turn so
-                    # the user does not lose tool results and assistant
-                    # messages accumulated before /stop.  The checkpoint was
-                    # already persisted to session metadata by
-                    # _emit_checkpoint during tool execution; materializing
-                    # it into session history now makes it visible in the
-                    # next conversation turn.
+                    # Il contesto parziale del turno interrotto non va perso.
+                    # Il checkpoint e' gia' nei metadata della sessione
+                    # (``AgentRunner._emit_checkpoint``, a ogni fase del turno),
+                    # e porta il turno *intero*: le
+                    # iterazioni chiuse in ``prior_messages``, i messaggi
+                    # iniettati, e l'iterazione in volo con le sue tool call.
+                    # Materializzarlo ora lo rende visibile al turno dopo; prima
+                    # portava solo l'ultima iterazione, e le tool call di quelle
+                    # precedenti — che avevano girato — sparivano dalla storia.
                     # Un turno RIPUDIATO (epoch bumpato da /stop o /new) salta
                     # il ripristino: lo ha già fatto il comando in modo
                     # sincrono, e questo handler può girare molto più tardi
@@ -1922,6 +1987,7 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                         await self._cron_turns.publish_next_deferred(session_key)
         finally:
             reset_turn_id(turn_id_token)
+            self._release_job_python_globals(session_key)
             if current_task is not None:
                 self._turn_tokens_by_task.pop(current_task, None)
             if pending is None and self._turn_epochs.is_current(turn_token):
@@ -1930,7 +1996,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 )
                 self._runtime_events().clear_turn(session_key)
                 await self._cron_turns.publish_next_deferred(session_key)
-
 
     async def _process_system_message(
         self,
@@ -2114,6 +2179,13 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         turn_token: TurnToken | None = None,
     ) -> TurnOutcome:
         """Process a single inbound message and return its outcome."""
+        # Un surrogato UTF-16 isolato (un frame tagliato dentro un'emoji) diventa
+        # U+FFFD qui, al confine del turno: arrivato in sessione, faceva fallire
+        # ogni salvataggio fino al riavvio.
+        if isinstance(msg.content, str):
+            clean = scrub_lone_surrogates(msg.content)
+            if clean != msg.content:
+                msg = dataclasses.replace(msg, content=clean)
         if msg.channel == "system":
             return await self._process_system_message(
                 msg,
@@ -2309,7 +2381,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             metadata=meta,
         )
 
-
     def _append_channel_delivery(
         self, session_key: str, content: str, media: list[str] | None
     ) -> None:
@@ -2381,6 +2452,26 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
             self._record_channel_delivery_locked(session_key, content, media)
         )
 
+    def _release_job_python_globals(self, session_key: str) -> None:
+        """Libera i globali ``python_exec`` di un job a fine turno.
+
+        La sessione di un monitor (``cron:<id>``) è una per job, e un run non
+        deve ritrovare le variabili del run prima: il job ricorda i propri run
+        dalla storia, non da uno stato nascosto in memoria. Senza, i globali di
+        ogni job mai girato restavano fino al riavvio. Sincrona di proposito: si
+        chiama prima di ogni ``await`` del ``finally``, così il turno dopo della
+        stessa sessione, in coda sul lock, non è ancora partito.
+        """
+        if not session_key.startswith(CRON_SESSION_PREFIX):
+            return
+        tool = self.tools.get("python_exec") if self.tools is not None else None
+        forget = getattr(tool, "forget_session", None)
+        if callable(forget):
+            try:
+                forget(session_key)
+            except Exception:  # noqa: BLE001 — la pulizia non deve rompere la chiusura del turno
+                logger.debug("python_exec globals of {} not released", session_key, exc_info=True)
+
     def forget_file_reads(self, session_key: str) -> None:
         """Dichiara che *session_key* non contiene piu' il contenuto di nessun file.
 
@@ -2390,6 +2481,16 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         l'ha mai visto.
         """
         self._file_state_store.drop(session_key)
+
+    def _measuring_hooks(self) -> list[AgentHook]:
+        """Gli hook di misura, da montare anche fuori dai turni del loop.
+
+        Sono quelli che dichiarano ``runs_when_ephemeral`` — misurare non è
+        parlare, e oggi è solo ``TokenUsageHook``. Vanno ai subagent e al
+        Consolidator, che chiamano il provider fuori da un turno di questo loop
+        e la cui spesa altrimenti non si contava.
+        """
+        return [hook for hook in self._extra_hooks if hook.runs_when_ephemeral()]
 
     def active_session_keys(self) -> tuple[str, ...]:
         """Le sessioni con un turno in volo **adesso**.
@@ -2402,6 +2503,29 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
         quella conversazione e' in volo.
         """
         return tuple(self._pending_queues)
+
+    def busy_session_keys(self) -> tuple[str, ...]:
+        """Le sessioni sotto cui qualcosa sta scrivendo **adesso**, non solo i turni.
+
+        Piu' largo di :meth:`active_session_keys`, che resta com'e' perche'
+        l'autocompact e il giardiniere la leggono con quel significato. Qui si
+        aggiungono gli altri tre scrittori che portano il nome di una
+        conversazione di progetto: un subagent lanciato da li', che sopravvive al
+        turno e a fine lavoro scrive record e annuncio sotto la chiave d'origine;
+        una passata del giardiniere, che scrive nella cartella della wiki; e
+        l'autocompact, che compattando o raccogliendo il diario rilegge e salva la
+        sessione dopo una chiamata LLM. Lo chiedono ``project.rename`` e
+        ``project.delete``: spostare o cancellare una sessione mentre uno di
+        questi ci scrive lascia una chat sotto il nome vecchio, senza cartella.
+        """
+        from jenny.agent.gardener import passes_in_flight
+        from jenny.session.keys import project_session_key
+
+        keys = dict.fromkeys(self._pending_queues)
+        keys.update(dict.fromkeys(self.subagents.active_origin_session_keys()))
+        keys.update(dict.fromkeys(project_session_key(n) for n in sorted(passes_in_flight())))
+        keys.update(dict.fromkeys(self.auto_compact.busy_session_keys()))
+        return tuple(keys)
 
     async def process_direct(
         self,
@@ -2513,5 +2637,6 @@ class AgentLoop(StateHandlersMixin, ProviderPresetMixin, TurnPersistenceMixin, L
                 )
         finally:
             reset_turn_id(turn_id_token)
+            self._release_job_python_globals(session_key)
             await self._runtime_events().run_status_changed(msg, session_key, "idle")
             self._runtime_events().clear_turn(session_key)

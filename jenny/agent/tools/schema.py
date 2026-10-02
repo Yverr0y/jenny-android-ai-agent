@@ -11,7 +11,7 @@ Note: Python does not allow subclassing ``bool``, so booleans use :class:`Boolea
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from jenny.agent.tools.base import Schema
@@ -80,56 +80,32 @@ class StringSchema(Schema):
         return d
 
 
-class IntegerSchema(Schema):
-    """Integer parameter: optional placeholder int (legacy ctor signature), description, and bounds."""
+class _NumericSchema(Schema):
+    """Base dei due schemi numerici: stessi campi, cambia solo il tipo JSON.
+
+    ``IntegerSchema`` e ``NumberSchema`` erano due copie identiche a parte la
+    parola ``"integer"``/``"number"``. Argomenti solo keyword: un posizionale era
+    una descrizione che si perdeva (v. il commit che li ha resi tali).
+    """
+
+    _JSON_TYPE = ""
+    # I tipi Python ammessi per limiti ed enum. ``bool`` e' un ``int`` per Python
+    # ma non per JSON Schema, quindi si esclude a parte.
+    _VALUE_TYPES: tuple[type, ...] = (int, float)
 
     def __init__(
         self,
-        value: int = 0,
-        *,
-        description: str = "",
-        minimum: int | None = None,
-        maximum: int | None = None,
-        enum: tuple[int, ...] | list[int] | None = None,
-        nullable: bool = False,
-    ) -> None:
-        self._value = value
-        self._description = description
-        self._minimum = minimum
-        self._maximum = maximum
-        self._enum = tuple(enum) if enum is not None else None
-        self._nullable = nullable
-
-    def to_json_schema(self) -> dict[str, Any]:
-        t: Any = "integer"
-        if self._nullable:
-            t = ["integer", "null"]
-        d: dict[str, Any] = {"type": t}
-        if self._description:
-            d["description"] = self._description
-        if self._minimum is not None:
-            d["minimum"] = self._minimum
-        if self._maximum is not None:
-            d["maximum"] = self._maximum
-        if self._enum is not None:
-            d["enum"] = list(self._enum)
-        return d
-
-
-class NumberSchema(Schema):
-    """Numeric parameter (JSON number): description and optional bounds."""
-
-    def __init__(
-        self,
-        value: float = 0.0,
         *,
         description: str = "",
         minimum: float | None = None,
         maximum: float | None = None,
-        enum: tuple[float, ...] | list[float] | None = None,
+        enum: Sequence[float] | None = None,
         nullable: bool = False,
     ) -> None:
-        self._value = value
+        values = [v for v in (minimum, maximum) if v is not None] + list(enum or ())
+        for value in values:
+            if isinstance(value, bool) or not isinstance(value, self._VALUE_TYPES):
+                raise TypeError(f"{type(self).__name__} bound {value!r} is not a valid value")
         self._description = description
         self._minimum = minimum
         self._maximum = maximum
@@ -137,9 +113,9 @@ class NumberSchema(Schema):
         self._nullable = nullable
 
     def to_json_schema(self) -> dict[str, Any]:
-        t: Any = "number"
+        t: Any = self._JSON_TYPE
         if self._nullable:
-            t = ["number", "null"]
+            t = [self._JSON_TYPE, "null"]
         d: dict[str, Any] = {"type": t}
         if self._description:
             d["description"] = self._description
@@ -150,6 +126,41 @@ class NumberSchema(Schema):
         if self._enum is not None:
             d["enum"] = list(self._enum)
         return d
+
+
+class IntegerSchema(_NumericSchema):
+    """Integer parameter: description and optional bounds (keyword-only).
+
+    Limiti ed enum sono interi, e un float si rifiuta: ``minimum=0.5`` su un
+    parametro intero annuncia al modello uno schema che nessun valore valido
+    rispetta nel modo in cui sembra.
+    """
+
+    _JSON_TYPE = "integer"
+    _VALUE_TYPES = (int,)
+
+    def __init__(
+        self,
+        *,
+        description: str = "",
+        minimum: int | None = None,
+        maximum: int | None = None,
+        enum: Sequence[int] | None = None,
+        nullable: bool = False,
+    ) -> None:
+        super().__init__(
+            description=description,
+            minimum=minimum,
+            maximum=maximum,
+            enum=enum,
+            nullable=nullable,
+        )
+
+
+class NumberSchema(_NumericSchema):
+    """Numeric parameter (JSON number): description and optional bounds (keyword-only)."""
+
+    _JSON_TYPE = "number"
 
 
 class BooleanSchema(Schema):

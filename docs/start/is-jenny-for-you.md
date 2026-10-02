@@ -8,11 +8,11 @@ A short, honest checklist before you spend time installing it.
 - You have a spare Android phone doing nothing, and like the idea of turning it into an always-on AI device (see [Set it as your launcher](launcher-setup.md) for the "dedicated device" option).
 - You'd rather hold your own API key and pay your provider directly than rent another subscription.
 - You enjoy reading the source of things you run, or at least want the option to.
-- You're fine with a sideloaded app: no Play Store, no App auto-updates, checking back for new releases yourself.
+- You're fine with a sideloaded app: no Play Store, nothing updates itself: Jenny checks daily for a new release and can install it when you say so, but Android still shows its own install prompt.
 
 ## Probably not, if
 
-- You want a polished one-tap install today. Jenny is a pre-release prototype: it works, but onboarding has rough edges and things are still being tightened.
+- You want a polished one-tap install from a store. Jenny is sideloaded and built by one person: it works, but onboarding still has rough edges and things are still being tightened.
 - You're on iOS. Android is the only supported runtime — this is not a temporary gap, the whole design assumes a device you own that stays powered on.
 - You want a feature-complete launcher. Jenny can act as your Android home screen, but it has no widgets, no folders, no icon packs, no wallpaper management. The launcher part is a means to being present, not an end in itself — see [Set it as your launcher](launcher-setup.md).
 - You need something audited and hardened before pointing it at models or content you don't trust. `python_exec` runs arbitrary Python in-process and is explicitly not a sandbox, prompt injection is not solved (nobody's is), and provider API keys are stored in plain text in the workspace. None of this is hidden — see the security model page — but if that's a dealbreaker for your use case, know it going in.

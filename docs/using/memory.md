@@ -43,7 +43,7 @@ It is not the final memory — it's the raw material Dream later shapes into som
 - **Token pressure**: once the conversation gets close to filling the configured context window, older messages are summarized and archived so the newest turns keep fitting.
 - **Idle timeout**: if the chat has been idle for a while (15 minutes by default — see [Configuration](../reference/configuration.md) for `idleCompactAfterMinutes`), the session is auto-compacted the same way.
 
-If the LLM call that produces the summary fails, the Consolidator falls back to a raw `[RAW]` dump of the messages instead of losing them — you get less polish, but nothing disappears.
+If the LLM call that produces the summary fails, nothing is thrown away. Idle compaction of the personal chat simply doesn't happen: the conversation is left intact and the compaction is retried about ten minutes later. Token-pressure compaction leaves the slice unconsolidated and retries on the next turn; only when it has failed in **three turns in a row** on the same session does it fall back to a raw `[RAW]` dump of the messages into `history.jsonl` and move on — less polish, but the content is kept. What counts is turns, not attempts: a turn tries more than once (before the prompt, after saving, after an overflow), and those retries count as one failure. The count lives in memory, so an app restart starts it again from zero.
 
 ### Stage 2: Dream
 
@@ -51,7 +51,7 @@ Dream is the slower, more thoughtful layer. By default it runs automatically eve
 
 Each Dream run:
 
-1. Reads new, unprocessed entries from `memory/history.jsonl` (up to 20 entries per run, each truncated to 500 characters).
+1. Reads new, unprocessed entries from `memory/history.jsonl`, each one **whole** — up to 20 entries per run, within a budget of 16,000 characters. An entry that doesn't fit waits for the next run instead of being cut; the first entry of a run is always read, even if it alone is longer than the budget.
 2. Reads the current `SOUL.md`, `USER.md`, and `memory/MEMORY.md`.
 3. Edits those long-term files — and skill files under `workspace/skills/<name>/SKILL.md` — surgically, in a single pass, using a restricted set of file-editing tools.
 
@@ -60,6 +60,8 @@ Dream doesn't rewrite everything from scratch; it makes the smallest honest chan
 Because of that, Jenny takes a workspace snapshot right before every Dream run. If Dream ever prunes or rewrites something you wanted kept, that snapshot is your way back — see [Backup and restore](./backup.md) for how to browse and restore snapshots. The snapshot attempt is best-effort: if it fails for some reason, Dream still runs (the safety net just wouldn't be there for that one pass).
 
 Dream's cursor into `history.jsonl` only advances once a run completes cleanly **and** actually manages to write something (or has nothing to write in the first place). If Dream gets blocked or a write fails partway through, the cursor stays put and those entries are retried on the next run — nothing is silently skipped.
+
+A run reads a *window* of unprocessed entries — at most 20, and at most 16,000 characters of whole entries (an entry is never cut; the first one always fits). Personal and [notebook](./projects.md) entries are never mixed in one batch, because they get different instructions and different tools. When the window holds both kinds, it is split: a first batch takes every entry of the oldest entry's kind, and a second batch, on the same window, takes the others. There is still a single cursor. It moves to the end of the window only when both batches land. If only the first lands, the cursor stops after the uninterrupted run of that kind at the start of the window, and everything past it comes back next run — the facts the first batch already saved are found on disk and reported as already present, which costs a re-read, not a fact.
 
 "Wrote something" is not the same as "saved the batch", and the difference is worth stating because it cost real entries. A run can obey the first half of an over-budget refusal — free some space by rewriting an existing line shorter — and then stop without adding the new fact. Every counter reads healthy: a write succeeded, no refusal is outstanding. So Dream also checks, at the end of each run, whether **any** memory file grew. If a memory file was already near its budget when the run started, the batch carried facts tagged for retention, and nothing grew, the cursor is held and those entries come back next run, which is also what pulls in the review pass that frees room. The "near its budget" part is what keeps this quiet: without it the check fires on every batch of facts Jenny already knows, which is most of them — the consolidator re-extracts the same facts each pass. Below that mark, a run that adds nothing is believed. This is a size heuristic, not a proof: a run that legitimately replaces a line with a shorter one carrying the new fact reads as "nothing landed" and gets replayed a few times. That is the cheap direction to be wrong in — the expensive one is losing the fact — and the replay is bounded: after four held runs Dream gives up on the batch, advances, and the stuck alarm has already fired.
 
@@ -75,7 +77,7 @@ The system prompt of the personal chat carries a `## Wikis` block: one line per 
 
 That is deliberately all it carries. The prompt knows your wikis by name and scope; the content is read when a question touches it — Jenny opens `wikis/<name>/wiki/index.md` before answering about one of those subjects, and greps `wikis/` when she needs to know whether something is recorded anywhere. A wiki whose scope line is missing shows up as `(no scope set)`, on purpose: a wiki whose one line is not enough to decide whether to open it is a wiki that needs a scope, or needs splitting.
 
-Two things follow. The block is withheld from [project](./projects.md) conversations and from [gardener](./gardener.md) passes — inside a project, the list of your other subjects is exactly the cross-project inventory the boundary keeps out. And there is no compiled directory of entities any more: versions before 0.10.0 built one from the wikis with a periodic job (Atlas) into `memory/WIKI.md`. That job, its config block and its files are removed at the first start of a version without it; nothing you wrote is touched.
+Two things follow. The block is withheld from [notebook](./projects.md) conversations and from [gardener](./gardener.md) passes — inside a notebook, the list of your other subjects is exactly the cross-project inventory the boundary keeps out. And there is no compiled directory of entities any more: versions before 0.10.0 built one from the wikis with a periodic job (Atlas) into `memory/WIKI.md`. That job, its config block and its files are removed at the first start of a version without it; nothing you wrote is touched.
 
 ## The files
 
@@ -93,6 +95,7 @@ workspace/
 These files play different roles:
 
 - `SOUL.md` remembers how Jenny should behave and sound — guardrails, interaction patterns, tool-use strategy.
+- `.jenny/soul_rules.md` holds the standing rules **you** wrote, from **Settings → Jenny**. Dream's write registry allows exactly `SOUL.md`, `USER.md`, `memory/MEMORY.md` and `skills/<name>/SKILL.md`, so no consolidation pass can touch that file; a marked block inside `SOUL.md` carries a copy, which is what the prompt reads, and it is re-projected after every pass. A line a pass wrote inside that block is not yours, so the re-projection moves it right after the block instead of deleting it. Emptying the box removes both.
 - `USER.md` remembers who you are and what you prefer — identity, habits, language, tone, reply length.
 - `MEMORY.md` remembers what remains true about the work itself — goals, decisions, infrastructure.
 - `history.jsonl` remembers what happened on the way there, as compressed, timestamped summaries.
@@ -104,7 +107,7 @@ All of these are plain text in your workspace. You can read them, edit them by h
 
 `history.jsonl` replaced an older, more casual "history as prose" format because it needed to be an operational substrate, not just pleasant reading. The JSON-lines format gives Jenny stable incremental cursors, safer machine parsing, easier batching per Dream run, and a cleaner boundary between raw history and curated knowledge. It's capped at **1000 entries**; once the cap is reached, the oldest entries are dropped to make room for new ones as the file is compacted.
 
-You can search it yourself with the `python_exec` tool or by asking Jenny to `grep` it, if you ever want to see exactly what got archived.
+You can search it yourself with the `python_exec` tool or by asking Jenny to `grep` it, if you ever want to see exactly what got archived. Jenny reads it herself with the `recall_history` tool, from the personal chat only (inside a project the tool refuses). That tool lists **every** entry in the file, not just the personal chat's: the journals of your projects (notebooks) are included, and so are entries hidden from the prompt with `prompt_visible=False` — such as the conversation `/new` just archived.
 
 ## What Jenny actually remembers when you open a new chat
 
@@ -123,19 +126,19 @@ Note the asymmetry in that list. The pending history is *capped* at injection ti
 
 | Command | What it does |
 |---------|--------------|
-| `/dream` | Runs Dream immediately instead of waiting for the next scheduled pass. Replies "Dreaming..." right away, then follows up with the outcome once it finishes (completed and how long it took, completed-but-wrote-nothing, failed, or nothing to process). When a review pass ran first, the note also says how many characters it freed, how many facts it moved into `memory/archive/` (with the ids to ask for them back), and how many writes were refused by a size budget and never landed — that last one is usually the explanation for "nothing was freed". |
+| `/dream` | Runs Dream immediately instead of waiting for the next scheduled pass. Replies "Dreaming..." right away, then follows up with the outcome once it finishes (completed and how long it took; completed but consolidated nothing from its batch, in which case the memory cursor stays put and those entries come back next run; completed but wrote nothing because its attempts were blocked or refused; did not complete; failed; or nothing to process). If another Dream cycle is already running it does not start a second one and says so instead of "Dreaming...". The exact texts are in [Slash commands](./slash-commands.md#dream--run-memory-consolidation-now). When a review pass ran first, the note also says how many characters it freed, how many facts it moved into `memory/archive/` (with the ids to ask for them back), and how many writes were refused by a size budget and never landed — that last one is usually the explanation for "nothing was freed". |
 
-It is a verb: it does something now, and takes no settings. It is also a **personal-chat command** — inside a [project](./projects.md) it is refused, because a project conversation never feeds the personal memory. See [Slash commands](./slash-commands.md#where-a-command-works).
+It is a verb: it does something now, and takes no settings. It is also a **personal-chat command** — inside a [notebook](./projects.md) it is refused. See [Slash commands](./slash-commands.md#where-a-command-works).
 
-## The knobs: Settings → Memory
+## The knobs: the workshop's Memory drawer
 
-The budgets and the review cadence used to be arguments of `/dream`. They are settings, so they live in **Settings → Memory**, next to what they act on:
+The budgets and the review cadence used to be arguments of `/dream`. They are settings, so they live in the workshop's **Memory** drawer (the workshop opens from the bottom of the home's Settings page), next to what they act on — the file sizes under «How much she remembers», the schedule and review cadence under «Dream — who fills those three files»:
 
 | Control | What it does |
 |---------|--------------|
 | Periodic consolidation | Whether Dream runs on its own, and how many hours between runs. Turning it on or off applies immediately — no restart. |
 | Review pass every N runs | How often the shrinking pass runs. Below **12** the screen asks for an explicit confirmation before writing it, with the measured reason in the dialog. [Why there is a floor.](#the-review-cadence-has-a-floor-of-12-and-it-is-enforced) |
-| File budgets | One field per file — `MEMORY.md`, `USER.md`, `SOUL.md` — each shown with **what that file currently measures**, so the budget is chosen from the real number rather than guessed. `0` means measure and never refuse. |
+| File budgets | The group shows each file — `MEMORY.md`, `USER.md`, `SOUL.md` — with **what it currently measures** against its budget, so the budget is chosen from the real number rather than guessed. The three fields themselves sit behind **Change the budgets**. `0` means measure and never refuse. |
 
 Every change goes through the config write funnel and takes effect on the next run. That surface exists because raising a default in a new version of the app does **not** reach a `config.json` that has already been written: the file wins, so there has to be a way to change it that is not a root shell.
 
@@ -151,7 +154,7 @@ Dream's configuration lives under `agents.defaults.dream` in `config.json`, and 
         "enabled": true,
         "intervalH": 2,
         "memoryBudgetChars": 3000,
-        "userBudgetChars": 3000,
+        "userBudgetChars": 4000,
         "soulBudgetChars": 0,
         "reviewEveryRuns": 12
       }
@@ -165,15 +168,15 @@ Dream's configuration lives under `agents.defaults.dream` in `config.json`, and 
 | `enabled` | Whether the periodic Dream job is registered at all. | `true` |
 | `intervalH` | How often Dream runs automatically, in hours. Internally this becomes an "every N hours" schedule. | `2` |
 | `memoryBudgetChars` | Target size for `memory/MEMORY.md`, in characters. Dream sees how full the file is in every prompt, and a Dream write that would push it further over the line is refused — a write that *shrinks* it is always allowed, or an over-budget file could never be pruned. `0` means "measure, don't enforce". | `3000` |
-| `userBudgetChars` | The same for `USER.md`. | `3000` |
-| `soulBudgetChars` | The same for `SOUL.md` — and it ships at `0` on purpose. That file mixes Jenny's identity, which must never be pruned, with notes that belong elsewhere, and a size limit cannot tell the two apart. The review pass reads before it decides; the limit does not. | `0` |
+| `userBudgetChars` | The same for `USER.md`. It ships 1,000 characters higher than `MEMORY.md` because identity facts said inside notebooks also land here (see the gotcha on notebook conversations below). | `4000` |
+| `soulBudgetChars` | The same for `SOUL.md` — and it ships at `0` on purpose. That file mixes Jenny's identity, which must never be pruned, with notes that belong elsewhere, and a size limit cannot tell the two apart. The review pass reads before it decides; the limit does not. The block with your own standing rules is not counted: the budget bounds what Dream writes, and those lines are yours. | `0` |
 | `reviewEveryRuns` | Every how many Dream runs the **review pass** runs: a pass whose only job is to make the files smaller, rather than to add to them. At the default interval, twelve runs is about once a day. **Settings asks for a confirmation below 12** — see below. Editing `config.json` by hand is not blocked (the schema still accepts any value from `1` up, so a restored config always loads), but 12 is the number the design assumes. | `12` |
 
 The budgets are counted in **characters**, not tokens, because that is the only unit the model can count while it is writing.
 
 **These caps bind Dream, not Jenny.** The refusal is mounted only on the tools Dream's own runs get. The tools Jenny uses while you are talking to her carry no size guard at all, so a chat turn can write past a budget and nothing stops it — measured on a real device at 2,399 characters against a cap of 2,400. That is deliberate. A refusal in the middle of a conversation would land on the one writer that has you sitting there, and it would trade a visible failure for an invisible one: the thing you just asked Jenny to remember would quietly not be saved. So for the main agent the numbers are **advisory** — the size the review pass aims for, not a wall. They are enforced where the writer is unattended and has a review pass behind it to make room.
 
-The cost of that choice is worth knowing: a chat turn can leave a file saturated, and it is Dream that then finds no room. If you see Dream reporting that it consolidated nothing, a file already at its cap is the first thing to check — Settings → Memory shows each file's size against its budget.
+The cost of that choice is worth knowing: a chat turn can leave a file saturated, and it is Dream that then finds no room. If you see Dream reporting that it consolidated nothing, a file already at its cap is the first thing to check — the workshop's Memory drawer shows each file's size against its budget.
 
 **Being over budget is not an error.** It means the next thing Dream wants to add has to wait for the review pass to make room — usually by *moving* something to where it belongs (a task specification to a skill file, project context to `MEMORY.md`) rather than by forgetting it.
 
@@ -183,34 +186,34 @@ A cadence below **12** runs does not get written without an explicit confirmatio
 
 Losing them is no longer possible. Every entry that leaves `USER.md` or `memory/MEMORY.md` is written to `memory/archive/` before the shrinking write lands, whichever tool does the shrinking — measured over two runs at `reviewEveryRuns: 1`, ten entries were archived and nothing was lost. So the floor is not there to stop deletion any more. It is there because a faster cadence spends tokens on every Dream run, unattended, for pruning that has nothing left to prune, and 12 is the cadence the rest of the design assumes.
 
-If you want a faster cadence anyway — measuring on a real device is the reason this path exists — typing a value below the floor in Settings → Memory raises a dialog carrying those measurements, and only an explicit yes writes it. Setting it back to 12 needs no confirmation.
+If you want a faster cadence anyway — measuring on a real device is the reason this path exists — typing a value below the floor in the workshop's Memory drawer raises a dialog carrying those measurements, and only an explicit yes writes it. Setting it back to 12 needs no confirmation.
 
 It used to be a confirmation *phrase* to retype (`/dream budget review 1 i-accept-back-to-back-reviews`), for the same reason the dialog exists now: it should be something you decide, not something that gets added for you. A tap that has just read the numbers is that decision; a tap that has not is why the dialog carries them.
 
 ### The budgets bound what Dream writes, not what a turn pays
 
-These are budgets on the *files*, not on the prompt. There is no read-side cap on `SOUL.md`, `USER.md` or `memory/MEMORY.md`: each one is injected into the system prompt whole, on every turn, however long it has become — and `SOUL.md` has no write-side budget either, since `soulBudgetChars` ships at `0`. Everything else injected alongside them *is* capped: the unprocessed history at ~8,000, the page content inside a [project](./projects.md) at 6,000 characters. The three durable files are the deliberate exception. (`AGENTS.md` is a fourth file loaded unfiltered, and it has no budget and no curator at all — that one is an open question, not a decision.)
+These are budgets on the *files*, not on the prompt. There is no read-side cap on `SOUL.md`, `USER.md` or `memory/MEMORY.md`: each one is injected into the system prompt whole, on every turn, however long it has become — and `SOUL.md` has no write-side budget either, since `soulBudgetChars` ships at `0`. Everything else injected alongside them *is* capped: the unprocessed history at ~8,000, the page content inside a [notebook](./projects.md) at 6,000 characters. The three durable files are the deliberate exception. (`AGENTS.md` is a fourth file loaded unfiltered, and it has no budget and no curator at all — that one is an open question, not a decision.)
 
 The reason is that a cap at injection time would be a limit with nobody behind it. What actually keeps these files small is the review pass: it reads a file before deciding, and *moves* what doesn't belong there rather than dropping it. That is what took `SOUL.md` from 6,447 characters to about 2,100 in under a week — by relocating platform notes into the app's own bundled templates, where they get rewritten at every boot. A cap can't do that. It can't tell Jenny's identity from a stale implementation note; it would cut whichever of the two happens to sit at the end of the file, on every turn, and report it to nobody who could act. A refused write, by contrast, leaves the file intact and tells the writer, the log, the counters and — if it keeps happening — you.
 
 The other half of the reason is that these files are terminal. A truncated line in the `## Wikis` block costs you a pointer, and the wiki it named is still one `read_file` away; the tail of `USER.md` is not written down anywhere else, so a "the rest is over there" notice would have nothing to point at.
 
-What that leaves you responsible for: the system prompt is a fixed cost, so if these files ever do get big, it's the live conversation that gets compacted earlier to make room. The sizes in Settings → Memory are the numbers to watch, and they are numbers to act on rather than a wall that will act for you.
+What that leaves you responsible for: the system prompt is a fixed cost, so if these files ever do get big, it's the live conversation that gets compacted earlier to make room. The sizes in the workshop's Memory drawer are the numbers to watch, and they are numbers to act on rather than a wall that will act for you.
 
 ### Related settings, and where to change them
 
 Related settings that shape *when* material reaches Dream in the first place (not Dream-specific, but relevant here) live under `agents.defaults` too: `idleCompactAfterMinutes` (idle-triggered compaction, default 15 minutes), `maxMessages` (default 120), and the consolidation ratio that controls how aggressively old messages are summarized (default 0.5). See [Configuration](../reference/configuration.md) for the full reference.
 
-**Settings → Memory** covers Dream itself: the on/off switch, the interval, the review cadence, and the three file budgets with their current sizes. What is still config-only is the material *around* it — the compaction thresholds in this paragraph — which can only be changed by editing `config.json` directly. The memory files themselves need no special mode to see: `SOUL.md`, `USER.md`, `memory/MEMORY.md`, and `memory/history.jsonl` are all visible from the Workspace file browser by default. The only things the file browser hides by default are dotfiles and a handful of runtime-internal paths (`config.json`, `agent/`, `cron/`, `sessions/`, `ui/`) — including the `memory/.cursor` and `memory/.dream_cursor` cursor files, which are dotfiles. Turning on **Developer mode** in Settings → System reveals those too, but it has no effect on the memory files themselves, which were never hidden.
+The workshop's **Memory** drawer covers Dream itself: the on/off switch, the interval, the review cadence, and the three file budgets with their current sizes. What is still config-only is the material *around* it — the compaction thresholds in this paragraph — which can only be changed by editing `config.json` directly. The memory files themselves need no special mode to see: `SOUL.md`, `USER.md`, `memory/MEMORY.md`, and `memory/history.jsonl` are all visible in the file browser («The real files», at the bottom of the same drawer). What the file browser never lists are dotfiles and a handful of runtime-internal paths (`config.json`, `agent/`, `cron/`, `sessions/`, `ui/`) — including the `memory/.cursor` and `memory/.dream_cursor` cursor files, which are dotfiles. There is no switch to reveal them any more: the old developer-mode toggle was removed.
 
 ## Gotchas worth knowing
 
-- **"Every 2 hours" is a floor, not a promise.** Since 0.6.0 the deadline survives an app restart and a run missed while the app was dead is caught up shortly after it comes back — before that, every restart pushed it out by another 2 hours. The second half of the problem was doze: with the screen off the phone suspends, and the timer Dream was waiting on stops advancing with it, so the gap stretched even on a process that had stayed alive for hours. Since 0.6.6 the scheduler also asks Android to wake the phone at the next deadline, and holds the CPU awake for the length of the run itself, so a consolidation pass no longer has to wait for the phone to wake on its own or risk freezing halfway through. It is still a floor: an alarm the OS downgrades to inexact, or a battery manager that kills the app outright, will still push a run later. See [Scheduling and proactivity](./scheduling.md#what-066-changed-and-what-it-didnt) for what is and isn't guaranteed, and Settings → Background activity for whether Jenny has actually been up.
-- **Dream never sees a project conversation.** Everything on this page is about the personal chat. A [project](./projects.md) conversation is not archived into `memory/history.jsonl` at all, so nothing said inside a project can reach `MEMORY.md`, `USER.md` or `SOUL.md`. The boundary is one-directional on purpose: your profile *is* read into a project's turns, but a project's content never flows back. A project remembers by writing pages in its own folder instead.
+- **"Every 2 hours" is a floor, not a promise.** Since 0.6.0 the deadline survives an app restart and a run missed while the app was dead is caught up shortly after it comes back — before that, every restart pushed it out by another 2 hours. The second half of the problem was doze: with the screen off the phone suspends, and the timer Dream was waiting on stops advancing with it, so the gap stretched even on a process that had stayed alive for hours. Since 0.6.6 the scheduler also asks Android to wake the phone at the next deadline, and holds the CPU awake for the length of the run itself, so a consolidation pass no longer has to wait for the phone to wake on its own or risk freezing halfway through. It is still a floor: an alarm the OS downgrades to inexact, or a battery manager that kills the app outright, will still push a run later. See [Scheduling and proactivity](./scheduling.md#what-066-changed-and-what-it-didnt) for what is and isn't guaranteed, and «Background activity» in the workshop's Brain drawer for whether Jenny has actually been up.
+- **A notebook conversation reaches `USER.md`, and nothing else.** A [notebook](./projects.md) conversation is archived into `memory/history.jsonl` too, under its own session key. Those entries never enter a turn's prompt, and Dream digests them in a separate batch whose only write tool is the entry tool on `USER.md`: an identity fact about you said inside a project can land there, but nothing can reach `MEMORY.md` or `SOUL.md`, and the project's own content stays in the project, which remembers by writing pages in its own folder.
 - **Dream prunes, not just adds.** Expect Jenny's memory to occasionally lose detail on purpose — that's Dream doing its job, not corruption. The pre-Dream snapshot is there specifically so a bad prune is recoverable.
 - **`/dream` on a short or fresh chat will say there's nothing to process.** That's because Dream reads `memory/history.jsonl`, not the live chat — see above.
-- **Memory files are visible in the file browser by default, no Developer mode needed.** If you go looking for `MEMORY.md` in the Workspace tab and don't see it, the more likely explanation is that it's still an untouched template with no real content yet. Developer mode (Settings → System) only reveals dotfiles and runtime-internal folders like `agent/`, `cron/`, and `sessions/` — it doesn't gate the memory files.
-- **If the provider is down when the Consolidator needs to summarize, it degrades to a raw `[RAW]` dump** instead of a clean summary — you don't lose the content, but it won't read as nicely until a later pass cleans it up.
+- **Memory files are always visible in the file browser.** If you go looking for `MEMORY.md` under «The real files» and don't see it, the more likely explanation is that it's still an untouched template with no real content yet. Only dotfiles and runtime-internal folders like `agent/`, `cron/`, and `sessions/` are hidden, and there is no switch that reveals them.
+- **If the provider is down when the Consolidator needs to summarize, the conversation waits.** Idle compaction leaves the chat intact and retries later; token-pressure compaction retries on the next turn and degrades to a raw `[RAW]` dump only after three turns in a row have failed — you don't lose the content, but a dump won't read as nicely as a summary.
 - **Dream's own model, interval, and batch size are not independently configurable today** — despite what an earlier draft of this documentation implied, there is no `modelOverride` field: Dream always uses the same model as your main agent, and there is no `maxBatchSize` or `cron` override to reach for.
 
 ## In practice

@@ -164,7 +164,23 @@ def test_system_prompt_follows_the_mode(tmp_path: Path) -> None:
 # -- guardia anti-polling ------------------------------------------------------
 
 
-class _FakeManager:
+class _OwnsTheTestIds:
+    """I subagent dei test (``abc``, ``xyz``) sono della sessione del tool.
+
+    ``cancel``/``restart``/``send`` controllano la sessione d'origine:
+    i fake la dichiarano con gli stessi due metodi che
+    il manager vero espone.
+    """
+
+    owned = ("abc", "xyz")
+
+    def list_records(self, session_key: str | None = None) -> list[Any]:
+        from types import SimpleNamespace
+
+        return [SimpleNamespace(task_id=tid, lineage_id=tid) for tid in self.owned]
+
+
+class _FakeManager(_OwnsTheTestIds):
     def __init__(self) -> None:
         self.snapshot: dict[str, Any] = {"running": [], "recent": []}
         self.cancelled: list[str] = []
@@ -374,7 +390,10 @@ async def test_restart_wraps_manager_and_surfaces_errors_as_text() -> None:
 # -- subagent_send -------------------------------------------------------------
 
 
-class _FakeSendManager:
+class _FakeSendManager(_OwnsTheTestIds):
+    def status_snapshot(self, session_key: str | None = None) -> dict[str, Any]:
+        return {"running": [], "recent": []}
+
     def __init__(self, mode: str = "injected") -> None:
         self.mode = mode
         self.sent: list[tuple[str, str, bool | None]] = []
@@ -505,3 +524,75 @@ def test_orchestrator_prompt_teaches_send_vs_spawn() -> None:
     prompt = render_template("agent/orchestrator.md", strip=True)
     assert "subagent_send" in prompt
     assert "Follow-ups" in prompt
+
+
+# -- la sessione d'origine ------------------------------
+
+
+class _TwoSessionsManager:
+    """Un subagent vivo della chat personale e uno finito di un quaderno.
+
+    ``status_snapshot``/``list_records`` filtrano per sessione come quelli veri;
+    le azioni registrano chi le ha raggiunte.
+    """
+
+    def __init__(self) -> None:
+        from types import SimpleNamespace
+
+        self.running = {"unified:default": [{"task_id": "live1", "lineage_id": "lin1"}]}
+        self.records = {"project:p": [SimpleNamespace(task_id="done2", lineage_id="lin2")]}
+        self.calls: list[tuple[str, str]] = []
+
+    def status_snapshot(self, session_key: str | None = None) -> dict[str, Any]:
+        return {"running": self.running.get(session_key, []), "recent": []}
+
+    def list_records(self, session_key: str | None = None) -> list[Any]:
+        return self.records.get(session_key, [])
+
+    async def cancel_task(self, task_id: str) -> bool:
+        self.calls.append(("cancel", task_id))
+        return True
+
+    async def restart(self, target_id: str, *, extra_instructions=None, manual=False) -> str:
+        self.calls.append(("restart", target_id))
+        return f"Subagent restarted (id: {target_id})"
+
+    async def send(self, target_id: str, message: str, *, quick=None):
+        from jenny.agent.subagent import SubagentSendResult
+
+        self.calls.append(("send", target_id))
+        return SubagentSendResult("injected", f"injected into [{target_id}]")
+
+
+def _in(tool: Any, session_key: str) -> Any:
+    tool.set_context(RequestContext(
+        channel="websocket", chat_id="default", session_key=session_key,
+        turn_id=f"{session_key}:1",
+    ))
+    return tool
+
+
+@pytest.mark.asyncio
+async def test_control_tools_only_reach_the_subagents_of_their_own_session() -> None:
+    manager = _TwoSessionsManager()
+    cancel = _in(SubagentCancelTool(manager), "project:p")
+    restart = _in(SubagentRestartTool(manager), "project:p")
+    send = _in(SubagentSendTool(manager), "project:p")
+
+    # Dal quaderno, il subagent vivo della chat personale non si tocca…
+    assert "Nothing to cancel" in await cancel.execute(task_id="live1")
+    assert "Cannot restart" in await restart.execute(task_id="lin1")
+    assert "Cannot send" in await send.execute(task_id="live1", message="fermati")
+    assert manager.calls == []
+
+    # …il proprio sì, per task id o per lineage.
+    assert "restarted" in await restart.execute(task_id="done2")
+    assert "injected" in await send.execute(task_id="lin2", message="continua")
+    assert manager.calls == [("restart", "done2"), ("send", "lin2")]
+
+    # E dalla chat personale vale il contrario.
+    manager.calls.clear()
+    cancel = _in(SubagentCancelTool(manager), "unified:default")
+    assert "Cancelled subagent [live1]" in await cancel.execute(task_id="live1")
+    assert "Nothing to cancel" in await cancel.execute(task_id="done2")
+    assert manager.calls == [("cancel", "live1")]

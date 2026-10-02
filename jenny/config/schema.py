@@ -1,6 +1,8 @@
 """Configuration schema using Pydantic."""
 from __future__ import annotations
 
+import math
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -96,8 +98,8 @@ class DreamConfig(Base):
         serialization_alias="memoryBudgetChars",
     )
     # ``USER.md`` sta a **4.000 dal 08/09/2026**, e i 1.000 in piu' rispetto a
-    # ``MEMORY.md`` hanno una causa sola: la corsia di diario dei progetti (v.
-    # ``.agent/project-memory-plan.md``). Misurato sul Titan 2 quel giorno, i
+    # ``MEMORY.md`` hanno una causa sola: la corsia di diario dei progetti.
+    # Misurato sul Titan 2 quel giorno, i
     # fatti personali detti dentro i progetti e mai arrivati qui valgono **1.749
     # caratteri** su un file che ne occupava 2.466 su 3.000 — cioe' il 140% del
     # tetto di allora, 1.215 di sforamento la prima notte. Un tetto che morde
@@ -409,21 +411,18 @@ class AgentDefaults(Base):
         default=None,
         validation_alias=AliasChoices("modelPreset", "model_preset"),
     )
-    # L'umore della mascotte: una richiesta piccola al modello dopo ogni turno
-    # WebUI (``jenny/session/mascot_mood.py``). Letti al momento della chiamata,
-    # quindi un cambio vale dal turno dopo senza riavvio. Il preset presta solo
-    # il ``model``: il provider resta quello del turno. Acceso di default: era
-    # in standby finche' le espressioni non erano disegnate (08/09/2026), e
-    # adesso lo sono.
+    # L'umore della mascotte: dopo ogni turno WebUI la faccia si legge dagli
+    # emoji della risposta (``jenny/session/mascot_mood.py``), senza nessuna
+    # richiesta al modello. Letto al momento della chiamata, quindi un cambio
+    # vale dal turno dopo senza riavvio.
+    # ``mascotMoodModelPreset`` non c'e' piu' dal 24/09/2026, con la richiesta
+    # che serviva: un config che lo porta ancora non si rompe — qui si ignora, e
+    # sta in ``loader.RETIRED_KEY_PATHS``, quindi la prossima scrittura di
+    # ``store.mutate`` lo toglie dal file invece di conservarlo.
     mascot_mood: bool = Field(
         default=True,
         validation_alias=AliasChoices("mascotMood", "mascot_mood"),
         serialization_alias="mascotMood",
-    )
-    mascot_mood_model_preset: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("mascotMoodModelPreset", "mascot_mood_model_preset"),
-        serialization_alias="mascotMoodModelPreset",
     )
 
     @model_validator(mode="before")
@@ -479,6 +478,275 @@ class ProvidersConfig(Base):
 
     providers: list[ProviderConfig] = Field(default_factory=list)
     default: str | None = None
+
+
+# ── Le pagine della casa ────────────────────────────────────────────────────
+
+#: Di che specie puo' essere una pagina: **un posto dove si sta**.
+#:
+#: * ``app`` — una Jenny App, ``ref`` e' il suo slug;
+#: * ``conversation`` — un quaderno, ``ref`` e' ``project:<nome>``. E' una
+#:   **scorciatoia**, non una seconda chat: arrivarci cambia la conversazione
+#:   dell'unica chat che c'e', e lo scorrimento lo traveste da pagina.
+#:
+#: Le assenze sono decise, non dimenticate:
+#:
+#: * **il cassetto delle app** come pagina *appendibile* — dal 23/09/2026 e'
+#:   una delle :data:`FIXED_PAGES`, che ci sono sempre e non si appendono;
+#: * **le stanze** — backup, aggiornamenti, modello: posti dove si *va* a
+#:   sbrigare una cosa e si esce. Ci sono state dal 22 al 23/09/2026 e sono
+#:   uscite per decisione dell'utente — «mettere per esteso le impostazioni
+#:   non ha alcun senso» — portandosi via il pezzo piu' fragile della casa, il
+#:   prestito di un elemento del guscio a una pagina. Un ``config.json`` che ne
+#:   ha ancora una non si rompe: v. ``HomeConfig._drawable_pages``.
+#:
+#: Stanno qui e non solo nel client perche' cosi' la regola vale anche per un
+#: `config.json` scritto a mano: una pagina che il prodotto non sa disegnare
+#: non deve poter esistere nel file.
+PAGE_KINDS = ("app", "conversation")
+
+#: Quante se ne possono aggiungere, oltre alle :data:`FIXED_PAGES`. Non e'
+#: una limitazione tecnica: oltre questa soglia i nomi della fila in alto non
+#: ci stanno piu' nemmeno scorrendo, e attraversarle diventa un viaggio.
+MAX_PAGES = 8
+
+#: Le pagine che ci sono sempre, nell'ordine in cui le trova chi non ha mai
+#: spostato niente: il cassetto, la chat, i quaderni, le impostazioni.
+#: **Si spostano, non si tolgono**: una
+#: casa senza la pagina Impostazioni non avrebbe piu' una strada per tornarci.
+#: Sono id riservati in :attr:`HomeConfig.order`, e nessuna schermata puo'
+#: portarne uno.
+FIXED_PAGES = ("app", "chat", "notebooks", "settings")
+
+
+def normalize_order(order: Any, page_ids: list[str]) -> list[str]:
+    """L'ordine delle pagine reso coerente con quel che c'e', **senza rifiutare**.
+
+    Toglie gli id che non sono ne' fissi ne' di una schermata, e i doppioni;
+    rimette in fondo le fisse che mancano; mette le schermate che mancano
+    **subito dopo la chat**, che e' dove stavano prima che l'ordine esistesse.
+    Un ordine vuoto e' l'ordine di chi non ha mai spostato niente.
+
+    Tollerante di proposito: qui un errore costa l'intero file (v.
+    :meth:`HomeConfig._drawable_pages`), e un ordine con un id orfano — una
+    pagina appena staccata — e' uno stato normale, non un file rotto. La
+    severita' sta nella rotta, che un ordine storto lo rifiuta con un 400.
+    """
+    valid = set(FIXED_PAGES) | set(page_ids)
+    seen: list[str] = []
+    for entry in order if isinstance(order, list) else []:
+        if isinstance(entry, str) and entry in valid and entry not in seen:
+            seen.append(entry)
+    if not seen:
+        return ["app", "chat", *page_ids, "notebooks", "settings"]
+    seen.extend(f for f in FIXED_PAGES if f not in seen)
+    missing = [i for i in page_ids if i not in seen]
+    after_chat = seen.index("chat") + 1
+    return seen[:after_chat] + missing + seen[after_chat:]
+
+
+def _valid_notebook(ref: Any) -> None:
+    """Una pagina conversazione punta a un **quaderno**, e a uno che si apre.
+
+    Solo quaderni: la conversazione personale ha gia' la sua pagina, la chat, e l'utente
+    ha chiesto «le chat quaderni». La regola sul nome e' quella di
+    ``session/keys.py``, che e' chi la applica a ogni messaggio in arrivo:
+    una seconda copia qui divergerebbe in silenzio.
+
+    Qui nello schema e non nella rotta, come la regola sulle specie: cosi' un
+    ``config.json`` scritto a mano non mette in casa una chiave che il gateway
+    rifiuterebbe al primo messaggio. L'import e' pigro perche' il pacchetto
+    ``jenny.session`` tira dentro il gestore delle sessioni, che legge la
+    configurazione.
+    """
+    from jenny.session.keys import PROJECT_SESSION_PREFIX, is_valid_project_name
+
+    if not isinstance(ref, str) or not ref.startswith(PROJECT_SESSION_PREFIX):
+        raise ValueError(
+            f"a conversation page needs a notebook ({PROJECT_SESSION_PREFIX}<name>), "
+            f"not {ref!r}"
+        )
+    name = ref[len(PROJECT_SESSION_PREFIX):]
+    if not is_valid_project_name(name):
+        raise ValueError(f"invalid notebook name: {name!r}")
+
+
+#: Com'e' fatto l'id di una pagina: il client lo genera come ``p`` piu' l'ora in
+#: base 36, quindi lettere, cifre, ``-`` e ``_`` bastano e avanzano. Il tetto
+#: tiene fuori un id che nel file e nella fila non avrebbe senso.
+_PAGE_ID_RE = re.compile(r"\A[A-Za-z0-9_-]{1,64}\Z")
+
+
+def _valid_app_slug(ref: Any) -> None:
+    """Una pagina app punta a uno slug che una Jenny App potrebbe avere.
+
+    Le regole sono quelle di :mod:`jenny.apps.manifest`, chi decide cos'e' uno
+    slug: una seconda copia qui divergerebbe in silenzio. L'app puo' non
+    esistere (la pagina si disegna «non c'e' piu'»); lo slug deve essere uno slug.
+    """
+    from jenny.apps.manifest import MAX_SLUG_LEN, SLUG_RE
+
+    if not isinstance(ref, str) or len(ref) > MAX_SLUG_LEN or not SLUG_RE.match(ref):
+        raise ValueError(f"an app page needs an app slug, not {ref!r}")
+
+
+class HomePageConfig(Base):
+    """Una pagina di casa: di che specie e', e cosa ci sta dentro.
+
+    Si chiama ``HomePageConfig``, e non solo «page», perche' nella casa le pagine
+    sono due cose diverse: queste sono le pagine **della casa** (il JS le tiene in
+    ``HomePages``, `home-pages.js`), quelle di un *quaderno* sono ``NotebookPages``
+    (`home-notebook-pages.js`). Fino al 25/09/2026 si chiamavano «schermata» e
+    «pagina», e le due parole in due lingue non bastavano a tenerle distinte.
+    """
+
+    id: str
+    kind: str
+    #: Lo slug dell'app, o la chiave di sessione del quaderno.
+    ref: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _known_kind(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            kind = data.get("kind")
+            if kind is not None and kind not in PAGE_KINDS:
+                raise ValueError(
+                    f"unknown page kind: {kind!r} "
+                    f"(the only ones are {', '.join(PAGE_KINDS)})"
+                )
+            if kind == "conversation":
+                _valid_notebook(data.get("ref"))
+            if kind == "app":
+                _valid_app_slug(data.get("ref"))
+            ident = data.get("id")
+            if ident is not None and (
+                not isinstance(ident, str) or not _PAGE_ID_RE.match(ident)
+            ):
+                raise ValueError(f"invalid page id: {ident!r}")
+        return data
+
+
+# Le righe di ``home.pages`` gia' segnalate in questo processo. Il validatore
+# le scarta dal modello ma non dal file — il loader legge e basta, ogni scrittura
+# passa da ``store.mutate`` — e ``load_config()`` non ha cache: senza questo la
+# stessa riga storta tornava nel log a ogni lettura, piu' volte per turno, finche'
+# qualcos'altro non riscriveva la config.
+_DROPPED_PAGES_WARNED: set[str] = set()
+
+
+def _warn_dropped_page(reason: str, row: Any) -> None:
+    """Un avviso per riga scartata per avvio, poi silenzio."""
+    key = f"{reason}|{row!r}"
+    if key in _DROPPED_PAGES_WARNED:
+        return
+    _DROPPED_PAGES_WARNED.add(key)
+    logger.warning("home page dropped ({}): {!r}", reason, row)
+
+
+class HomeConfig(Base):
+    """Quel che la casa ricorda fra un avvio e l'altro.
+
+    **Perche' qui e non in `localStorage`.** Sono la schermata iniziale del
+    telefono: perderle a un ripristino o a una reinstallazione sarebbe la
+    sorpresa peggiore, e `localStorage` non entra nel backup cifrato. Il prezzo
+    e' una rotta in piu'; il guadagno e' che le pagine seguono l'utente come
+    tutto il resto.
+
+    **Due elenchi, non uno.** ``pages`` sono le pagine *aggiunte* — cosa
+    c'e' dentro ciascuna. ``order`` e' **dove sta ogni pagina**, le fisse
+    comprese: la chat non e' piu' la pagina 0 e si sposta come le altre (dal
+    23/09/2026). Le fisse non stanno in
+    ``pages`` perche' non hanno niente da ricordare oltre al posto, e un
+    file che le potesse elencare le potrebbe anche togliere.
+    """
+
+    pages: list[HomePageConfig] = Field(default_factory=list)
+    #: Gli id delle pagine nell'ordine in cui si vedono: :data:`FIXED_PAGES`
+    #: e gli ``id`` delle schermate. Normalizzato a ogni lettura
+    #: (:func:`normalize_order`), quindi vuoto vuol dire «mai spostato niente».
+    order: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drawable_pages(cls, data: Any) -> Any:
+        """Una pagina che non si puo' disegnare esce dal file, non se lo porta via.
+
+        **Qui un errore costa l'intero file.** Il loader davanti a un
+        ``config.json`` che non valida prova il ``.bak`` — che ha la stessa
+        pagina — e poi **parte dai default** (``loader.py::_load_with_recovery``):
+        chi aveva una pagina storta si ritroverebbe senza provider e senza chiavi,
+        per una pagina. E una pagina storta non richiede un file scritto a mano:
+        basta un backup di una versione piu' nuova, con una specie che questa non
+        conosce, ripristinato su questa.
+
+        Quindi le righe si vagliano **prima** della validazione, una per una, con
+        le regole della rotta: esce una specie sconosciuta, un quaderno che non si
+        aprirebbe, una riga a cui manca un campo, un id doppio o riservato, e
+        quel che supera :data:`MAX_PAGES` — e, dal 25/09/2026, uno slug d'app o
+        un id che non hanno la forma giusta. La regola che conta resta vera —
+        in casa non entra una pagina che il prodotto non sa disegnare — ma costa
+        la pagina e non il resto. Le stanze del 22-23/09/2026 escono in silenzio
+        (erano pagine vere, e l'uscita e' decisa); tutto il resto con un avviso.
+
+        Chi *scrive* non passa di qui: il comando ``home.pages.set`` valida
+        ogni riga come :class:`HomePageConfig` e rifiuta con ``bad_request``.
+        """
+        if not isinstance(data, dict) or "pages" not in data:
+            return data
+        raw = data["pages"]
+        if not isinstance(raw, list):
+            _warn_dropped_page("home.pages is not a list", raw)
+            return {**data, "pages": []}
+        remaining: list[Any] = []
+        seen: set[str] = set()
+        for row in raw:
+            # ``room`` e' il nome inglese della ``stanza`` di allora (la traduce
+            # :meth:`Config._migrate_casa_to_home`): esce in silenzio come prima.
+            if isinstance(row, dict) and row.get("kind") == "room":
+                continue
+            try:
+                page = (
+                    row if isinstance(row, HomePageConfig)
+                    else HomePageConfig.model_validate(row)
+                )
+            except Exception as exc:  # noqa: BLE001 — qualunque rifiuto costa solo la riga
+                _warn_dropped_page(str(exc), row)
+                continue
+            if page.id in seen or page.id in FIXED_PAGES:
+                _warn_dropped_page("duplicate or reserved id", row)
+                continue
+            if len(remaining) >= MAX_PAGES:
+                _warn_dropped_page(f"more than {MAX_PAGES} pages", row)
+                continue
+            seen.add(page.id)
+            # La pagina gia' validata, non la riga grezza: il campo accetta
+            # un'istanza cosi' com'e', e la riga non si rivalida una seconda volta.
+            remaining.append(page)
+        return {**data, "pages": remaining}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _raw_order(cls, data: Any) -> Any:
+        """Un ``order`` che non e' un elenco di stringhe si pulisce, non si rifiuta.
+
+        Il tipo del campo lo rifiuterebbe prima di :func:`normalize_order`, e un
+        rifiuto qui costa l'intero file come per le stanze (v. sopra).
+        """
+        if not isinstance(data, dict) or "order" not in data:
+            return data
+        raw = data["order"]
+        clean = [v for v in raw if isinstance(v, str)] if isinstance(raw, list) else []
+        if clean == raw:
+            return data
+        return {**data, "order": clean}
+
+    @model_validator(mode="after")
+    def _consistent_order(self) -> "HomeConfig":
+        # Tetto, id doppi e riservati li ha gia' tolti ``_drawable_pages``:
+        # qui resta da mettere d'accordo l'ordine con le pagine rimaste.
+        self.order = normalize_order(self.order, [s.id for s in self.pages])
+        return self
 
 
 class HeartbeatConfig(Base):
@@ -652,13 +920,6 @@ class WikiConfig(Base):
 
     enabled: bool = True
     wikis_dir: str = "wikis"  # Relativo a workspace
-    extensions: list[str] = Field(default_factory=lambda: [
-        "fenced_code",
-        "tables",
-        "toc",
-        "wikilinks",
-        "mermaid",
-    ])
 
 
 class WorkspaceConfig(Base):
@@ -698,6 +959,14 @@ class SnapshotConfig(Base):
     retention_max_age_days: int = Field(default=0, ge=0)
     # Il tetto rispecchia MAX_KDF_ITERATIONS del formato container (crypto.py).
     pbkdf2_iterations: int = Field(default=600_000, ge=100_000, le=10_000_000)
+    # Quando un backup cifrato è stato **salvato davvero**, in secondi epoch;
+    # 0 = mai. Non lo sa il gateway: lui prepara il file cifrato in staging, e
+    # se quel file finisca su disco lo decide il picker SAF, che risponde solo
+    # al client (``window.jennyBackup.onExportDone``). Per questo lo scrive una
+    # rotta che il client chiama a cose fatte, e per questo il campo si chiama
+    # «esportato» e non «preparato»: sono due momenti diversi, e quello che
+    # conta per chi legge «ultimo backup» è il secondo.
+    last_export_at: float = Field(default=0.0, ge=0)
     # Unica fonte di verità: la costante del motore di snapshot (engine.py).
     exclude_globs: list[str] = Field(
         default_factory=lambda: list(DEFAULT_EXCLUDE_GLOBS)
@@ -785,13 +1054,38 @@ class ModelPresetConfig(Base):
 
 # Versione corrente dello schema del config. Alzala di uno ogni volta che
 # aggiungi un ramo a ``Config._migrate_by_version``, mai altrimenti.
-CURRENT_CONFIG_VERSION = 2
+CURRENT_CONFIG_VERSION = 3
 
 # Migrazioni gia annunciate in questo processo. Solo per il log: la migrazione
 # resta idempotente e rigira a ogni parse finche il file non viene riscritto (lo
 # fa ``store.persist_schema_migrations`` all'avvio), ma il config viene letto piu
 # volte per boot e una riga per lettura e rumore, non informazione.
 _ANNOUNCED_MIGRATIONS: set[int] = set()
+
+
+def _whole_config_version(raw: Any) -> int | None:
+    """*raw* come versione dello schema: un intero non negativo, o ``None``.
+
+    Oltre all'intero vero, le sue forme innocue: ``3.0`` (un float intero) e
+    ``"3"`` (cifre in una stringa, spazi attorno ammessi). Non ``true``, che per
+    Python e' un 1 ma nel file e' un'altra cosa, non ``2.5`` ne' un infinito
+    (``1e400``), e non una stringa di cifre lunga oltre ogni versione possibile:
+    ``int()`` su migliaia di cifre solleva, fuori dal recupero del loader.
+    """
+    if type(raw) is int:
+        return raw if raw >= 0 else None
+    if type(raw) is float:
+        return int(raw) if math.isfinite(raw) and raw >= 0 and raw.is_integer() else None
+    if isinstance(raw, str):
+        text = raw.strip()
+        if text.isascii() and text.isdigit() and len(text) <= 9:
+            return int(text)
+    return None
+
+# I valori italiani del blocco ``casa`` (fino al 25/09/2026) e i loro nomi di adesso:
+# v. :meth:`Config._migrate_casa_to_home`.
+_CASA_KINDS = {"conversazione": "conversation", "stanza": "room"}
+_CASA_FIXED_IDS = {"quaderni": "notebooks", "impostazioni": "settings"}
 
 
 class Config(BaseSettings):
@@ -819,7 +1113,13 @@ class Config(BaseSettings):
     # (salvati in ``uploads/``) e letti on-demand dall'agente coi suoi tool,
     # senza iniettarne il testo nel contesto a ogni turno. Impostare a ``True``
     # per estrarre e inlinare subito il testo di PDF/documenti.
-    extract_document_text: bool = False
+    extract_document_text: bool = Field(
+        default=False,
+        # La grafia della documentazione. Senza l'alias ``extractDocumentText``
+        # finiva tra le chiavi ignote e l'impostazione non aveva effetto.
+        validation_alias=AliasChoices("extractDocumentText", "extract_document_text"),
+        serialization_alias="extractDocumentText",
+    )
     websocket: dict[str, Any] = Field(default_factory=dict)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
@@ -833,9 +1133,14 @@ class Config(BaseSettings):
     snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     updates: UpdatesConfig = Field(default_factory=UpdatesConfig)
     floating: FloatingConfig = Field(default_factory=FloatingConfig)
+    home: HomeConfig = Field(default_factory=HomeConfig)
     model_presets: dict[str, ModelPresetConfig] = Field(
         default_factory=dict,
         validation_alias=AliasChoices("modelPresets", "model_presets"),
+        # La grafia che documentazione e utenti scrivono. Senza, il dump usava
+        # ``model_presets`` e un ``modelPresets`` scritto a mano restava accanto
+        # come chiave «ignota», vincendo a ogni lettura sulle modifiche dalla UI.
+        serialization_alias="modelPresets",
     )
 
     @model_validator(mode="before")
@@ -855,12 +1160,27 @@ class Config(BaseSettings):
         if not isinstance(data, dict):
             return data
         raw_version = data.get("configVersion", data.get("config_version", 0))
-        try:
-            version = int(raw_version)
-        except (TypeError, ValueError):
+        version = _whole_config_version(raw_version)
+        if version is not None:
+            if type(raw_version) is not int:
+                # ``"3"`` o ``3.0`` sono la versione 3 scritta in un'altra forma:
+                # valevano 0, e la migrazione v1 riportava a 3 un
+                # ``maxConcurrentSubagents: 1`` scelto dopo lo stamp. Si passa al
+                # campo l'intero, che il campo accetta.
+                data = {k: v for k, v in data.items() if k != "config_version"}
+                data["configVersion"] = version
+        else:
             # Versione illeggibile (file toccato a mano): la trattiamo come 0 e la
             # riscriviamo sanificata, invece di far fallire la validazione del
-            # campo e mandare in quarantena un config per il resto valido.
+            # campo e mandare in quarantena un config per il resto valido. Solo un
+            # intero vero: ``int()`` accettava ``2.5``, ``"3"`` e ``true`` e poi il
+            # campo li rifiutava (il file intero ai default), e su ``1e400`` — che
+            # per ``json`` e' infinito — sollevava ``OverflowError`` fuori dal
+            # recupero del loader: un gateway che non ripartiva piu'.
+            logger.warning(
+                "Config version {!r} is not a non-negative integer; treating it as 0",
+                raw_version,
+            )
             version = 0
             data = {k: v for k, v in data.items() if k != "config_version"}
             data["configVersion"] = 0
@@ -905,7 +1225,63 @@ class Config(BaseSettings):
                 "Config migration v2: retired keys are dropped on the next write "
                 "(agents.defaults.atlas, wiki.defaultWiki)"
             )
+
+        # v3: come la v2, nessun valore cambia qui. Il blocco ``casa`` diventa
+        # ``home`` (lo traduce :meth:`_migrate_casa_to_home`, a ogni lettura finche'
+        # il file ha ancora quello vecchio) e ``casa`` e' una chiave ritirata:
+        # alzare la versione fa riscrivere il file al primo avvio, e il blocco
+        # vecchio cade subito invece che alla prima impostazione cambiata.
+        if version < 3 and 3 not in _ANNOUNCED_MIGRATIONS and "casa" in data:
+            _ANNOUNCED_MIGRATIONS.add(3)
+            logger.info("Config migration v3: the home block moves from 'casa' to 'home'")
         return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_casa_to_home(cls, data: Any) -> Any:
+        """Il blocco ``casa`` scritto fino al 25/09/2026 si legge come ``home``.
+
+        Fino a quel giorno le pagine della casa stavano in
+        ``casa: {schermate, ordine}``, con le specie e gli id fissi in italiano:
+        ``conversazione``, ``quaderni``, ``impostazioni`` (e ``stanza``, ritirata
+        il 23/09/2026). Qui si traducono chiavi **e** valori nei nomi di adesso
+        — ``home: {pages, order}``, ``conversation``, ``notebooks``, ``settings``,
+        ``room`` — e basta: la validazione vera la fanno poi, riga per riga,
+        i validatori di :class:`HomeConfig`. Per questo la traduzione non rifiuta
+        niente: una riga che non e' un oggetto, o un ordine che non e' un elenco,
+        passano come sono e costano quel che costano li' (la riga, non il file).
+
+        Se il file ha gia' ``home``, vince ``home`` e ``casa`` si ignora: e' il
+        caso di un file scritto a mano, o di una scrittura interrotta a meta'.
+        In entrambi i casi ``casa`` esce dal file alla prossima scrittura di
+        ``store.mutate``, perche' e' in ``loader.RETIRED_KEY_PATHS``.
+        """
+        if not isinstance(data, dict) or "casa" not in data:
+            return data
+        rest = {k: v for k, v in data.items() if k != "casa"}
+        if "home" in data:
+            return rest
+        old = data["casa"]
+        if not isinstance(old, dict):
+            return rest
+        home: dict[str, Any] = {}
+        if "schermate" in old:
+            rows = old["schermate"]
+            if isinstance(rows, list):
+                rows = [
+                    {**r, "kind": _CASA_KINDS.get(r["kind"], r["kind"])}
+                    if isinstance(r, dict) and isinstance(r.get("kind"), str) else r
+                    for r in rows
+                ]
+            home["pages"] = rows
+        if "ordine" in old:
+            order = old["ordine"]
+            if isinstance(order, list):
+                order = [
+                    _CASA_FIXED_IDS.get(v, v) if isinstance(v, str) else v for v in order
+                ]
+            home["order"] = order
+        return {**rest, "home": home}
 
     @model_validator(mode="after")
     def _stamp_config_version(self) -> "Config":

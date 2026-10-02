@@ -1,6 +1,6 @@
 """``journal_append``: la cattura di un progetto, e i suoi tre cancelli.
 
-Passo **T2.5** di ``roadmap/taccuino-passi.md``. Il tool nasce da una misura sul
+Passo **T2.5** del piano del taccuino. Il tool nasce da una misura sul
 telefono, non da un disegno: la politica di cattura funzionava, ma passava da uno
 spawn di subagent, perché ``orchestrator_mode`` toglie all'agente principale ogni
 scrittura. Una corsa di subagent per una riga di testo, a ogni turno con un fatto
@@ -358,8 +358,8 @@ def test_it_is_registered_in_the_loader() -> None:
 
 # ── L'attribuzione: di chi è il fatto che la riga registra ───────────────────
 #
-# Il difetto (D1): il 24/08 Jenny ha chiesto «l'ogoh-ogoh te lo porti, *o quello
-# resta a casa*?», l'utente ha risposto «l ogoh ogoh che cenrtra?» — una domanda,
+# Il difetto (D1): il 24/08 Jenny ha chiesto «il telescopio te lo porti, *o quello
+# resta a casa*?», l'utente ha risposto «il telescopio che cenrtra?» — una domanda,
 # nessuna scelta — e la cattura ha registrato «resta a casa» come decisione
 # dell'utente. Poi il giardiniere l'ha promossa a `state: decided`.
 #

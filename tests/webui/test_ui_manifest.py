@@ -39,20 +39,42 @@ DEAD_TOKENS = [
 ]
 
 
-def _index_asset_refs() -> list[str]:
-    html = (UI_DIR / "index.html").read_text()
+# I documenti: la casa (`index.html`, il default), l'officina (`workshop.html`) e
+# il primo avvio (`onboarding.html`). Un riferimento rotto in uno di loro e' un
+# 404 silenzioso su Android.
+SHELLS = ["index.html", "workshop.html", "onboarding.html"]
+
+
+def _shell_asset_refs(shell: str) -> list[str]:
+    html = (UI_DIR / shell).read_text()
     refs = re.findall(r'(?:href|src)="/html-mobile/([^"]+)"', html)
-    assert refs, "no /html-mobile/ asset references found in index.html"
+    assert refs, f"no /html-mobile/ asset references found in {shell}"
     return refs
 
 
-def test_index_html_assets_are_in_manifest():
+def _missing_refs(shell: str, manifest: set[str]) -> list[str]:
+    return [ref for ref in _shell_asset_refs(shell) if ref.split("?")[0] not in manifest]
+
+
+def test_shell_assets_are_in_manifest():
     manifest = set(_UI_MANIFEST)
-    missing = [ref for ref in _index_asset_refs() if ref not in manifest]
+    missing = {shell: _missing_refs(shell, manifest) for shell in SHELLS}
+    missing = {shell: refs for shell, refs in missing.items() if refs}
     assert not missing, (
-        f"index.html references assets missing from _UI_MANIFEST "
+        f"the shells reference assets missing from _UI_MANIFEST "
         f"(they would 404 on Android): {missing}"
     )
+
+
+def test_the_shell_guard_bites_on_the_workshop():
+    """Il banco guardava solo `index.html`: un
+    riferimento rotto nell'officina passava verde. Qui si toglie dal manifest
+    un file che solo l'officina carica, e il banco deve accorgersene."""
+    only_workshop = set(_shell_asset_refs("workshop.html")) - set(_shell_asset_refs("index.html"))
+    assert only_workshop, "l'officina non carica piu' niente di suo: il banco non morde"
+    victim = sorted(only_workshop)[0]
+    manifest = set(_UI_MANIFEST) - {victim}
+    assert _missing_refs("workshop.html", manifest) == [victim]
 
 
 def test_js_module_imports_are_in_manifest():
@@ -115,34 +137,109 @@ def test_manifest_has_no_duplicates():
     assert not duplicates, f"voci duplicate in _UI_MANIFEST: {duplicates}"
 
 
-def test_css_url_refs_are_in_manifest():
-    """Every url(...) in first-party CSS must resolve to a bundled file."""
-    manifest = set(_UI_MANIFEST)
-    css_files = ["assets/mobile-style.css", "assets/vendor/fonts/google-fonts.css"]
-    theme_fonts = UI_DIR / "assets/vendor/fonts/theme-fonts.css"
-    if theme_fonts.is_file():
-        css_files.append("assets/vendor/fonts/theme-fonts.css")
+def _css_url_problems(manifest: set[str]) -> list[str]:
+    """I `url(...)` di ogni foglio del manifest che non risolvono a un file spedito.
+
+    Un `@font-face` elenca spesso piu' formati (`woff2`, poi `woff`, poi `ttf`):
+    il browser usa il primo che sa leggere, e il WebView legge `woff2`. Di una
+    lista `src:` basta quindi che risolva il **primo** `url()`; le riserve dopo
+    possono restare fuori (KaTeX spedisce solo i `woff2`).
+    """
     problems = []
-    for rel in css_files:
+    url_re = re.compile(r"url\(\s*['\"]?([^'\")]+)['\"]?\s*\)")
+    for rel in sorted(e for e in manifest if e.endswith(".css")):
         css_path = UI_DIR / rel
-        for url in re.findall(r"url\(\s*['\"]?([^'\")]+)['\"]?\s*\)", css_path.read_text()):
+        css = re.sub(r"/\*.*?\*/", "", css_path.read_text(), flags=re.S)
+        urls = []
+        for decl in re.split(r"[;{}]", css):
+            found = url_re.findall(decl)
+            if re.match(r"\s*src\s*:", decl):
+                found = found[:1]
+            urls.extend(found)
+        for url in urls:
             if url.startswith(("data:", "http:", "https:", "#")):
                 continue
-            resolved = (css_path.parent / url.split("?")[0]).resolve()
-            entry = resolved.relative_to(UI_DIR.resolve()).as_posix()
+            path = url.split("?")[0].split("#")[0]
+            if path.startswith("/html-mobile/"):
+                entry = path[len("/html-mobile/"):]
+            else:
+                resolved = (css_path.parent / path).resolve()
+                entry = resolved.relative_to(UI_DIR.resolve()).as_posix()
             if entry not in manifest:
                 problems.append(f"{rel} -> {url}")
+    return problems
+
+
+def test_css_url_refs_are_in_manifest():
+    """Every url(...) in every bundled CSS must resolve to a bundled file."""
+    problems = _css_url_problems(set(_UI_MANIFEST))
     assert not problems, f"CSS url() references not covered by _UI_MANIFEST: {problems}"
 
 
-def test_mobile_style_has_no_backdrop_filter():
+def test_the_css_guard_reads_every_sheet():
+    """Prima il banco leggeva due fogli scelti a mano: `home-style.css` e
+    `jenny-kit.css` restavano fuori. Ora li legge tutti: togliere dal manifest
+    il foglio che `jenny-kit.css` importa deve far fallire il banco."""
+    victim = "assets/vendor/fonts/google-fonts.css"
+    kit = (UI_DIR / "assets/apps/jenny-kit.css").read_text()
+    assert f"/html-mobile/{victim}" in kit, "il kit non importa piu' quel foglio: cambia vittima"
+    problems = _css_url_problems(set(_UI_MANIFEST) - {victim})
+    assert any(p.startswith("assets/apps/jenny-kit.css ->") for p in problems), problems
+
+
+def test_backdrop_filter_only_on_the_drawer_scrim():
+    """Il divieto resta, con **una** eccezione dichiarata.
+
+    Il divieto totale e\' del 01/08/2026 (`8833b94`, "Jenny 0.3.0"), e la
+    ragione scritta allora era «Android WebView performance». Accanto, su
+    `.swipe-scrim`, un commento della stessa data ne da\' un\'altra: il WebView
+    rendeva **nere** le zone trasparenti, cioe\' le icone.
+
+    Il 20/09/2026 l\'eccezione: lo scrim del cassetto. Le due ragioni di allora
+    non lo riguardano allo stesso modo —
+
+    * `.swipe-scrim` anima l\'opacita\' a **ogni frame** durante il gesto di
+      cambio vista; questo sfuma una volta e poi sta fermo. E\' il caso facile,
+      non quello che aveva motivato il divieto.
+    * sul Titan 2 gira oggi **WebView 143.0.7499.192** (misurato): il difetto
+      delle zone trasparenti rese nere e\' di versioni molto piu\' vecchie.
+
+    Quindi il banco non sparisce e non si allarga: **elenca**. Un
+    `backdrop-filter` nuovo su un altro selettore torna rosso e obbliga chi lo
+    aggiunge a dire perche\', che e\' esattamente cio\' che il divieto proteggeva.
+
+    **Resta da confermare sul telefono**: le icone delle app nella lista e la
+    mascotte — il nodo trasparente piu\' grosso della casa — a cassetto aperto.
+    Se tornassero nere, si toglie la riga e si rimette il divieto tondo.
+    """
     css = (UI_DIR / "assets/mobile-style.css").read_text()
-    # Match the actual CSS property declaration, not the word appearing in a
-    # comment (e.g. one documenting the deliberate *absence* of the property).
-    assert not re.search(r"backdrop-filter\s*:", css), (
-        "backdrop-filter property reintroduced in mobile-style.css — it is banned "
-        "for Android WebView performance (use opaque surfaces)"
+    # I selettori a cui e\' concesso. Si dichiarano uno per uno.
+    allowed = {".launcher-scrim"}
+
+    culprits = []
+    for block in css.split("}"):
+        if not re.search(r"backdrop-filter\s*:", block):
+            continue
+        head = block.split("{")[0].strip()
+        names = {s.strip().splitlines()[-1].strip() for s in head.split(",") if s.strip()}
+        if not (names & allowed):
+            culprits.append(head.splitlines()[-1].strip() if head else "?")
+
+    assert not culprits, (
+        f"backdrop-filter su selettori non concessi: {culprits}. "
+        f"E\' vietato per le prestazioni del WebView Android (usa superfici "
+        f"opache); le eccezioni si dichiarano in `concessi` con il motivo."
     )
+
+
+def test_the_drawer_scrim_actually_blurs():
+    """E l\'eccezione deve esserci davvero: toglierla e\' una decisione, non una
+    svista. Senza questa riga, il banco qui sopra passerebbe anche a
+    sfocatura sparita."""
+    css = (UI_DIR / "assets/mobile-style.css").read_text()
+    block = next(b for b in css.split("}") if ".launcher-scrim" in b.split("{")[0])
+    assert re.search(r"[^-]backdrop-filter:\s*blur\(", block), "lo scrim non sfoca piu\'"
+    assert "-webkit-backdrop-filter" in block, "manca il prefisso: il WebView usa quello"
 
 
 def test_accent_backgrounds_use_on_accent():

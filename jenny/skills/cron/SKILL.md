@@ -2,9 +2,6 @@
 name: cron
 description: Schedule reminders, recurring checks and conditional alerts.
 locked: true
-user_summary:
-  it: "Promemoria, controlli ricorrenti e avvisi condizionati: chiedi a Jenny di ricordarti qualcosa a un'ora precisa, di ripetere un'azione nel tempo, o di avvertirti solo se una certa condizione si verifica."
-  en: "Reminders, recurring checks and conditional alerts: ask Jenny to remind you of something at a specific time, to repeat an action over time, or to warn you only when a condition is met."
 ---
 
 # Cron
@@ -45,7 +42,7 @@ cron(action="add", message="Time to take a break!", every_seconds=1200, mode="re
 
 Conditional alert — speaks only when the condition fires:
 ```
-cron(action="add", message="Check the soil humidity of all plants; if any is below 15%, warn me. Otherwise say nothing.", every_seconds=3600, mode="monitor")
+cron(action="add", message="Check the chance of rain in every city on the list; if any is above 70%, warn me. Otherwise say nothing.", every_seconds=3600, mode="monitor")
 ```
 
 Recurring check whose result the user always wants:

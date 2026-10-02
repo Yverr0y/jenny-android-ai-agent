@@ -1175,7 +1175,7 @@ def test_two_boundaries_in_a_row_are_one_page_break(tmp_path, monkeypatch) -> No
 
 
 _SUBAGENT_ANNOUNCE = (
-    "[Subagent 'backup latest hps' completed successfully]\n\n"
+    "[Subagent 'backup latest pibox' completed successfully]\n\n"
     "Task: Fai una singola chiamata al tool MCP `latest` sull'hub…\n\n"
     "Result:\nlocale ok, remoto ok\n\n"
     "Summarize this naturally for the user."
@@ -1199,7 +1199,7 @@ def test_cron_turn_does_not_backfill_a_subagent_announce_as_a_user_bubble(
     key = "websocket:cron-announce"
     append_transcript_object(
         key,
-        {"event": "message", "chat_id": "cron-announce", "text": "buongiorno papi, backup ok"},
+        {"event": "message", "chat_id": "cron-announce", "text": "buongiorno boss, backup ok"},
     )
     append_transcript_object(key, {"event": "turn_end", "chat_id": "cron-announce"})
 
@@ -1218,13 +1218,13 @@ def test_cron_turn_does_not_backfill_a_subagent_announce_as_a_user_bubble(
                 "injected_event": "subagent_result",
                 "subagent_task_id": "ff0941f9",
             },
-            {"role": "assistant", "content": "buongiorno papi, backup ok"},
+            {"role": "assistant", "content": "buongiorno boss, backup ok"},
         ],
     )
 
     assert out is not None
     assert [(m["role"], m["content"]) for m in out["messages"]] == [
-        ("assistant", "buongiorno papi, backup ok"),
+        ("assistant", "buongiorno boss, backup ok"),
     ]
 
 
@@ -1238,7 +1238,7 @@ def test_cron_turn_still_backfills_a_real_user_message(tmp_path, monkeypatch) ->
     key = "websocket:real-user"
     append_transcript_object(
         key,
-        {"event": "message", "chat_id": "real-user", "text": "buongiorno papi, backup ok"},
+        {"event": "message", "chat_id": "real-user", "text": "buongiorno boss, backup ok"},
     )
     append_transcript_object(key, {"event": "turn_end", "chat_id": "real-user"})
 
@@ -1246,12 +1246,12 @@ def test_cron_turn_still_backfills_a_real_user_message(tmp_path, monkeypatch) ->
         key,
         session_messages=[
             {"role": "user", "content": "com'è andato il backup?"},
-            {"role": "assistant", "content": "buongiorno papi, backup ok"},
+            {"role": "assistant", "content": "buongiorno boss, backup ok"},
         ],
     )
 
     assert out is not None
     assert [(m["role"], m["content"]) for m in out["messages"]] == [
         ("user", "com'è andato il backup?"),
-        ("assistant", "buongiorno papi, backup ok"),
+        ("assistant", "buongiorno boss, backup ok"),
     ]

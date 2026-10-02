@@ -19,18 +19,16 @@ bugia entrerebbe:
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from support.js_harness import requires_node, run_module
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 SETTINGS_JS = ASSETS / "mobile-settings.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _member(name: str) -> str:
@@ -138,7 +136,11 @@ _MEMBERS = (
     "_workerValue",
     "_repaintWorkerDerived",
     "_budgetMeasure",
-    "_renderBudget",
+    # `_renderBudget` era la riga con dentro il campo modificabile. In
+    # cassetto i tetti ora si **leggono** (`_measureCap`) e i campi stanno
+    # nel pannello «Cambia i tetti»: cambia chi disegna, non cosa si salva.
+    "_measureCap",
+    "_capState",
     "_numberField",
 )
 
@@ -148,14 +150,7 @@ def _run(script: str, tmp_path: Path) -> str:
     harness = _HARNESS.replace("__MEMBERS__", members).replace("__PAYLOAD__", _PAYLOAD)
     (tmp_path / "harness.mjs").write_text(harness, encoding="utf-8")
     (tmp_path / "test.mjs").write_text(script, encoding="utf-8")
-    result = subprocess.run(
-        [_NODE, str(tmp_path / "test.mjs")],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
-    return result.stdout
+    return run_module(tmp_path / "test.mjs", timeout=30)
 
 
 def _toggles() -> str:
@@ -412,3 +407,45 @@ console.log(JSON.stringify({
     )
     assert '"on":"every 30min"' in out
     assert '"off":""' in out
+
+
+def test_after_a_save_the_measure_and_the_headroom_stay_in_their_rows(tmp_path) -> None:
+    """Regressione di ``013f93c``: dopo un salvataggio ``_repaintWorkerDerived``
+    scriveva la misura nella riga di «quanto resta», che quindi compariva due
+    volte mentre «restano N» spariva. Il ridisegno deve dire le stesse cose
+    del disegno."""
+    out = _run(
+        """
+import assert from 'node:assert/strict';
+import { Screen, makeEl } from './harness.mjs';
+
+/* Il disegno vero: si legge dall'HTML di _measureCap cosa sta in quale riga. */
+const screen0 = new Screen({});
+const html = screen0._measureCap(screen0.data.memory, 'MEMORY.md', 'memory_budget_chars');
+const cella = (attr) => html.match(new RegExp(attr + '="MEMORY.md"[^>]*>([^<]*)<'))[1];
+const valueBefore = cella('data-measure-value');
+const restBefore = cella('data-measure');
+assert.match(valueBefore, /ofBudget/);
+assert.match(restBefore, /headroom/);
+
+const value = makeEl({ textContent: valueBefore });
+const rest = makeEl({ textContent: restBefore });
+const fill = { style: {} };
+const meter = makeEl({
+  classList: { toggle() {} },
+  querySelector: () => fill,
+});
+const screen = new Screen({
+  '[data-measure-value="MEMORY.md"]': value,
+  '[data-measure="MEMORY.md"]': rest,
+  '[data-meter="MEMORY.md"]': meter,
+});
+await screen._saveWorkerParams('memory', { memory_budget_chars: '3000' });
+assert.equal(value.textContent, valueBefore, 'la misura non e\\' piu\\' al suo posto');
+assert.equal(rest.textContent, restBefore, '«quanto resta» e\\' stato sostituito');
+assert.notEqual(rest.textContent, value.textContent, 'la misura compare due volte');
+console.log('ok');
+""",
+        tmp_path,
+    )
+    assert out.strip() == "ok"

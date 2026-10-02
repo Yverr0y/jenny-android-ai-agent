@@ -5,7 +5,7 @@ correzione. Fino a quel giorno questo gancio era montato in un posto solo — la
 passata del giardiniere (``run_gardener``) — e la conseguenza si è vista sul
 telefono: la passata con **meno** contesto era l'unica trattenuta, e la
 conversazione, che ha i corpi delle pagine, la giornata intera e la libertà di
-ristrutturare, non era trattenuta affatto. Il 26/08 in ``wikis/salute`` una
+ristrutturare, non era trattenuta affatto. Il 26/08 in una wiki di progetto una
 richiesta di sistemare la wiki ha riscritto la ``source:`` di una pagina come
 lista YAML, e i due lettori che la interpretano hanno dato due risposte diverse
 (``_page_frontmatter`` → ``'- raw/journal/...'``, trattino incluso e quindi
@@ -34,6 +34,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from jenny.security.workspace_policy import is_path_within
 from jenny.utils.wiki_paths import wiki_page_rel
 
 _PROVENANCE_REFUSAL_TEMPLATE = (
@@ -155,11 +156,14 @@ def _journal_line_provenance(root: Path, source: str) -> str:
     if match is None:
         return _UNRESOLVED
     minute, ordinal = match.group(1), match.group(2)
-    page = (root / rel.strip()).resolve()
+    page = root / rel.strip()
+    # Contenuta nel progetto: ``source:`` e' testo che il modello scrive, quindi
+    # ``../..`` e' una cosa che puo' capitare — qui non serve leggere fuori.
+    # Il percorso grezzo, non gia' risolto: e' ``is_path_within`` a risolverlo,
+    # e un loop di symlink (``RuntimeError`` su Python 3.11) diventa un no.
+    if not is_path_within(page, root):
+        return _UNRESOLVED
     try:
-        # Contenuta nel progetto: ``source:`` e' testo che il modello scrive, quindi
-        # ``../..`` e' una cosa che puo' capitare — qui non serve leggere fuori.
-        page.relative_to(root.resolve())
         text = page.read_text(encoding="utf-8")
     except (OSError, ValueError):
         return _UNRESOLVED
@@ -212,7 +216,8 @@ def _provenance_guard(root: Path, pages: Path) -> Any:
         try:
             target = Path(path).resolve()
             target.relative_to(pages)
-        except (ValueError, OSError, TypeError):
+        except (ValueError, OSError, RuntimeError, TypeError):
+            # ``RuntimeError``: un loop di symlink, su Python 3.11.
             return None
         return _check_page(root, target, text)
 
@@ -245,7 +250,8 @@ def wiki_page_provenance_guard() -> Any:
     def _guard(path: Any, text: str) -> str | None:
         try:
             target = Path(path).resolve()
-        except (OSError, TypeError):
+        except (OSError, RuntimeError, TypeError):
+            # ``RuntimeError``: un loop di symlink, su Python 3.11.
             return None
         rel = wiki_page_rel(target)
         if rel is None:
@@ -353,9 +359,12 @@ def _names_a_document(root: Path, source: str) -> bool:
     rel = source.partition("#")[0].strip()
     if not rel:
         return False
+    page = root / rel
+    # Il percorso grezzo: lo risolve ``is_path_within``, che tratta anche un loop
+    # di symlink (``RuntimeError`` su Python 3.11) come un no.
+    if not is_path_within(page, root):
+        return False
     try:
-        page = (root / rel).resolve()
-        page.relative_to(root.resolve())
         text = page.read_text(encoding="utf-8")
     except (OSError, ValueError):
         return False

@@ -27,38 +27,25 @@ tocca, così l'etichetta scritta a schermo è osservabile.
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 SWITCH_JS = ASSETS / "shared" / "write-switch.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _member(source: str, name: str) -> str:
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
 _HARNESS = """
 import assert from 'node:assert/strict';
 
-const i18n = { t: (key) => 'i18n:' + key, onLocaleChange() {} };
+const i18n = { t: (key) => 'i18n:' + key };
 
 /* Lo stato condiviso: `AppState.readonlyTurn` è ciò che `ws-manager.sendToChat`
    legge per mettere `readonly: true` nell'envelope. Qui si tiene anche l'elenco
@@ -111,24 +98,18 @@ function makeSwitch() {
 def _harness() -> str:
     src = _read(SWITCH_JS)
     return (
-        _HARNESS.replace("__CTOR__", _member(src, "constructor"))
-        .replace("__SYNC__", _member(src, "syncFromSession"))
-        .replace("__READONLY__", _member(src, "readonly"))
-        .replace("__TOGGLE__", _member(src, "toggle"))
-        .replace("__PUBLISH__", _member(src, "_publish"))
-        .replace("__RENDER__", _member(src, "render"))
+        _HARNESS.replace("__CTOR__", member(src, "constructor"))
+        .replace("__SYNC__", member(src, "syncFromSession"))
+        .replace("__READONLY__", member(src, "readonly"))
+        .replace("__TOGGLE__", member(src, "toggle"))
+        .replace("__PUBLISH__", member(src, "_publish"))
+        .replace("__RENDER__", member(src, "render"))
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── Il primo tocco ──────────────────────────────────────────────────────────
@@ -234,7 +215,7 @@ def test_the_preference_stays_per_conversation() -> None:
       sw.toggle();                       // e ora anche bordi
       assert.equal(sw.readonly, true);
 
-      sw.syncFromSession('project:patreon');
+      sw.syncFromSession('project:palestra');
       assert.equal(sw.readonly, false);
 
       sw.syncFromSession('websocket:default');
@@ -263,7 +244,7 @@ def test_a_switch_without_the_element_does_nothing_at_all() -> None:
 
 def test_the_dead_guard_is_gone() -> None:
     """Guardia debole: la riga che rendeva morto il tasto non torni."""
-    body = _member(_read(SWITCH_JS), "toggle")
+    body = member(_read(SWITCH_JS), "toggle")
     code = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
     code = re.sub(r"(?m)^\s*//.*$|\s//.*$", "", code)
     assert "this._byKey.set(this._key" in code

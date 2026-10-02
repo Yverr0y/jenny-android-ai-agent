@@ -104,8 +104,9 @@ async def test_loopback_endpoints_get_the_longer_request_timeout() -> None:
     await local._ensure_client()
     await remote._ensure_client()
 
-    assert local._http_client.timeout.read == _LOCAL_REQUEST_TIMEOUT_S
-    assert remote._http_client.timeout.read == _OPENAI_COMPAT_REQUEST_TIMEOUT_S
+    assert local._http_client.timeout.connect == _LOCAL_REQUEST_TIMEOUT_S
+    assert remote._http_client.timeout.connect == _OPENAI_COMPAT_REQUEST_TIMEOUT_S
+    assert local._http_client.timeout.read > remote._http_client.timeout.read
     assert _LOCAL_REQUEST_TIMEOUT_S > _OPENAI_COMPAT_REQUEST_TIMEOUT_S
 
 

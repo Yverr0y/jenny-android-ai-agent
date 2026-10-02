@@ -8,6 +8,7 @@ from jenny.config.schema import Config, ProviderConfig
 from jenny.runtime.context import get_runtime_context
 from jenny.webui.settings_api import (
     WebUISettingsError,
+    normalize_api_base,
     provider_models_payload,
     save_onboarding,
     settings_payload,
@@ -138,6 +139,28 @@ async def test_update_provider_still_replaces_key_when_retyped(
     assert saved.api_key == "sk-new-secret-key-9999"
 
 
+@pytest.mark.asyncio
+async def test_a_key_saved_without_a_format_keeps_the_provider_anthropic(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La casa salva la chiave con ``{name, api_key}`` e basta: il predefinito
+    ``openai_compat`` finiva scritto sul provider, e un Anthropic smetteva di
+    rispondere. Assente = invariato; il predefinito vale per un provider nuovo."""
+    config_path = tmp_path / "config.json"
+    config = _add_provider(Config(), "claude", format="anthropic", api_key="not-a-real-credential")
+    save_config(config, config_path)
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+
+    await update_provider({"name": "claude", "api_key": "another-fake-credential"})
+    await update_provider({"name": "fresh", "api_key": "a-third-fake-credential"})
+
+    saved = {p.name: p for p in load_config(config_path).providers.providers}
+    assert saved["claude"].format == "anthropic"
+    assert saved["claude"].api_key == "another-fake-credential"
+    assert saved["fresh"].format == "openai_compat"
+
+
 async def test_update_agent_settings_accepts_context_window_options(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
@@ -164,6 +187,16 @@ async def test_update_context_window_rejects_unknown_values(
 
     with pytest.raises(WebUISettingsError, match="context_window_tokens must be 65536 or 262144"):
         await update_agent_settings({"context_window_tokens": ["128000"]})
+
+
+def test_the_context_window_refusal_names_the_options_it_has(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from jenny.webui import settings_api
+
+    monkeypatch.setattr(settings_api, "_CONTEXT_WINDOW_TOKEN_OPTIONS", (65_536, 131_072, 262_144))
+    with pytest.raises(WebUISettingsError, match="65536 or 131072 or 262144"):
+        settings_api._parse_context_window_tokens("1000")
 
 
 async def test_update_timezone_rejects_unknown_name(
@@ -410,10 +443,10 @@ async def test_save_onboarding_welcome_lands_in_unified_session(
     session = sessions.get_or_create(UNIFIED_SESSION_KEY)
     assert [m.get("role") for m in session.messages] == ["assistant"]
     assert result["welcome_message"] in session.messages[0]["content"]
-    assert "Ciao sono Jenny" in session.messages[0]["content"]
-    # La lingua italiana (fallback) viene persistita nella config.
+    assert "Hi, I'm Jenny" in session.messages[0]["content"]
+    # Senza locale si ripiega sull'inglese, come la WebUI, e lo si persiste.
     saved = load_config(config_path)
-    assert saved.agents.defaults.language == "it"
+    assert saved.agents.defaults.language == "en"
 
 
 @pytest.mark.asyncio
@@ -448,6 +481,45 @@ async def test_save_onboarding_welcome_is_localized_to_english(
     assert "Hi, I'm Jenny" in session.messages[0]["content"]
     saved = load_config(config_path)
     assert saved.agents.defaults.language == "en"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("locale", "greeting", "saved_language"),
+    [("it", "Ciao sono Jenny", "it"), ("fr", "Hi, I'm Jenny", "en")],
+)
+async def test_save_onboarding_welcome_follows_a_known_locale_only(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, locale: str, greeting: str, saved_language: str
+) -> None:
+    """L'italiano resta per chi l'ha scelto; una lingua che non c'è ripiega sull'inglese.
+
+    Il saluto è il primo messaggio della cronologia: un ripiego italiano lo
+    faceva leggere a un modello che per tutto il resto parla inglese.
+    """
+    import asyncio
+
+    from jenny.session.keys import UNIFIED_SESSION_KEY
+    from jenny.session.manager import SessionManager
+
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+    sessions = SessionManager(tmp_path)
+
+    await save_onboarding(
+        {
+            "provider_name": "openai",
+            "format": "openai_compat",
+            "model": "gpt-x",
+            "api_key": "sk-test-123",
+            "locale": locale,
+        },
+        session_manager=sessions,
+        onboarding_event=asyncio.Event(),
+    )
+
+    session = sessions.get_or_create(UNIFIED_SESSION_KEY)
+    assert greeting in session.messages[0]["content"]
+    assert load_config(config_path).agents.defaults.language == saved_language
 
 
 async def test_short_api_key_is_shown_as_present(tmp_path, monkeypatch) -> None:
@@ -496,3 +568,67 @@ def test_settings_payload_reports_a_recovered_cron_store(tmp_path) -> None:
     finally:
         ctx.cron_recovered_from = None
         ctx.cron_quarantine_path = None
+
+
+# ── L'indirizzo del provider si controlla prima di scriverlo (collaudo 27/09) ─
+
+
+@pytest.mark.parametrize(
+    ("typed", "saved"),
+    [
+        ("", None),
+        ("   ", None),
+        (None, None),
+        ("Http://10.0.2.2:8765/v1", "http://10.0.2.2:8765/v1"),
+        ("HTTPS://api.example.test/v1", "https://api.example.test/v1"),
+        ("https://api.example.test", "https://api.example.test"),
+        ("${PROVIDER_BASE}", "${PROVIDER_BASE}"),
+    ],
+)
+def test_the_base_url_is_normalised(typed: str | None, saved: str | None) -> None:
+    assert normalize_api_base(typed) == saved
+
+
+@pytest.mark.parametrize(
+    "typed", ["Http:/10.0.2.2:8765/v1", "ftp://files.example.test", "api.example.test/v1", "https://"]
+)
+def test_a_base_url_that_is_not_a_web_address_is_refused(typed: str) -> None:
+    """«http://» diventato «Http:/» con l'autocorrezione era salvato così."""
+    with pytest.raises(WebUISettingsError):
+        normalize_api_base(typed)
+
+
+@pytest.mark.asyncio
+async def test_a_bad_base_url_does_not_reach_the_config(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config = _add_provider(Config(), DYNAMIC_PROVIDER_NAME, api_base=DYNAMIC_PROVIDER_API_BASE)
+    save_config(config, config_path)
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+
+    with pytest.raises(WebUISettingsError):
+        await update_provider({"name": DYNAMIC_PROVIDER_NAME, "api_base": "Http:/broken"})
+    await update_provider({"name": DYNAMIC_PROVIDER_NAME, "api_base": "Https://ok.example.test/v1"})
+
+    saved = next(
+        p for p in load_config(config_path).providers.providers if p.name == DYNAMIC_PROVIDER_NAME
+    )
+    assert saved.api_base == "https://ok.example.test/v1"
+
+
+@pytest.mark.asyncio
+async def test_the_onboarding_refuses_a_bad_base_url_too(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    save_config(Config(), config_path)
+    monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
+    with pytest.raises(WebUISettingsError):
+        await save_onboarding({
+            "provider_name": "p", "format": "openai_compat", "api_key": "not-a-real-credential",
+            "api_base": "Http:/10.0.2.2", "model": "m",
+        })
+    assert load_config(config_path).providers.providers == []

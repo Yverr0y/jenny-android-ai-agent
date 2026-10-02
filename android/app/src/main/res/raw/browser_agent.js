@@ -66,7 +66,16 @@
     contentinfo: 1, complementary: 1, region: 1,
   };
 
+  function isPassword(el) {
+    return el.tagName.toLowerCase() === 'input' &&
+      (el.getAttribute('type') || '').toLowerCase() === 'password';
+  }
+
   function role(el) {
+    // Un campo password resta `password` qualunque `role` dichiari la pagina:
+    // `<input type=password role=textbox>` passava per un textbox, e il divieto
+    // di scriverci (che guarda il ruolo) non scattava.
+    if (isPassword(el)) return 'password';
     var explicit = el.getAttribute('role');
     if (explicit) {
       var first = explicit.split(/\s+/)[0].toLowerCase();
@@ -140,6 +149,19 @@
       if (tail) return '/' + decodeURIComponent(tail).slice(0, 40);
     }
     return '';
+  }
+
+  // Il nome del bottone che invia il modulo di *el*, o '' se non c'e' un modulo.
+  // Serve alla politica su `press Enter`: un Enter in un campo invia il modulo
+  // come un click sul suo bottone, e deve passare dallo stesso lessico dei
+  // verbi che costano. Senza bottone, il nome del modulo stesso.
+  function formLabel(el) {
+    var f = el.form;
+    if (!f) return '';
+    var btn = f.querySelector(
+      'button[type="submit"], button:not([type]), input[type="submit"], input[type="image"]');
+    var n = btn ? accessibleName(btn, 'button') : '';
+    return n || clean(f.getAttribute('aria-label')) || clean(f.getAttribute('name')) || 'form';
   }
 
   function state(el, r) {
@@ -247,7 +269,7 @@
         // politica su cosa si puo' cliccare e dove si puo' scrivere sta in
         // Python, dove si puo' testare, ma il nome accessibile lo sa solo la
         // pagina. Questo indice non arriva al modello.
-        index[ref] = [item.role, item.name];
+        index[ref] = [item.role, item.name, formLabel(item.el)];
       }
       lines.push(lineFor(item, ref)); keys.push(keyFor(item));
       used += probe.length + 1;
@@ -275,13 +297,13 @@
     for (var k in deferred) if (deferred[k]) rest.push(deferred[k] + ' ' + k);
     var trailer = '';
     if (rest.length) {
-      trailer = (filter ? '… senza "' + filter + '" nel nome: ' : '… fuori schermo: ') +
+      trailer = (filter ? '… without "' + filter + '" in the name: ' : '… off screen: ') +
         rest.sort().join(', ') +
-        (filter ? '.' : ' — usa filter="<testo>" per raggiungerli, o scroll.');
+        (filter ? '.' : ' — use filter="<text>" to reach them, or scroll.');
     }
     if (truncated) {
       trailer = (trailer ? trailer + '\n' : '') +
-        '… snapshot troncato a ' + maxChars + ' caratteri.';
+        '… snapshot truncated at ' + maxChars + ' characters.';
     }
 
     var text = lines.join('\n') + (trailer ? '\n' + trailer : '');
@@ -300,8 +322,8 @@
       for (var c = 0; c < lines.length; c++) if (!before[keys[c]]) added.push(lines[c]);
       var kept = lines.length - added.length;
       var removed = J.prev.length - kept;
-      diff = (added.length ? added.join('\n') : '(niente di nuovo sulla pagina)') +
-        '\n… ' + kept + ' invariate, ' + removed + ' sparite.' +
+      diff = (added.length ? added.join('\n') : '(nothing new on the page)') +
+        '\n… ' + kept + ' unchanged, ' + removed + ' gone.' +
         (trailer ? '\n' + trailer : '');
     }
     // Una fotografia filtrata e' una ricerca, non un ritratto della pagina:
@@ -325,16 +347,16 @@
   // ---------------------------------------------------------------- azioni
 
   function resolve(ref) {
-    if (!ref) return { error: 'ref mancante' };
+    if (!ref) return { error: 'missing ref' };
     var v = String(ref).split(':')[0];
     if (String(J.v) !== v) {
-      return { error: 'ref "' + ref + '" è della versione ' + v + ', lo snapshot corrente è ' +
-        J.v + ' — la pagina è cambiata, rifai browser_snapshot' };
+      return { error: 'ref "' + ref + '" is from version ' + v + ', the current snapshot is ' +
+        J.v + ' — the page has changed, run browser_snapshot again' };
     }
     var el = J.refs[ref];
-    if (!el) return { error: 'ref "' + ref + '" sconosciuto in questo snapshot' };
+    if (!el) return { error: 'ref "' + ref + '" is unknown in this snapshot' };
     if (!el.isConnected) {
-      return { error: 'ref "' + ref + '" non è più nel documento — rifai browser_snapshot' };
+      return { error: 'ref "' + ref + '" is no longer in the document — run browser_snapshot again' };
     }
     return { el: el };
   }
@@ -366,11 +388,23 @@
         } else if (a === 'press') {
           var target = document.activeElement || document.body;
           var key = st.key || 'Enter';
+          // `submit: false` lo mette Python quando non sa (o non deve) far
+          // partire il modulo: l'invio si fa allora col click sul bottone, che
+          // passa dal controllo sui verbi che costano. Il rifiuto viene **prima**
+          // dei tasti: un keydown Enter lo legge anche il JavaScript della
+          // pagina, e un gestore che paga all'Enter non aspetta il submit.
+          if (key === 'Enter' && target.form && st.submit === false) {
+            r.error = 'Enter would submit the form "' + formLabel(target) + '": click its ' +
+              'button instead, or repeat the step with "confirm": true if the user said yes.';
+            results.push(r); break;
+          }
           ['keydown', 'keyup'].forEach(function (t) {
             target.dispatchEvent(new KeyboardEvent(t, { key: key, bubbles: true }));
           });
-          if (key === 'Enter' && target.form) { target.form.requestSubmit ?
-            target.form.requestSubmit() : target.form.submit(); navHint = true; }
+          if (key === 'Enter' && target.form) {
+            target.form.requestSubmit ?
+              target.form.requestSubmit() : target.form.submit(); navHint = true;
+          }
           r.ok = true;
         } else {
           var res = resolve(st.ref);
@@ -389,11 +423,17 @@
             // il modello ci ha provato quattro volte di fila, perche' ogni
             // volta gli rispondevamo "ok".
             var tag = el.tagName.toLowerCase();
+            // Anche qui, oltre che in Python: l'indice dei ruoli puo' mancare
+            // (il ref di un bridge vecchio), il tipo del campo no.
+            if (isPassword(el)) {
+              r.error = 'I don\'t type into a password field: the user enters credentials.';
+              results.push(r); break;
+            }
             var typeable = tag === 'input' || tag === 'textarea' || el.isContentEditable;
             if (!typeable) {
-              r.error = 'non ci si puo\' scrivere: ' + (role(el) || tag) +
-                ' "' + accessibleName(el, role(el)).slice(0, 40) + '". Serve un textbox o una searchbox: ' +
-                'cerca quello nello snapshot, o clicca prima questo se apre un campo.';
+              r.error = 'cannot type into this: ' + (role(el) || tag) +
+                ' "' + accessibleName(el, role(el)).slice(0, 40) + '". It takes a textbox or a searchbox: ' +
+                'look for one in the snapshot, or click this first if it opens a field.';
               results.push(r); break;
             }
             el.focus();
@@ -402,13 +442,13 @@
             // Verifica invece di fidarsi: un campo controllato da un framework
             // puo' rimettersi come prima appena lo si tocca.
             if (String(el.value) !== String(st.text || '')) {
-              r.error = 'il campo non ha tenuto il testo (lo riscrive la pagina)';
+              r.error = 'the field did not keep the text (the page rewrites it)';
               results.push(r); break;
             }
             r.ok = true; r.value = String(el.value).slice(0, 60);
           } else if (a === 'select') {
             if (el.tagName.toLowerCase() !== 'select') {
-              r.error = 'non e\' un elenco a tendina: ' + (role(el) || el.tagName.toLowerCase());
+              r.error = 'not a dropdown: ' + (role(el) || el.tagName.toLowerCase());
               results.push(r); break;
             }
             var want = String(st.value == null ? '' : st.value).toLowerCase();
@@ -419,14 +459,14 @@
                   clean(opt.text).toLowerCase() === want) { picked = o; break; }
             }
             if (picked < 0) {
-              r.error = 'nessuna opzione "' + st.value + '" in questo elenco';
+              r.error = 'no option "' + st.value + '" in this list';
               results.push(r); break;
             }
             el.selectedIndex = picked;
             fire(el, 'input'); fire(el, 'change');
             r.ok = true; r.selected = clean(el.options[picked].text);
           } else {
-            r.error = 'azione sconosciuta: ' + a;
+            r.error = 'unknown action: ' + a;
             results.push(r); break;
           }
         }
@@ -468,7 +508,7 @@
     if (ARGS.op === 'snapshot') return JSON.stringify(snapshot(ARGS));
     if (ARGS.op === 'act') return JSON.stringify(act(ARGS));
     if (ARGS.op === 'read') return JSON.stringify(read(ARGS));
-    return JSON.stringify({ error: 'op sconosciuta: ' + ARGS.op });
+    return JSON.stringify({ error: 'unknown op: ' + ARGS.op });
   } catch (e) {
     return JSON.stringify({ error: 'JS: ' + String(e && e.message ? e.message : e) });
   }

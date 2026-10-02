@@ -39,15 +39,21 @@ _REQUEST_KEYS = ("requests", "provider_requests", "estimated_requests")
 # farebbe ripiegare su ``"system"`` alla prossima lettura (``_clean_source``),
 # cioe' cambierebbe etichetta a una spesa passata: un registro e' l'unico posto
 # dove la storia deve restare com'era.
-# ``mascot`` e' il sidecar dell'umore della mascotte (``session.mascot_mood``):
-# una richiesta piccola per turno WebUI, fuori dal turno, che senza un bucket
-# suo finirebbe addebitata alla chat.
+# ``mascot`` era il sidecar dell'umore della mascotte: una richiesta piccola per
+# turno WebUI, fuori dal turno. Dal 24/09/2026 l'umore si legge dagli emoji e
+# non scrive piu' qui; il bucket resta per la stessa ragione di sopra — i giorni
+# gia' registrati lo portano.
 _SOURCE_KEYS = ("user", "api", "cron", "dream", "atlas", "gardener", "mascot", "system")
 # Mappa *locale* kind interno -> bucket di ``_SOURCE_KEYS``. Il vocabolario dei
 # kind e' condiviso (``jenny.session.keys.internal_session_kind``), la
 # partizione in bucket no: e' una scelta di contabilita di questo modulo.
 # I kind assenti (``internal``, ``subagent``) finiscono in ``"user"`` per
-# fallthrough — come prima di questa condivisione.
+# fallthrough — come prima di questa condivisione. Un subagent pero' non si conta
+# con una chiave ``subagent:``: il suo runner porta la chiave della sessione che
+# l'ha lanciato, e il bucket e' quello (``SubagentManager.usage_hooks``). Allo
+# stesso modo una consolidazione si conta sotto la sessione consolidata
+# (``Consolidator.usage_hooks``). Un tempo nessuna delle due arrivava qui:
+# l'hook stava solo sui turni di ``AgentLoop``, e quella spesa non si vedeva.
 _INTERNAL_KIND_TO_SOURCE = {
     "dream": "dream",
     "cron": "cron",
@@ -285,22 +291,6 @@ def record_token_usage(
             kept = dict(sorted(state["days"].items())[-_MAX_DAYS_RETAINED:])
             state["days"] = kept
         return write_token_usage_state(state)
-
-
-def record_response_token_usage(
-    response: Any,
-    *,
-    source: str,
-    timezone_name: str | None = None,
-) -> None:
-    try:
-        record_token_usage(
-            getattr(response, "usage", None),
-            source=source,
-            timezone_name=timezone_name,
-        )
-    except Exception:
-        logger.exception("failed to record {} token usage", source)
 
 
 def token_usage_payload(

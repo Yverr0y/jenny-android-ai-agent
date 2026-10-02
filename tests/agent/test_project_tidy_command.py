@@ -1,7 +1,7 @@
 """``/tidy`` riordina la wiki **in questa conversazione**, con le misure in mano.
 
 Il caso che l'ha chiesto, il 26/08/2026. L'utente ha parlato dentro
-``wikis/salute`` e poi ha detto «sistema un po' la wiki, se necessario spezza i
+``wikis/sartoria`` e poi ha detto «sistema un po' la wiki, se necessario spezza i
 concetti». Il risultato è stato buono, e per una ragione che nessuna passata
 periodica può avere: le pagine erano nel turno, la giornata di discussione era nel
 turno, e l'utente era lì a decidere. Quel che è mancato è tutto qui:
@@ -51,7 +51,7 @@ def _msg(content: str = PROJECT_TIDY_COMMAND) -> InboundMessage:
     )
 
 
-def _wiki(root: Path, name: str = "salute", *, map_text: str = "# Salute\n\n## Pages\n") -> Path:
+def _wiki(root: Path, name: str = "sartoria", *, map_text: str = "# Sartoria\n\n## Pages\n") -> Path:
     project = root / "wikis" / name
     (project / "wiki").mkdir(parents=True, exist_ok=True)
     (project / "wiki" / "index.md").write_text(map_text, encoding="utf-8")
@@ -69,7 +69,7 @@ def _flat(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
-async def _prompt(loop: AgentLoop, key: str = "project:salute") -> str:
+async def _prompt(loop: AgentLoop, key: str = "project:sartoria") -> str:
     expanded = await loop._expand_project_tidy(_msg(), key)
     assert expanded is not None
     return _flat(expanded.content)
@@ -98,7 +98,7 @@ async def test_it_rewrites_the_turn_instead_of_launching_a_pass(tmp_path: Path) 
     _wiki(tmp_path)
     original = _msg()
 
-    expanded = await loop._expand_project_tidy(original, "project:salute")
+    expanded = await loop._expand_project_tidy(original, "project:sartoria")
 
     assert expanded is not None
     assert expanded.content != original.content, "il comando deve diventare un prompt"
@@ -200,7 +200,7 @@ async def test_the_prune_paragraph_only_appears_when_the_map_is_over(
     un ordine di potare è un invito a potare per niente — e potare muove prosa
     dentro le pagine, cioè non è gratis."""
     loop = _loop(tmp_path)
-    _wiki(tmp_path, map_text="# Salute\n\n" + "y" * map_chars)
+    _wiki(tmp_path, map_text="# Sartoria\n\n" + "y" * map_chars)
 
     prompt = await _prompt(loop)
 
@@ -407,7 +407,7 @@ async def test_any_of_the_three_folders_declares_the_research_layout(
 async def test_the_measurements_are_in_both_layouts(tmp_path: Path) -> None:
     """Il tetto per turno **non** è una regola di layout, ed è il motivo per cui il
     comando serve su tutte e due: l'iniettore non guarda in che cartella sta una
-    pagina. Su ``allergie`` (layout ricerca, misurata il 26/08) sono nove pagine
+    pagina. Su ``alpinismo`` (layout ricerca, misurata il 26/08) sono nove pagine
     che nessuna conversazione può leggere."""
     loop = _loop(tmp_path)
     project = _wiki(tmp_path)
@@ -454,7 +454,7 @@ async def test_no_heading_or_bullet_is_glued_to_the_line_before_it(
     for rel in pages:
         _page(project, rel, 7000)
 
-    expanded = await loop._expand_project_tidy(_msg(), "project:salute")
+    expanded = await loop._expand_project_tidy(_msg(), "project:sartoria")
 
     assert expanded is not None
     glued = [

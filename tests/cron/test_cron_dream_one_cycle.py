@@ -15,13 +15,16 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from support.aio import wait_until
 
 from jenny.agent import dream_cycle
 from jenny.agent.tools.file_state import FileStates
 from jenny.config.schema import Config
 from jenny.runtime.cron_dispatch import CronDispatcher
 
-_DREAM_JOB = SimpleNamespace(name="dream", id="job-dream")
+_DREAM_JOB = SimpleNamespace(
+    name="dream", id="dream", payload=SimpleNamespace(kind="system_event")
+)
 
 
 @pytest.fixture(autouse=True)
@@ -107,11 +110,12 @@ def _dispatcher(agent: _GatedAgent) -> CronDispatcher:
 
 async def _wait_for_the_turn(agent: _GatedAgent) -> None:
     """Attende che il primo ciclo sia davvero dentro il turno."""
-    for _ in range(500):
-        await asyncio.sleep(0.005)
-        if agent.turns:
-            return
-    raise AssertionError("il primo ciclo Dream non è mai arrivato al turno")
+    await wait_until(
+        lambda: agent.turns,
+        timeout=2.5,
+        interval=0.005,
+        msg="il primo ciclo Dream non è mai arrivato al turno",
+    )
 
 
 async def _second_tick(dispatcher: CronDispatcher, *, timeout: float = 2.0):

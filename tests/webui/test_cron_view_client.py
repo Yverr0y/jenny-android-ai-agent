@@ -16,20 +16,17 @@ niente si rompe, l'informazione si limita a diventare inutile.
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
 
 VIEW_JS = (
     Path(__file__).resolve().parents[2]
     / "jenny" / "templates" / "ui" / "assets" / "shared" / "cron-view.js"
 )
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 # ``tr`` finta: ritorna la chiave piu' i parametri, cosi' un'asserzione dice
 # quale stringa e' stata scelta senza dipendere da una traduzione vera. Il
@@ -44,15 +41,7 @@ const NOW = 1_700_000_000_000;
 
 def _run_js(script: str) -> str:
     source = VIEW_JS.read_text(encoding="utf-8") + _HARNESS + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        env={"TZ": "Europe/Rome", "PATH": "/usr/bin:/bin:/usr/local/bin"},
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
-    return proc.stdout
+    return run_js(source, env={"TZ": "Europe/Rome", "PATH": "/usr/bin:/bin:/usr/local/bin"})
 
 
 # ── il vocabolario dei cinque esiti ─────────────────────────────────────────
@@ -419,3 +408,193 @@ def test_an_unavailable_payload_still_produces_a_renderable_view() -> None:
     assert view["available"] is False
     assert view["banner"] == {"kind": "unavailable"}
     assert view["rows"] == []
+
+
+# ── Il filtro: un elenco per cassetto ───────────────────────────────────────
+
+
+def _payload(*, jobs: str = "", extra: str = "") -> str:
+    return f"{{ available: true, now_ms: NOW, default_timezone: 'Europe/Rome', jobs: [{jobs}], counts: {{ system: 4, user: 2 }}{extra} }}"
+
+
+def _job(id_: str, kind: str, *, effective: str = "active", next_ms: str = "NOW + 60_000") -> str:
+    """Un lavoro come lo manda il gateway. `effective` e' il campo che
+    `pickBanner` guarda per dire «fermo»: `enabled` da solo non basta."""
+    return (f"{{ id: '{id_}', name: '{id_}', kind: '{kind}', effective: '{effective}', "
+            f"schedule: {{ kind: 'every', every_ms: 1_800_000 }}, next_run_at_ms: {next_ms}, "
+            f"last_run_at_ms: NOW - 600_000, runs: [] }}")
+
+
+def test_a_drawer_shows_only_its_own_jobs() -> None:
+    """«Programmazione» non era una famiglia: i quattro lavori di sistema
+    finiscono in tre posti diversi. Il payload porta gia' `kind` per riga, e
+    il filtro e' quel che rende la divisione un parametro invece di un giro di
+    codice nuovo."""
+    out = _run_js(f"""
+      const all = buildCronView({_payload(jobs=', '.join([
+          _job('dream', 'system'), _job('gardener', 'system'),
+          _job('heartbeat', 'system'), _job('pioggia-oslo', 'user')]))}, {{ tr }});
+      const hands = buildCronView({_payload(jobs=', '.join([
+          _job('dream', 'system'), _job('gardener', 'system'),
+          _job('heartbeat', 'system'), _job('pioggia-oslo', 'user')]))},
+        {{ tr, keep: (j) => j.kind !== 'system' || j.id === 'heartbeat' }});
+      console.log(JSON.stringify({{
+        all: all.rows.map((r) => r.id),
+        hands: hands.rows.map((r) => r.id),
+      }}));
+    """)
+    visto = json.loads(out)
+    assert sorted(visto["all"]) == ["dream", "gardener", "heartbeat", "pioggia-oslo"]
+    assert sorted(visto["hands"]) == ["heartbeat", "pioggia-oslo"], (
+        "il cassetto Mani mostra lavori che appartengono a un altro cassetto"
+    )
+
+
+def test_the_banner_talks_about_the_jobs_you_can_see() -> None:
+    """Il banner nomina i lavori spenti. Calcolato sul payload intero e mostrato
+    accanto a un elenco filtrato, direbbe di lavori che li' non ci sono — e chi
+    legge cerca una riga che non esiste."""
+    off = ', '.join([
+        _job('dream', 'system', effective='inert', next_ms='null'),
+        _job('gardener', 'system', effective='inert', next_ms='null'),
+        _job('heartbeat', 'system'),
+        _job('pioggia-oslo', 'user'),
+    ])
+    out = _run_js(f"""
+      const all = buildCronView({_payload(jobs=off)}, {{ tr }});
+      const hands = buildCronView({_payload(jobs=off)},
+        {{ tr, keep: (j) => j.kind !== 'system' || j.id === 'heartbeat' }});
+      console.log(JSON.stringify({{
+        all: all.banner, hands: hands.banner,
+      }}));
+    """)
+    visto = json.loads(out)
+    assert visto["all"] and visto["all"]["kind"] == "inert", visto["all"]
+    assert "dream" in visto["all"]["jobs"], visto["all"]
+    assert not visto["hands"] or "dream" not in (visto["hands"].get("jobs") or []), (
+        f"il banner di Mani nomina un lavoro che Mani non mostra: {visto['hands']}"
+    )
+
+
+def test_the_count_describes_what_is_on_screen() -> None:
+    """I conteggi vengono dal payload e descrivono **tutti** i lavori: un «4
+    lavori» sopra due righe si legge come un guasto."""
+    jobs = ', '.join([
+        _job('dream', 'system'), _job('gardener', 'system'),
+        _job('heartbeat', 'system'), _job('pioggia-oslo', 'user'),
+    ])
+    out = _run_js(f"""
+      const all = buildCronView({_payload(jobs=jobs)}, {{ tr }});
+      const hands = buildCronView({_payload(jobs=jobs)},
+        {{ tr, keep: (j) => j.kind !== 'system' || j.id === 'heartbeat' }});
+      console.log(JSON.stringify({{ all: all.counts, hands: hands.counts }}));
+    """)
+    visto = json.loads(out)
+    assert visto["all"] == {"system": 4, "user": 2}, "senza filtro i conti restano quelli del server"
+    assert visto["hands"] == {"system": 1, "user": 1}, visto["hands"]
+
+
+def test_without_a_filter_nothing_changes() -> None:
+    """Il filtro e' un parametro, non un cambio di comportamento: chi non lo
+    passa deve vedere esattamente quel che vedeva prima."""
+    jobs = ', '.join([_job('dream', 'system'), _job('pioggia-oslo', 'user')])
+    out = _run_js(f"""
+      const a = buildCronView({_payload(jobs=jobs)}, {{ tr }});
+      const b = buildCronView({_payload(jobs=jobs)}, {{ tr, keep: undefined }});
+      console.log(JSON.stringify({{ a: a.rows.map((r) => r.id), b: b.rows.map((r) => r.id),
+                                    tallies: a.counts }}));
+    """)
+    visto = json.loads(out)
+    assert visto["a"] == visto["b"]
+    assert visto["tallies"] == {"system": 4, "user": 2}
+
+
+def _predicate_of_hands() -> str:
+    """`HANDS_JOBS` preso dal sorgente, non riscritto qui.
+
+    Ricopiarlo vorrebbe dire misurare la copia: il difetto che conta e' che
+    *quel* predicato cambi, non che ne esista uno giusto da qualche parte.
+    """
+    import re
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "jenny" / "templates" / "ui" / "assets" / "mobile-settings.js"
+    ).read_text(encoding="utf-8")
+    m = re.search(r"^export const HANDS_JOBS = (.+);$", src, re.M)
+    assert m, "HANDS_JOBS non si trova piu' in mobile-settings.js"
+    return m.group(1)
+
+
+def test_the_hands_drawer_keeps_what_she_does_for_you() -> None:
+    """I quattro lavori di sistema vanno in tre posti diversi.
+
+    In Mani resta cio' che Jenny fa **per te** quando non glielo stai
+    chiedendo: i tuoi promemoria, e l'heartbeat — che legge le cose che le hai
+    lasciato in `HEARTBEAT.md`. `dream` e `gardener` riempiono la memoria e
+    stanno accanto a quel che riempiono; `update_check` e' dell'app, e il suo
+    giro e' in casa.
+    """
+    out = _run_js(f"""
+      const keep = {_predicate_of_hands()};
+      const jobs = [
+        {{ id: 'dream', kind: 'system' }},
+        {{ id: 'gardener', kind: 'system' }},
+        {{ id: 'update_check', kind: 'system' }},
+        {{ id: 'heartbeat', kind: 'system' }},
+        {{ id: 'pioggia-oslo', kind: 'user' }},
+      ];
+      console.log(JSON.stringify(jobs.filter(keep).map((j) => j.id)));
+    """)
+    assert sorted(json.loads(out)) == ["heartbeat", "pioggia-oslo"], json.loads(out)
+
+
+# ── un payload senza `jobs`, con un filtro attivo ───────────────────────────
+
+
+def test_counting_survives_a_payload_without_jobs() -> None:
+    """Un guardiano su due non e' un guardiano.
+
+    ``visto`` nasce da ``keep && payload?.jobs ? {...} : payload``: quando
+    ``jobs`` manca, ``visto`` **e'** ``payload``, cioe' un oggetto senza
+    ``jobs``. Le due righe che ricontano i lavori ci facevano ``.filter``
+    sopra — e con un filtro attivo, che Mani passa **sempre**
+    (``HANDS_JOBS``), era un ``TypeError`` che portava via l'intero gruppo
+    «quando agisce da sola».
+
+    Trovato per caso il 21/09/2026 mentre si provava un altro passo, con una
+    risposta finta priva di ``jobs``. La riga sopra si proteggeva gia'; questa
+    no, e la distanza fra le due era di tre righe.
+    """
+    out = _run_js("""
+      const view = buildCronView(
+        { service_running: true },
+        { nowMs: NOW, tr, locale: 'it', keep: (j) => j.kind !== 'system' },
+      );
+      console.log(JSON.stringify({ available: view.available, counts: view.counts }));
+    """)
+    data = json.loads(out)
+
+    assert data["counts"] == {"system": 0, "user": 0}, (
+        "senza lavori i conteggi sono zero, non un'eccezione"
+    )
+
+
+def test_the_row_carries_the_actions_the_server_allows_and_the_pause() -> None:
+    """La lista dei gesti viene dal server e passa intatta: il client non la
+    ricalcola. Un payload di una versione vecchia, senza ``actions``, non offre
+    niente invece di rompersi."""
+    paused = (_job("acqua", "user", effective="disabled", next_ms="null")[:-2]
+              + ", actions: ['resume', 'remove'], paused_at_ms: NOW - 3_600_000 }")
+    legacy = _job("vecchio", "user")
+    out = _run_js(f"""
+      const view = buildCronView({_payload(jobs=paused + ', ' + legacy)}, {{ tr }});
+      const byId = Object.fromEntries(view.rows.map((r) => [r.id, r]));
+      console.log(JSON.stringify({{
+        acqua: [byId.acqua.actions, byId.acqua.pausedAtMs === NOW - 3_600_000],
+        vecchio: [byId.vecchio.actions, byId.vecchio.pausedAtMs],
+      }}));
+    """)
+    visto = json.loads(out)
+    assert visto["acqua"] == [["resume", "remove"], True]
+    assert visto["vecchio"] == [[], None]

@@ -1,6 +1,6 @@
 """Sola lettura: cosa si chiude, e soprattutto cosa **non** si chiude.
 
-Passo **4.2** di ``roadmap/progetti-passi.md``.
+Passo **4.2** del piano dei progetti.
 
 I cancelli sono otto, non tre. Tre sono quelli che il confine di scrittura del
 passo 1.3 aveva già sdoppiato — i tool file, i builtin di ``python_exec``,
@@ -99,6 +99,25 @@ async def test_edit_file_is_refused_and_leaves_the_file_alone(readonly: Path) ->
         path="modificabile.txt", old_text="prima", new_text="dopo"
     )
     assert _REFUSED in result
+    assert (readonly / "modificabile.txt").read_text(encoding="utf-8") == "prima\n"
+
+
+async def test_apply_patch_is_refused_but_its_dry_run_is_not(readonly: Path) -> None:
+    """Il dry-run non scrive, quindi in sola lettura resta.
+
+    Prima passava da ``_resolve_write`` come la patch vera e veniva rifiutato:
+    proprio l'anteprima che serve a descrivere «cosa avrei cambiato».
+    """
+    from jenny.agent.tools.apply_patch import ApplyPatchTool
+
+    edits = [{
+        "path": "modificabile.txt", "action": "replace", "old_text": "prima", "new_text": "dopo",
+    }]
+    preview = await ApplyPatchTool(workspace=readonly).execute(edits=edits, dry_run=True)
+    assert "dry-run succeeded" in preview and _REFUSED not in preview, preview
+
+    applied = await ApplyPatchTool(workspace=readonly).execute(edits=edits)
+    assert _REFUSED in applied, applied
     assert (readonly / "modificabile.txt").read_text(encoding="utf-8") == "prima\n"
 
 
@@ -301,7 +320,7 @@ def readonly_scope(ws: Path, restrict: bool):
         yield ws
 
 
-_MUTAZIONI = [
+_MUTATIONS = [
     ("os.remove", "import os; os.remove({p!r})"),
     ("os.rename", "import os; os.rename({p!r}, {p!r} + '.x')"),
     ("os.mkdir", "import os; os.mkdir({p!r} + '.dir')"),
@@ -323,7 +342,7 @@ _MUTAZIONI = [
 
 
 @pytest.mark.parametrize(
-    ("_id", "code"), _MUTAZIONI, ids=[i for i, _c in _MUTAZIONI]
+    ("_id", "code"), _MUTATIONS, ids=[i for i, _c in _MUTATIONS]
 )
 async def test_every_mutating_route_is_refused_on_the_real_path(
     readonly_scope: Path, restrict: bool, _id: str, code: str
@@ -338,11 +357,11 @@ async def test_every_mutating_route_is_refused_on_the_real_path(
     # E il filesystem non si è mosso: un rifiuto detto a metà è il caso peggiore.
     assert target.read_text(encoding="utf-8") == "prima\n"
     assert (readonly_scope / (target.name + ".d")).is_dir()
-    for suffisso in (".x", ".dir", ".link", ".copia", ".mosso"):
-        assert not Path(str(target) + suffisso).exists(), suffisso
+    for suffix in (".x", ".dir", ".link", ".copia", ".mosso"):
+        assert not Path(str(target) + suffix).exists(), suffix
 
 
-_LETTURE = [
+_READS = [
     ("listdir", "import os; print(os.listdir({p!r}))"),
     ("stat", "import os; print(os.stat({p!r} + '/leggibile.txt').st_size)"),
     ("access", "import os; print(os.access({p!r}, os.R_OK))"),
@@ -361,7 +380,7 @@ _LETTURE = [
 ]
 
 
-@pytest.mark.parametrize(("_id", "code"), _LETTURE, ids=[i for i, _c in _LETTURE])
+@pytest.mark.parametrize(("_id", "code"), _READS, ids=[i for i, _c in _READS])
 async def test_reading_is_untouched_on_the_real_path(
     readonly_scope: Path, restrict: bool, _id: str, code: str
 ) -> None:
@@ -423,7 +442,7 @@ async def test_host_code_keeps_writing_during_a_readonly_turn(readonly_scope: Pa
     _os.remove(readonly_scope / "dal-gateway.txt")
 
 
-class TestIlFlagArrivaAlThreadCheEsegue:
+class TestTheFlagReachesTheThreadThatRuns:
     """Il test che muore se il cancello torna a essere solo sincrono.
 
     Non prova un rifiuto: prova il *meccanismo*. Toccando la copia del contesto
@@ -432,21 +451,21 @@ class TestIlFlagArrivaAlThreadCheEsegue:
     passare — che è esattamente come il difetto è arrivato in produzione.
     """
 
-    async def test_current_turn_is_readonly_e_vero_sul_worker(
+    async def test_current_turn_is_readonly_is_true_on_the_worker(
         self, readonly_scope: Path
     ) -> None:
         visto: dict[str, Any] = {}
 
-        def _registra() -> None:
+        def _register() -> None:
             from jenny.security.workspace_access import current_turn_is_readonly
 
             visto["thread"] = threading.get_ident()
             visto["readonly"] = current_turn_is_readonly()
 
         tool = _tool(readonly_scope, True)
-        tool.namespace.register_function("_registra", _registra)
+        tool.namespace.register_function("_register", _register)
 
-        await tool.execute(code="_registra()")
+        await tool.execute(code="_register()")
 
         assert visto["thread"] != threading.get_ident(), (
             "il codice ha girato sul thread del test: questa prova non dice più "

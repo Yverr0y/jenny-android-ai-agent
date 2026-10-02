@@ -25,9 +25,11 @@ from typing import Any
 
 import httpx
 import pytest
+from support.aio import wait_until
 
 from jenny.runtime import update_install
 from jenny.runtime.update_check import UpdateInfo
+from jenny.security import fetch
 
 _INFO = UpdateInfo(
     version_code=9,
@@ -294,11 +296,9 @@ async def test_concurrent_calls_start_a_single_download(
 
     first = asyncio.create_task(update_install.start_install())
     # Lascia partire il primo fino dentro il thread di download.
-    for _ in range(500):
-        if bridge.downloads:
-            break
-        await asyncio.sleep(0.01)
-    assert bridge.downloads, "the first install never reached the bridge"
+    await wait_until(
+        lambda: bridge.downloads, timeout=5.0, msg="the first install never reached the bridge"
+    )
 
     second = await update_install.start_install()
 
@@ -461,7 +461,7 @@ async def test_an_endless_redirect_chain_gives_up(monkeypatch: pytest.MonkeyPatc
     async with _client(handler) as client:
         with pytest.raises(ValueError, match="too many redirects"):
             await _REAL_RESOLVE("https://github.invalid/x.apk", client=client)
-    assert hops["n"] == update_install._MAX_REDIRECTS + 1
+    assert hops["n"] == fetch.MAX_REDIRECTS + 1
 
 
 async def test_the_bridge_downloads_the_resolved_url(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -15,6 +15,7 @@ from jenny.providers.base import (
     LLMResponse,
     ToolCallRequest,
     parse_tool_arguments,
+    stream_error_response,
 )
 from jenny.providers.openai_compat_helpers import (
     _extract_tc_extras,
@@ -138,6 +139,12 @@ class ResponseParsingMixin:
 
     def _parse(self, response: Any) -> LLMResponse:
         response_map = self._maybe_mapping(response) or {}
+        if response_map.get("error"):
+            # Un 200 il cui corpo è un errore del gateway (OpenRouter, un proxy
+            # davanti a un modello sovraccarico): è lo stesso ``{"error": ...}``
+            # che scrive dentro uno stream, e si legge allo stesso modo. Senza,
+            # diventava «empty choices» senza status, e un 502 non si ritentava.
+            return stream_error_response(response_map["error"])
         choices = response_map.get("choices") or []
         if not choices:
             content = self._extract_text_content(
@@ -215,13 +222,52 @@ class ResponseParsingMixin:
     def _parse_chunks(cls, chunks: list[Any]) -> LLMResponse:
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
-        tc_bufs: dict[int, dict[str, Any]] = {}
+        tc_bufs: dict[Any, dict[str, Any]] = {}
         finish_reason = "stop"
         usage: dict[str, int] = {}
+        # Per i delta senza ``index``: a quale buffer va un id già visto (anche
+        # se visto accanto al suo ``index``), e quale buffer ha ricevuto l'ultimo
+        # frammento.
+        key_by_id: dict[str, Any] = {}
+        last_key: list[Any] = []
+
+        def _key_for(tc: Any, idx_hint: int) -> Any:
+            """Il buffer di un delta. ``index`` se c'è; altrimenti l'id decide.
+
+            Il ripiego sulla posizione nel chunk (*idx_hint*) dava 0 a ogni
+            chiamata parallela mandata una per chunk, e le fondeva in una. Senza
+            ``index``: un id nuovo apre un buffer nuovo, un id noto torna al suo,
+            un frammento senza id continua l'ultimo aperto.
+            """
+            raw_index = _get(tc, "index")
+            tc_id = _get(tc, "id")
+            if raw_index is not None:
+                # L'id visto col suo ``index`` resta legato a quel buffer: un
+                # chunk successivo che ripete solo l'id continua la stessa
+                # chiamata invece di aprirne un'altra.
+                if tc_id:
+                    key_by_id.setdefault(str(tc_id), raw_index)
+                return raw_index
+            if tc_id:
+                key = key_by_id.get(str(tc_id))
+                if key is None:
+                    if last_key and not tc_bufs[last_key[-1]]["id"]:
+                        # L'ultimo buffer è nato da un frammento senza id: è
+                        # questa chiamata, che si presenta adesso.
+                        key = last_key[-1]
+                    else:
+                        key = ("id", str(tc_id)) if tc_bufs else idx_hint
+                    key_by_id[str(tc_id)] = key
+                return key
+            # Più chiamate senza id nello stesso chunk restano distinte per
+            # posizione, come prima; il primo frammento di un chunk continua
+            # la chiamata dell'ultimo.
+            return last_key[-1] if last_key and idx_hint == 0 else idx_hint
 
         def _accum_tc(tc: Any, idx_hint: int) -> None:
             """Accumulate one streaming tool-call delta into *tc_bufs*."""
-            tc_index: int = _get(tc, "index") if _get(tc, "index") is not None else idx_hint
+            tc_index = _key_for(tc, idx_hint)
+            last_key[:] = [tc_index]
             buf = tc_bufs.setdefault(tc_index, {
                 "id": "", "name": "", "arguments": "",
                 "extra_content": None, "prov": None, "fn_prov": None,
@@ -260,8 +306,16 @@ class ResponseParsingMixin:
             if fn_args:
                 buf["arguments"] += str(fn_args)
 
+        stream_error: Any = None
         for chunk in chunks:
             chunk_map = cls._maybe_mapping(chunk) or {}
+            if chunk_map.get("error"):
+                # ``{"error": ...}`` scritto dal gateway dentro uno stream a 200
+                # (OpenRouter, un proxy davanti a un modello sovraccarico), con o
+                # senza ``choices`` accanto. Ci si ferma qui, come fa il ciclo
+                # dello stream: ``partial_content`` è ciò che l'utente ha visto.
+                stream_error = chunk_map["error"]
+                break
             choices = chunk_map.get("choices") or []
             if not choices:
                 usage = cls._extract_usage(chunk_map) or usage
@@ -292,6 +346,13 @@ class ResponseParsingMixin:
                 _accum_tc(tc, idx)
             _accum_legacy_function_call(delta.get("function_call"))
             usage = cls._extract_usage(chunk_map) or usage
+
+        if stream_error is not None:
+            # Un errore non è una risposta: niente tool call da eseguire, e lo
+            # status ricavato dal corpo decide il retry (v. ``stream_error_response``).
+            return stream_error_response(
+                stream_error, partial_content="".join(content_parts) or None,
+            )
 
         # Some providers (e.g. Zhipu/GLM) reuse the same tool_call id for
         # parallel tool calls in streaming mode. Deduplicate before building

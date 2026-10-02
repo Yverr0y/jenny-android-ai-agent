@@ -1,6 +1,6 @@
 """L'inventario delle scritture, e il guardiano che lo tiene onesto.
 
-Passo **4.1** di ``roadmap/progetti-passi.md``, allargato al passo **T4.7**.
+Passo **4.1** del piano dei progetti, allargato al passo **T4.7**.
 
 «Sola lettura» vuol dire «non cambia niente sul telefono» (deciso il 22/08), e
 quella promessa è mantenuta da una **lista** — chi scrive, e da quale cancello.
@@ -171,6 +171,16 @@ _ASKS_FOR_ITSELF = {
     # il comportamento futuro (wall timeout, chip del goal, iniezione «keep
     # working»). Stessa famiglia di un job cron, stesso rifiuto.
     "agent/tools/long_task.py": "registra un goal sostenuto via sessions.save, non un path",
+    # Stava in ``_OUT_OF_SCOPE`` con «scrive su una
+    # macchina remota», ma ``ssh_transfer direction=down`` scrive **sul
+    # telefono**: un subagent nato in sola lettura riscriveva ``SOUL.md`` da un
+    # file remoto. La destinazione passa da ``resolve_allowed_path`` con
+    # ``for_write`` spento, quindi il cancello dei tool file non la vede.
+    # ``ssh_exec``/``ssh_job``/``up`` scrivono sul remoto e restano aperti.
+    "agent/tools/ssh.py": (
+        "ssh_transfer down scrive nel workspace locale; exec, job e up scrivono sul "
+        "remoto, altro asse, e restano aperti"
+    ),
 }
 
 # Chi scrive ma **non deve** chiedere, con la ragione. Non è una lista di
@@ -192,7 +202,6 @@ _OUT_OF_SCOPE = {
         "non è registrato fra i tool (nessun TOOLS): ci scrive solo Dream, "
         "che è una sessione interna e non ha un messaggio da cui leggere il flag"
     ),
-    "agent/tools/ssh.py": "scrive su una macchina remota — altro asse, resta aperto",
     "agent/tools/ssh_jobs.py": "stato locale di un job ssh, non un file dell'utente",
     "agent/tools/ssh_transport.py": "stato locale del trasporto",
     # ── T4.7: i quattro scrittori del gateway, fuori scopo *per costruzione* ──
@@ -493,6 +502,35 @@ async def _probe_long_task(root: Path, readonly: bool) -> str:
     return out
 
 
+class _NoNetworkTransfer:
+    """``ssh_transfer`` senza rete: la risoluzione dell'host fallisce subito.
+
+    Con la scrittura accesa la sonda muore lì, cioè oltre il cancello, che è
+    quel che serve dimostrare; nessuna config vera viene letta.
+    """
+
+    @staticmethod
+    def build(root: Path) -> Any:
+        from jenny.agent.tools.ssh import SshTransferTool
+        from jenny.agent.tools.ssh_backends.base import SshError
+
+        class _Tool(SshTransferTool):
+            def _resolve(self, alias: str) -> Any:
+                raise SshError("nessuna rete nei test")
+
+        return _Tool(workspace=root)
+
+
+async def _probe_ssh(root: Path, readonly: bool) -> str:
+    (root / "SOUL.md").write_text("io\n", encoding="utf-8")
+    with _turn(root, readonly):
+        out = await _NoNetworkTransfer.build(root).execute(
+            host="lab", direction="down", local_path="SOUL.md", remote_path="/tmp/x",
+        )
+    assert (root / "SOUL.md").read_text(encoding="utf-8") == "io\n"
+    return out
+
+
 _PROBES: dict[str, Probe] = {
     "agent/tools/download.py": _probe_download,
     "apps/storage.py": _probe_app_storage,
@@ -500,6 +538,7 @@ _PROBES: dict[str, Probe] = {
     "agent/tools/app_update.py": _probe_app_update,
     "agent/tools/journal.py": _probe_journal,
     "agent/tools/long_task.py": _probe_long_task,
+    "agent/tools/ssh.py": _probe_ssh,
 }
 
 

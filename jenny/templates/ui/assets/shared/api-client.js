@@ -91,6 +91,34 @@ class ApiClient {
     location.reload();
   }
 
+  // Va a un ALTRO documento della WebUI portandosi dietro il segreto, che
+  // altrimenti resterebbe qui. È la strada fra i due gusci — la casa e
+  // l'officina — e senza questa il documento di destinazione farebbe un
+  // `bootstrap()` senza credenziale e prenderebbe 401.
+  //
+  // Perché non basta `reload()`: quello ricarica *questa* pagina. Perché non
+  // basta `location.href = path`: il fragment col segreto è stato consumato e
+  // cancellato al primo caricamento (v. _consumeBootstrapSecretFromLocation) e
+  // da lì in poi vive solo nella memoria di questa istanza, che la navigazione
+  // distrugge.
+  //
+  // `assign` di norma: i due gusci sono documenti separati e il tasto Indietro
+  // deve poter tornare da dove si è arrivati. `replace` per i passaggi da e
+  // verso `onboarding.html`: la casa lasciata per il primo avvio e il wizard
+  // concluso non sono posti in cui Indietro debba riportare.
+  navigate(path, { replace = false } = {}) {
+    if (typeof location === 'undefined') return;
+    const go = (url) => (replace ? location.replace(url) : location.assign(url));
+    if (!this._bootstrapSecret) {
+      go(path);
+      return;
+    }
+    const [base, rawHash = ''] = String(path).split('#');
+    const params = new URLSearchParams(rawHash);
+    params.set('bs', this._bootstrapSecret);
+    go(`${base}#${params}`);
+  }
+
   // Riporta un errore client-side nel log del gateway (fire-and-forget).
   // Best-effort: non deve mai lanciare né generare a sua volta errori globali,
   // e un cap per pagina evita flood in caso di errori ripetuti in loop.
@@ -123,18 +151,27 @@ class ApiClient {
     return res.json();
   }
 
-  async getSkills() {
-    const res = await this._fetch('/api/webui/skills');
-    if (!res.ok) throw new Error(`Skills failed: ${res.status}`);
-    return res.json();
-  }
 
   /** Stato della programmazione: cosa e' armato, e cosa fa davvero.
-   *  Sola lettura — le scritture passano dal tool `cron`, che e' l'unico imbuto
-   *  sullo store dei job. */
+   *  Questa e' la lettura. Da qui un job dell'utente si mette in pausa, si
+   *  riprende o si elimina (`cronJobAction`), sullo stesso servizio che usa il
+   *  tool `cron`; crearne uno o cambiarlo resta del tool. */
   async getCron() {
     const res = await this._fetch('/api/webui/cron');
     if (!res.ok) throw new Error(`Cron failed: ${res.status}`);
+    return res.json();
+  }
+
+  /* Pausa, ripresa o eliminazione di un job dell'utente (`pause` | `resume` |
+     `remove`). L'errore porta `status`: 409 vuol dire un promemoria singolo la
+     cui ora e' passata durante la pausa, che si puo' solo eliminare. */
+  async cronJobAction(jobId, action) {
+    const res = await this._fetch(`/api/webui/cron/${encodeURIComponent(jobId)}/${action}`);
+    if (!res.ok) {
+      const err = new Error((await res.text().catch(() => '')) || `Cron ${action} failed: ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
     return res.json();
   }
 
@@ -162,23 +199,47 @@ class ApiClient {
     return res.json();
   }
 
-  async getHiddenApps() {
-    const res = await this._fetch('/api/webui/hidden-apps');
-    if (!res.ok) throw new Error(`Hidden apps failed: ${res.status}`);
-    return res.json();
-  }
 
-  async setHiddenApps(packages) {
-    const state = encodeURIComponent(JSON.stringify({ packages }));
-    const res = await this._fetch(`/api/webui/hidden-apps/update?state=${state}`);
-    if (!res.ok) throw new Error(`Hidden apps update failed: ${res.status}`);
-    return res.json();
-  }
 
   async getJennyApps() {
     const res = await this._fetch('/api/webui/apps');
     if (!res.ok) throw new Error(`Jenny apps failed: ${res.status}`);
     return res.json();
+  }
+
+  /** Le skill, tutte: anche le spente e le `internal`, che Mani conta. */
+  async listSkills() {
+    const res = await this._fetch('/api/webui/skills');
+    if (!res.ok) throw new Error(`Skills failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Accende o spegne una skill **tua**. Su una integrata il gateway risponde
+   *  403: l'avvio la ri-estrarrebbe, e la scelta sparirebbe al riavvio. */
+  async setSkillDisabled(name, disabled) {
+    const res = await this._fetch(
+      `/api/webui/skills/${encodeURIComponent(name)}/update?disabled=${disabled ? 1 : 0}`,
+    );
+    if (!res.ok) throw new Error(`Skill update failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Il token con cui si incornicia la Jenny App *slug* (v. `frameForApp`).
+   *
+   *  Non il segreto del gateway: quello apre ogni route e la WebSocket, e
+   *  un'app — o un'iniezione dentro un'app — avrebbe avuto l'intera API. Questo
+   *  vale solo per i file e le azioni di quell'app (`jenny/apps/token.py`).
+   *  Deterministico lato server, quindi si chiede una volta per slug. */
+  async appToken(slug) {
+    this._appTokens ||= new Map();
+    const cached = this._appTokens.get(slug);
+    if (cached) return cached;
+    const res = await this._fetch(`/api/webui/apps/${encodeURIComponent(slug)}/token`);
+    if (!res.ok) throw new Error(`App token failed: ${res.status}`);
+    const { token } = await res.json();
+    if (!token) throw new Error('App token failed: empty');
+    this._appTokens.set(slug, token);
+    return token;
   }
 
   async deleteJennyApp(slug) {
@@ -187,11 +248,6 @@ class ApiClient {
     return res.json();
   }
 
-  async getConfig() {
-    const res = await this._fetch('/api/config');
-    if (!res.ok) return {};
-    return res.json();
-  }
 
   /** Progetti dello scope chip: un progetto e' una wiki, quindi e' l'elenco
    *  delle wiki. Ritorna `{ dir, projects: [{ name, modified }] }`. */
@@ -212,18 +268,30 @@ class ApiClient {
     return res.json();
   }
 
-  async getTree(wiki) {
-    const url = wiki ? `/api/tree?wiki=${encodeURIComponent(wiki)}` : '/api/tree';
-    const res = await this._fetch(url);
-    if (!res.ok) throw new Error(`Tree failed: ${res.status}`);
+
+  /** Nodi, archi e indice full-text di *wiki*, in una risposta sola.
+   *
+   *  Il nome e' **obbligatorio**: la forma senza — il grafo a stella di tutte
+   *  le wiki — non esiste piu' ne' qui ne' sul server, che risponde 400. */
+  async getGraph(wiki) {
+    const res = await this._fetch(`/api/graph?wiki=${encodeURIComponent(wiki)}`);
+    if (!res.ok) throw new Error(`Graph failed: ${res.status}`);
     return res.json();
   }
 
-  async getGraph(wiki) {
-    const url = wiki ? `/api/graph?wiki=${encodeURIComponent(wiki)}` : '/api/graph';
-    const res = await this._fetch(url);
-    if (!res.ok) throw new Error(`Graph failed: ${res.status}`);
-    return res.json();
+  /** Crea un riscontro ancorato a un punto di una pagina.
+   *
+   *  `selStart`/`selEnd` sono offset nel **markdown sorgente**. Il server si
+   *  rilegge il file da solo e calcola le tre ancore: il vecchio client gli
+   *  mandava anche `rawMarkdown` e la rotta lo **ignorava**.
+   *
+   *  Viaggia sul WebSocket (`rpc.createAudit`, comando `audit.create`): il
+   *  commento e' testo libero, e fino al 26/09/2026 stava nella query di una
+   *  GET, sotto il tetto di 8192 byte della riga di richiesta. Import
+   *  **dinamico** per la stessa ragione di `savePages`. */
+  async createAudit({ wiki, target, selStart, selEnd, comment }) {
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.createAudit({ wiki, target, selStart, selEnd, comment });
   }
 
   async getPage({ wiki, page } = {}) {
@@ -235,23 +303,7 @@ class ApiClient {
     return res.json();
   }
 
-  async getAudits({ wiki, targetPath, mode = 'open' } = {}) {
-    const params = new URLSearchParams({ target: targetPath || '', mode });
-    if (wiki) params.set('wiki', wiki);
-    const res = await this._fetch(`/api/audit?${params}`);
-    if (!res.ok) throw new Error(`Audits failed: ${res.status}`);
-    return res.json();
-  }
 
-  async createAudit({ wiki, target, rawMarkdown, selStart, selEnd, comment, severity, author }) {
-    const params = new URLSearchParams({ wiki, target, selStart, selEnd, comment, severity, author });
-    const res = await this._fetch(`/api/audit/create?${params}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Audit create failed: ${res.status}`);
-    }
-    return res.json();
-  }
 
   // Workspace APIs
   async listWorkspace(path) {
@@ -297,37 +349,26 @@ class ApiClient {
     return res.json();
   }
 
+  /* Rinomina, cancellazione e copia viaggiano sul WebSocket (`rpc`, comandi
+     `workspace.rename`/`delete`/`copy`): cambiano il disco, e fino al
+     26/09/2026 erano GET su /api/, che e' per letture e parametri corti,
+     e un `<img src>` con il token nell'indirizzo poteva farli partire. Stanno qui con
+     la stessa firma perche' i chiamanti non cambino; l'errore porta il `code`
+     del comando e il messaggio del server. Import **dinamico** per la stessa
+     ragione di `savePages`. */
   async renameWorkspace(oldPath, newPath) {
-    const params = new URLSearchParams();
-    params.set('oldPath', oldPath);
-    params.set('newPath', newPath);
-    const res = await this._fetch(`/api/workspace/rename?${params}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Workspace rename failed: ${res.status}`);
-    }
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.renameWorkspace(oldPath, newPath);
   }
 
   async deleteWorkspace(path) {
-    const res = await this._fetch(`/api/workspace/delete?path=${encodeURIComponent(path)}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Workspace delete failed: ${res.status}`);
-    }
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.deleteWorkspace(path);
   }
 
   async copyWorkspace(path, dest) {
-    const params = new URLSearchParams();
-    params.set('path', path);
-    if (dest) params.set('dest', dest);
-    const res = await this._fetch(`/api/workspace/copy?${params}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Workspace copy failed: ${res.status}`);
-    }
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.copyWorkspace(path, dest);
   }
 
   // ── Session APIs ──
@@ -349,14 +390,17 @@ class ApiClient {
     return res.json();
   }
 
+  /* I quattro metodi che portano un segreto — `getProviderModels`,
+     `updateProvider`, `saveTelegramToken`, `saveSshHost` — viaggiano sul
+     WebSocket (`rpc`): la chiave API, il token del bot e la password SSH
+     stavano nella query di una GET, cioe' nella riga di richiesta che log e
+     traceback vedono. Firma e forma della risposta sono
+     quelle di prima, cosi' i chiamanti non cambiano; l'errore porta il
+     messaggio del server e il `code` del comando. Import **dinamico** per la
+     stessa ragione di `savePages`. */
   async getProviderModels(provider, apiKey, apiBase, format) {
-    let url = `/api/settings/provider-models?provider=${encodeURIComponent(provider)}`;
-    if (apiKey) url += `&api_key=${encodeURIComponent(apiKey)}`;
-    if (apiBase) url += `&api_base=${encodeURIComponent(apiBase)}`;
-    if (format) url += `&format=${encodeURIComponent(format)}`;
-    const res = await this._fetch(url);
-    if (!res.ok) throw new Error(`Provider models failed: ${res.status}`);
-    return res.json();
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.providerModels({ provider, apiKey, apiBase, format });
   }
 
   _postWithQuery(url, params) {
@@ -373,18 +417,18 @@ class ApiClient {
     return res.json();
   }
 
+  /* Il messaggio del server arriva nell'errore: il backend rifiuta il
+     salvataggio spiegando *quale* file CA non ha potuto leggere e dove, e uno
+     stato secco trasformerebbe quella spiegazione in un mistero. I valori vuoti
+     si scartano come faceva `_postWithQuery`: la stringa vuota vuol dire «non
+     toccare», e `ca_bundle_clear` e' il segnale a parte per svuotare. */
   async updateProvider(params) {
-    const res = await this._postWithQuery('/api/settings/provider/update', params);
-    if (!res.ok) {
-      // Il corpo dell'errore va propagato: il backend rifiuta il salvataggio
-      // spiegando *quale* file CA non ha potuto leggere e dove, e uno stato
-      // secco ("400") trasformerebbe quella spiegazione in un mistero. Le rotte
-      // dei settings rispondono in `text/plain` (`http_error`), non in JSON come
-      // quelle delle app: qui si legge il testo, non `err.error`.
-      const detail = await res.text().catch(() => '');
-      throw new Error(detail.trim() || `Provider update failed: ${res.status}`);
+    const { rpc } = await import('./rpc-client.js');
+    const clean = {};
+    for (const [k, v] of Object.entries(params || {})) {
+      if (v !== null && v !== undefined && v !== '') clean[k] = String(v);
     }
-    return res.json();
+    return rpc.updateProvider(clean);
   }
 
   async deleteProvider(params) {
@@ -480,16 +524,19 @@ class ApiClient {
   }
 
   // `params` accetta anche `auth` ('key' | 'password') e, solo con
-  // `auth: 'password'`, la password in chiaro. Due cose da sapere prima di
-  // toccarla: il parametro si deve chiamare esattamente `password`, perché è
-  // quel nome che `http_utils.redact_query_secrets` riconosce e maschera nel
-  // log del path lato gateway; e va omesso — non passato vuoto — quando
-  // l'utente non l'ha ridigitata, perché assente significa "tieni quella
-  // salvata". Il valore non va mai loggato né tenuto in giro: la risposta non
-  // lo rimanda indietro (porta `has_password`, un booleano) proprio perché non
-  // esista una copia da cui possa ricomparire.
+  // `auth: 'password'`, la password in chiaro. Viaggia sul WebSocket (comando
+  // `ssh.host.save`), non piu' nella query: v. il commento su
+  // `getProviderModels`. Va omessa — non passata vuota — quando l'utente non
+  // l'ha ridigitata, perché assente significa "tieni quella salvata". Il valore
+  // non va mai loggato né tenuto in giro: la risposta non lo rimanda indietro
+  // (porta `has_password`, un booleano) proprio perché non esista una copia da
+  // cui possa ricomparire. I valori `null` diventano stringa vuota come in
+  // `_sshCall`: un campo svuotato deve arrivare vuoto.
   async saveSshHost(params) {
-    return this._sshCall('/api/settings/ssh/host/save', params);
+    const { rpc } = await import('./rpc-client.js');
+    const clean = {};
+    for (const [k, v] of Object.entries(params || {})) clean[k] = v == null ? '' : String(v);
+    return rpc.saveSshHost(clean);
   }
 
   async deleteSshHost(alias) {
@@ -513,8 +560,12 @@ class ApiClient {
     return this._sshCall('/api/settings/ssh/host-key/accept', params);
   }
 
+  /* La prima chiave API dell'utente: viaggia sul WebSocket come gli altri
+     segreti (v. `getProviderModels`), non nella query di una GET. Stessa firma
+     e stessa risposta di prima; l'errore porta il messaggio del server. */
   async saveOnboarding(params) {
-    const qs = new URLSearchParams({
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.saveOnboarding({
       provider_name: params.provider_name || params.provider || '',
       format: params.format || '',
       api_key: params.api_key || '',
@@ -524,12 +575,6 @@ class ApiClient {
       bot_icon: params.bot_icon || '',
       locale: params.locale || '',
     });
-    const res = await this._fetch(`/api/onboarding/save?${qs}`);
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(text || `Onboarding save failed: ${res.status}`);
-    }
-    return res.json();
   }
 
   // ── Telegram APIs ──
@@ -547,8 +592,11 @@ class ApiClient {
     return this._telegramGet('/api/telegram/status');
   }
 
+  /* Il token sul WebSocket (comando `telegram.save`), non nella query: v. il
+     commento su `getProviderModels`. */
   async saveTelegramToken(token) {
-    return this._telegramGet(`/api/telegram/save?token=${encodeURIComponent(token)}`);
+    const { rpc } = await import('./rpc-client.js');
+    return rpc.saveTelegramToken(token);
   }
 
   async unpairTelegram() {
@@ -585,6 +633,42 @@ class ApiClient {
 
   async exportBackup(passphrase) {
     return this._backupPost('/api/backup/export', { passphrase });
+  }
+
+  /* ── Le pagine della casa ────────────────────────────────────────────── */
+
+  /** `{pages, order, fixed, max, kinds}`. Il tetto arriva dal server e non se lo tiene
+   *  scritto il client: due copie di quel numero divergerebbero, e la seconda
+   *  si scoprirebbe solo quando un salvataggio viene rifiutato. */
+  async getPages() {
+    const res = await this._fetch('/api/home/pages');
+    if (!res.ok) throw new Error(`Pages read failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Le pagine aggiunte **e** l'ordine di tutte, fisse comprese: `{ok,
+   *  pages, order}` torna com'e' stato salvato. L'ordine deve nominare
+   *  ogni pagina una volta sola, o il server lo rifiuta (`bad_request`) e qui
+   *  si lancia l'errore, con il suo `code`.
+   *
+   *  Resta qui perche' e' la gemella di `getPages`, ma la scrittura viaggia
+   *  sul WebSocket (`rpc.saveHomePages`): `/api/` e' per letture e parametri
+   *  corti, e fino al 25/09/2026 questa era una GET col
+   *  JSON nell'indirizzo. Import **dinamico**: `ws-manager.js` importa questo
+   *  modulo, e uno statico chiuderebbe il cerchio al caricamento. */
+  async savePages(pages, order) {
+    const { rpc } = await import('./rpc-client.js');
+    const body = await rpc.saveHomePages(pages, order);
+    return { ok: body.ok, pages: body.pages, order: body.order };
+  }
+
+  /* «Il file e' stato salvato davvero». Il gateway non puo' saperlo: lui
+     prepara il container cifrato in staging, e se quel file finisca su disco
+     lo decide il picker SAF, che risponde solo di qua. */
+  async noteBackupExported() {
+    const res = await this._fetch('/api/backup/exported');
+    if (!res.ok) throw new Error(`Backup record failed: ${res.status}`);
+    return res.json();
   }
 
   async importBackup({ stagedPath, passphrase } = {}) {

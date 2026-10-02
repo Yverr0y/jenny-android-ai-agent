@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 import pytest
+from support.kotlin_source import read_source
 
 from jenny.snapshot.backup import IMPORT_STAGED_FILENAME
 from jenny.snapshot.locations import backup_staging_dir_for
@@ -29,7 +30,7 @@ _STAGING_DIR_NAME = backup_staging_dir_for(Path("/x/workspace")).name
 def _kotlin_source() -> str:
     if not KOTLIN_MAIN.is_file():
         pytest.skip("sorgente Android non presente in questo checkout")
-    return KOTLIN_MAIN.read_text("utf-8")
+    return read_source(KOTLIN_MAIN)
 
 
 def _js(path: Path) -> str:

@@ -10,6 +10,7 @@ For the product-level mental model, read [Concepts](./concepts.md) first.
 flowchart LR
     WS["WebSocket Channel<br/>WebUI"] --> Bus["MessageBus<br/>InboundMessage"]
     TG["Telegram Channel<br/>(optional, paired)"] --> Bus
+    NF["Notification + Floating<br/>(Android only)"] --> Bus
     Bus --> Loop["AgentLoop<br/>session, workspace, context"]
     Loop --> Runner["AgentRunner<br/>provider/tool loop"]
     Runner --> Provider["Provider<br/>LLM backend"]
@@ -21,6 +22,7 @@ flowchart LR
     Outbound --> Dispatcher["WebSocketDispatcher<br/>fan-out + retry + coalescing"]
     Dispatcher --> WS
     Dispatcher --> TG
+    Dispatcher --> NF
 
     Loop -. reads/writes .-> State["Session, memory,<br/>hooks, skills, templates"]
 ```
@@ -43,7 +45,7 @@ Main files:
 `AgentLoop` owns the channel-facing turn:
 
 - receives inbound messages from the bus;
-- determines the effective session and workspace scope (always the unified session on the WebUI/Telegram path; internal jobs use separate session keys);
+- determines the effective session and workspace scope (the unified session on the WebUI/Telegram path, except a project chat, which gets its own `project:<name>` session — see [Agent turn](./agent-turn.md#session-keys); internal jobs use separate session keys);
 - builds context (workspace files, skills, memory, recent messages, channel metadata);
 - wires hooks, progress reporting, and channel metadata;
 - publishes outbound messages back to the bus.
@@ -64,10 +66,10 @@ Providers are user-defined `ProviderConfig` entries in `jenny/config/schema.py` 
 Provider selection and construction:
 
 - `Config.get_active_provider()` returns the entry named by `providers.default`, otherwise the first entry in the list;
-- `jenny/providers/factory.py::make_provider()` builds the backend from that entry's `format`: `"anthropic"` → `AnthropicProvider`, everything else → `OpenAICompatProvider` (with an `OpenAIResponsesConverter` path when `apiType` selects the Responses API);
+- `jenny/providers/factory.py::make_provider()` builds the backend from that entry's `format`: `"anthropic"` → `AnthropicProvider`, everything else → `OpenAICompatProvider`, which also carries the Responses API path when `apiType` selects it (the message/tool conversion helpers for that path are the module-level functions in `jenny/providers/openai_responses/converters.py`);
 - the backend is built once when the gateway starts (`GatewayContainer.build()`), **but it is not fixed for the process lifetime** — see the hot-reload note below.
 
-**Provider and model changes made from the Settings screen apply without an app restart.** `GatewayContainer._on_settings_changed()` (`jenny/runtime/container.py`) is wired as a callback into the WebUI settings routes; when it fires it reloads `config.json`, rebuilds the provider via `make_provider()`, and — if the resolved model or the provider's `apiBase` actually changed — calls `agent._apply_provider_switch(new_provider, new_model, new_ctx)` to swap the live agent's provider and model in place. A restart is only needed when `config.json` is hand-edited on disk outside the Settings UI (nothing watches the file for external changes), or when a change is flagged `requires_restart` by the backend — `update_agent_settings()` in `jenny/webui/settings_api.py` sets that flag for `timezone`, `bot_name`, `bot_icon`, and `tool_hint_max_length` changes specifically (model/provider changes are not in that list and hot-reload as described above). As of this writing the WebUI never surfaces that flag to the user, so a restart-flagged change can silently need an app relaunch to take effect.
+**Provider and model changes made from the Settings screen apply without an app restart.** `GatewayContainer._on_settings_changed()` (`jenny/runtime/container.py`) is wired as a callback into the WebUI settings routes; when it fires it reloads `config.json`, resolves `${VAR}` references, and compares `provider_fingerprint(config)` (`jenny/providers/factory.py`) with the one taken when the current provider was built. The fingerprint is the active `ProviderConfig` in full (`model_dump()`: `apiKey`, `apiBase`, `apiType`, `extraHeaders`, `caBundle`, ...) plus the model, the context window and the generation settings (`temperature`, `maxTokens`, `reasoningEffort`), so a change to any of them triggers a rebuild, and a save of unrelated settings returns early before anything is built. On a change it builds a new provider via `make_provider()` and calls `agent._apply_provider_switch(new_provider, new_model, new_ctx)` to swap the live agent's provider and model in place; the "model changed" update is published to the UI only when the model name itself changed. A restart is only needed when `config.json` is hand-edited on disk outside the Settings UI (nothing watches the file for external changes), or when a change is flagged `requires_restart` by the backend — `update_agent_settings()` in `jenny/webui/settings_api.py` sets that flag for `timezone`, `bot_name`, `bot_icon`, and `tool_hint_max_length` changes specifically (model/provider changes are not in that list and hot-reload as described above). The WebUI does surface the flag where it applies: the home's model page (`home-model.js`) and the workshop's Settings (`mobile-settings.js`) answer with a "takes effect from the next start" message instead of the plain "saved" one.
 
 Provider implementations live in `jenny/providers/`. Most endpoints use the OpenAI-compatible implementation; Anthropic and the OpenAI Responses API (`jenny/providers/openai_responses/`) have specialized paths.
 
@@ -78,14 +80,16 @@ Useful docs:
 
 ## Channels
 
-Jenny has **two** channels, both owned by `WebSocketDispatcher` (`jenny/channels/dispatcher.py`), which fans outbound bus messages out to whichever channels are active:
+Jenny has **four** channels, all owned by `WebSocketDispatcher` (`jenny/channels/dispatcher.py`), which fans outbound bus messages out to whichever channels are active:
 
 | Channel | File | Notes |
 |---|---|---|
 | WebSocket (WebUI) | `jenny/channels/websocket.py` (+ `ws_sender.py`, `ws_parsing.py`) | Always enabled on Android; serves the mobile WebUI over the same port as the HTTP API. |
-| Telegram | `jenny/channels/telegram.py` | Optional, personal-bot channel; created only if `telegram.enabled` is true and a `bot_token` is set. Paired via a 6-digit code; both channels share the single unified session, so `/new` from either one resets the other too. |
+| Telegram | `jenny/channels/telegram.py` | Optional, personal-bot channel; created only if `telegram.enabled` is true and a `bot_token` is set. Paired via a 6-digit code; it shares the single unified session with the WebUI, so `/new` from either one resets the other too. |
+| Notification | `jenny/channels/notification.py` | Android only. A reply typed into one of Jenny's notifications comes in on this channel, and her answer goes back as a system alert. No connection of its own. |
+| Floating | `jenny/channels/floating.py` | Android only. The floating mascot's bubble: what you type there comes in on this channel, and the answer is shown in the bubble. |
 
-`WebSocketDispatcher` also owns retry, delta coalescing for streaming updates, and progress-message filtering per channel — see [`dispatcher.py`](../../jenny/channels/dispatcher.py). This is a decomposition, not a generic channel registry: the two channels are wired explicitly in `_init_channel()`/`_init_telegram()`, not discovered.
+`WebSocketDispatcher` also owns retry, delta coalescing for streaming updates, and progress-message filtering per channel — see [`dispatcher.py`](../../jenny/channels/dispatcher.py). This is a decomposition, not a generic channel registry: the four channels are wired explicitly in `_init_channel()`/`_init_telegram()`/`_init_notification()`/`_init_floating()`, not discovered.
 
 Useful docs:
 
@@ -97,12 +101,12 @@ Useful docs:
 
 The gateway (started by the Android runtime via `jenny.android_entry.run_gateway(data_dir, android_context, port=18790)`) starts:
 
-- the WebSocket channel and, if configured, the Telegram channel (via `WebSocketDispatcher`);
+- the WebSocket channel, the Telegram channel if configured, and — when an Android context is present — the notification and floating channels (all via `WebSocketDispatcher`);
 - the workspace-scoped cron service;
 - system jobs such as Dream and the heartbeat;
 - the HTTP API routes under `/api/` (settings, apps, media, skills, wiki, transcript, backup...) served from the same asyncio process.
 
-**There is no `/health` endpoint.** No route named `health` exists anywhere in `jenny/channels/` or `jenny/webui/`. On Android, `run_gateway()` forces `host="127.0.0.1"` and `port=18790` for both the WebSocket handshake and the HTTP API (`_apply_gateway_overrides()` in `jenny/gateway_runtime.py` sets `config.gateway.port`, `config.websocket["port"]`, and defaults `config.websocket["enabled"]` to `true`) — WebSocket and HTTP genuinely share one origin so the WebView can reach both without CORS. `gateway.port` defaults to `18790` in the schema; `websocket.port` independently defaults to `8765` and `websocket.enabled` defaults to `false` in `jenny/config/schema.py` — those are the desktop-testing defaults, and the Android entry point always overrides them at startup.
+**There is no `/health` endpoint.** No route named `health` exists anywhere in `jenny/channels/` or `jenny/webui/`. On Android, `run_gateway()` forces `host="127.0.0.1"` and `port=18790` for both the WebSocket handshake and the HTTP API (`_apply_gateway_overrides()` in `jenny/gateway_runtime.py` sets `config.gateway.port`, `config.websocket["port"]`, and defaults `config.websocket["enabled"]` to `true`) — WebSocket and HTTP genuinely share one origin so the WebView can reach both without CORS. `gateway.port` defaults to `18790` in the schema. `config.websocket` is a free-form dict in the schema (`websocket: dict = {}`); the `8765` port and `enabled = false` defaults live on `WebSocketConfig` in `jenny/channels/websocket.py`, the model the channel validates that dict against. Those are the desktop-testing defaults, and the Android entry point always overrides them at startup.
 
 The packaged WebUI is served from `jenny/templates/ui/` and rendered inside the Android app's WebView.
 
@@ -113,7 +117,7 @@ Useful docs:
 
 ## Tools
 
-Tools are **explicitly registered**, not discovered by scanning the filesystem. `jenny/agent/tools/loader.py` imports a fixed list of 22 modules (`_HARDCODED_TOOL_MODULES`); each module declares a module-level `TOOLS = [...]` list of `Tool` subclasses. `ToolLoader.discover()` imports every module in the list, in order, and collects each module's `TOOLS`; a module with no `TOOLS` attribute at all raises at startup rather than silently contributing nothing, and a name collision between two registered tools also raises at startup instead of one silently overwriting the other.
+Tools are **explicitly registered**, not discovered by scanning the filesystem. `jenny/agent/tools/loader.py` imports a fixed list of 23 modules (`_HARDCODED_TOOL_MODULES`); each module declares a module-level `TOOLS = [...]` list of `Tool` subclasses. `ToolLoader.discover()` imports every module in the list, in order, and collects each module's `TOOLS`; a module with no `TOOLS` attribute at all raises at startup rather than silently contributing nothing, and a name collision between two registered tools also raises at startup instead of one silently overwriting the other.
 
 | # | Module | `TOOLS` | Tool area |
 |---|---|---|---|
@@ -121,7 +125,7 @@ Tools are **explicitly registered**, not discovered by scanning the filesystem. 
 | 2 | `python_exec.py` | `PythonExecTool` | In-process Python execution on the Chaquopy interpreter |
 | 3 | `android_web.py` | `AndroidWebSearchTool`, `AndroidWebFetchTool` | Web search/fetch via a hidden Android WebView |
 | 4 | `browser.py` | `BrowserOpenTool`, `BrowserSnapshotTool`, `BrowserDoTool`, `BrowserReadTool`, `BrowserCloseTool` | An interactive second WebView with persistent cookies, for pages `web_fetch` cannot handle. Gated on the same `tools.androidWeb.enable` as search/fetch |
-| 5 | `download.py` | `DownloadFileTool` | Downloads a URL into `workspace/downloads/`, per-hop SSRF-checked |
+| 5 | `download.py` | `DownloadFileTool` | Downloads a URL into the turn root's `downloads/` (`<project>/downloads/` inside a notebook, `workspace/downloads/` otherwise), per-hop SSRF-checked |
 | 6 | `location.py` | `GetLocationTool` | On-demand fresh GPS fix (distinct from the last-known location injected into every turn's context) |
 | 7 | `long_task.py` | `LongTaskTool`, `CompleteGoalTool` | Sustained/background goal tracking (`/goal`) |
 | 8 | `spawn.py` | `SpawnTool` | Spawns a subagent, blind to the parent conversation |
@@ -132,19 +136,20 @@ Tools are **explicitly registered**, not discovered by scanning the filesystem. 
 | 13 | `memory_recall.py` | `MemoryRecallTool`, `HistoryRecallTool` | Search the memory archive (`recall`) and the verbatim conversation log (`recall_history`). `core` + `orchestrator` only |
 | 14 | `search.py` | `FindFilesTool`, `GrepTool` | Filename and content search inside the workspace |
 | 15 | `message.py` | `MessageTool` | Sends a proactive message (with attachments/buttons) outside the current turn |
-| 16 | `apply_patch.py` | `ApplyPatchTool` | Atomic multi-file patch application with rollback |
-| 17 | `exec_session.py` | `ListExecSessionsTool`, `WriteStdinTool` | Manage long-running `python_exec` sessions (poll/stdin/terminate) |
-| 18 | `introspect.py` | `GetSourceTool` | Read-only access to Jenny's own bundled Python source |
-| 19 | `diagnostics.py` | `GetRecentLogsTool` | Reads the in-memory log ring buffer |
-| 20 | `ui_view.py` | `UiViewTool` | Pull-based view of what's on screen right now; fails from Telegram, cron, or with the screen off |
-| 21 | `ssh.py` | `SshHostsTool`, `SshExecTool`, `SshJobTool`, `SshTransferTool` | Remote machines over SSH. Scope `remote`, which no agent loads by default — only the `sysadmin` subagent type asks for it |
-| 22 | `app_update.py` | `UpdateStatusTool`, `InstallUpdateTool` | Report a pending app update and install it. Android-only; `install_update` kills the process by design |
+| 16 | `nothing_to_report.py` | `NothingToReportTool` | Lets a silent scheduled run declare that there is nothing for the user to see, instead of sending an empty message. `core` + `orchestrator` |
+| 17 | `apply_patch.py` | `ApplyPatchTool` | Atomic multi-file patch application with rollback |
+| 18 | `exec_session.py` | `ListExecSessionsTool`, `WriteStdinTool` | Manage long-running `python_exec` sessions (poll/stdin/terminate) |
+| 19 | `introspect.py` | `GetSourceTool` | Read-only access to Jenny's own bundled Python source |
+| 20 | `diagnostics.py` | `GetRecentLogsTool` | Reads the in-memory log ring buffer |
+| 21 | `ui_view.py` | `UiViewTool` | Pull-based view of what's on screen right now; fails from Telegram, cron, or with the screen off |
+| 22 | `ssh.py` | `SshHostsTool`, `SshExecTool`, `SshJobTool`, `SshTransferTool` | Remote machines over SSH. Scope `remote`, which no agent loads by default — only the `sysadmin` subagent type asks for it |
+| 23 | `app_update.py` | `UpdateStatusTool`, `InstallUpdateTool` | Report a pending app update and install it. Android-only; `install_update` kills the process by design |
 
 The numbering is the load order in `_HARDCODED_TOOL_MODULES`, which is the order `discover()` walks.
 
-`self.py`'s module-level `TOOLS` list is deliberately empty. `MyTool` (the `my` introspection/self-check tool) needs a live reference to the running `AgentLoop`, which the generic loader can't provide, so it is instantiated and registered by hand in `AgentLoop._register_default_tools()`, gated on `tools.my.enable`. Two other tools reach the registry the same way and for the same reason — `memory_entry` needs the memory store, and the per-app action tool is synced per turn — so this list is not a complete inventory of the tool surface.
+`self.py`'s module-level `TOOLS` list is deliberately empty. `MyTool` (the `my` introspection/self-check tool) needs a live reference to the running `AgentLoop`, which the generic loader can't provide, so it is instantiated and registered by hand in `AgentLoop._register_default_tools()`, gated on `tools.my.enable`. Two other tool classes are built outside the loader for the same reason — `memory` (`MemoryEntryTool`) needs the memory store, and is registered only in Dream's own registry (`MemoryStore.build_dream_tools`), never in a conversation agent's; and `AppActionTool` (`app_actions.py`) is instantiated once per declared app action and synced per turn by `AppToolsSyncer` — so this list is not a complete inventory of the tool surface.
 
-`ToolLoader.discover()` therefore returns 41 tool classes across those 23 modules, plus the manually-registered `MyTool` — 42 built-in tool classes in total. Not all of them are necessarily *registered* at runtime, and no single agent ever sees all 42: `ToolLoader.load()` filters by the caller's `scope` against each tool's `_scopes` (`core`, `orchestrator`, `subagent`, `remote`), then optionally by an `allow` list of names (that is how agent types narrow their toolset), then checks each tool's `enabled(ctx)` against the current config. The live tool count for a given install therefore depends on the config toggles *and* on which agent is asking. On top of the built-ins, Jenny Apps register their own dynamic `<slug>_<action>` tools per turn (`AppToolsSyncer`) — see [Mini-apps](../using/mini-apps.md) and [Tool reference](../reference/tools.md) for the full, toggle-aware picture.
+`ToolLoader.discover()` therefore returns 41 tool classes across those 23 modules, plus the manually-registered `MyTool` — 42 built-in tools a conversation agent can draw on. Not all of them are necessarily *registered* at runtime, and no single agent ever sees all 42: `ToolLoader.load()` filters by the caller's `scope` against each tool's `_scopes` (`core`, `orchestrator`, `subagent`, `remote`), then optionally by an `allow` list of names (that is how agent types narrow their toolset), then checks each tool's `enabled(ctx)` against the current config. The live tool count for a given install therefore depends on the config toggles *and* on which agent is asking. On top of the built-ins, Jenny Apps register their own dynamic `<slug>_<action>` tools per turn (`AppToolsSyncer`) — see [Mini-apps](../using/mini-apps.md) and [Tool reference](../reference/tools.md) for the full, toggle-aware picture.
 
 Tool behavior is part of the model contract: user-visible tool names, schemas, and error messages should be treated as an interface — changing them affects how the model uses the tool, so keep changes intentional and covered by tests.
 
@@ -167,7 +172,7 @@ Defaults (all relative to the workspace root unless noted):
 | Runtime data (media, WebUI display threads) | `<workspace>/.jenny/` (`media/`, `webui/`) — migrated automatically from the legacy `.minijenny/`/`.nanobot/` names if found. Runtime logs are **not** written here; they only live in the in-memory ring buffer the `get_recent_logs` tool reads (see Tools below) |
 | Snapshots (workspace version history) | Sibling of the workspace directory, so a restore's atomic swap doesn't take snapshot history with it |
 
-The schema accepts both camelCase and snake_case keys on read, but `Config.save()` always writes `config.json` back out with camelCase aliases.
+The schema accepts both camelCase and snake_case keys on read, but every write (`jenny/config/store.py::mutate()`, which serialises through `save_config()` in `loader.py`) puts `config.json` back out with camelCase aliases — the free-form `websocket` block is the one exception, kept as written.
 
 ## Memory and Sessions
 
@@ -213,7 +218,7 @@ Common checks:
 
 ```bash
 ruff check jenny/ tests/
-npx pyright jenny/bus jenny/command jenny/runtime jenny/session
+npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py
 pytest -q
 ```
 

@@ -11,9 +11,16 @@ import androidx.core.app.RemoteInput
  * Riceve ciò che l'utente scrive nella tendina — la risposta rapida
  * (`RemoteInput`) su un alert di Jenny — e lo passa al gateway.
  *
- * Non esportato nel manifest, come `WakeReceiver`: non ha un intent-filter e
- * l'unica cosa che lo raggiunge è il nostro `PendingIntent`, che porta già la
- * nostra identità.
+ * Non esportato nel manifest, come `WakeReceiver`: non ha un intent-filter, e
+ * un broadcast fabbricato da un'altra app non arriva. Lo raggiunge il nostro
+ * `PendingIntent` — ma quello della risposta è **mutabile** (deve esserlo, v.
+ * `NotifierBridge.replyIntentFlags`), e chi lo tiene in mano può riempirne gli
+ * extra: un'app con l'accesso alle notifiche (`NotificationListenerService`)
+ * vede le azioni degli alert e può mandare questa con un testo suo, nel
+ * `RemoteInput` o in `EXTRA_REPLY_RETRY_TEXT`. È lo stesso meccanismo con cui
+ * un orologio o l'auto rispondono a una notifica, e Jenny lo riceve come testo
+ * dell'utente. Il confine vero è quindi l'accesso alle notifiche, che l'utente
+ * concede app per app; `exported="false"` chiude solo il resto.
  *
  * **Qui dentro non si attraversa Chaquopy.** Il testo viene impacchettato in un
  * intent per `GatewayService` e la consegna avviene là. Un thread lanciato in
@@ -27,7 +34,7 @@ import androidx.core.app.RemoteInput
  * Avviare un FGS da background è vietato da Android 12 in su, **tranne** nella
  * finestra di allowlist che il sistema concede quando l'utente agisce su una
  * notifica: la stessa esenzione, per un motivo diverso, che rende legale la
- * strada di `WakeReceiver`.
+ * strada di `WakeReceiver` quando la sua sveglia è esatta.
  *
  * Due porte d'ingresso, e portano allo stesso punto:
  *
@@ -83,7 +90,7 @@ class ReplyReceiver : BroadcastReceiver() {
             manager?.cancel(NotifierBridge.FAILED_TAG, NotifierBridge.ALERT_ID)
         }
 
-        // Il lock corto di handoff, come in `WakeReceiver.ensureGatewayUp`:
+        // Il lock corto di handoff, come in `GatewayStarter.ensureUp`:
         // senza, il device può risospendere all'uscita di `onReceive` e il
         // service partire minuti dopo. Lo rilascia `GatewayService` a consegna
         // tentata, in ogni esito.

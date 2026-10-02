@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,46 @@ MAX_RETRIES = 3
 RETRY_DELAY_S = 5
 
 
+_STDERR_SINK_ID: int | None = None
+
+
+class _CurrentStderr:
+    """Scrive sul ``sys.stderr`` *di adesso*, non su quello dell'import.
+
+    Chaquopy ridirige ``sys.stderr`` su logcat; un sink che tenesse l'oggetto
+    visto al momento dell'``add`` scriverebbe su uno stream sostituito (e sotto
+    pytest su una cattura già chiusa).
+    """
+
+    def write(self, text: str) -> None:
+        sys.stderr.write(text)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
+
+
+def configure_log_sinks() -> None:
+    """Sostituisce il sink di default di loguru con uno senza ``diagnose``.
+
+    Il default ha ``backtrace=True, diagnose=True``: ogni traceback porta i
+    valori delle variabili locali dei suoi frame, e un'eccezione in una route
+    autenticata ci mette dentro il segreto del gateway, una chiave API o una
+    password SSH passate in query. Stesso livello e stesso formato del
+    default, solo senza quelle due opzioni. Idempotente: il ciclo di retry e
+    un secondo avvio nello stesso processo non aggiungono sink.
+    """
+    global _STDERR_SINK_ID
+    if _STDERR_SINK_ID is not None:
+        return
+    try:
+        logger.remove(0)  # il sink di default, aggiunto da loguru all'import
+    except ValueError:
+        pass  # già tolto da chi ci ha preceduto
+    _STDERR_SINK_ID = logger.add(
+        _CurrentStderr(), level="DEBUG", backtrace=False, diagnose=False
+    )
+
+
 def set_android_context(context: Any) -> None:
     """Store the Android Context passed from Kotlin/Chaquopy.
 
@@ -30,61 +71,14 @@ def set_android_context(context: Any) -> None:
     get_runtime_context().android_context = context
 
 
-def run_gateway(
-    data_dir: str,
-    android_context: Any = None,
-    *,
-    host: str = "127.0.0.1",
-    port: int = 18790,
-) -> None:
-    """Start the jenny gateway.
+def _reset_loop_bound_state() -> None:
+    """Rimette a nuovo lo stato di modulo legato a un event loop.
 
-    This is the single entry point for the Android runtime (called from
-    Java/Kotlin via Chaquopy). The same function can be invoked manually for
-    local testing, but the execution path is identical to the Android runtime.
-    The WebSocket and HTTP surfaces share the same port so the WebView can
-    reach both from one origin.
-
-    Args:
-        data_dir: Runtime data directory. The workspace is created at
-            ``<data_dir>/workspace``.
-        android_context: Optional Android Context object passed from Kotlin.
-            When provided, Android-only tools can use native Android APIs.
-
-    Raises:
-        Exception: If the gateway fails to start after all retries.
+    Va chiamata prima di **ogni** ``asyncio.run`` del gateway, non una volta
+    sola: un tentativo che muore lascia lock, bridge e loop del suo giro nelle
+    globali, e il tentativo successivo li erediterebbe (``RuntimeError: ...
+    bound to a different event loop`` alla prima contesa).
     """
-    if android_context is not None:
-        set_android_context(android_context)
-
-    # Rileva la timezone del device (best-effort) prima di ogni load_config:
-    # il loader la usa come default quando la config non ne fissa una.
-    try:
-        from jenny.runtime.context import get_runtime_context
-        from jenny.utils.device_timezone import detect_device_timezone
-        from jenny.utils.helpers import tzdata_available
-
-        device_tz = detect_device_timezone()
-        get_runtime_context().device_timezone = device_tz
-        logger.info(
-            "Device timezone: {} (tzdata available: {})",
-            device_tz or "unknown",
-            tzdata_available(),
-        )
-    except Exception:
-        logger.opt(exception=True).debug("Could not detect device timezone")
-
-    # Capture logs in-memory so the get_recent_logs tool can surface them
-    # without adb/logcat access.
-    try:
-        from jenny.agent.tools.diagnostics import install_log_buffer
-
-        install_log_buffer()
-    except Exception:
-        # Non-fatale: la cattura log in-memory è best-effort (il tool
-        # get_recent_logs resta degradato). Logghiamo invece di ingoiare muto.
-        logger.opt(exception=True).debug("Could not install in-memory log buffer")
-
     # Reset Android-only bridge state so a fresh gateway start cannot inherit
     # a stale bridge or locked asyncio state from a previous crashed loop.
     # Tutti i bridge (web-search + installed-apps + notifier + location + power
@@ -96,6 +90,7 @@ def run_gateway(
         from jenny.agent.tools.browser import reset_browser_state
         from jenny.agent.tools.ssh_jobs import reset_job_store
         from jenny.agent.tools.ssh_transport import reset_ssh_backend
+        from jenny.apps.storage import reset_storage_locks
         from jenny.config.store import reset_config_store_state
         from jenny.runtime.floating import reset_floating_state
         from jenny.runtime.location import reset_location_state
@@ -143,9 +138,71 @@ def run_gateway(
         # il loop muore lì in mezzo, la guardia ``locked()`` risponde ``busy``
         # per sempre e il bottone resta morto.
         reset_update_check_state()
+        # I lock per collezione delle Jenny App: stessa sorte del lock di
+        # config.json, legati al loop del tentativo che li ha creati.
+        reset_storage_locks()
     except Exception:
         # Non-fatale: al peggio si eredita un bridge stale (verrà ricreato).
         logger.opt(exception=True).debug("Could not reset Android bridge state")
+
+
+def run_gateway(
+    data_dir: str,
+    android_context: Any = None,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 18790,
+) -> None:
+    """Start the jenny gateway.
+
+    This is the single entry point for the Android runtime (called from
+    Java/Kotlin via Chaquopy). The same function can be invoked manually for
+    local testing, but the execution path is identical to the Android runtime.
+    The WebSocket and HTTP surfaces share the same port so the WebView can
+    reach both from one origin.
+
+    Args:
+        data_dir: Runtime data directory. The workspace is created at
+            ``<data_dir>/workspace``.
+        android_context: Optional Android Context object passed from Kotlin.
+            When provided, Android-only tools can use native Android APIs.
+
+    Raises:
+        Exception: If the gateway fails to start after all retries.
+    """
+    # Per primo: prima di qualunque riga di log che possa portare un traceback.
+    configure_log_sinks()
+
+    if android_context is not None:
+        set_android_context(android_context)
+
+    # Rileva la timezone del device (best-effort) prima di ogni load_config:
+    # il loader la usa come default quando la config non ne fissa una.
+    try:
+        from jenny.runtime.context import get_runtime_context
+        from jenny.utils.device_timezone import detect_device_timezone
+        from jenny.utils.helpers import tzdata_available
+
+        device_tz = detect_device_timezone()
+        get_runtime_context().device_timezone = device_tz
+        logger.info(
+            "Device timezone: {} (tzdata available: {})",
+            device_tz or "unknown",
+            tzdata_available(),
+        )
+    except Exception:
+        logger.opt(exception=True).debug("Could not detect device timezone")
+
+    # Capture logs in-memory so the get_recent_logs tool can surface them
+    # without adb/logcat access.
+    try:
+        from jenny.agent.tools.diagnostics import install_log_buffer
+
+        install_log_buffer()
+    except Exception:
+        # Non-fatale: la cattura log in-memory è best-effort (il tool
+        # get_recent_logs resta degradato). Logghiamo invece di ingoiare muto.
+        logger.opt(exception=True).debug("Could not install in-memory log buffer")
 
     data_path = Path(data_dir)
     workspace_path = data_path / "workspace"
@@ -172,9 +229,21 @@ def run_gateway(
     # Set global workspace dir for path resolution
     set_workspace_dir(workspace_dir)
 
-    # Sync templates, skills, UI assets from package to writable storage
+    # Sync templates, skills, UI assets from package to writable storage.
+    #
+    # Il percorso si riprende da ``get_workspace_path()`` e non dalla variabile
+    # locale qui sopra, che è la stessa cartella scritta in un altro modo: su
+    # Android la cartella dati risponde a due nomi, Java passa
+    # ``/data/user/0/<pkg>`` e ``set_workspace_dir`` lo risolve — apposta — in
+    # ``/data/data/<pkg>`` (v. il commento lì, 26/08). Usando la locale, questa
+    # sync e quella di ``runtime/container`` scrivono nello stesso posto
+    # **dicendo due nomi diversi**, e nel log del boot le due passate sembrano
+    # due destinazioni invece che una ripetizione. È così che la ripetizione è
+    # rimasta invisibile fino al 20/09/2026.
+    from jenny.config.paths import get_workspace_path
+
     try:
-        sync_workspace_templates(workspace_path)
+        sync_workspace_templates(get_workspace_path())
     except Exception:
         logger.opt(exception=True).warning(
             "Failed to extract package assets to {} — gateway may lack WebUI or prompts",
@@ -202,6 +271,7 @@ def run_gateway(
 
     # Run the gateway with retry loop
     for attempt in range(1, MAX_RETRIES + 1):
+        _reset_loop_bound_state()
         try:
             asyncio.run(
                 _run_gateway(

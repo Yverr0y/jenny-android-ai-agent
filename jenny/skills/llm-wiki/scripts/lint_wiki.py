@@ -161,11 +161,14 @@ INLINE_CODE_RE = re.compile(r"(`{1,2})(?:(?!\1)[\s\S])*?\1")
 AUDIT_TS_RE = re.compile(r"^(\d{8}-\d{6})")  # YYYYMMDD-HHMMSS prefix
 
 # Required audit frontmatter fields
+# Nessun ``severity``: il campo e' uscito dal formato il 22/09/2026 (v. la
+# docstring di ``AuditEntry``). Questo e' un insieme di chiavi **obbligatorie**,
+# non chiuso — il controllo e' ``REQUIRED - set(fm.keys())`` — quindi un file
+# vecchio che se la porta dietro passa lo stesso.
 AUDIT_REQUIRED_FIELDS = {
     "id", "target", "target_lines", "anchor_before", "anchor_text",
-    "anchor_after", "severity", "author", "source", "created", "status",
+    "anchor_after", "author", "source", "created", "status",
 }
-VALID_SEVERITIES = {"info", "suggest", "warn", "error"}
 
 # Canonical op names for log/ entries (SKILL.md § log/ format).
 #
@@ -319,12 +322,12 @@ def _decided_cap_reason(
     a promuoverla. Nessuno lo dice oggi: la guardia in scrittura parla solo
     quando una passata ci prova, e se non ci prova mai il tetto resta invisibile.
 
-    Il caso di campo (25/08, ``viaggio-pazzo``): la pagina del progetto è nata il
+    Il caso di campo (25/08, un progetto reale): la pagina del progetto è nata il
     24/08 ancorata al **giorno intero**, e le righe di quel giorno sono anteriori
     ai marcatori. È a ``open`` per sempre, correttamente, e in due giorni di
     lavoro niente e nessuno l'ha detto.
 
-    Torna ``(motivo, esito)`` — uno di :data:`_CAP_FIXABLE`, :data:`_CAP_HISTORY`,
+    Torna ``(motivo, outcome)`` — uno di :data:`_CAP_FIXABLE`, :data:`_CAP_HISTORY`,
     :data:`_CAP_DOCUMENT`. **La seconda metà decide come si stampa**, e non è
     pedanteria: su una wiki scritta prima dei marcatori *quasi ogni* pagina a
     ``open`` è qui dentro, e un elenco che le nomina tutte per dire «non si può
@@ -338,7 +341,7 @@ def _decided_cap_reason(
     perché è `[inferred]`, che non è un difetto ma la risposta giusta.
 
     **Il giorno si legge prima di tutto, e questa è la correzione del 26/08.**
-    Misurato sul progetto ``salute`` vero: cinque pagine su cinque hanno
+    Misurato su un progetto reale: cinque pagine su cinque hanno
     ``source: raw/research/<documento>.md`` — la forma che ``project.md`` chiede
     quando il materiale arriva da fuori — e questa funzione le mandava tutte e
     cinque ad «aggiungi un ``#HH:MM``», cioè a una riparazione che su un documento
@@ -402,10 +405,10 @@ MAP_MAX_CHARS = 2000
 # saltata a ogni turno di ogni conversazione del progetto, per sempre, e la
 # selezione è alfabetica: non c'è messaggio dell'utente che possa richiamarla.
 #
-# Perché il budget intero e non una frazione. Sulle otto wiki vere (188 pagine,
-# misurate il 23/08: mediana 3.217, p90 6.396, massimo 16.385) questo numero
-# segnala **23 pagine** su 188 — 9 in ``main``, 9 in ``allergie``, 5 in
-# ``patreon-creator`` — e sono *esattamente* le 23 il cui blocco recintato sfonda
+# Perché il budget intero e non una frazione. Sulle otto wiki di un workspace reale
+# (188 pagine: mediana 3.217, p90 6.396, massimo 16.385) questo numero
+# segnala **23 pagine** su 188 — 9 in ``main``, 9 e 5 in altre due wiki —
+# e sono *esattamente* le 23 il cui blocco recintato sfonda
 # il budget da solo, cioè quelle che il modello non vedrà mai. Una soglia più
 # bassa segnalerebbe pagine che il prompt riesce ancora a portare: a 4.000 sono
 # 75, a 3.000 sono 98, a 2.000 sono 131. Una lista di 131 voci su 188 non è un
@@ -1225,10 +1228,6 @@ def lint(root: str) -> int:
                     f"   {rel} — missing fields: {', '.join(sorted(missing))}"
                 )
                 continue
-            if fm["severity"] not in VALID_SEVERITIES:
-                audit_issues.append(
-                    f"   {rel} — invalid severity '{fm['severity']}' (expected {sorted(VALID_SEVERITIES)})"
-                )
             if not str(fm["source"]).strip():
                 audit_issues.append(f"   {rel} — empty source field")
             # id must be unique and its timestamp prefix must match the filename.
@@ -1753,7 +1752,7 @@ def lint(root: str) -> int:
             # sbagliato — ``project.md`` chiede *esattamente* questa forma per il
             # materiale che arriva da fuori. Detto comunque perché altrimenti un
             # progetto alimentato da documenti non ha modo di sapere che
-            # ``decided`` lì è irraggiungibile: su ``salute`` (26/08) sono cinque
+            # ``decided`` lì è irraggiungibile: sul progetto misurato sono cinque
             # pagine su cinque.
             print(f"\nℹ️  {capped_by_document} more page(s) rest on a document copied into "
                   "`raw/` rather than on a journal line — the shape `project.md` asks for when "

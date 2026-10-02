@@ -209,7 +209,7 @@ class WorkspaceScopeResolver:
     default_restrict_to_workspace: bool
     scoped_channel: str = "websocket"
     # Sottocartella che ospita i progetti, relativa al workspace. Un progetto
-    # *e'* una wiki (v. ``roadmap/progetti-passi.md``): non esiste una
+    # *e'* una wiki: non esiste una
     # ``projects/`` separata. Configurabile perche' lo e' ``config.wiki.wikis_dir``,
     # e chi costruisce il resolver la passa da li'.
     projects_subdir: str = "wikis"
@@ -247,7 +247,7 @@ class WorkspaceScopeResolver:
         """Lo scope di questo turno.
 
         **Per una sessione-progetto la cartella si ricava dalla chiave**, e non
-        dai metadati: ``project:patreon`` -> ``<workspace>/wikis/patreon``. Cosi'
+        dai metadati: ``project:ricette`` -> ``<workspace>/wikis/ricette``. Cosi'
         la sessione e la sua cartella non possono divergere — non c'e' un secondo
         dato da tenere allineato, e nessun client puo' chiedere una cartella
         diversa da quella che il suo nome dichiara. I metadati restano la strada

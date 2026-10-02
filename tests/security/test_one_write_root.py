@@ -6,7 +6,7 @@ Il confine di scrittura era ricalcolato in sei posti: i tool file
 (``_project_write_boundary`` / ``_mutation_boundary``), ``download`` e
 ``journal``. Nessuno sbagliato da solo; l'insieme sì — «che cosa può cambiare
 questo turno» è UNA domanda, e sei risposte non possono che divergere. Ci erano
-già divergiti: con uno scope su ``wikis/patreon``, ``open('<ws>/SOUL.md', 'w')``
+già divergiti: con uno scope su ``wikis/palestra``, ``open('<ws>/SOUL.md', 'w')``
 veniva rifiutata e ``os.remove('<ws>/SOUL.md')`` passava.
 
 Questo file è il guardiano di quell'unificazione, ed è fatto di due metà che
@@ -91,8 +91,8 @@ class Env:
 @pytest.fixture
 def env(tmp_path: Path):
     ws = tmp_path / "workspace"
-    project = ws / "wikis" / "patreon"
-    other = ws / "wikis" / "etf"
+    project = ws / "wikis" / "palestra"
+    other = ws / "wikis" / "etna"
     outside = tmp_path / "outside"
     for d in (project / "wiki", project / "raw" / "journal", other / "wiki", outside):
         d.mkdir(parents=True)
@@ -235,8 +235,40 @@ async def _root_journal(env: Env) -> Path:
 
     created = list(env.tmp.rglob("raw/journal/*.md"))
     assert len(created) == 1, f"una sola pagina di diario attesa, trovate {created}"
-    # ``<radice>/raw/journal/<AAAAMMGG>.md`` → tre livelli sopra il file.
+    # ``<root>/raw/journal/<AAAAMMGG>.md`` → tre livelli sopra il file.
     return created[0].parents[2]
+
+
+async def _root_ssh_transfer(env: Env) -> Path:
+    """``ssh_transfer`` in discesa: scrive sul telefono il file del remoto."""
+    from types import SimpleNamespace
+
+    from jenny.agent.tools import ssh as ssh_mod
+    from jenny.agent.tools.ssh import SshTransferTool
+
+    class _Backend:
+        async def get(self, target, remote, local, max_bytes):
+            Path(local).write_text("x", encoding="utf-8")
+            return 1
+
+    class _Tool(SshTransferTool):
+        def _resolve(self, alias):
+            return SimpleNamespace(max_transfer_bytes=10**6), None, object()
+
+    tool = _Tool(workspace=env.ws, validate=lambda _h: (True, ""))
+    original = ssh_mod.get_ssh_backend
+    ssh_mod.get_ssh_backend = lambda: _Backend()  # type: ignore[assignment]
+    try:
+        async def accepts(d: Path) -> bool:
+            out = await tool.execute(
+                host="lab", direction="down", local_path=str(d / "probe-ssh.txt"),
+                remote_path="/x",
+            )
+            return out.startswith("Downloaded")
+
+        return await _only_accepted(env, accepts)
+    finally:
+        ssh_mod.get_ssh_backend = original  # type: ignore[assignment]
 
 
 # Nome della superficie → sonda. Il MODULO è la chiave del controllo
@@ -251,6 +283,7 @@ _SURFACES: dict[str, tuple[str, Callable[[Env], Awaitable[Path]]]] = {
     "python_exec superficie os": ("python_exec.py", _root_python_exec_os),
     "download_file": ("download.py", _root_download),
     "journal_append": ("journal.py", _root_journal),
+    "ssh_transfer (down)": ("ssh.py", _root_ssh_transfer),
 }
 
 
@@ -295,6 +328,10 @@ _NOT_A_WRITE_ROOT = {
     ),
     ("message.py", "project_path"): "risolve gli allegati in uscita: è una lettura",
     ("message.py", "allowed_root"): "idem — l'alias storico, non una seconda risposta",
+    ("python_exec.py", "project_path"): (
+        "impara dove stanno i progetti per accorgersi di uno cancellato, rinominato o "
+        "ricreato e liberarne i globali: identità della cartella, non un confine"
+    ),
     ("memory_recall.py", "project_path"): (
         "domanda opposta: non dove si scrive, ma **se** questo turno è dentro un "
         "progetto. recall_history legge solo la radice e tace altrove, e il "

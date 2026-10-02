@@ -1,6 +1,6 @@
 """Il prompt del subagent dice la sola lettura DELLA SPEC, non quella del chiamante.
 
-Passo **T4.8** di ``roadmap/audit-taccuino-corrections.md``.
+Passo **T4.8** delle correzioni al taccuino.
 
 ``_build_subagent_prompt`` viene chiamato **fuori** dal blocco
 ``enter_workspace_scope(spec.workspace_scope)``: se il flag ``readonly`` lo

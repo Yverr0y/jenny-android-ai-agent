@@ -1,6 +1,6 @@
 """Il giardiniere — la passata che trasforma il diario di un progetto in pagine.
 
-Passo **T4.2** di ``roadmap/taccuino-passi.md``. La cattura (T2) scrive righe di
+Passo **T4.2** del piano del taccuino. La cattura (T2) scrive righe di
 diario mentre si conversa; qui quelle righe diventano pagine e la mappa torna
 vera. Due mestieri separati di proposito: la cattura deve costare una chiamata e
 non decidere niente, il giardiniere decide (nomi, struttura, cosa merita una
@@ -71,6 +71,7 @@ from jenny.agent.internal_run import (
 # ``jenny/agent/wiki_provenance.py``.
 from jenny.agent.wiki_provenance import _provenance_guard
 from jenny.session.keys import GARDENER_SESSION_PREFIX
+from jenny.session.turn_visibility import silent_progress
 from jenny.utils.helpers import safe_zoneinfo
 from jenny.utils.prompt_templates import render_template
 from jenny.utils.wiki_paths import (
@@ -104,8 +105,8 @@ _MAX_AGENTS_CHARS = 4000
 # soglia oltre la quale il blocco di progetto smette di iniettare la mappa
 # intera a ogni turno (``jenny/agent/context.py::_PROJECT_MAP_MAX_CHARS``, e il
 # lint di T5 tiene lo stesso numero). Oltre, il modello vede la testa della
-# mappa e nient'altro: su ``patreon-creator`` (12.298 caratteri, misurati il
-# 23/08) il troncamento lascia **5 pagine su 51** fra quelle che la mappa
+# mappa e nient'altro: su una wiki reale da 12.298 caratteri di mappa il
+# troncamento lascia **5 pagine su 51** fra quelle che la mappa
 # nomina. L'elenco nudo delle stesse 51 costerebbe 1.495 caratteri — il tetto è
 # giusto, ed è la prosa nella mappa a non doverci stare.
 #
@@ -772,7 +773,7 @@ class GardenerStore:
         passata non riesce a scrivere niente.
 
         *write_guard* è il gancio **pre-scrittura** dei tre tool di scrittura:
-        ``(path, testo) -> None`` per lasciar passare, o la frase di rifiuto che
+        ``(path, text) -> None`` per lasciar passare, o la frase di rifiuto che
         il modello legge. Il parametro dei tool si chiama ``write_size_guard``
         perché il primo (e finora unico) uso era il budget dei file di memoria,
         ma il contratto è generico — «questa scrittura può andare su disco?» — ed
@@ -885,8 +886,8 @@ class GardenerStore:
         righe vere; se non ha promosso niente **ha comunque bruciato il cursore
         su quelle righe**, e il diario è append-only, quindi nessun giro futuro
         le rivedrà. Quello è l'evento più consequenziale che questa passata possa
-        produrre, ed era l'unico a non lasciare traccia: il 25/08 tre passate su
-        ``viaggio-pazzo`` ne hanno lasciata **una**, e dal registro non si
+        produrre, ed era l'unico a non lasciare traccia: tre passate su
+        uno stesso progetto ne hanno lasciata **una**, e dal registro non si
         distingueva «non è mai passato» da «è passato e ha deciso di no».
 
         La regola era già stata forzata una volta, per le segnalazioni, con
@@ -985,10 +986,6 @@ class GardenerStore:
             logger.warning("gardener: log not written to {}: {}", page, exc)
 
 
-async def _silent(*_args: Any, **_kwargs: Any) -> None:
-    pass
-
-
 def _lines_backwards(path: Path, *, chunk: int = 64 * 1024) -> Iterator[str]:
     """Le righe di *path* dalla fine verso l'inizio, un blocco alla volta.
 
@@ -1071,21 +1068,21 @@ def read_recent_user_messages(
 
     **E il taglio dice la verità anche quando il file è ruotato.** Superati gli
     8 MB, ``transcript_store`` sposta i turni vecchi in
-    ``<chiave>.segments/NNNNNN.jsonl`` e lascia sul posto solo la coda: la
+    ``<key>.segments/NNNNNN.jsonl`` e lascia sul posto solo la coda: la
     finestra risultava allora «intera» — ``truncated=False`` — mentre metà
     conversazione era in un altro file. Un segmento esiste solo perché una
     rotazione è avvenuta, e ogni turno comincia con un messaggio dell'utente
     (``_split_transcript_turns``), quindi la sua presenza *è* la prova che
     esistono messaggi più vecchi.
     """
-    from jenny.session.keys import WEBUI_CHANNEL, project_session_key
+    from jenny.session.keys import project_session_key, webui_transcript_key
     from jenny.webui.transcript_store import (
         webui_transcript_path,
         webui_transcript_segments_dir,
     )
 
     try:
-        key = f"{WEBUI_CHANNEL}:{project_session_key(name)}"
+        key = webui_transcript_key(project_session_key(name))
         path = webui_transcript_path(key)
         rotated = any(webui_transcript_segments_dir(key).glob("*.jsonl"))
     except Exception:  # noqa: BLE001 — senza transcript il controllo salta, non rompe
@@ -1220,6 +1217,17 @@ async def _checkpoint(agent: Any) -> None:
 # stessa istruzione sincrona (nessun ``await`` in mezzo) e l'event loop è uno.
 _PASSES_IN_FLIGHT: set[str] = set()
 
+
+def passes_in_flight() -> frozenset[str]:
+    """I nomi dei progetti con una passata in corso adesso.
+
+    Una copia, non il set: chi chiede (il rinomino di un quaderno, che non deve
+    spostare la cartella sotto una passata che ci sta scrivendo) non deve poter
+    togliere o aggiungere voci alla presa.
+    """
+    return frozenset(_PASSES_IN_FLIGHT)
+
+
 # La frase che il modello legge quando l'utente è tornato. È un rifiuto di
 # scrittura perché è il solo punto che i tre tool condividono prima di toccare il
 # file: la passata si chiude dicendogli di fermarsi, e il codice — non lui —
@@ -1229,7 +1237,6 @@ _YIELD_REFUSAL = (
     "is giving way. Do not write anything else and end your turn — the journal will be "
     "read again by the next pass."
 )
-
 
 
 def _compose_write_guards(*guards: Any) -> Any:
@@ -1450,6 +1457,7 @@ async def _run_pass(
     # ``_prune_sessions`` lascia per sempre un ``gardener_<nome>-<ora>.jsonl`` e
     # una voce in ``AgentLoop._session_locks``. Era il caso di ``failed``, cioè
     # esattamente del ramo che su un provider giù si prende ogni mezz'ora.
+
     def _stamped(outcome: GardenerOutcome) -> GardenerOutcome:
         """Timbra il tentativo e attacca all'esito la lunghezza della serie.
 
@@ -1492,7 +1500,7 @@ async def _run_pass(
                 session_key=session_key,
                 ephemeral=True,
                 tools=tools,
-                on_progress=_silent,
+                on_progress=silent_progress,
             )
         except Exception as exc:  # noqa: BLE001 — l'esito viaggia nell'outcome
             logger.exception("gardener: pass over {} failed", store.name)

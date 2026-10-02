@@ -183,7 +183,7 @@ class TestKeys:
         assert _is_webui_readable_session_key("cron:job-1") is False
         assert _is_webui_readable_session_key("heartbeat") is False
         assert _is_webui_readable_session_key("websocket:default") is True
-        assert _is_webui_readable_session_key("project:patreon") is True
+        assert _is_webui_readable_session_key("project:palestra") is True
 
     def test_dream_prune_glob_does_not_match_subagent_histories(
         self, tmp_path: Path

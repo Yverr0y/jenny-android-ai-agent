@@ -44,6 +44,7 @@ def build_bus_progress_callback(
         file_edit_events: list[dict[str, Any]] | None = None,
         reasoning: bool = False,
         reasoning_end: bool = False,
+        waiting_for_subagents: int = 0,
     ) -> None:
         meta = dict(msg.metadata or {})
         meta["_progress"] = True
@@ -52,6 +53,11 @@ def build_bus_progress_callback(
             meta["_reasoning_delta"] = True
         if reasoning_end:
             meta["_reasoning_end"] = True
+        if waiting_for_subagents > 0:
+            # Il turno e' fermo ad aspettare i subagent che ha lanciato: un
+            # frame del momento, che il canale websocket manda come
+            # ``turn_waiting`` e non scrive nel transcript (``ws_sender``).
+            meta["_waiting_for_subagents"] = waiting_for_subagents
         if tool_events:
             meta["_tool_events"] = tool_events
         if file_edit_events:

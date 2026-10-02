@@ -1,8 +1,8 @@
 """Lint dei documenti che le skill impacchettate spediscono sul telefono.
 
-Perché esiste. Il 2026-08-11 un subagent ha scritto `wb_probe.py` nella radice
+Perché esiste. Il 2026-08-11 un subagent ha scritto `rc_probe.py` nella radice
 del workspace e l'ha importato con un `sys.path.insert` esplicito. Quando ha
-trascritto quel codice — funzionante — dentro `skills/waterbot/SKILL.md`, ha
+trascritto quel codice — funzionante — dentro `skills/raincheck/SKILL.md`, ha
 lasciato cadere il `sys.path.insert` sostituendolo con la prosa "con cwd =
 workspace root". Da lì in poi ogni heartbeat ricopiava il blocco, l'import nudo
 falliva e l'agente bruciava quattro tool call per cicli a riscoprire `sys.path`.

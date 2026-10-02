@@ -10,18 +10,22 @@ import { api } from './api-client.js';
 import { escapeHtml, showToast } from './utils.js';
 import { i18n } from './i18n.js';
 import { batteryExemptionHtml, wireBatteryExemption } from './battery-exemption.js';
+import { confirmDialog } from './dialog.js';
 
 const POLL_MS = 2500;
 
 export class TelegramPairingWidget {
   /**
    * @param {HTMLElement} container dove renderizzare
-   * @param {{mode?: 'onboarding'|'settings', onPaired?: Function}} opts
+   * @param {{mode?: 'onboarding'|'settings', onPaired?: Function, onStatus?: Function}} opts
+   *   `onStatus(status)` a ogni stato nuovo che il widget disegna: serve a chi
+   *   ne mostra un riassunto fuori dal widget (la riga in cassetto).
    */
   constructor(container, opts = {}) {
     this.el = container;
     this.mode = opts.mode || 'settings';
     this.onPaired = opts.onPaired || null;
+    this.onStatus = opts.onStatus || null;
     this.status = null;
     this._pollTimer = null;
     this._busy = false;
@@ -65,6 +69,9 @@ export class TelegramPairingWidget {
     this._stopPolling();
     const s = this.status;
     if (!s) return;
+    /* Ogni cambio di stato passa di qui — lettura, accoppiamento, token,
+       interruttore, disaccoppia — quindi e' qui che lo si racconta. */
+    this.onStatus?.(s);
     if (s.configured && !s.enabled) {
       this._renderDisabled();
     } else if (s.paired) {
@@ -264,8 +271,21 @@ export class TelegramPairingWidget {
     });
   }
 
+  /* Scollegare chiede conferma. Il token resta, ma da quel momento Jenny non
+     risponde su Telegram e non ci manda avvisi finche' qualcuno non manda al
+     bot il codice nuovo — e niente lo segnala. Era l'unica azione distruttiva
+     dell'officina senza conferma (audit sul Titan 2, 26/09/2026). La domanda
+     viene prima di `_busy`: un secondo tocco a dialogo aperto e' gia' un
+     «annulla» per `confirmDialog`, e un no non deve lasciare il widget bloccato. */
   async _unpair() {
     if (this._busy) return;
+    const s = this.status || {};
+    const who = s.paired_username ? `@${s.paired_username}` : i18n.t('settings.telegram.aChat');
+    const ok = await confirmDialog(
+      i18n.t('settings.telegram.unpairConfirm', { who }),
+      i18n.t('settings.telegram.unpair'),
+    );
+    if (!ok || this._busy) return;
     this._busy = true;
     try {
       this.status = await api.unpairTelegram();
@@ -301,4 +321,23 @@ export class TelegramPairingWidget {
       this._busy = false;
     }
   }
+}
+
+/** Telegram in una riga sola, per il riepilogo in cassetto.
+ *
+ *  Le quattro combinazioni che contano — spento, acceso senza token, acceso
+ *  col token ma non collegato, collegato — rispondono tutte alla stessa
+ *  domanda: «posso scriverle da fuori, adesso?». La riga dice quella, e il
+ *  resto si apre col tocco.
+ *
+ *  Funzione e non metodo del widget: la riga vive **fuori** dal widget, in un
+ *  cassetto che il widget non ha ancora disegnato.
+ */
+export function telegramSummary(status) {
+  if (!status) return i18n.t('settings.telegram.summaryUnknown');
+  if (!status.enabled) return i18n.t('settings.telegram.summaryOff');
+  if (!status.configured) return i18n.t('settings.telegram.summaryNoToken');
+  if (!status.paired) return i18n.t('settings.telegram.summaryNotPaired');
+  const who = status.paired_username ? `@${status.paired_username}` : i18n.t('settings.telegram.aChat');
+  return i18n.t('settings.telegram.summaryPaired', { who });
 }

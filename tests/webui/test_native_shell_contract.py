@@ -19,6 +19,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+from support.kotlin_source import read_source
+
 ROOT = Path(__file__).resolve().parents[2]
 ANDROID = ROOT / "android" / "app" / "src" / "main"
 JAVA = ANDROID / "java" / "com" / "flagdizero" / "jenny"
@@ -26,12 +29,11 @@ MANIFEST = ANDROID / "AndroidManifest.xml"
 MAIN_ACTIVITY = JAVA / "MainActivity.kt"
 NOTIFIER = JAVA / "NotifierBridge.kt"
 LAYOUT = ANDROID / "res" / "layout" / "activity_main.xml"
-THEMES = ANDROID / "res" / "values" / "themes.xml"
 UI_ASSETS = ROOT / "jenny" / "templates" / "ui" / "assets"
 
 
 def _main_activity() -> str:
-    return MAIN_ACTIVITY.read_text(encoding="utf-8")
+    return read_source(MAIN_ACTIVITY)
 
 
 def _app_js() -> str:
@@ -65,6 +67,14 @@ def _fun_body(source: str, name: str) -> str:
     raise AssertionError(f"graffe non bilanciate in {name}")
 
 
+def _until_blank_line(source: str, name: str) -> str:
+    """Una funzione a espressione (``fun f(): T = ...``), fino alla riga vuota."""
+    match = re.search(rf"\bfun {re.escape(name)}\s*\(", source)
+    assert match, f"funzione {name} non trovata"
+    end = source.find("\n\n", match.end())
+    return source[match.start() : end if end >= 0 else len(source)]
+
+
 def _code_only(source: str) -> str:
     """Via i commenti: qui si asserisce su cosa il codice *fa*, e più di un
     commento nomina apposta la riga che è stata tolta."""
@@ -87,9 +97,9 @@ def _activity_config_changes() -> set[str]:
 def test_the_activity_absorbs_the_config_changes_that_really_happen() -> None:
     """Ogni configurazione non elencata ricrea l'activity, e ricreare l'activity
     distrugge la WebView — cioè la SPA, con la vista corrente, lo scroll della
-    chat, la mini-app aperta e la connessione WebSocket. Non c'è nessun
-    ``onSaveInstanceState`` che la rimetta a posto: ``stateNotNeeded="true"``
-    dichiara proprio che lo stato non si salva.
+    chat, la mini-app aperta e la connessione WebSocket. ``onSaveInstanceState``
+    salva solo il path di un export in corso: la SPA non la rimette a posto
+    niente.
 
     Mancavano i quattro cambi che su un telefono capitano davvero con l'app
     davanti: tema scuro di sistema (``uiMode``, anche quello automatico
@@ -108,8 +118,37 @@ def test_the_activity_absorbs_the_config_changes_that_really_happen() -> None:
         "fontScale",
         "density",
         "locale",
+        # Sett 2026: una tastiera Bluetooth che si attacca cambia `keyboard` (e
+        # spesso `navigation`), che `keyboardHidden` non copre; `layoutDirection`
+        # accompagna `locale` quando la lingua è RTL.
+        "keyboard",
+        "navigation",
+        "layoutDirection",
+        # 26/09/2026: il «testo in grassetto» di Accessibilità (API 31),
+        # accanto alla dimensione carattere; e due cambi senza risorse da
+        # ri-risolvere (v. il test qui sotto).
+        "fontWeightAdjustment",
+        "colorMode",
+        "touchscreen",
     ):
         assert required in tokens, f"configChanges senza {required}"
+
+
+def test_absorbing_color_mode_and_touchscreen_is_safe_because_no_resource_follows_them() -> None:
+    """``colorMode`` e ``touchscreen`` si assorbono perché nessuna cartella di
+    risorse usa i loro qualificatori: se un giorno ne comparisse una, l'app la
+    ignorerebbe fino al riavvio. ``mcc``/``mnc`` restano fuori apposta."""
+    res = ANDROID / "res"
+    qualified = [
+        d.name
+        for d in res.iterdir()
+        if d.is_dir()
+        and any(q in d.name.split("-") for q in ("widecg", "nowidecg", "highdr", "lowdr",
+                                                   "notouch", "finger", "stylus"))
+    ]
+    assert qualified == [], qualified
+    tokens = _activity_config_changes()
+    assert "mcc" not in tokens and "mnc" not in tokens
 
 
 def test_absorbing_uimode_is_safe_because_nothing_native_follows_it() -> None:
@@ -119,8 +158,9 @@ def test_absorbing_uimode_is_safe_because_nothing_native_follows_it() -> None:
     l'app resterebbe coi colori vecchi fino al riavvio — e nessuno collegherebbe
     la cosa a questa riga di manifest.
     """
-    themes = THEMES.read_text(encoding="utf-8")
-    assert "DayNight" not in themes
+    # Anche values-v31/, dove stanno gli splash per tema.
+    for themes in sorted((ANDROID / "res").glob("values*/themes.xml")):
+        assert "DayNight" not in themes.read_text(encoding="utf-8"), themes
     non_vendor_css = [
         path
         for path in UI_ASSETS.rglob("*.css")
@@ -130,7 +170,7 @@ def test_absorbing_uimode_is_safe_because_nothing_native_follows_it() -> None:
 
 
 def test_absorbing_locale_is_safe_because_the_layout_has_no_string_resources() -> None:
-    """Stessa condizione per ``locale``: il layout nativo scrive le sue tre
+    """Stessa condizione per ``locale``: il layout nativo scrive le sue sei
     stringhe in chiaro e non referenzia nessun ``@string``, quindi non c'è niente
     da ri-risolvere al cambio lingua. La WebUI ha la sua i18n, con selettore
     dedicato in Impostazioni.
@@ -238,12 +278,65 @@ def test_the_alert_notification_carries_a_routable_action() -> None:
     esattamente dov'era — dentro una mini-app, in Wiki, ovunque — e il messaggio
     proattivo non veniva mostrato.
     """
-    notifier = NOTIFIER.read_text(encoding="utf-8")
-    assert "setAction(MainActivity.ACTION_OPEN_CHAT)" in notifier
+    notifier = read_source(NOTIFIER)
+    assert "MainActivity.openChatIntent(context)" in notifier
     kotlin = _main_activity()
-    assert re.search(r"\bconst val ACTION_OPEN_CHAT\b", kotlin), (
-        "l'action deve essere pubblica: NotifierBridge la legge da qui"
+    assert re.search(r"\bconst val ACTION_OPEN_CHAT\b", kotlin)
+    builder = _code_only(_until_blank_line(kotlin, "openChatIntent"))
+    assert ".setAction(ACTION_OPEN_CHAT)" in builder
+
+
+def test_only_our_open_chat_clears_the_alerts() -> None:
+    """L'activity è esportata (è il launcher): l'action la scrive chiunque, e il
+    ramo del tap **cancella gli avvisi**. Un'altra app poteva far sparire dalla
+    tendina i messaggi proattivi non letti.
+    Ora l'intent nostro porta un gettone casuale tenuto nelle preferenze private,
+    e i due rami — ``onNewIntent`` e il gemello in ``onCreate`` — lo esigono."""
+    kotlin = _main_activity()
+    builder = _code_only(_until_blank_line(kotlin, "openChatIntent"))
+    assert ".putExtra(EXTRA_OPEN_CHAT_TOKEN, openChatToken(context))" in builder
+    check = _code_only(_fun_body(kotlin, "isOurOpenChat"))
+    assert "getStringExtra(EXTRA_OPEN_CHAT_TOKEN)" in check
+    assert "MessageDigest.isEqual(" in check
+    token = _code_only(_fun_body(kotlin, "openChatToken"))
+    assert "SecureRandom()" in token and "Context.MODE_PRIVATE" in token
+    for fun in ("onNewIntent", "onCreate"):
+        body = _code_only(_fun_body(kotlin, fun))
+        assert "isOurOpenChat(this, intent)" in body, f"{fun} non controlla il gettone"
+        assert "intent?.action == ACTION_OPEN_CHAT" not in body, (
+            f"{fun}: l'action da sola non basta più"
+        )
+    # Chi porta in chat dall'interno usa lo stesso costruttore, gettone compreso.
+    for sender in (NOTIFIER, JAVA / "FloatingOverlayController.kt"):
+        src = _code_only(read_source(sender))
+        assert "setAction(MainActivity.ACTION_OPEN_CHAT)" not in src
+        assert "MainActivity.openChatIntent(" in src
+
+
+def test_alerts_left_from_before_an_update_get_the_token_too() -> None:
+    """Un alert postato da una versione senza gettone, ancora in tendina dopo
+    l'aggiornamento, al tocco non portava in chat. Dopo ``MY_PACKAGE_REPLACED``
+    il ricevitore richiede il ``PendingIntent`` di ogni alert in tendina con lo
+    stesso codice, la stessa action e gli stessi flag: ``FLAG_UPDATE_CURRENT``
+    ne riscrive gli extra al suo posto, gettone compreso."""
+    notifier = read_source(NOTIFIER)
+    tap = _code_only(_until_blank_line(notifier, "alertTapIntent"))
+    assert "tag.hashCode()" in tap, "il codice di sempre: e' quello che identifica l'intent"
+    assert "MainActivity.openChatIntent(context)" in tap
+    assert "PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE" in tap
+    builder = _code_only(_fun_body(notifier, "baseBuilder"))
+    assert ".setContentIntent(alertTapIntent(context, tag))" in builder, (
+        "un alert nuovo e un alert rinfrescato devono chiedere lo stesso intent"
     )
+    refresh = _code_only(_fun_body(notifier, "refreshAlertTapIntents"))
+    assert "activeNotifications" in refresh
+    assert "channelId == CHANNEL_ID" in refresh and "tag != FAILED_TAG" in refresh
+    assert "alertTapIntent(context, it)" in refresh
+    assert "catch (e: Exception)" in refresh, "non deve far cadere il ricevitore"
+    boot = _code_only(_fun_body(read_source(JAVA / "BootReceiver.kt"), "onReceive"))
+    guarded = boot[boot.index("action == Intent.ACTION_MY_PACKAGE_REPLACED") :]
+    assert "NotifierBridge.refreshAlertTapIntents(" in guarded
+    assert boot.index("refreshAlertTapIntents(") < boot.index("GatewayStarter.ensureUp(")
 
 
 def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
@@ -259,7 +352,7 @@ def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
     """
     kotlin = _main_activity()
     on_new_intent = _code_only(_fun_body(kotlin, "onNewIntent"))
-    assert "ACTION_OPEN_CHAT" in on_new_intent
+    assert "isOurOpenChat(this, intent)" in on_new_intent
     assert "OPEN_CHAT_JS" in on_new_intent
     open_chat_js = re.search(r"OPEN_CHAT_JS = \"\"\"(.*?)\"\"\"", kotlin, re.S)
     assert open_chat_js, "OPEN_CHAT_JS non trovato"
@@ -267,11 +360,17 @@ def test_tapping_the_alert_closes_what_is_above_and_lands_in_chat() -> None:
     assert "app.openChat()" in body
     assert "goHome()" not in body, "il guscio non ricompone il comportamento a mano"
 
-    # E il lato SPA deve davvero fare le tre cose, non solo esistere.
+    # E il lato SPA deve davvero farlo, non solo esistere. Dal 29/09/2026
+    # l'officina non apre piu' la sua Console — l'ultima vista usata, magari un
+    # quaderno — ma va a casa, che nasce sulla chat personale (collaudo del
+    # 27/09). Torna false: la chat li' non si e' aperta, e gli avvisi li
+    # cancella la casa quando la mostra.
     open_chat = _method(_app_js(), "openChat")
-    assert "this._dismissAllOverlays()" in open_chat
-    assert "collapseToRoot?.()" in open_chat
-    assert "this._navPos = 0" in open_chat, "la chat diventa la radice, non una entry sopra"
+    assert "api.navigate('/html-mobile/', { replace: true })" in open_chat
+    assert "return false;" in open_chat
+    home = _method((UI_ASSETS / "home-app.js").read_text(encoding="utf-8"), "openChat")
+    assert "this._closeAllOverlays()" in home
+    assert "this.switchConversation(null)" in home, "la casa deve aprire la conversazione personale"
 
 
 def test_pending_alerts_are_cleared_where_the_chat_reaches_the_screen() -> None:
@@ -308,15 +407,37 @@ def test_the_resume_branch_asks_what_is_on_screen_before_clearing() -> None:
     assert '== "true"' in clear_line, clear_line
 
 
-def test_the_chat_visible_question_reads_the_spa_view_that_exists() -> None:
-    """``CHAT_ON_SCREEN_JS`` interroga ``mobileApp.currentMode``: se quel campo o il
-    nome della vista cambiassero, la domanda risponderebbe sempre no — e gli
-    alert resterebbero in coda per sempre, senza che niente fallisca."""
+def test_the_chat_visible_question_asks_a_method_every_shell_has() -> None:
+    """``CHAT_ON_SCREEN_JS`` chiede ``mobileApp.isChatOnScreen()``.
+
+    Leggeva ``mobileApp.currentMode``, un campo dell'officina: nella casa — il
+    guscio di default — non c'era, la domanda rispondeva sempre no, e gli alert
+    restavano in coda per sempre senza che niente fallisse. Questo stesso test
+    guardava solo ``mobile-app.js``, cioe' il guscio in cui la domanda aveva
+    senso, ed e' rimasto verde tutto il tempo (trovato il 24/09/2026)."""
     kotlin = _main_activity()
     question = re.search(r"CHAT_ON_SCREEN_JS = \"\"\"(.*?)\"\"\"", kotlin, re.S)
     assert question, "CHAT_ON_SCREEN_JS non trovato"
-    assert "currentMode === 'chat'" in question.group(1)
+    assert "app.isChatOnScreen()" in question.group(1)
+    assert "typeof app.isChatOnScreen === 'function'" in question.group(1)
+    assert "currentMode" not in question.group(1)
+
+
+@pytest.mark.parametrize("shell", ["mobile-app.js", "home-app.js"])
+def test_both_shells_answer_the_chat_visible_question(shell: str) -> None:
+    """Il guscio nativo non sa quale delle due interfacce ha caricato: il
+    contratto vale per entrambe, o per una delle due non vale."""
+    source = (UI_ASSETS / shell).read_text(encoding="utf-8")
+    assert re.search(r"\n  isChatOnScreen\(\)\s*\{", source), f"{shell}: isChatOnScreen manca"
+
+
+def test_the_workshop_answer_is_its_chat_mode() -> None:
+    """La Console, e con la conversazione personale: se e' un quaderno, l'avviso
+    li' non c'e' (collaudo del 27/09/2026)."""
     app_js = _app_js()
+    answer = _method(app_js, "isChatOnScreen")
+    assert "this.currentMode === 'chat'" in answer
+    assert "sessionManager.currentKey === sessionManager.personalKey" in answer
     assert "this.currentMode = mode" in app_js
     assert "switchMode('chat'" in app_js
 
@@ -333,7 +454,11 @@ def test_entering_the_chat_view_notifies_the_native_shell() -> None:
     body = activate.group(1)
     assert "JennyNative?.chatOpened?.()" in body
     assert "try {" in body
-    assert '@JavascriptInterface' in _main_activity().split("fun chatOpened")[0][-200:]
+    # Sta sulla porta dei comandi, che solo il frame principale della SPA
+    # raggiunge (v. tests/security/test_native_bridge_origin.py): dall'iframe
+    # di una Jenny App non si cancellano gli avvisi dell'utente.
+    assert '"chatOpened" -> chatOpened()' in _main_activity()
+    assert "'chatOpened'" in (UI_ASSETS / "shared" / "native-bridge.js").read_text("utf-8")
 
 
 def test_a_cold_start_from_the_alert_still_lands_in_chat() -> None:
@@ -345,3 +470,41 @@ def test_a_cold_start_from_the_alert_still_lands_in_chat() -> None:
     kotlin = _main_activity()
     assert "openChatOnLoad = true" in _code_only(_fun_body(kotlin, "onCreate"))
     assert "openChatOnLoad" in _code_only(_fun_body(kotlin, "buildGatewayUrl"))
+
+
+# ── Quel che il guscio grida, qualcuno deve sentirlo ─────────────────────
+
+
+def test_every_event_the_shell_dispatches_has_a_listener() -> None:
+    """Il guscio parla alla WebUI anche per eventi, non solo per chiamate: la
+    WebView vede cose che il JS dentro la pagina non puo' vedere, e gliele
+    rigira.
+
+    **Un evento senza ascoltatore non fallisce.** Non c'e' un errore, non c'e'
+    una riga nel log: cade nel vuoto, e quel che doveva succedere semplicemente
+    non succede. E' andata cosi' per `jenny-subframe-error`, che il guscio manda
+    quando l'iframe di una mini-app non carica: l'ascolto stava nel costruttore
+    della scheda «App», e quando quella schermata e' stata cancellata se n'e'
+    andato con lei. Da allora una mini-app che non parte e' un riquadro bianco —
+    compreso il caso piu' frequente, il cleartext bloccato dalla policy
+    dell'APK, che senza quella scritta si vede solo in logcat.
+
+    Il banco guarda dalla parte che non si puo' dimenticare: l'elenco lo detta
+    il guscio, non noi. Un evento nuovo di la' arriva qui rosso finche' non ha
+    un orecchio.
+    """
+    kotlin = "\n".join(read_source(p) for p in JAVA.rglob("*.kt"))
+    events = set(re.findall(r"new (?:Custom)?Event\('([\w-]+)'", kotlin))
+    assert events, "nessun evento nel guscio: la ricerca non guarda piu' dove deve"
+
+    listeners = "\n".join(
+        p.read_text(encoding="utf-8", errors="replace")
+        for p in UI_ASSETS.rglob("*.js")
+        if "vendor" not in p.relative_to(UI_ASSETS).parts
+    )
+    deaf = sorted(e for e in events if f"addEventListener('{e}'" not in listeners)
+    assert not deaf, (
+        f"il guscio manda questi eventi e in pagina non li ascolta nessuno: {deaf}. "
+        f"Cadono nel vuoto in silenzio — nessun errore, e la cosa che dovevano "
+        f"far succedere semplicemente non succede."
+    )

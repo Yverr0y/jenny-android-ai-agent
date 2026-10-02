@@ -19,7 +19,9 @@ domanda per tutta la sessione. Un reload "riparava": lo scambio nel file c'era
 sempre stato, era la vista viva a mentire.
 
 Il flag che tiene aperto il turno deve quindi essere **indipendente dalla UI**:
-``_closeMini`` non lo tocca, e solo ``turn_end``/``error`` lo chiudono.
+``_closeMini`` non lo tocca, e solo ``turn_end``/``error`` lo chiudono. Dal
+28/09/2026 la minichat e' dei due gusci (``shared/jenny-minichat.js``) e va oltre:
+a minichat chiusa segue ancora la domanda, e la risposta la trovi riaprendola.
 
 Asserzioni sul sorgente, nello stile di ``test_thinking_scroll_contract.py``: la
 WebUI non ha un runner JS con DOM.
@@ -32,11 +34,16 @@ from pathlib import Path
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
-JENNY_JS = ASSETS / "mobile-jenny.js"
+JENNY_JS = ASSETS / "shared" / "jenny-minichat.js"
+MASCOT_JS = ASSETS / "shared" / "jenny-mascot.js"
 
 
 def _method(source: str, name: str) -> str:
-    body = re.search(rf"\n  (?:async )?{name}\([^)]*\)\s*\{{(.*?)\n  \}}", source, re.S)
+    # I parametri possono avere un default con le sue parentesi
+    # (`mine = this._trackedTurnMatches(msg)`): un livello di annidamento basta.
+    body = re.search(
+        rf"\n  (?:async )?{name}\((?:[^()]|\([^()]*\))*\)\s*\{{(.*?)\n  \}}", source, re.S
+    )
     assert body, f"{name} non trovato"
     return body.group(1)
 
@@ -80,14 +87,13 @@ def test_the_pending_turn_flag_is_independent_of_the_minichat_ui() -> None:
     source = JENNY_JS.read_text(encoding="utf-8")
     close = _method(source, "_closeMini")
 
-    # Le due condizioni storiche della guardia: _closeMini le azzera entrambe,
-    # ed è questo che rendeva il difetto inevitabile.
-    assert "this.awaiting = false;" in close
-    assert "classList.remove('thinking', 'mini');" in close
-    assert "_pendingTurn" not in close, (
+    # La chiusura legge il flag (per sapere se c'e' ancora una risposta in
+    # arrivo), ma non lo scrive.
+    assert "this._pendingTurn = " not in close, (
         "se la chiusura della minichat tocca il flag, il flag è di nuovo uno stato della UI "
         "e turn_end torna a essere scartato"
     )
+    assert "awaiting" not in source, "e' tornata la seconda guardia, quella che la UI azzera"
 
     assert "this._pendingTurn = true;" in _method(source, "_send"), (
         "il flag si alza quando il turno parte, non quando la bolla appare"
@@ -95,20 +101,28 @@ def test_the_pending_turn_flag_is_independent_of_the_minichat_ui() -> None:
 
 
 def test_turn_end_reaches_the_history_invalidation_with_the_minichat_closed() -> None:
+    # `_handleWsMessage` (condiviso) filtra la conversazione e l'umore, poi
+    # passa qui.
     source = JENNY_JS.read_text(encoding="utf-8")
-    body = _method(source, "_handleWsMessage")
+    body = _method(source, "_handleFrame")
 
-    guard = body.split("switch (msg.event)", 1)[0]
-    assert "const closing = msg.event === 'turn_end' || msg.event === 'error';" in guard
-    assert "this._pendingTurn" in guard, "la guardia non conosce il flag: turn_end resta scartato"
-    assert "closing && this._pendingTurn" in guard, (
-        "solo gli eventi che chiudono il turno scavalcano la guardia: i delta di una bolla "
-        "invisibile non servono a nessuno"
+    assert "if (!this._pendingTurn) return;" in body, (
+        "la guardia non conosce il flag: turn_end resta scartato"
+    )
+    assert "minichatOpen" not in body and "'open'" not in body, (
+        "la guardia guarda di nuovo cosa c'e' a schermo: a minichat chiusa la domanda si perde"
     )
 
-    # E la chiusura deve continuare a fare l'unica cosa che conta per la chat.
-    assert "this._invalidateChatHistory();" in body
-    assert body.count("this._pendingTurn = false;") == 2, (
+    # Oltre la guardia il frame va alla macchina della madre, che chiude il
+    # flag su entrambi gli esiti (turn_end ed error); il fumetto e
+    # l'invalidazione stanno nel gancio. L'esecuzione vera di tutto questo e' in
+    # `test_minichat_frames_client.py`.
+    assert "this._handleChatStream(msg, mine);" in body
+    hook = _method(source, "_beforeChatState")
+    assert "this._adapter.onTurnClosed?.();" in hook
+    mother = _method(MASCOT_JS.read_text(encoding="utf-8"), "_handleChatStream")
+    closing = mother.split("case 'turn_end':", 1)[1]
+    assert "case 'error':" in closing.split("this._pendingTurn = false;", 1)[0], (
         "il flag va chiuso su entrambi gli esiti (turn_end ed error), altrimenti resta alzato"
     )
 
@@ -127,5 +141,5 @@ def test_the_flag_is_also_closed_from_the_main_chat_stream() -> None:
     """Un turno partito dalla minichat può concludersi dopo che l'utente è
     passato nella sezione chat: lì gli eventi vengono instradati altrove, e
     senza chiusura il flag resterebbe alzato a tempo indeterminato."""
-    body = _method(JENNY_JS.read_text(encoding="utf-8"), "_handleChatStream")
+    body = _method(MASCOT_JS.read_text(encoding="utf-8"), "_handleChatStream")
     assert "this._pendingTurn = false;" in body

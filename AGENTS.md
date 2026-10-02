@@ -17,13 +17,22 @@ The gateway is started by the Android runtime via `jenny.android_entry.run_gatew
 
 ## Android Build & Deploy
 
-The Android project lives in the `android/` directory. Build and install the debug APK on the attached device with:
+The Android project lives in the `android/` directory.
+
+**Every on-device test runs on the Android emulator `jenny_square`** (AVD: 1440×1440 @ 480 dpi,
+arm64, android-37), and only there. Do not install on, uninstall from or test against any
+other device, even when one shows up in `adb devices`: pin the emulator with
+`ANDROID_SERIAL=emulator-5554` on every `adb`/Gradle command.
 
 ```bash
-cd android && ./gradlew app:installDebug
+~/Library/Android/sdk/emulator/emulator -avd jenny_square -no-snapshot-save &
+adb devices -l   # emulator-5554 must be listed
+cd android && ANDROID_SERIAL=emulator-5554 ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew app:installDebug
 ```
 
-This builds `app-debug.apk` and installs it via `adb` on the connected device (e.g. Unihertz Titan 2). Verify the device is detected first with `adb devices`.
+Debug and release APKs are signed differently: switching between them on the emulator needs
+`adb uninstall com.flagdizero.jenny` first, which wipes the emulator's workspace — and brings
+back the first-run onboarding, which is often exactly what a test wants.
 
 ## High-Level Architecture
 
@@ -40,14 +49,14 @@ Messages flow through an async `MessageBus` (`jenny/bus/queue.py`) that decouple
 
 - **Agent Loop** (`jenny/agent/loop.py`, `runner.py`): The core processing engine. `AgentLoop` manages session keys, hooks, and context building. `AgentRunner` executes the multi-turn LLM conversation with tool execution.
 - **LLM Providers** (`jenny/providers/`): Provider implementations (Anthropic, OpenAI-compatible, OpenAI Responses API converters) built on a common base (`base.py`). `factory.py` creates the provider from config.
-- **Channel** (`jenny/channels/`): WebSocket (`websocket.py`) and Telegram (`telegram.py`, a paired personal-bot channel) are the two channels; `dispatcher.py` routes outbound bus messages to both (retry, delta coalescing, progress filtering). Other platform integrations were removed from this fork.
-- **Tools** (`jenny/agent/tools/`): Agent capabilities exposed to the LLM: filesystem (read/write/edit/list), `python_exec` for code execution, Android web search/fetch (`android_web.py`), cron, subagent spawning, long-running tasks / sustained goals (`long_task.py`), and self-modification. Tools are explicitly registered: `loader.py` imports a fixed module list of 23 (`_HARDCODED_TOOL_MODULES`) and each module declares `TOOLS = [...]`, yielding 41 tool classes. **Three more bypass the loader**, each because it needs a live reference the loader cannot provide: `my` (the running `AgentLoop`), `memory_entry` (the memory store) and the per-app action tool (synced per turn) — so this list is not a complete inventory of the tool surface, and `self.py`/`memory_entries.py` declaring no usable `TOOLS` is deliberate rather than an oversight. A name collision — like a module without `TOOLS` — raises `ToolLoadError` and aborts startup; a failing `enabled()`/`create()` only disables that one tool, logged at ERROR and recorded in `ToolLoader.failures`.
+- **Channel** (`jenny/channels/`): four channel classes — WebSocket (`websocket.py`, the WebUI), Telegram (`telegram.py`, a paired personal-bot channel), Notification (`notification.py`, a reply typed into an Android notification, answered with a system alert) and Floating (`floating.py`, the floating mascot's bubble); the last two exist only on Android. `dispatcher.py` owns them and routes outbound bus messages to whichever are active (retry, delta coalescing, progress filtering). All four feed the same unified session. Other platform integrations were removed from this fork.
+- **Tools** (`jenny/agent/tools/`): Agent capabilities exposed to the LLM: filesystem (read/write/edit/list), `python_exec` for code execution, Android web search/fetch (`android_web.py`), cron, subagent spawning, long-running tasks / sustained goals (`long_task.py`), and self-modification. Tools are explicitly registered: `loader.py` imports a fixed module list of 23 (`_HARDCODED_TOOL_MODULES`) and each module declares `TOOLS = [...]`, yielding 41 tool classes. **Three more bypass the loader**, each because it needs a live reference the loader cannot provide: `my` (the running `AgentLoop`), `memory` (`MemoryEntryTool`, which needs the memory store) and the per-app action tool (synced per turn) — so this list is not a complete inventory of the tool surface, and `self.py`/`memory_entries.py` declaring no usable `TOOLS` is deliberate rather than an oversight. A name collision — like a module without `TOOLS`, or an `allow` entry that names no known tool — raises `ToolLoadError` and aborts startup; a failing `enabled()`/`create()` only disables that one tool, logged at ERROR and recorded in `ToolLoader.failures`.
 - **Memory** (`jenny/agent/memory.py`): Session history persistence with Dream two-phase memory consolidation. Uses atomic writes with fsync for durability.
-- **Session Management** (`jenny/session/`): History persistence, context compaction, TTL-based auto-compaction (`manager.py`), and sustained goal state tracking (`goal_state.py`). The user conversation is a **single unified session** (`unified:default`, see `keys.py`); internal work (cron, Dream, heartbeat) uses separate internal keys via `session_key_override`.
+- **Session Management** (`jenny/session/`): History persistence, context compaction, and sustained goal state tracking (`goal_state.py`); TTL-based auto-compaction lives in `jenny/agent/autocompact.py` (`AutoCompact`). The user conversation is a **single unified session** (`unified:default`, see `keys.py`), except that a project chat on the WebSocket channel gets its own `project:<name>` session (`session_key_for_channel`); internal work (cron, Dream, heartbeat) uses separate internal keys via `session_key_override`.
 - **Config** (`jenny/config/schema.py`, `loader.py`, `store.py`): Pydantic-*style* configuration (`jenny/pydantic_compat/`, stdlib-only — see [`FORK_BOUNDARY.md`](./FORK_BOUNDARY.md)) loaded from `workspace/config.json` inside the project root. Supports camelCase aliases for JSON compatibility. **Every write goes through `store.mutate()`** — see the rule under [Config & security](#config--security); calling `save_config()` directly reintroduces a silent data-loss bug that no test will catch for you.
-- **WebUI** (`jenny/templates/ui/`): Mobile-first HTML/JS SPA served by the gateway. It talks to the gateway over the same WebSocket used for chat, plus HTTP routes under `/api/`.
+- **WebUI** (`jenny/templates/ui/`): Mobile-first HTML/JS served by the gateway, in two shells that share `assets/shared/`: the home (`index.html` + `home-*.js`, the default) and the workshop (`workshop.html` + `mobile-*.js`), reached from the home's Settings page; `onboarding.html` is a third, first-run document. Both shells talk to the gateway over the same WebSocket used for chat, plus HTTP routes under `/api/`.
 - **WebUI HTTP API** (`jenny/webui/`): The `/api/` route handlers backing the SPA (apps, settings, media, skills, transcript, token usage, workspaces, file preview, etc.), plus gateway service/token wiring.
-- **Jenny Apps** (`jenny/apps/`): Runtime for user-authored mini-apps — `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`. See [`.agent/jenny-apps.md`](.agent/jenny-apps.md).
+- **Jenny Apps** (`jenny/apps/`): Runtime for user-authored mini-apps — `manifest.py`, `executor.py`, `storage.py`, `summary.py`, `http.py`, `proxy.py`, `token.py`. See [Write a mini-app](docs/contribute/write-a-mini-app.md).
 - **Command Router** (`jenny/command/`): Slash command routing and built-in command handlers.
 - **Heartbeat** (`jenny/templates/HEARTBEAT.md`): Periodic task list checked via `cron` jobs.
 - **Skills** (`jenny/skills/`): Built-in skill definitions loaded into agent context.
@@ -72,11 +81,17 @@ Large classes are split into focused mixins/leaf modules composed via MRO (behav
 
 ## Project-Specific Notes
 
-- Architecture constraints: [`.agent/design.md`](.agent/design.md)
-- Security boundaries: [`.agent/security.md`](.agent/security.md)
-- Common gotchas: [`.agent/gotchas.md`](.agent/gotchas.md)
-- Jenny Apps design: [`.agent/jenny-apps.md`](.agent/jenny-apps.md)
-- Fork boundary: [`FORK_BOUNDARY.md`](./FORK_BOUNDARY.md)
+Working notes (plans, checklists, reviews) live in a local `.agent/` folder that is not
+versioned: a clone does not have it, so never cite it from code, tests or `docs/`, and put the
+reason in the comment itself. The public references are
+[Security model](docs/internals/security-model.md) for the security boundaries,
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for the design rules and
+[`FORK_BOUNDARY.md`](./FORK_BOUNDARY.md) for what this fork keeps and drops.
+
+- **Design boards are not in the repo.** Some code comments cite «tavole» — design boards
+  such as `Quaderno.dc.html` or the artifact *Jenny UI: Utente e Operatore* — that lived
+  outside the repository. Where a comment and the code disagree, the code wins. Do not go
+  looking for the files, and do not cite a board as the only justification for a new decision.
 - **`docs/` has a second consumer outside this repo.** The website
   (`flagdizero/jenny-site`) generates its `/docs/**` routes from these files at build
   time, deriving each page's title from the `# H1` and its sidebar position from the
@@ -94,7 +109,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for contribution flow and PR guidelin
 - Line length: 100.
 - Linting: `ruff` with rules E, F, I, N, W (E501 ignored).
 - pytest with `asyncio_mode = "auto"`.
-- Language convention: docstrings/comments in Italian for new code; inherited upstream code keeps English — do not translate existing text. Identifiers, log messages and commit-facing strings: English. User-facing WebUI strings are localized via i18n JSON files (`jenny/templates/ui/assets/i18n/{it,en}.json`), not hardcoded.
+- Language convention: every Markdown file under `jenny/` (skills, their references, prompt templates) is English only — examples, frontmatter and `{# … #}` Jinja comments included — because the model reads them and imitates their language; `tests/skills/test_prompt_markdown_is_english.py` enforces it, and a bundled skill's localized `user_summary` lives in the i18n JSON (`skills.userSummary.<name>`). Otherwise, docstrings/comments in Italian for new code; inherited upstream code keeps English — do not translate existing text. Identifiers, log messages and commit-facing strings: English. User-facing WebUI strings are localized via i18n JSON files (`jenny/templates/ui/assets/i18n/{it,en}.json`), not hardcoded. "Identifiers" includes the WebUI's vocabulary — CSS classes, element ids, `data-*` attributes, i18n keys — and file names; the two shells are the home (`index.html`, `home-*.js`) and the workshop (`workshop.html`, `mobile-*.js`), and the home's own pages are `HomePages` while a notebook's pages are `NotebookPages`. A name that is persisted or on the wire (`config.json`, `localStorage`, an `/api/` field, an RPC, a `postMessage` type) does not change without a migration: see `Config._migrate_casa_to_home` and `RENAMED_KEYS` in `shared/mascot.js`.
 
 ## Verification Commands
 
@@ -106,7 +121,7 @@ ruff check jenny/ tests/
 
 # Static type check (pyright basic, zero runtime impact; config: pyrightconfig.json)
 # BLOCKING subset — must stay green (already error-clean):
-npx pyright jenny/bus jenny/command jenny/runtime jenny/session
+npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py
 # Full-perimeter visibility (non-blocking; shows residual errors to tighten over time):
 npx pyright || true
 
@@ -114,7 +129,7 @@ npx pyright || true
 pytest -q
 
 # Full CI-equivalent check (lint + type check + tests)
-ruff check jenny/ tests/ && npx pyright jenny/bus jenny/command jenny/runtime jenny/session && pytest -q
+ruff check jenny/ tests/ && npx pyright jenny/bus jenny/command jenny/runtime jenny/session jenny/snapshot jenny/gateway_runtime.py && pytest -q
 ```
 
 ## Common File Locations

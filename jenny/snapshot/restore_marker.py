@@ -32,12 +32,8 @@ from jenny.snapshot.locations import (
     STAGED_SNAPSHOTS_DIR_NAME,
     STAGED_WORKSPACE_DIR_NAME,
 )
+from jenny.utils.clock import now_ms as _now_ms
 from jenny.utils.path import atomic_write
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
 
 # -- marker -------------------------------------------------------------------
 
@@ -122,8 +118,12 @@ def _apply_pending_restore(runtime_root: Path) -> bool:
     workspace = runtime_root / "workspace"
     staged = runtime_root / STAGED_WORKSPACE_DIR_NAME
     staged_snapshots = runtime_root / STAGED_SNAPSHOTS_DIR_NAME
-    created_at = int(marker.get("created_at_ms") or _now_ms())
-    safety = runtime_root / f"{SAFETY_DIR_PREFIX}{created_at}"
+    # La copia di sicurezza porta l'istante del **ripristino**, non quello dello
+    # staging scritto nel marker: fra i due c'e' il riavvio, che puo' arrivare
+    # giorni dopo, e la pulizia all'avvio (``sweep_safety_copies``) data la copia
+    # dal nome — una copia nata col nome di dieci giorni prima spariva subito.
+    applied_at = _now_ms()
+    safety = runtime_root / f"{SAFETY_DIR_PREFIX}{applied_at}"
 
     if not staged.is_dir():
         if workspace.is_dir():
@@ -149,7 +149,7 @@ def _apply_pending_restore(runtime_root: Path) -> bool:
     # precedente l'aveva già fatta: workspace assente + staged presente).
     if workspace.is_dir():
         if safety.exists():
-            safety = runtime_root / f"{SAFETY_DIR_PREFIX}{created_at}_{_now_ms()}"
+            safety = runtime_root / f"{SAFETY_DIR_PREFIX}{applied_at}_{_now_ms()}"
         os.replace(workspace, safety)
 
     # Mossa 2: promuovi lo staging a workspace.
@@ -211,6 +211,22 @@ def _recover_from_safety(runtime_root: Path, workspace: Path) -> None:
 # -- pulizia copie di sicurezza ----------------------------------------------------
 
 
+def _safety_copy_time_s(candidate: Path) -> float:
+    """L'istante (epoch, secondi) del restore che ha prodotto *candidate*.
+
+    Dal nome, ``<prefisso><ms del ripristino>[_<ms>]``, che scrive la mossa 1 di
+    :func:`_apply_pending_restore`, e non dall'mtime: la copia e' il workspace
+    **rinominato**, e il rename tiene l'mtime della cartella — l'ultima volta che
+    nella sua radice si e' creato o tolto un file, magari mesi prima. Con l'mtime
+    la pulizia all'avvio, che gira subito dopo il ripristino, cancellava la copia
+    appena fatta. L'mtime resta per un nome che non porta la data.
+    """
+    stamp = candidate.name[len(SAFETY_DIR_PREFIX):].split("_", 1)[0]
+    if stamp.isdigit():
+        return int(stamp) / 1000
+    return candidate.stat().st_mtime
+
+
 def sweep_safety_copies(runtime_root: Path, *, max_age_days: int = 7) -> int:
     """Elimina le copie di sicurezza più vecchie di ``max_age_days``. Mai raises."""
     removed = 0
@@ -218,7 +234,7 @@ def sweep_safety_copies(runtime_root: Path, *, max_age_days: int = 7) -> int:
     try:
         for candidate in Path(runtime_root).glob(f"{SAFETY_DIR_PREFIX}*"):
             try:
-                if candidate.is_dir() and candidate.stat().st_mtime < threshold:
+                if candidate.is_dir() and _safety_copy_time_s(candidate) < threshold:
                     shutil.rmtree(candidate, ignore_errors=True)
                     removed += 1
             except OSError:

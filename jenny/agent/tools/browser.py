@@ -23,7 +23,7 @@ from loguru import logger
 
 # Stessa dicitura di web_search/web_fetch, una sola volta: se cambia la formula
 # con cui si marca il contenuto non fidato, deve cambiare per tutti insieme.
-from jenny.agent.tools.android_web import _UNTRUSTED_BANNER
+from jenny.agent.tools.android_web import _UNTRUSTED_BANNER, AndroidWebGateMixin
 from jenny.agent.tools.base import Tool, tool_parameters
 from jenny.agent.tools.schema import (
     ArraySchema,
@@ -33,12 +33,16 @@ from jenny.agent.tools.schema import (
     StringSchema,
     tool_parameters_schema,
 )
-from jenny.config.tool_schemas import AndroidWebToolsConfig
 
 _BROWSER_LOCK = asyncio.Lock()
 _BROWSER_INSTANCE: Any = None
 _LAST_USE: float = 0.0
 _IDLE_TASK: asyncio.Task[None] | None = None
+
+# La risposta di ``isIsolated`` per la sessione viva, con l'istanza a cui si
+# riferisce: l'aggancio del profilo si decide una volta, quando nasce la
+# WebView, quindi dentro una sessione non cambia. Si butta con la sessione.
+_ISOLATED_FOR: tuple[Any, bool | None] | None = None
 
 # Ogni quanto il guardiano guarda l'orologio. Costante di modulo perche' un
 # test non deve aspettare i minuti veri.
@@ -49,6 +53,13 @@ _IDLE_POLL_S = 15
 # nome lo conosce solo la pagina e la politica deve stare dove si puo' testare.
 _LAST_INDEX: dict[str, tuple[str, str]] = {}
 _INDEX_VERSION: str = ""
+# Per ref, il nome del bottone che invia il modulo dell'elemento ('' fuori da
+# un modulo), dal terzo campo dell'indice. E il ref che ha il cursore: l'ultimo
+# `click`/`type`/`select` riuscito. Insieme dicono **cosa** invierebbe un
+# `press Enter`, che deve passare dallo stesso lessico di un click. Si
+# svuotano col documento, come l'indice.
+_FORM_OF: dict[str, str] = {}
+_FOCUS_REF: str = ""
 
 # Verbi che cambiano il mondo di chi legge: soldi, distruzione, identita'. Un
 # click su uno di questi non parte da solo.
@@ -62,23 +73,42 @@ _INDEX_VERSION: str = ""
 # Confronto a parola intera: "ordina" non deve scattare su "ordinamento", e
 # "conferma" da sola non deve scattare su ogni banner dei cookie — per questo
 # c'e' "conferma ordine" e non "conferma".
-_SENSITIVE_VERBS = (
+_COSTLY_VERBS = (
     r"pag(?:a|are|amento)", r"acquist(?:a|are|o)", r"compra", r"ordina",
     r"conferma ordine", r"procedi al pagamento", r"abbonati",
     r"pay", r"buy", r"purchase", r"checkout", r"place order", r"subscribe",
     r"elimin(?:a|are)", r"cancell(?:a|are)", r"rimuov(?:i|ere)", r"svuota",
     r"delete", r"remove", r"empty (?:cart|trash)",
     r"trasferisc(?:i|ere)", r"bonifico", r"invia denaro", r"transfer", r"send money",
+)
+_ACCESS_VERBS = (
     # "entra" e' l'etichetta di accesso piu' comune sui siti italiani, e senza
     # di essa l'interlocco non copre il caso piu' frequente qui. Il confine di
     # parola la tiene stretta: non scatta su "rientra", "entrata", "centrale".
     r"accedi", r"entra", r"sign in", r"log ?in",
 )
+_SENSITIVE_VERBS = _COSTLY_VERBS + _ACCESS_VERBS
 _SENSITIVE_RE = re.compile(r"\b(?:" + "|".join(_SENSITIVE_VERBS) + r")\b", re.IGNORECASE)
+_COSTLY_RE = re.compile(r"\b(?:" + "|".join(_COSTLY_VERBS) + r")\b", re.IGNORECASE)
 
 
 def _is_sensitive(name: str) -> bool:
     return bool(name) and _SENSITIVE_RE.search(name) is not None
+
+
+def _page_has_costly_actions() -> bool:
+    """Vero se nello snapshot corrente c'e' un nome che costa (soldi o distruzione).
+
+    Serve a ``press Enter`` quando il modulo non si conosce: un Enter lo legge
+    anche il JavaScript della pagina, e senza un ``<form>`` non c'e' un bottone
+    di cui leggere il nome. Guarda i nomi e i moduli di tutti i ref che lo
+    snapshot ha mostrato; i verbi di accesso restano fuori, perche' un link
+    «Accedi» sta quasi su ogni pagina e un accesso senza password — che l'utente
+    mette da se' — non parte.
+    """
+    return any(_COSTLY_RE.search(name) for _role, name in _LAST_INDEX.values()) or any(
+        _COSTLY_RE.search(label) for label in _FORM_OF.values()
+    )
 
 
 def reset_browser_state() -> None:
@@ -88,9 +118,18 @@ def reset_browser_state() -> None:
     viene atteso la prima volta, quindi riusarne uno attraverso un loop nuovo
     (gateway ripartito nello stesso processo) esplode con "bound to a different
     event loop" al primo acquire.
+
+    La sessione rimasta viva dal giro precedente si **chiude**, non si
+    dimentica: staccarla e basta lascerebbe in piedi la WebView col suo
+    profilo, cookie compresi, che la prossima ``_get_browser`` non vedrebbe
+    ma che resterebbe aperta fino alla morte del processo. È la stessa cosa
+    che fa ``android_web.reset_android_web_state`` col suo bridge. Bloccante
+    (``close`` in Kotlin aspetta fino a 10 s), e qui va bene: si chiama da
+    ``android_entry`` prima che il loop parta. Un errore della chiusura lo
+    logga ``_close_bridge`` e non ferma l'avvio.
     """
-    global _BROWSER_INSTANCE, _BROWSER_LOCK, _IDLE_TASK, _LAST_USE
-    _LAST_INDEX.clear()
+    global _BROWSER_LOCK, _IDLE_TASK, _LAST_USE
+    _close_bridge(_detach_browser())
     if _IDLE_TASK is not None:
         # Il task puo' appartenere a un loop gia' chiuso (e' proprio il caso
         # per cui questa funzione esiste): li' ``cancel`` solleva invece di
@@ -101,7 +140,6 @@ def reset_browser_state() -> None:
             pass
     _IDLE_TASK = None
     _LAST_USE = 0.0
-    _BROWSER_INSTANCE = None
     _BROWSER_LOCK = asyncio.Lock()
 
 
@@ -152,21 +190,58 @@ async def _watch_idle(idle_s: int) -> None:
             if time.monotonic() - _LAST_USE < idle_s:
                 continue
             logger.info("Browser session closed after {:.0f}s idle", idle_for)
-            destroy_browser()
+            await _destroy_browser_async()
             return
 
 
-def destroy_browser() -> None:
-    """Chiude la sessione e butta il profilo (cookie inclusi), se c'e'."""
-    global _BROWSER_INSTANCE
+def _detach_browser() -> Any:
+    """Stacca la sessione dallo stato del modulo e la restituisce (o ``None``).
+
+    Istantaneo e sul thread del loop: da qui in poi nessuno la vede piu', anche
+    se la chiusura vera (``close`` in Kotlin) deve ancora girare.
+    """
+    global _BROWSER_INSTANCE, _ISOLATED_FOR, _FOCUS_REF
     _LAST_INDEX.clear()
-    if _BROWSER_INSTANCE is not None:
-        try:
-            _BROWSER_INSTANCE.close()
-        except Exception:
-            logger.opt(exception=True).debug("Chiusura sessione browser fallita")
-        finally:
-            _BROWSER_INSTANCE = None
+    _FORM_OF.clear()
+    _FOCUS_REF = ""
+    _ISOLATED_FOR = None
+    bridge, _BROWSER_INSTANCE = _BROWSER_INSTANCE, None
+    return bridge
+
+
+def _close_bridge(bridge: Any) -> None:
+    """Chiude una sessione gia' staccata. Bloccante: fino a 10 s in Kotlin."""
+    if bridge is None:
+        return
+    try:
+        bridge.close()
+    except Exception:
+        logger.opt(exception=True).warning("Browser session close failed")
+
+
+def destroy_browser() -> None:
+    """Chiude la sessione e ne svuota il profilo (cookie inclusi), se c'e'.
+
+    **Bloccante** (``close`` in Kotlin aspetta il main thread fino a 10 s): dal
+    loop si usa ``_destroy_browser_async``. Resta sincrona per chi non ha un
+    loop sotto.
+    """
+    _close_bridge(_detach_browser())
+
+
+async def _destroy_browser_async() -> None:
+    """``destroy_browser`` senza fermare il loop del gateway. Col lucchetto preso.
+
+    La sessione si stacca subito, sul loop; la chiusura bloccante gira in un
+    thread. Chiamata sul thread del loop, ``close`` teneva fermo il gateway —
+    chat, cron, tutto — fino ai 10 s del suo tetto, proprio nei casi (fermo
+    scaduto, turno annullato) in cui il main thread di Android e' gia' in
+    difficolta'. Se l'attesa viene annullata a sua volta, la chiusura nel
+    thread arriva comunque in fondo: la sessione e' gia' staccata.
+    """
+    bridge = _detach_browser()
+    if bridge is not None:
+        await asyncio.to_thread(_close_bridge, bridge)
 
 
 def _decode(raw: Any) -> dict[str, Any]:
@@ -178,7 +253,7 @@ def _decode(raw: Any) -> dict[str, Any]:
     Si prova a scartare due volte e ci si ferma al primo oggetto.
     """
     if raw is None:
-        return {"error": "il bridge non ha restituito niente"}
+        return {"error": "the bridge returned nothing"}
     data: Any = str(raw)
     for _ in range(2):
         if isinstance(data, dict):
@@ -186,8 +261,8 @@ def _decode(raw: Any) -> dict[str, Any]:
         try:
             data = json.loads(data)
         except (json.JSONDecodeError, TypeError):
-            return {"error": f"risposta non decodificabile dal bridge: {str(raw)[:200]}"}
-    return data if isinstance(data, dict) else {"error": "risposta inattesa dal bridge"}
+            return {"error": f"undecodable response from the bridge: {str(raw)[:200]}"}
+    return data if isinstance(data, dict) else {"error": "unexpected response from the bridge"}
 
 
 async def _call(
@@ -212,18 +287,60 @@ async def _call(
             # Una pagina lenta non e` inattivita`: si timbra anche in uscita.
             _LAST_USE = time.monotonic()
         except asyncio.CancelledError:
-            logger.warning("browser.{} annullato", method)
-            destroy_browser()
+            logger.warning("browser.{} cancelled", method)
+            await _destroy_browser_async()
             raise
         except asyncio.TimeoutError:
             logger.error("browser.{} timed out after {}s", method, timeout + 10)
-            destroy_browser()
-            return {"error": f"browser_{method} non ha risposto entro {timeout + 10}s"}
+            await _destroy_browser_async()
+            return {"error": f"browser_{method} did not answer within {timeout + 10}s"}
         except Exception as exc:
             logger.exception("browser.{} failed", method)
-            destroy_browser()
-            return {"error": f"browser_{method} fallito: {exc}"}
+            await _destroy_browser_async()
+            return {"error": f"browser_{method} failed: {exc}"}
     return _decode(raw)
+
+
+async def _session_isolated() -> bool | None:
+    """La sessione aperta ha un profilo suo, o divide i cookie con ``web_fetch``?
+
+    Il bridge mette la sessione in un profilo separato (``MULTI_PROFILE``) e lo
+    svuota alla chiusura; dove la WebView non lo supporta, o l'aggancio fallisce,
+    resta sul profilo di default, cioe' sullo stesso barattolo di cookie di
+    ``web_fetch``, e ``browser_close`` non cancella niente. Il modello lo deve
+    sapere: la descrizione del tool gli promette il contrario.
+
+    ``None`` se non si sa (nessuna sessione, bridge vecchio, errore): nel dubbio
+    non si avvisa di un difetto che forse non c'e'. Non passa da ``_call`` perche'
+    il metodo rende un booleano, non JSON.
+
+    La risposta si tiene per la sessione (``_ISOLATED_FOR``): prima si prendeva
+    il lucchetto globale a ogni ``browser_open`` per rileggere un valore che,
+    dentro una sessione, non cambia. Un ``None`` da errore si tiene anche lui: e'
+    un APK senza il metodo, e non lo acquista a meta' sessione.
+    """
+    global _ISOLATED_FOR
+    cached = _ISOLATED_FOR
+    if cached is not None and cached[0] is _BROWSER_INSTANCE:
+        return cached[1]
+    async with _BROWSER_LOCK:
+        bridge = _BROWSER_INSTANCE
+        if bridge is None:
+            return None
+        answer: bool | None
+        try:
+            answer = bool(await asyncio.to_thread(bridge.isIsolated))
+        except Exception:
+            logger.opt(exception=True).debug("isIsolated not available on this bridge")
+            answer = None
+        _ISOLATED_FOR = (bridge, answer)
+        return answer
+
+
+_NOT_ISOLATED_NOTICE = (
+    "⚠ This device's WebView cannot give the browser its own profile: this session "
+    "shares cookies and logins with web_fetch, and browser_close will not erase them."
+)
 
 
 def _render_snapshot(data: dict[str, Any]) -> str:
@@ -234,13 +351,17 @@ def _render_snapshot(data: dict[str, Any]) -> str:
     index = data.get("index")
     if isinstance(index, dict):
         version = str(data.get("version", ""))
-        global _INDEX_VERSION
+        global _INDEX_VERSION, _FOCUS_REF
         if version != _INDEX_VERSION:
             _LAST_INDEX.clear()
+            _FORM_OF.clear()
+            _FOCUS_REF = ""
             _INDEX_VERSION = version
         for ref, pair in index.items():
-            if isinstance(pair, list) and len(pair) == 2:
+            if isinstance(pair, list) and len(pair) in (2, 3):
                 _LAST_INDEX[str(ref)] = (str(pair[0]), str(pair[1]))
+                if len(pair) == 3:
+                    _FORM_OF[str(ref)] = str(pair[2])
     head = [
         _UNTRUSTED_BANNER,
         f"url: {data.get('url', '')}",
@@ -251,8 +372,8 @@ def _render_snapshot(data: dict[str, Any]) -> str:
     total = data.get("total", 0)
     mode = data.get("mode", "full")
     head.append(
-        f"snapshot v{data.get('version', '?')} ({mode}) — {refs} elementi con ref "
-        f"su {total} visibili"
+        f"snapshot v{data.get('version', '?')} ({mode}) — {refs} elements with a ref "
+        f"out of {total} visible"
     )
     return "\n".join(head) + "\n\n" + str(data.get("text", ""))
 
@@ -262,28 +383,90 @@ def _refuse_step(steps: list[dict[str, Any]]) -> str | None:
 
     Rifiuta l'intera chiamata e non solo il passo: i passi sono un blocco, e
     fermarsi a meta' lascerebbe la pagina in uno stato che nessuno ha descritto.
+
+    ``press Enter`` in un campo invia il suo modulo come un click sul bottone, e
+    passa quindi dallo stesso lessico: il modulo lo si conosce dal campo
+    che ha il cursore — l'ultimo ``click``/``type``/``select`` di questo blocco,
+    o del precedente. Se il cursore non si sa, il passo parte con
+    ``submit: false`` e la pagina non invia: l'invio passa allora dal click sul
+    bottone, che il suo nome lo porta. **Unico passo che questa funzione
+    modifica**, e solo quel campo.
+
+    Un campo fuori da un ``<form>`` ha l'etichetta vuota, e vuota **non** vuol
+    dire innocuo: l'Enter lo legge il JavaScript della pagina, che può farci
+    quello che vuole. Vuota, o sconosciuta, vale come «non so»: se lo snapshot
+    mostra azioni che costano (:func:`_page_has_costly_actions`) si chiede
+    conferma, altrimenti l'Enter parte — con ``submit: false`` se il cursore
+    non si sa.
     """
+    focus = _FOCUS_REF
     for i, st in enumerate(steps):
         if not isinstance(st, dict):
             continue
         action = str(st.get("action", "")).lower()
         ref = str(st.get("ref", ""))
+        if action == "press":
+            st.pop("submit", None)
+            if str(st.get("key") or "Enter") != "Enter" or st.get("confirm"):
+                continue
+            label = _FORM_OF.get(focus) if focus else None
+            if label and _is_sensitive(label):
+                return (
+                    f'step {i}: Enter would submit the form "{label}", an action that costs '
+                    "(money, deletion or access). I won't do it on my own: ask the user to "
+                    "confirm, and if they say yes, repeat the same step adding "
+                    '"confirm": true.'
+                )
+            if not label and _page_has_costly_actions():
+                # Cursore sconosciuto, o un campo fuori da un <form> (etichetta
+                # vuota): che cosa faccia l'Enter lo decide il JavaScript della
+                # pagina, e la pagina ha azioni che costano. Si chiede.
+                where = "a field outside any form" if label == "" else "an unknown field"
+                return (
+                    f"step {i}: Enter on {where}, on a page with actions that cost "
+                    "(money or deletion): I can't tell what it would trigger. Click the "
+                    "button you need, or ask the user to confirm and, if they say yes, "
+                    'repeat the same step adding "confirm": true.'
+                )
+            if label is None:
+                st["submit"] = False
+            continue
+        if action in ("click", "type", "select") and ref:
+            focus = ref
         role, name = _LAST_INDEX.get(ref, ("", ""))
         if action == "type" and role == "password":
             return (
-                f"passo {i}: non scrivo in un campo password. Le credenziali le mette "
-                "l'utente dal telefono, non io — chiediglielo e prosegui da dopo il login."
+                f"step {i}: I don't type into a password field. The user enters "
+                "credentials on the phone, not me — ask them to, and carry on after the login."
             )
         if action == "click" and _is_sensitive(name) and not st.get("confirm"):
             return (
-                f'passo {i}: "{name}" e\' un\'azione che costa (soldi, cancellazione o '
-                "accesso). Non la faccio da sola: chiedi conferma all'utente, e se dice di "
-                'si\' ripeti lo stesso passo aggiungendo "confirm": true.'
+                f'step {i}: "{name}" is an action that costs (money, deletion or '
+                "access). I won't do it on my own: ask the user to confirm, and if they "
+                'say yes, repeat the same step adding "confirm": true.'
             )
     return None
 
 
-class _BrowserToolBase(Tool):
+def _remember_focus(steps: list[dict[str, Any]], results: list[Any]) -> None:
+    """Il cursore dopo i passi: il ref dell'ultimo click/type/select riuscito."""
+    global _FOCUS_REF
+    for r in results:
+        if not isinstance(r, dict) or not r.get("ok"):
+            continue
+        idx = r.get("i")
+        if not isinstance(idx, int) or not 0 <= idx < len(steps):
+            continue
+        st = steps[idx]
+        if (
+            isinstance(st, dict)
+            and str(st.get("action", "")).lower() in ("click", "type", "select")
+            and st.get("ref")
+        ):
+            _FOCUS_REF = str(st["ref"])
+
+
+class _BrowserToolBase(AndroidWebGateMixin, Tool):
     """Base dei tool di sessione: interruttore, config e concorrenza.
 
     ``exclusive`` e' la proprieta' che conta, non ``read_only``: in Jenny
@@ -296,32 +479,9 @@ class _BrowserToolBase(Tool):
 
     _scopes = {"core", "subagent"}
 
-    config_key = "androidWeb"
-
     @property
     def exclusive(self) -> bool:
         return True
-
-    @classmethod
-    def config_cls(cls):
-        return AndroidWebToolsConfig
-
-    @classmethod
-    def enabled(cls, ctx: Any) -> bool:
-        return (
-            bool(ctx.android_context)
-            and getattr(ctx.config, "android_web", None) is not None
-            and ctx.config.android_web.enable
-        )
-
-    @classmethod
-    def disabled_reason(cls, ctx: Any) -> str | None:
-        if not ctx.android_context:
-            return None
-        web = getattr(ctx.config, "android_web", None)
-        if web is not None and not web.enable:
-            return "web access is off (Settings > Tools > Web Search)"
-        return None
 
     def __init__(self, android_context: Any, cfg: Any) -> None:
         self.android_context = android_context
@@ -356,9 +516,10 @@ class BrowserOpenTool(_BrowserToolBase):
 
     async def execute(self, url: str, filter: str = "", **kwargs: Any) -> Any:
         url = url.strip(" \t\r\n`\"'")
-        from jenny.security.network import validate_url_target
+        from jenny.security.network import validate_url_target_async
 
-        ok, err = validate_url_target(url)
+        # Fuori dal loop: la validazione risolve il nome.
+        ok, err = await validate_url_target_async(url)
         if not ok:
             return f"Error: URL validation failed: {err}"
 
@@ -373,7 +534,10 @@ class BrowserOpenTool(_BrowserToolBase):
         )
         if shot.get("error"):
             return f"Error: {shot['error']}"
-        return _render_snapshot(shot)
+        text = _render_snapshot(shot)
+        if await _session_isolated() is False:
+            text += f"\n\n{_NOT_ISOLATED_NOTICE}"
+        return text
 
 
 @tool_parameters(
@@ -421,10 +585,12 @@ _STEP = ObjectSchema(
     key=StringSchema("Key name, default Enter (action=press)"),
     direction=StringSchema("up | down (action=scroll)"),
     amount=IntegerSchema(
-        "How many screenfuls to scroll — 1 is one screen, capped at 10. "
-        "Not pixels (action=scroll)"
+        description=(
+            "How many screenfuls to scroll — 1 is one screen, capped at 10. "
+            "Not pixels (action=scroll)"
+        ),
     ),
-    ms=IntegerSchema("Milliseconds to wait (action=wait)"),
+    ms=IntegerSchema(description="Milliseconds to wait (action=wait)"),
     confirm=BooleanSchema(
         description=(
             "Set true only after the user agreed, to allow a click that costs money, "
@@ -455,20 +621,21 @@ class BrowserDoTool(_BrowserToolBase):
 
     async def execute(self, steps: list[dict[str, Any]] | None = None, **kwargs: Any) -> Any:
         if not steps:
-            return "Error: nessun passo da eseguire"
+            return "Error: no steps to run"
         if (refusal := _refuse_step(steps)) is not None:
             return f"Error: {refusal}"
         payload = json.dumps(steps, ensure_ascii=False)
         out = await _call(self.android_context, "act", payload, self.timeout, timeout=self.timeout, idle_s=self.idle_close_s)
         if out.get("error"):
             return f"Error: {out['error']}"
+        _remember_focus(steps, out.get("results") or [])
 
         lines = []
         for r in out.get("results", []):
-            mark = "ok" if r.get("ok") else "FALLITO"
+            mark = "ok" if r.get("ok") else "FAILED"
             detail = r.get("error") or r.get("selected") or ""
             lines.append(f"  {r.get('i')}. {r.get('action')}: {mark}{' — ' + detail if detail else ''}")
-        header = "passi eseguiti:\n" + "\n".join(lines) if lines else "nessun passo eseguito"
+        header = "steps run:\n" + "\n".join(lines) if lines else "no steps run"
 
         # La guardia lavora **durante** la navigazione, quindi non puo' finire nel
         # risultato dei passi: si ritira qui, altrimenti un blocco resta muto e il
@@ -486,7 +653,7 @@ class BrowserDoTool(_BrowserToolBase):
             timeout=self.timeout, idle_s=self.idle_close_s,
         )
         if shot.get("error"):
-            return f"{header}\n\n(snapshot non disponibile: {shot['error']})"
+            return f"{header}\n\n(snapshot unavailable: {shot['error']})"
         return f"{header}\n\n{_render_snapshot(shot)}"
 
 
@@ -512,7 +679,7 @@ class BrowserReadTool(_BrowserToolBase):
     async def execute(self, ref: str = "", **kwargs: Any) -> Any:
         role, _name = _LAST_INDEX.get(ref, ("", ""))
         if role == "password":
-            return "Error: non leggo un campo password."
+            return "Error: I don't read password fields."
         out = await _call(
             self.android_context, "read", ref or "", self.max_read_chars, self.timeout,
             timeout=self.timeout, idle_s=self.idle_close_s,
@@ -521,7 +688,7 @@ class BrowserReadTool(_BrowserToolBase):
             return f"Error: {out['error']}"
         tail = ""
         if out.get("truncated"):
-            tail = f"\n\n… troncato: la regione ha {out.get('chars')} caratteri."
+            tail = f"\n\n… truncated: the region has {out.get('chars')} characters."
         return f"{_UNTRUSTED_BANNER}\nurl: {out.get('url', '')}\n\n{out.get('text', '')}{tail}"
 
 
@@ -536,8 +703,12 @@ class BrowserCloseTool(_BrowserToolBase):
     )
 
     async def execute(self, **kwargs: Any) -> Any:
-        destroy_browser()
-        return "Sessione chiusa."
+        # Col lucchetto, come ogni altro accesso alla sessione: senza, la
+        # chiusura strappava la WebView a una chiamata in volo (``_call`` lo
+        # tiene per tutta la sua durata). E fuori dal loop, perche' blocca.
+        async with _BROWSER_LOCK:
+            await _destroy_browser_async()
+        return "Session closed."
 
 
 TOOLS = [

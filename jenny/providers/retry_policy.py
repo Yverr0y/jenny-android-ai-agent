@@ -119,14 +119,21 @@ def is_transient_response(response: "LLMResponse") -> bool:
     if response.error_should_retry is not None:
         return bool(response.error_should_retry)
 
+    kind = (response.error_kind or "").strip().lower()
+
     if response.error_status_code is not None:
         status = int(response.error_status_code)
         if status == 429:
             return is_retryable_429_response(response)
         if status in RETRYABLE_STATUS_CODES or status >= 500:
             return True
+        # Uno status definitivo (400, 401, 403, 404...) decide da solo: i
+        # marker testuali sono il ripiego per chi non ha uno status, e su un
+        # corpo d'errore arbitrario mentono — «requested 250000 tokens» contiene
+        # «500», «timeout must be between 1 and 600» contiene «timeout» — e
+        # facevano ritentare fino a dieci volte un errore che non passa mai.
+        return kind in TRANSIENT_ERROR_KINDS
 
-    kind = (response.error_kind or "").strip().lower()
     if kind in TRANSIENT_ERROR_KINDS:
         return True
 

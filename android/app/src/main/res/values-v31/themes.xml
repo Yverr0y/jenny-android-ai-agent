@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Da Android 12 la starting window è lo splash di sistema, che non legge
+         windowBackground ma windowSplashScreenBackground: senza, era bianco
+         (il colorBackground di AppCompat.Light) anche con un tema scuro. -->
+    <style name="Theme.Jenny" parent="Base.Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#111013</item>
+    </style>
+
+    <!-- Uno splash per ciascuno dei sette temi della WebUI. Da Android 13
+         MainActivity.syncSplashTheme sceglie quello il cui colore è lo sfondo
+         del tema attivo, e il sistema lo ricorda per il lancio successivo. Il
+         colore è quindi l'unica cosa che li distingue, e deve essere
+         esattamente la variabile bg di mobile-style.css: lo controlla
+         tests/test_splash_themes_match_the_webui.py. I temi chiari chiedono
+         anche le icone di sistema scure.
+
+         Solo qui e non in values/: sotto API 33 nessuno li usa. -->
+    <style name="Theme.Jenny.Splash.Chanel" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#141414</item>
+    </style>
+    <style name="Theme.Jenny.Splash.Synthwave" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#111013</item>
+    </style>
+    <style name="Theme.Jenny.Splash.Kyoto" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#201d1a</item>
+    </style>
+    <style name="Theme.Jenny.Splash.Sticker" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#17131c</item>
+    </style>
+    <style name="Theme.Jenny.Splash.Comic" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#faf6ef</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="Theme.Jenny.Splash.Y2k" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#f7e0f8</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="Theme.Jenny.Splash.Stone" parent="Theme.Jenny">
+        <item name="android:windowSplashScreenBackground">#eae6df</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

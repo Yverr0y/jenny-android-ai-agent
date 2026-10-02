@@ -73,7 +73,10 @@ async def persist_schema_migrations(*, config_path: Path | None = None) -> bool:
     try:
         _, raw = load_config_with_raw(config_path)
         candidate = raw.get("configVersion", raw.get("config_version", 0))
-        raw_version = int(candidate)
+        # Solo un intero vero e' gia' a posto. Un ``"3"`` o un ``3.0`` il parse li
+        # legge come 3 (``schema._whole_config_version``), ma nel file restano
+        # nella forma sbagliata: si riscrivono una volta, e diventano un intero.
+        raw_version = candidate if type(candidate) is int else -1
     except Exception:
         # File assente, illeggibile o versione non numerica: in tutti i casi
         # "indietro". Il rewrite lo sistema; se non si può leggere, mutate
@@ -84,11 +87,6 @@ async def persist_schema_migrations(*, config_path: Path | None = None) -> bool:
     await mutate(lambda _cfg: None, config_path=config_path)
     logger.info("Config schema stamped at version {}", CURRENT_CONFIG_VERSION)
     return True
-
-
-def locked() -> bool:
-    """True se una mutazione è in corso (usato dai test)."""
-    return _LOCK.locked()
 
 
 def reset_config_store_state() -> None:

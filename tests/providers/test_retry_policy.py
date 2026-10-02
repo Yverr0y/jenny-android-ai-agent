@@ -10,6 +10,8 @@ funzioni di classificazione esportate da questo modulo.
 
 from __future__ import annotations
 
+import pytest
+
 from jenny.providers.base import LLMResponse
 from jenny.providers.retry_policy import (
     extract_error_type_code,
@@ -153,6 +155,31 @@ def test_is_transient_response_retryable_status_code_408() -> None:
 def test_is_transient_response_401_status_not_transient() -> None:
     response = _response(error_status_code=401, content="unauthorized")
     assert is_transient_response(response) is False
+
+
+@pytest.mark.parametrize(
+    "status, content",
+    [
+        (400, "This model's maximum context length is 200000 tokens; you requested 250000"),
+        (400, "timeout must be between 1 and 600"),
+        (401, "Connection to the auth service was refused"),
+        (403, "overloaded: this key is not allowed here"),
+    ],
+)
+def test_is_transient_response_definitive_4xx_ignores_text_markers(status, content) -> None:
+    """Un 4xx definitivo non diventa transitorio perche' il corpo contiene «500» o «timeout».
+
+    Prima il ramo sullo status non chiudeva: un context-length-exceeded con un
+    numero che contiene «500» veniva ritentato fino a dieci volte.
+    """
+    response = _response(error_status_code=status, content=content)
+    assert is_transient_response(response) is False
+
+
+def test_is_transient_response_4xx_with_structured_transient_kind_still_retries() -> None:
+    """La metadata strutturata (``error_kind``) resta piu' forte dello status."""
+    response = _response(error_status_code=400, error_kind="connection", content="reset")
+    assert is_transient_response(response) is True
 
 
 def test_is_transient_response_transient_kind_timeout() -> None:

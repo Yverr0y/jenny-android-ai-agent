@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from support.agent import make_loop
+from support.aio import wait_until
+from support.runner import make_spec
 
 from jenny.agent.turn_types import TurnOutcome
-from jenny.config.schema import AgentDefaults
 from jenny.providers.base import LLMResponse, ToolCallRequest
-
-_MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
 
 def _make_injection_callback(queue: asyncio.Queue):
@@ -26,19 +26,8 @@ def _make_injection_callback(queue: asyncio.Queue):
 
 
 def _make_loop(tmp_path):
-    from jenny.agent.loop import AgentLoop
-    from jenny.bus.queue import MessageBus
+    return make_loop(tmp_path, bare=True, model=None, context_window_tokens=None, patch_deps=True)
 
-    bus = MessageBus()
-    provider = MagicMock()
-    provider.get_default_model.return_value = "test-model"
-
-    with patch("jenny.agent.loop.ContextBuilder"), \
-         patch("jenny.agent.loop.SessionManager"), \
-         patch("jenny.agent.loop.SubagentManager") as mock_sub_mgr:
-        mock_sub_mgr.return_value.cancel_by_session = AsyncMock(return_value=0)
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path)
-    return loop
 
 @pytest.mark.asyncio
 async def test_drain_injections_returns_empty_when_no_callback():
@@ -242,7 +231,7 @@ async def test_drain_injections_handles_callback_exception():
 @pytest.mark.asyncio
 async def test_checkpoint1_injects_after_tool_execution():
     """Follow-up messages are injected after tool execution, before next LLM call."""
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -274,12 +263,10 @@ async def test_checkpoint1_injects_after_tool_execution():
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -296,7 +283,7 @@ async def test_checkpoint1_injects_after_tool_execution():
 async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
     """After final response, if injections exist, stream_end should get resuming=True."""
     from jenny.agent.hook import AgentHook, AgentHookContext
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -332,12 +319,10 @@ async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         hook=TrackingHook(),
         injection_callback=inject_cb,
     ))
@@ -354,7 +339,7 @@ async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
 @pytest.mark.asyncio
 async def test_checkpoint2_preserves_final_response_in_history_before_followup():
     """A follow-up injected after a final answer must still see that answer in history."""
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -380,12 +365,10 @@ async def test_checkpoint2_preserves_final_response_in_history_before_followup()
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -469,7 +452,7 @@ async def test_loop_injected_followup_preserves_image_media(tmp_path):
 @pytest.mark.asyncio
 async def test_runner_merges_multiple_injected_user_messages_without_losing_media():
     """Multiple injected follow-ups should not create lossy consecutive user messages."""
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
 
     provider = MagicMock()
     call_count = {"n": 0}
@@ -501,12 +484,10 @@ async def test_runner_merges_multiple_injected_user_messages_without_losing_medi
         return []
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -532,7 +513,7 @@ async def test_runner_merges_multiple_injected_user_messages_without_losing_medi
 @pytest.mark.asyncio
 async def test_injection_cycles_capped_at_max():
     """Injection cycles should be capped at _MAX_INJECTION_CYCLES."""
-    from jenny.agent.runner import _MAX_INJECTION_CYCLES, AgentRunner, AgentRunSpec
+    from jenny.agent.runner import _MAX_INJECTION_CYCLES, AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -556,12 +537,10 @@ async def test_injection_cycles_capped_at_max():
         return []
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "start"}],
         tools=tools,
-        model="test-model",
         max_iterations=20,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -573,7 +552,7 @@ async def test_injection_cycles_capped_at_max():
 @pytest.mark.asyncio
 async def test_no_injections_flag_is_false_by_default():
     """had_injections should be False when no injection callback or no messages."""
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
 
     provider = MagicMock()
 
@@ -585,12 +564,10 @@ async def test_no_injections_flag_is_false_by_default():
     tools.get_definitions.return_value = []
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hi"}],
         tools=tools,
-        model="test-model",
         max_iterations=1,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     ))
 
     assert result.had_injections is False
@@ -707,10 +684,9 @@ async def test_cron_turn_deferred_while_session_active(tmp_path):
     )
     await loop.bus.publish_inbound(msg)
 
-    for _ in range(20):
-        if loop._cron_turns.deferred_queues.get(session_key):
-            break
-        await asyncio.sleep(0.05)
+    await wait_until(
+        lambda: loop._cron_turns.deferred_queues.get(session_key), timeout=1.0, interval=0.05
+    )
 
     loop.stop()
     await asyncio.wait_for(run_task, timeout=2)
@@ -895,7 +871,7 @@ async def test_dispatch_republishes_leftover_queue_messages(tmp_path):
 @pytest.mark.asyncio
 async def test_drain_injections_on_fatal_tool_error():
     """Pending injections should be drained even when a fatal tool error occurs."""
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -925,12 +901,10 @@ async def test_drain_injections_on_fatal_tool_error():
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         fail_on_tool_error=True,
         injection_callback=inject_cb,
     ))
@@ -948,7 +922,7 @@ async def test_drain_injections_on_fatal_tool_error():
 @pytest.mark.asyncio
 async def test_drain_injections_on_llm_error():
     """Pending injections should be drained when the LLM returns an error finish_reason."""
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -978,16 +952,14 @@ async def test_drain_injections_on_llm_error():
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "previous response"},
             {"role": "user", "content": "trigger error"},
         ],
         tools=tools,
-        model="test-model",
         max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -1003,7 +975,7 @@ async def test_drain_injections_on_llm_error():
 @pytest.mark.asyncio
 async def test_drain_injections_on_empty_final_response():
     """Pending injections should be drained when the runner exits due to empty response."""
-    from jenny.agent.runner import _MAX_EMPTY_RETRIES, AgentRunner, AgentRunSpec
+    from jenny.agent.runner import _MAX_EMPTY_RETRIES, AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -1028,16 +1000,14 @@ async def test_drain_injections_on_empty_final_response():
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "previous response"},
             {"role": "user", "content": "trigger empty"},
         ],
         tools=tools,
-        model="test-model",
         max_iterations=10,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -1058,7 +1028,7 @@ async def test_drain_injections_on_max_iterations():
     injections are appended to messages but not processed by the LLM.
     The key point is they are consumed from the queue to prevent re-publish.
     """
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -1085,12 +1055,10 @@ async def test_drain_injections_on_max_iterations():
     )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=2,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 
@@ -1110,7 +1078,7 @@ async def test_drain_injections_on_max_iterations():
 async def test_drain_injections_set_flag_when_followup_arrives_after_last_iteration():
     """Late follow-ups drained in max_iterations should still flip had_injections."""
     from jenny.agent.hook import AgentHook
-    from jenny.agent.runner import AgentRunner, AgentRunSpec
+    from jenny.agent.runner import AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -1149,12 +1117,10 @@ async def test_drain_injections_set_flag_when_followup_arrives_after_last_iterat
                 )
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[{"role": "user", "content": "hello"}],
         tools=tools,
-        model="test-model",
         max_iterations=2,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
         hook=InjectOnLastAfterIterationHook(),
     ))
@@ -1172,7 +1138,7 @@ async def test_drain_injections_set_flag_when_followup_arrives_after_last_iterat
 @pytest.mark.asyncio
 async def test_injection_cycle_cap_on_error_path():
     """Injection cycles should be capped even when every iteration hits an LLM error."""
-    from jenny.agent.runner import _MAX_INJECTION_CYCLES, AgentRunner, AgentRunSpec
+    from jenny.agent.runner import _MAX_INJECTION_CYCLES, AgentRunner
     from jenny.bus.events import InboundMessage
 
     provider = MagicMock()
@@ -1200,16 +1166,14 @@ async def test_injection_cycle_cap_on_error_path():
         return []
 
     runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
+    result = await runner.run(make_spec(
         initial_messages=[
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "previous"},
             {"role": "user", "content": "trigger error"},
         ],
         tools=tools,
-        model="test-model",
         max_iterations=20,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         injection_callback=inject_cb,
     ))
 

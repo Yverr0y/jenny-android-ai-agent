@@ -1,6 +1,6 @@
 """Dentro un progetto il prompt dice la verità su dov'è, e tace sugli altri.
 
-Passi **2.1** e **2.2** di ``roadmap/progetti-passi.md``. Il passo 1 ha legato la
+Passi **2.1** e **2.2** del piano dei progetti. Il passo 1 ha legato la
 cartella al turno, ma il prompt aveva continuato a descrivere quella cartella
 come se fosse il workspace. Tre affermazioni false, tutte misurate il 21/08:
 
@@ -10,7 +10,7 @@ come se fosse il workspace. Tre affermazioni false, tutte misurate il 21/08:
    lavoro dell'1.2, che aveva sdoppiato la radice dei soli file di bootstrap.
 2. ``## Where Produced Files Go`` (in ``tool_contract.md``, e parola per parola
    anche in ``subagent_system.md``) mandava quel che si produce in
-   ``<radice>/output/`` e vietava di scrivere nella "radice del workspace"
+   ``<root>/output/`` e vietava di scrivere nella "radice del workspace"
    perché "contiene un insieme fisso di documenti". Dentro una wiki sono due
    cose false, ed è **da qui** che il file di prova del 21/08 è finito in
    ``wikis/zz-prova-claude/output/`` — una cartella che nello scaffold non
@@ -101,7 +101,7 @@ _RETIRED_ABSOLUTE = "Answer from them"
 _PROJECT_MD_RULES: tuple[tuple[str, str, str], ...] = (
     (
         "ristrutturare la wiki è un'operazione con un manuale, non un'improvvisazione",
-        "il caso del 26/08 su ``wikis/salute``: l'utente ha detto «sistema un po' la wiki, "
+        "il caso del 26/08 su ``wikis/sartoria``: l'utente ha detto «sistema un po' la wiki, "
         "se necessario spezza i concetti» e il risultato è stato buono — ma la passata si è "
         "inventata la forma, e fra le altre cose ha scritto una ``source:`` a lista YAML che "
         "i due parser leggono in due modi, rendendo illeggibile la provenienza di una pagina. "
@@ -132,7 +132,7 @@ _PROJECT_MD_RULES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "una subordinata che nomina una cosa è una cosa",
-        "il caso del 25/08 su ``viaggio-pazzo``: «Pavia come tappa perché ci vive "
+        "il caso del 25/08 su ``viaggio-lento``: «Ferrara come tappa perché ci vive "
         "l'amico X» è finita in **una** riga, quindi in una pagina intitolata alla "
         "tappa, con la persona sepolta dentro come subordinata. Non era una regola "
         "mancante: la regola c'era e puntava **dall'altra parte** («a fact that needs "
@@ -170,10 +170,10 @@ def _wiki(root: pathlib.Path, name: str) -> pathlib.Path:
 
 def _prompts(root: pathlib.Path) -> tuple[str, str]:
     """``(prompt di progetto, prompt personale)`` sullo stesso workspace."""
-    project = _wiki(root, "etf-finance")
+    project = _wiki(root, "etna-guide")
     builder = ContextBuilder(root)
     return (
-        builder.build_system_prompt(workspace=project, session_key="project:etf-finance"),
+        builder.build_system_prompt(workspace=project, session_key="project:etna-guide"),
         builder.build_system_prompt(session_key="unified:default"),
     )
 
@@ -235,7 +235,7 @@ def test_the_block_stays_small() -> None:
     giorno la regola diceva «se sarà ancora vero, scrivilo» senza dire mai *sul
     progetto*, e sul telefono si vedeva il risultato: **39 righe su 72** dei
     journal dei progetti veri erano fatti sulla persona, promossi a pagine di
-    wiki che non c'entravano (v. ``.agent/project-memory-plan.md``). Sono ~210
+    wiki che non c'entravano. Sono ~210
     token per turno di progetto, ed è il prezzo di non archiviare la famiglia di
     qualcuno sotto un progetto di lavoro.
     """
@@ -325,7 +325,7 @@ def test_the_two_halves_of_the_split_rule_are_both_there(tmp_path) -> None:
     Il 25/08 ce n'era una sola. Il blocco diceva «a fact that needs a subordinate
     clause is still one fact» — l'anticorpo al rumore, giusto e da tenere — e non
     diceva che una subordinata *che nomina una cosa* è una cosa. Con quella metà
-    sola, «Pavia come tappa perché ci vive l'amico X» è una riga, quindi una
+    sola, «Ferrara come tappa perché ci vive l'amico X» è una riga, quindi una
     pagina intitolata alla tappa, con la persona sepolta dentro; e il giardiniere
     che la riceve non può fare altro, perché il diario è append-only.
 
@@ -428,13 +428,13 @@ def test_the_subagent_gets_the_layout_but_not_the_capture_rule() -> None:
 
     args = {"project_path": "/w/wikis/x"}
     con = render_template("agent/project.md", capture=True, **args)
-    senza = render_template("agent/project.md", capture=False, **args)
+    without = render_template("agent/project.md", capture=False, **args)
 
-    assert PROJECT_BLOCK in senza and JOURNAL_PATH in senza
-    assert CAPTURE_TIMING not in senza
-    assert NO_PERMISSION_NEEDED not in senza
+    assert PROJECT_BLOCK in without and JOURNAL_PATH in without
+    assert CAPTURE_TIMING not in without
+    assert NO_PERMISSION_NEEDED not in without
     assert CAPTURE_TIMING in con
-    assert len(senza) < len(con)
+    assert len(without) < len(con)
 
 
 def test_the_two_callers_pass_the_flag_explicitly() -> None:
@@ -738,9 +738,9 @@ def test_no_date_is_baked_into_the_block(tmp_path) -> None:
 def test_memory_and_skills_are_named_at_the_installation_not_at_the_project(tmp_path) -> None:
     """Il difetto n. 1: tre percorsi inesistenti nelle prime dieci righe."""
     root = tmp_path
-    project = _wiki(root, "etf-finance")
+    project = _wiki(root, "etna-guide")
     prompt = ContextBuilder(root).build_system_prompt(
-        workspace=project, session_key="project:etf-finance"
+        workspace=project, session_key="project:etna-guide"
     )
     for tail in ("memory/MEMORY.md", "memory/history.jsonl", "skills/"):
         assert f"{project}/{tail}" not in prompt, (
@@ -774,8 +774,8 @@ def test_the_workspace_file_rules_step_aside_inside_a_project(tmp_path) -> None:
 def _with_directory(root: pathlib.Path) -> pathlib.Path:
     """Due altre wiki con uno scope riconoscibile: e' quel che il blocco elenca."""
     (root / "memory").mkdir(exist_ok=True)
-    for name, scope in (("patreon-creator", "il canale e i suoi post"),
-                        ("android-rom", "partizioni Android, Monstera Adansonii a parte")):
+    for name, scope in (("palestra-schede", "il canale e i suoi post"),
+                        ("andes-trek", "sentieri andini, Ficus Benjamina a parte")):
         project = _wiki(root, name)
         (project / "AGENTS.md").write_text(
             f"---\nsummary: {scope}\n---\n\n# {name}\n", encoding="utf-8"
@@ -790,13 +790,13 @@ def test_a_project_prompt_does_not_name_another_project(tmp_path) -> None:
     cambia forma o arriva da un'altra parte; questa no.
     """
     root = _with_directory(tmp_path)
-    for name in ("patreon-creator", "android-rom", "etf-finance"):
+    for name in ("palestra-schede", "andes-trek", "etna-guide"):
         _wiki(root, name)
     prompt = ContextBuilder(root).build_system_prompt(
-        workspace=root / "wikis" / "etf-finance", session_key="project:etf-finance"
+        workspace=root / "wikis" / "etna-guide", session_key="project:etna-guide"
     )
-    for other in ("patreon-creator", "android-rom", "Monstera Adansonii"):
-        assert other not in prompt, f"il prompt di etf-finance nomina {other}"
+    for other in ("palestra-schede", "andes-trek", "Ficus Benjamina"):
+        assert other not in prompt, f"il prompt di etna-guide nomina {other}"
 
 
 def test_the_personal_chat_keeps_the_directory(tmp_path) -> None:
@@ -804,7 +804,7 @@ def test_the_personal_chat_keeps_the_directory(tmp_path) -> None:
     root = _with_directory(tmp_path)
     prompt = ContextBuilder(root).build_system_prompt(session_key="unified:default")
     assert WIKIS in prompt
-    assert "patreon-creator" in prompt
+    assert "palestra-schede" in prompt
 
 
 def test_the_directory_is_gated_on_the_session_not_on_the_folder(tmp_path) -> None:
@@ -815,7 +815,7 @@ def test_the_directory_is_gated_on_the_session_not_on_the_folder(tmp_path) -> No
     la rubrica resta. Se qualcuno unificasse le due guardie, questo cade.
     """
     root = _with_directory(tmp_path)
-    project = _wiki(root, "etf-finance")
+    project = _wiki(root, "etna-guide")
     prompt = ContextBuilder(root).build_system_prompt(
         workspace=project, session_key="internal:dream"
     )
@@ -849,7 +849,7 @@ def test_long_term_memory_does_not_travel_into_a_project(tmp_path) -> None:
         "# Memoria\n\n- Il gatto si chiama Pixel.\n", encoding="utf-8"
     )
     prompt = ContextBuilder(root).build_system_prompt(
-        workspace=_wiki(root, "etf-finance"), session_key="project:etf-finance"
+        workspace=_wiki(root, "etna-guide"), session_key="project:etna-guide"
     )
 
     assert "Pixel" not in prompt, "il contenuto di MEMORY.md non entra in un progetto"
@@ -880,7 +880,7 @@ def test_the_subagent_inside_a_wiki_gets_the_same_block(tmp_path) -> None:
     from jenny.utils.prompt_templates import render_template
 
     root = tmp_path
-    project = _wiki(root, "etf-finance")
+    project = _wiki(root, "etna-guide")
     prompt = render_template(
         "agent/subagent_system.md",
         time_ctx="",
@@ -961,14 +961,14 @@ def test_a_wiki_still_on_the_old_filename_is_mute_until_the_migration(tmp_path) 
     è quando la migrazione la rinomina. Piccola, e si chiude da sé.
     """
     root = tmp_path
-    project = _wiki(root, "android-rom")
+    project = _wiki(root, "andes-trek")
     (project / "CLAUDE.md").write_text(
         "# Android ROM\n\n## Scope\n\nWhat this wiki deliberately excludes:\n"
         "- enterprise MDM/Knox deployment\n",
         encoding="utf-8",
     )
     prompt = ContextBuilder(root).build_system_prompt(
-        workspace=project, session_key="project:android-rom"
+        workspace=project, session_key="project:andes-trek"
     )
 
     assert "enterprise MDM/Knox deployment" not in prompt
@@ -983,7 +983,7 @@ def test_the_migration_makes_that_same_wiki_speak(tmp_path) -> None:
     from jenny.utils.wiki_migration import migrate_wikis
 
     root = tmp_path
-    project = _wiki(root, "android-rom")
+    project = _wiki(root, "andes-trek")
     (project / "CLAUDE.md").write_text(
         "# Android ROM\n\n## Scope\n\nWhat this wiki deliberately excludes:\n"
         "- enterprise MDM/Knox deployment\n",
@@ -992,7 +992,7 @@ def test_the_migration_makes_that_same_wiki_speak(tmp_path) -> None:
 
     migrate_wikis(root / "wikis")
     prompt = ContextBuilder(root).build_system_prompt(
-        workspace=project, session_key="project:android-rom"
+        workspace=project, session_key="project:andes-trek"
     )
 
     assert "enterprise MDM/Knox deployment" in prompt
@@ -1007,10 +1007,10 @@ def test_the_heading_carries_the_name_the_file_really_has(tmp_path) -> None:
     correttamente «da quale file l'hai preso?» il 22/08.
     """
     root = tmp_path
-    project = _wiki(root, "android-rom")
+    project = _wiki(root, "andes-trek")
     (project / "AGENTS.md").write_text("# Android ROM\n", encoding="utf-8")
     prompt = ContextBuilder(root).build_system_prompt(
-        workspace=project, session_key="project:android-rom"
+        workspace=project, session_key="project:andes-trek"
     )
 
     assert "## AGENTS.md" in prompt
@@ -1263,10 +1263,10 @@ def test_a_first_page_over_the_cap_is_skipped_not_swallowed(tmp_path) -> None:
     continua invece di fermarsi."""
     from jenny.agent.context import _PROJECT_PAGES_MAX_CHARS
 
-    enorme = "# Grande\n\n" + ("parola " * 3000)
-    assert len(enorme) > _PROJECT_PAGES_MAX_CHARS
+    huge = "# Grande\n\n" + ("parola " * 3000)
+    assert len(huge) > _PROJECT_PAGES_MAX_CHARS
     prompt = _pages_prompt(tmp_path, {
-        "aaa-enorme.md": enorme,
+        "aaa-enorme.md": huge,
         "bbb.md": "# Bbb\n\ncorta ma presente",
         "ccc.md": "# Ccc\n\nanche questa",
     })
@@ -1368,8 +1368,8 @@ def test_a_page_absent_from_the_block_is_not_declared_missing(tmp_path) -> None:
 # used" — parlava delle pagine iniettate come se fossero *le* pagine del
 # progetto. Su una wiki vera è una manciata: alfabeticamente prime, congelate e
 # senza rapporto con la domanda. Misurato sulle otto wiki vere il 23/08, **dopo**
-# la correzione del tetto (T3.2): adhd 1 su 13, allergie 2 su 23, android-rom 4
-# su 31, etf-finance 1 su 20, main 2 su 52, memory 2 su 16, patreon-creator 1 su
+# la correzione del tetto (T3.2): acquari 1 su 13, alpinismo 2 su 23, andes-trek 4
+# su 31, etna-guide 1 su 20, main 2 su 52, memory 2 su 16, palestra-schede 1 su
 # 33. Un'istruzione che l'iniezione non può sostenere costa due volte: la si
 # segue e si risponde da una fetta arbitraria, oppure non si apre niente perché
 # "le pagine sono già qui".
@@ -1536,7 +1536,7 @@ def test_the_injected_block_has_a_ceiling_too(tmp_path, size: int) -> None:
 # 23/08, dopo T3.2), quindi **l'ordine è la selezione**: il tetto si riempie
 # dalla testa, e cambiare l'ordine è tutto quel che serve per far entrare le
 # pagine giuste. Alfabetico dava ``concepts/2DCD`` su una wiki personale da 52
-# pagine e ``concepts/ADHD-Architecture`` su una che ha una pagina di panoramica:
+# pagine e ``concepts/Acquari-Architecture`` su una che ha una pagina di panoramica:
 # la prima lettera dell'alfabeto usata come criterio di rilevanza.
 #
 # Il vincolo che decide il disegno è la **cache**: il blocco di sistema è il
@@ -1564,9 +1564,9 @@ def _injected_pages(project) -> list[str]:
 
 
 def test_the_page_the_map_names_first_is_the_page_that_enters(tmp_path) -> None:
-    """Il difetto misurato, in una riga: su ``adhd`` entrava
-    ``concepts/ADHD-Architecture`` — la prima in ordine alfabetico — mentre la
-    mappa nomina per prima ``concepts/ADHD-Overview``, che è la pagina di
+    """Il difetto misurato, in una riga: su ``acquari`` entrava
+    ``concepts/Acquari-Architecture`` — la prima in ordine alfabetico — mentre la
+    mappa nomina per prima ``concepts/Acquari-Overview``, che è la pagina di
     panoramica. Con una pagina sola nel tetto, quale entra è tutto.
     """
     big = "x" * 4000
@@ -1643,9 +1643,9 @@ def test_a_page_the_map_does_not_name_goes_last_in_alphabetical_order(tmp_path) 
 def test_the_map_may_name_a_page_by_its_bare_name(tmp_path) -> None:
     """Nelle mappe vere il bersaglio ha **due forme**, e le due si trovano nello
     stesso corpus: il percorso dentro ``wiki/``
-    (``[[concepts/rom-anatomy/partitions]]``, mappa di ``android-rom``) e il nome
+    (``[[concepts/trail-maps/passes]]``, mappa di ``andes-trek``) e il nome
     nudo (``[[Active-Memory]]`` per ``concepts/Active-Memory.md``, mappe di
-    ``memory`` e ``patreon-creator``). Risolvere solo la prima avrebbe lasciato
+    ``memory`` e ``palestra-schede``). Risolvere solo la prima avrebbe lasciato
     due wiki su otto all'ordine alfabetico senza dirlo.
     """
     project = _wiki_with_map_and_pages(
@@ -1803,7 +1803,7 @@ def test_the_block_says_which_pages_these_are(tmp_path) -> None:
 # l'hanno data le 11 wiki vere (471 pagine) — sha256 del testo iniettato, del
 #  Quel corpo non e' quello del telefono: ricontato il 24/08 in sola lettura sono 8 wiki
 # / 274 pagine sotto wiki/ / la piu' grande (main) 65. La misura del 23/08 girava su una
-# copia nello scratchpad con alberi duplicati e una wiki blackberry che sul telefono non
+# copia nello scratchpad con alberi duplicati e una wiki biliardo che sul telefono non
 # c'e', quindi i valori assoluti qui sopra non sono quelli del dispositivo: vale il
 # prima/dopo, non il numero. L'identita' byte-per-byte non ne dipende (vale su qualunque
 # corpo); i millisecondi si'.
@@ -1905,7 +1905,7 @@ def test_a_page_that_cannot_fit_at_all_is_not_opened(tmp_path) -> None:
 
     rel_a, rel_b = "grande-a.md", "grande-b.md"
     len_a = CAP // 2
-    # ``cost = len(rel) + 22 + len(testo)`` (+2 per il ``\n\n`` del join).
+    # ``cost = len(rel) + 22 + len(text)`` (+2 per il ``\n\n`` del join).
     body_a = "a" * (len_a - 22 - len(rel_a))
     body_b = "b" * (CAP - len_a - 2 - 22 - len(rel_b) - 5)  # chiude il tetto a 5 dalla fine
     pages = {rel_a: body_a, rel_b: body_b}

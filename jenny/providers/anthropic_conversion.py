@@ -61,7 +61,7 @@ def replayable_thinking_blocks(blocks: Iterable[Any]) -> list[dict[str, Any]]:
     return result
 
 
-_VALID_TOOL_ID = re.compile(r"^[a-zA-Z0-9_-]+$")
+_VALID_TOOL_ID = re.compile(r"\A[a-zA-Z0-9_-]+\Z")
 
 
 def _sanitize_tool_id(tid: str) -> str:
@@ -77,7 +77,6 @@ def _sanitize_tool_id(tid: str) -> str:
     safe_prefix = re.sub(r"[^a-zA-Z0-9_-]", "_", tid)[:48].strip("_") or "toolu"
     digest = hashlib.sha1(tid.encode()).hexdigest()[:8]
     return f"{safe_prefix}_{digest}"
-
 
 
 class AnthropicConversionMixin:

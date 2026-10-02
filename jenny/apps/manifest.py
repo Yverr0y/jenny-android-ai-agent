@@ -1,15 +1,15 @@
 """Jenny App manifest loading and validation.
 
 An app is a folder in ``<workspace>/apps/<slug>/`` with an ``app.json``
-manifest optionally declaring typed actions (see ``.agent/jenny-apps.md`` and
-the ``app-creator`` skill reference). Loading never raises: malformed apps come
+manifest optionally declaring typed actions (see ``docs/contribute/write-a-mini-app.md``
+and the ``app-creator`` skill reference). Loading never raises: malformed apps come
 back as ``LoadedApp(broken=True, error=...)`` so the grid can show them as
 broken without ever crashing the gateway.
 
 ``actions`` is optional: an app whose only job is to draw a screen has nothing
 agent-facing to declare, and requiring a non-empty list made that app
 impossible to write — the observed result was an *invented* action added only to
-satisfy the schema. ``.agent/jenny-apps.md`` always described the agent-facing
+satisfy the schema. The design always described the agent-facing
 side as something an app "can" carry; the code disagreed until Sept 2026.
 """
 
@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Kept character-identical to skills/app-creator/scripts/validate_app.py
-SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-ACTION_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-COLLECTION_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+SLUG_RE = re.compile(r"\A[a-z0-9]+(-[a-z0-9]+)*\Z")
+ACTION_NAME_RE = re.compile(r"\A[a-z][a-z0-9_]*\Z")
+COLLECTION_RE = re.compile(r"\A[a-z0-9]+(-[a-z0-9]+)*\Z")
 PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
 STORAGE_OPS = {"append", "set", "update", "delete", "query"}
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
@@ -125,7 +125,12 @@ def _parse_action(raw: object, index: int, has_server: bool) -> AppAction:
         if not isinstance(schema, dict) or "type" not in schema:
             raise ValueError(f"{where}: param '{pname}' must be a JSON Schema object with 'type'")
     required = raw.get("required", [])
-    if not isinstance(required, list) or any(r not in params for r in required):
+    # ``isinstance`` prima dell'``in``: un elemento lista o dict non e' hashable,
+    # e il ``TypeError`` che ne usciva non lo raccoglie nessuno fino ad
+    # ``AgentLoop`` — il gateway non partiva. Stesso motivo per op/method/kind.
+    if not isinstance(required, list) or any(
+        not isinstance(r, str) or r not in params for r in required
+    ):
         raise ValueError(f"{where}: 'required' must list a subset of params {sorted(params)}")
 
     kind = raw.get("kind")
@@ -139,7 +144,7 @@ def _parse_action(raw: object, index: int, has_server: bool) -> AppAction:
 
     if kind == "storage":
         op = raw.get("op")
-        if op not in STORAGE_OPS:
+        if not isinstance(op, str) or op not in STORAGE_OPS:
             raise ValueError(f"{where}: 'op' must be one of {sorted(STORAGE_OPS)}")
         collection = raw.get("collection")
         if not isinstance(collection, str) or not COLLECTION_RE.match(collection):
@@ -148,7 +153,7 @@ def _parse_action(raw: object, index: int, has_server: bool) -> AppAction:
         action.collection = collection
     elif kind == "http":
         method = raw.get("method")
-        if method not in HTTP_METHODS:
+        if not isinstance(method, str) or method not in HTTP_METHODS:
             raise ValueError(f"{where}: 'method' must be one of {sorted(HTTP_METHODS)}")
         path = raw.get("path")
         if not isinstance(path, str) or not path.startswith("/"):
@@ -216,7 +221,7 @@ def _parse_manifest(data: object) -> AppManifest:
         if not isinstance(view, dict):
             raise ValueError("app.json: 'view' must be an object")
         view_kind = view.get("kind")
-        if view_kind not in VIEW_KINDS:
+        if not isinstance(view_kind, str) or view_kind not in VIEW_KINDS:
             raise ValueError(
                 f"app.json: view.kind must be one of {sorted(VIEW_KINDS)} (got {view_kind!r})"
             )
@@ -263,6 +268,11 @@ def load_app(app_dir: Path) -> LoadedApp:
     except ValueError as exc:
         app.broken = True
         app.error = str(exc)
+    except Exception as exc:  # noqa: BLE001 - la promessa e' «non solleva mai»
+        # Una forma che i controlli sopra non prevedono: resta un'app rotta, non
+        # un gateway che non parte.
+        app.broken = True
+        app.error = f"app.json: unexpected structure ({type(exc).__name__}: {exc})"
     return app
 
 
@@ -271,9 +281,16 @@ def scan_apps(workspace: Path) -> list[LoadedApp]:
     apps_root = Path(workspace) / "apps"
     if not apps_root.is_dir():
         return []
+    try:
+        entries = sorted(apps_root.iterdir(), key=lambda p: p.name)
+    except OSError:
+        return []
     apps: list[LoadedApp] = []
-    for entry in sorted(apps_root.iterdir(), key=lambda p: p.name):
-        if not entry.is_dir() or entry.name.startswith("."):
+    for entry in entries:
+        try:
+            if not entry.is_dir() or entry.name.startswith("."):
+                continue
+        except OSError:
             continue
         apps.append(load_app(entry))
     return apps

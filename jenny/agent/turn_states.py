@@ -189,6 +189,11 @@ class StateHandlersMixin:
             msg=ctx.msg, session=ctx.session, key=ctx.session_key, raw=raw, loop=self
         )
         result = await self.commands.dispatch(cmd_ctx)
+        # Qui la risposta la pubblica il turno, piu' avanti: cio' che il comando
+        # ha lasciato da fare dopo si fa subito, com'era prima di `after_reply`.
+        # Da qui ci passa solo `/new` a sessione ferma, che non ne lascia.
+        for step in cmd_ctx.after_reply:
+            await step()
         if result is not None:
             ctx.outbound = result
             # Shortcut commands skip BUILD and SAVE, so we must persist the

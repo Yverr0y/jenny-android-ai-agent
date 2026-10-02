@@ -60,7 +60,9 @@ from jenny.webui.metadata import WEBUI_MESSAGE_SOURCE_METADATA_KEY
 
 _REVIEW_TARGET = "jenny.agent.dream_review.run_dream_review"
 
-_DREAM_JOB = SimpleNamespace(name="dream", id="job-dream")
+_DREAM_JOB = SimpleNamespace(
+    name="dream", id="dream", payload=SimpleNamespace(kind="system_event")
+)
 
 # Scrittura enorme con cui si interroga il guard montato su un run: serve solo a
 # sapere se l'enforcement è acceso, senza dover ispezionare l'oggetto.
@@ -193,6 +195,11 @@ class _FakeAgent:
         self.snapshot_before_dream = snapshot_before_dream
         self.turn_explodes = turn_explodes
         self._memory = memory
+        self._background_tasks: list[asyncio.Task] = []
+
+    def _schedule_background(self, coro: Any) -> None:
+        # Come ``AgentLoop._schedule_background``: ``cmd_dream`` passa da qui.
+        self._background_tasks.append(asyncio.create_task(coro))
 
     async def _publish(self, message: Any) -> None:
         self.published.append(message)
@@ -1144,10 +1151,10 @@ class TestTheAlarmLeavesTheLog:
         content, metadata = sent[0]
         assert format_stuck_alarm(STUCK_IS_ALARMING) in content
         # L'alert dice dove andare a vedere i numeri, che qui non ci sono.
-        # Era ``/dream budget``, rimosso il 31/08/2026: la superficie ora è la
-        # sezione Memoria delle Impostazioni, e l'alert deve nominare *quella*
+        # Era ``/dream budget``, rimosso il 31/08/2026: la superficie ora è il
+        # cassetto Memoria dell'officina, e l'alert deve nominare *quello*
         # — mandare a un comando che non esiste è peggio che non dire niente.
-        assert "Settings \u2192 Memory" in content
+        assert "Workshop \u2192 Memory" in content
         assert metadata == {
             WEBUI_MESSAGE_SOURCE_METADATA_KEY: {"kind": "cron", "label": "Dream"}
         }
@@ -1192,7 +1199,7 @@ class TestTheAlarmLeavesTheLog:
         # Il conteggio nel corpo cresce: l'alert che sostituisce il precedente
         # non è una copia, è la misura aggiornata.
         assert [alert_fields(c, m)[1] for c, m in sent] == [
-            f"{format_stuck_alarm(n)} Settings \u2192 Memory shows the sizes."
+            f"{format_stuck_alarm(n)} Workshop \u2192 Memory shows the sizes."
             for n in (STUCK_IS_ALARMING + 1, STUCK_IS_ALARMING + 2, STUCK_IS_ALARMING + 3)
         ]
 
@@ -1211,7 +1218,7 @@ class TestTheAlarmLeavesTheLog:
 
         _, body, _ = alert_fields(*sent[0])
         assert not body.endswith("…"), body
-        assert body.endswith("Settings \u2192 Memory shows the sizes.")
+        assert body.endswith("Workshop \u2192 Memory shows the sizes.")
 
 
 class TestACycleWithNothingToConsolidate:

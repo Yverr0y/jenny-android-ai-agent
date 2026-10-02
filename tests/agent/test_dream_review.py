@@ -33,7 +33,7 @@ from jenny.utils.helpers import sync_workspace_templates
 # Testo iniziale dei tre file misurati. Deve essere abbastanza lungo da poter
 # essere accorciato in modo visibile dai test che simulano una potatura.
 _MEMORY_TEXT = "# Memory\n" + "".join(f"- fact number {i}\n" for i in range(40))
-_USER_TEXT = "# User\n- Name: Ludovico\n- Timezone: Europe/Rome\n"
+_USER_TEXT = "# User\n- Name: Marco\n- Timezone: Europe/Rome\n"
 _SOUL_TEXT = "# Soul\n- Helpful, concise.\n"
 
 

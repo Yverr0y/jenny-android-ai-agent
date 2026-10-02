@@ -112,14 +112,38 @@ class TestEnforceRoleAlternation:
         assert result[1]["content"] is None
         assert result[2]["role"] == "tool"
 
-    def test_non_string_content_uses_latest(self):
+    def test_list_and_string_user_turns_are_joined_not_dropped(self):
+        """Due ``user`` di fila, uno a blocchi: si uniscono.
+
+        Prima vinceva l'ultimo e il primo spariva: un messaggio rimasto senza
+        risposta (turno fallito) seguito da una foto perdeva il testo, e al
+        contrario la foto perdeva la domanda. Il testo diventa un blocco
+        ``text`` accanto agli altri.
+        """
+        image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}}
         msgs = [
-            {"role": "user", "content": [{"type": "text", "text": "A"}]},
-            {"role": "user", "content": "B"},
+            {"role": "system", "content": "S"},
+            {"role": "user", "content": "Messaggio rimasto senza risposta"},
+            {"role": "user", "content": [{"type": "text", "text": "guarda"}, image]},
         ]
         result = LLMProvider._enforce_role_alternation(msgs)
-        assert len(result) == 1
-        assert result[0]["content"] == "B"
+        assert [m["role"] for m in result] == ["system", "user"]
+        assert result[1]["content"] == [
+            {"type": "text", "text": "Messaggio rimasto senza risposta"},
+            {"type": "text", "text": "guarda"},
+            image,
+        ]
+
+        reverse = LLMProvider._enforce_role_alternation([
+            {"role": "user", "content": [{"type": "text", "text": "A"}]},
+            {"role": "user", "content": "B"},
+        ])
+        assert reverse[0]["content"] == [
+            {"type": "text", "text": "A"}, {"type": "text", "text": "B"},
+        ]
+        # L'originale non si tocca.
+        assert msgs[2]["content"][0] == {"type": "text", "text": "guarda"}
+        assert len(msgs[2]["content"]) == 2
 
     def test_original_messages_not_mutated(self):
         msgs = [

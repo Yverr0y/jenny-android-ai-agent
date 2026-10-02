@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from support.aio import drain_nowait
 
 from jenny.agent.loop import AgentLoop
 from jenny.agent.turn_types import TurnDisposition
@@ -68,17 +69,14 @@ def _announce(session_key: str) -> InboundMessage:
         channel="system",
         sender_id="subagent",
         chat_id="websocket:default",
-        content="subagent completed successfully: waterbot-umidita-check",
+        content="subagent completed successfully: raincheck-pioggia-check",
         metadata={"subagent_task_id": "sub-1"},
         session_key_override=session_key,
     )
 
 
 async def _drain(loop: AgentLoop) -> list[OutboundMessage]:
-    out = []
-    while loop.bus.outbound_size:
-        out.append(await loop.bus.consume_outbound())
-    return out
+    return drain_nowait(loop.bus.outbound)
 
 
 class TestTheSubagentAnnounceInheritsTheOriginVisibility:
@@ -155,7 +153,7 @@ class TestTheErrorBranchRespectsTheContract:
             channel="websocket",
             sender_id="cron",
             chat_id="default",
-            content="controlla l'umidità",
+            content="controlla la pioggia",
             metadata=silent_turn_metadata(),
             session_key_override=HEARTBEAT_SESSION_KEY,
         )
@@ -254,7 +252,7 @@ class TestTheOnlyWayOutIsTheMessageTool:
                 channel="websocket",
                 sender_id="cron",
                 chat_id="default",
-                content="controlla l'umidità",
+                content="controlla la pioggia",
                 metadata=silent_turn_metadata(),
             ),
             session_key=HEARTBEAT_SESSION_KEY,
@@ -298,7 +296,7 @@ class TestTheOnlyWayOutIsTheMessageTool:
         )
 
         await tool.execute(
-            content="il monitoraggio delle piante non sta girando",
+            content="il monitoraggio della pioggia non sta girando",
             channel="websocket",
             chat_id="default",
         )
@@ -328,10 +326,10 @@ class TestTheAnnouncePromptFollowsTheVisibility:
 
         return render_template(
             "agent/subagent_announce.md",
-            label="waterbot-umidita-check",
+            label="raincheck-pioggia-check",
             status_text="completed successfully",
-            task="controlla l'umidità",
-            result="Acerello 44%, Albinella 79%",
+            task="controlla la pioggia",
+            result="Oslo 85%, Bergen 40%",
             silent=silent,
         )
 
@@ -363,8 +361,8 @@ class TestTheAnnouncePromptFollowsTheVisibility:
     def test_both_branches_carry_the_result(self) -> None:
         for silent in (True, False):
             text = self._rendered(silent=silent)
-            assert "Acerello 44%" in text
-            assert "waterbot-umidita-check" in text
+            assert "Oslo 85%" in text
+            assert "raincheck-pioggia-check" in text
 
 
 @pytest.mark.parametrize("channel", ["websocket", "telegram"])

@@ -13,7 +13,7 @@ import pytest
 from jenny.utils.runtime import looks_like_user_question
 
 _INCIDENT_MESSAGE = (
-    "ok papi, si parte 😏 prima domanda:\n\n"
+    "ok boss, si parte 😏 prima domanda:\n\n"
     "**cosa dovrebbe fare questa app? cosa vuoi vedere quando la apri?**\n\n"
     "dammi un'idea anche vaga — es. \"una lista della spesa\", \"il tracker delle mie "
     "piante\" — e da lì costruiamo."
@@ -41,7 +41,7 @@ def test_detects_questions(text: str) -> None:
         "",
         "   ",
         "fatto: ho scritto app.json e index.html, passo alla validazione.",
-        "Ho annaffiato l'albinella. Prossimo step: il basilico.",
+        "Ho preso l'ombrello. Prossimo step: la giacca.",
     ],
 )
 def test_ignores_statements(text: str | None) -> None:

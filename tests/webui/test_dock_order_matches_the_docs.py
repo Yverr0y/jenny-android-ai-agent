@@ -1,10 +1,12 @@
 """L'ordine della dock nei docs deve essere quello del DOM.
 
-``docs/using/webui-tour.md`` elenca i cinque slot «in this order», e quell'ordine
+``docs/using/webui-tour.md`` elenca gli slot «in this order», e quell'ordine
 non è cosmetico: è anche l'ordine del carosello dello swipe (``_visibleModes``),
-quindi la pagina che lo sbaglia insegna la gesture sbagliata. Aveva
-Chat·Apps·Wiki dove il DOM ha chat·wiki·apps — Apps sta al centro di proposito,
-perché è lo slot più raggiungibile dal pollice.
+quindi la pagina che lo sbaglia insegna la gesture sbagliata.
+
+Dal 20/09/2026 sono quattro — una console e tre facoltà — e il ``data-mode``
+non è più il nome del sottosistema: ``brain``, ``hands`` e ``memory`` sono
+tre cassetti della stessa vista.
 
 Si confronta la sequenza, non i nomi presi uno per uno: uno slot spostato è
 esattamente il difetto, e un test su «ci sono tutti» non lo vedrebbe.
@@ -16,20 +18,20 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INDEX_HTML = ROOT / "jenny" / "templates" / "ui" / "index.html"
+WORKSHOP_HTML = ROOT / "jenny" / "templates" / "ui" / "workshop.html"
 TOUR_DOC = ROOT / "docs" / "using" / "webui-tour.md"
 
-# ``onboarding`` è il sesto slot, nascosto dopo il primo avvio: la pagina lo
-# descrive a parte e non nella tabella, quindi resta fuori dal confronto.
-_HIDDEN_MODES = {"onboarding"}
+# Slot del dock che la tabella non elenca. Era ``onboarding``, la voce nascosta
+# del primo avvio: dal 27/09/2026 il wizard ha un documento suo e nel dock non
+# c'e' piu'.
+_HIDDEN_MODES: set[str] = set()
 
 # Come la tabella nomina ciascun mode. La chiave è il ``data-mode`` del DOM.
 _DOC_LABELS = {
-    "chat": "Chat",
-    "graph": "Wiki",
-    "apps": "Apps",
-    "workspace": "Workspace",
-    "settings": "Settings",
+    "chat": "Console",
+    "brain": "Brain",
+    "hands": "Hands",
+    "memory": "Memory",
 }
 
 
@@ -41,9 +43,11 @@ def _dom_order() -> list[str]:
     silenzio lo slot scritto al contrario — è successo con ``chat``, e il test
     accusava il documento invece di sé stesso.
     """
-    html = INDEX_HTML.read_text("utf-8")
+    html = WORKSHOP_HTML.read_text("utf-8")
     modes: list[str] = []
-    for tag in re.findall(r"<div\b[^>]*>", html):
+    # ``<button>`` dal 26/09/2026: il dock si
+    # raggiunge dalla tastiera. Il ``<div>`` resta per chi lo riportasse.
+    for tag in re.findall(r"<(?:button|div)\b[^>]*>", html):
         classes = re.search(r'class="([^"]*)"', tag)
         # ``dock-item`` come *token*: lo slot attivo porta ``class="dock-item
         # active"``, e un confronto sulla stringa esatta lo perdeva — che è
@@ -67,7 +71,7 @@ def test_the_docs_list_the_dock_in_dom_order() -> None:
     dom = _dom_order()
     doc = _doc_order()
 
-    assert dom, "nessuno slot trovato in index.html: il markup della dock è cambiato"
+    assert dom, "nessuno slot trovato in officina.html: il markup della dock è cambiato"
     assert doc, "nessuna riga riconosciuta nella tabella di webui-tour.md"
     assert doc == dom, (
         f"webui-tour.md elenca {doc}, il DOM ha {dom}. "

@@ -7,8 +7,8 @@ secondo tap non è bloccato, e la prima fetch non viene annullata da nessuno), e
 la vecchia `loadThread` scriveva lo scope su un campo condiviso: vinceva **chi
 rispondeva per ultimo**, non chi era stato toccato per ultimo.
 
-Il caso concreto: tap su `patreon`, tap su `bordi` 200 ms dopo, e se `patreon`
-risponde per seconda il chip dice `patreon` mentre i messaggi vanno in `bordi`.
+Il caso concreto: tap su `palestra`, tap su `bordi` 200 ms dopo, e se `palestra`
+risponde per seconda il chip dice `palestra` mentre i messaggi vanno in `bordi`.
 Da lì l'utente enuncia un fatto credendo di essere in un progetto e il fatto
 finisce nel diario dell'altro, dove il gardener lo promuove in pagina: durevole
 e non ritirabile, cioè l'unico guasto irrecuperabile che quel modulo si impegna
@@ -30,42 +30,37 @@ In coda due asserzioni sul solo testo del sorgente, dichiarate deboli.
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
 SESSION_JS = ASSETS / "shared" / "session-manager.js"
+PAGER_JS = ASSETS / "shared" / "history-pager.js"
 
-_NODE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+pytestmark = requires_node
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _member(source: str, name: str) -> str:
-    """Il testo vero di un membro, dalla dichiarazione alla chiusura a due spazi.
-
-    Conserva `async`/`get`: senza `async` un `await` nel corpo non compila, e il
-    test misurerebbe un errore di sintassi invece del comportamento.
-    """
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
-
-
 _HARNESS = """
 import assert from 'node:assert/strict';
+
+/* Cursore e chiavistello della paginazione stanno nel modulo condiviso: qui si
+   importa quello vero, cosi' la guardia contro il cambio di conversazione si
+   misura sull'intera catena (pager -> `_beginHistoryPage`
+   -> `loadThread`) invece che su un ritaglio di testo. */
+globalThis.document = {
+  createElement() {
+    return { className: '', textContent: '', type: '', disabled: false,
+             addEventListener() {}, remove() {} };
+  },
+};
+const { HistoryPager } = await import('__PAGER_URL__');
 
 // ── Doppi: tutto ciò che i metodi veri chiamano fuori da sé ─────────────────
 const UNIFIED_KEY = 'websocket:default';
@@ -103,9 +98,6 @@ function makeChat() {
   const chat = {
     rendered: [],
     identityEl: null,
-    historyCursor: null,
-    hasMoreHistory: true,
-    isLoadingHistory: false,
     _initialHistoryLoaded: false,
     _loadingInitialHistory: false,
     _resetStreamState() {},
@@ -129,7 +121,7 @@ function makeChat() {
     },
     __INVALIDATE__,
     __LOAD_INITIAL__,
-    __LOAD_MORE__,
+    __BEGIN_PAGE__,
     __SWITCH_CONVERSATION__,
   };
   // Il DOM ridotto all'osso: svuotarlo si vede, ed è ciò che `invalidateHistory`
@@ -139,7 +131,30 @@ function makeChat() {
   chat.chatArea = {
     get innerHTML() { return chat.rendered.join('\\n'); },
     set innerHTML(v) { if (v === '') chat.rendered = []; },
+    querySelector() { return null; },
   };
+  chat._pager = new HistoryPager({
+    scroller: () => chat._scroller,
+    listenOn: { addEventListener() {} },
+    container: () => chat.chatArea,
+    pageSize: 120,
+    begin: () => chat._beginHistoryPage(),
+    prepend: (msgs) => chat._renderThreadMessagesToTop(msgs),
+    mount() {},
+    label: () => 'i18n:chat.loadPrevious',
+  });
+  /* Gli stessi nomi di prima: li legge il resync e li scrivono i test. */
+  Object.defineProperties(chat, {
+    historyCursor: {
+      get: () => chat._pager.cursor,
+      set: (v) => { chat._pager.cursor = v || null; },
+    },
+    hasMoreHistory: {
+      get: () => chat._pager.hasMore,
+      set: (v) => { chat._pager.hasMore = !!v; },
+    },
+    isLoadingHistory: { get: () => chat._pager.loading },
+  });
   return chat;
 }
 
@@ -167,26 +182,21 @@ def _harness() -> str:
     chat = _read(CHAT_JS)
     session = _read(SESSION_JS)
     return (
-        _HARNESS.replace("__CTOR__", _member(session, "constructor"))
-        .replace("__SWITCH_TO__", _member(session, "switchTo"))
-        .replace("__GENERATION__", _member(session, "switchGeneration"))
-        .replace("__LOAD_THREAD__", _member(session, "loadThread"))
-        .replace("__INVALIDATE__", _member(chat, "invalidateHistory"))
-        .replace("__LOAD_INITIAL__", _member(chat, "loadInitialHistory"))
-        .replace("__LOAD_MORE__", _member(chat, "loadMoreHistory"))
-        .replace("__SWITCH_CONVERSATION__", _member(chat, "_switchConversation"))
+        _HARNESS.replace("__CTOR__", member(session, "constructor"))
+        .replace("__SWITCH_TO__", member(session, "switchTo"))
+        .replace("__GENERATION__", member(session, "switchGeneration"))
+        .replace("__LOAD_THREAD__", member(session, "loadThread"))
+        .replace("__INVALIDATE__", member(chat, "invalidateHistory"))
+        .replace("__LOAD_INITIAL__", member(chat, "loadInitialHistory"))
+        .replace("__BEGIN_PAGE__", member(chat, "_beginHistoryPage"))
+        .replace("__PAGER_URL__", PAGER_JS.as_uri())
+        .replace("__SWITCH_CONVERSATION__", member(chat, "_switchConversation"))
     )
 
 
 def _run_js(script: str) -> None:
     source = _harness() + "\n" + script
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(source)
 
 
 # ── La corsa ────────────────────────────────────────────────────────────────
@@ -205,10 +215,10 @@ def test_the_overtaken_switch_loses_even_when_it_answers_last() -> None:
       pending('websocket:default').resolve(thread(null, 'ciao'));
       await boot;
 
-      // Tap su patreon, tap su bordi: il secondo non aspetta il primo, e non
+      // Tap su palestra, tap su bordi: il secondo non aspetta il primo, e non
       // deve — un tap che resta senza risposta per una fetch è il difetto
       // opposto.
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
@@ -216,12 +226,12 @@ def test_the_overtaken_switch_loses_even_when_it_answers_last() -> None:
       assert.equal(inflight.length, 2, 'i due caricamenti si sovrappongono: è il caso');
       // Ogni caricamento chiede la *sua* chiave, non quella corrente al momento
       // dell'attesa.
-      assert.deepEqual(inflight.map((f) => f.key), ['project:patreon', 'project:bordi']);
+      assert.deepEqual(inflight.map((f) => f.key), ['project:palestra', 'project:bordi']);
 
-      // bordi risponde, poi patreon: lo scavalcato risponde per ultimo.
+      // bordi risponde, poi palestra: lo scavalcato risponde per ultimo.
       pending('project:bordi').resolve(thread('bordi', 'da bordi', { before_cursor: 'b-1' }));
       await tick();
-      pending('project:patreon').resolve(thread('patreon', 'da patreon', { before_cursor: 'p-1' }));
+      pending('project:palestra').resolve(thread('palestra', 'da palestra', { before_cursor: 'p-1' }));
       await tick();
       await Promise.all([first, second]);
 
@@ -300,14 +310,14 @@ def test_a_superseded_failure_does_not_steal_the_load_latch() -> None:
     thread già a schermo."""
     _run_js("""
       const chat = makeChat();
-      const first = chat._switchConversation('project:patreon');
+      const first = chat._switchConversation('project:palestra');
       await tick();
       const second = chat._switchConversation('project:bordi');
       await tick();
 
       pending('project:bordi').resolve(thread('bordi', 'da bordi'));
       await tick();
-      pending('project:patreon').reject(new Error('rete'));
+      pending('project:palestra').reject(new Error('rete'));
       await tick();
       await Promise.all([first, second]);
 
@@ -330,7 +340,8 @@ def test_a_page_of_old_history_is_not_pasted_onto_another_conversation() -> None
       chat.historyCursor = 'c-1';
       chat.rendered = ['recente'];
 
-      const more = chat.loadMoreHistory();
+      // Il percorso vero: lo scroll infinito chiama il pager (`bindInfiniteScroll`).
+      const more = chat._pager.loadMore();
       await tick();
       assert.deepEqual(inflight.map((f) => f.key), ['websocket:default']);
 
@@ -374,17 +385,17 @@ def test_a_thread_answered_after_a_switch_never_reaches_the_shared_state() -> No
     """`loadThread` da sola, senza la vista: la risposta scaduta si dichiara
     `stale` e non scrive né lo scope né il run in corso."""
     _run_js("""
-      const load = sessionManager.loadThread('project:patreon', 160);
+      const load = sessionManager.loadThread('project:palestra', 160);
       await tick();
       sessionManager.switchTo('project:bordi');
-      pending('project:patreon').resolve({
+      pending('project:palestra').resolve({
         messages: [], page: {},
-        workspace_scope: { project_path: '/w/projects/patreon' },
+        workspace_scope: { project_path: '/w/projects/palestra' },
         run_started_at: 111,
       });
       const out = await load;
       assert.equal(out.stale, true);
-      assert.equal(out.scope?.project_path, '/w/projects/patreon',
+      assert.equal(out.scope?.project_path, '/w/projects/palestra',
                    'il valore di ritorno resta quello di questa richiesta');
       assert.equal(sessionManager.currentScope, null,
                    'una risposta scaduta ha scritto lo scope condiviso');

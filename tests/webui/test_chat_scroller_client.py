@@ -9,29 +9,16 @@ devono.
 
 from __future__ import annotations
 
-import re
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import member, requires_node, run_js
 
 ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
 CHAT_JS = ASSETS / "mobile-chat.js"
-
-_NODE = shutil.which("node")
-
-pytestmark = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+PAGER_JS = ASSETS / "shared" / "history-pager.js"
 
 
-def _member(source: str, name: str) -> str:
-    m = re.search(
-        rf"\n  ((?:async |get )?{re.escape(name)}\([^)]*\)\s*\{{.*?)\n  \}}",
-        source,
-        re.S,
-    )
-    assert m, f"{name} non trovato"
-    return m.group(1) + "\n  }"
+pytestmark = requires_node
 
 
 _HARNESS = """
@@ -51,6 +38,11 @@ globalThis.window = {
 };
 const fire = (type) => (windowListeners[type] || []).forEach((fn) => fn());
 
+/* Lo scorrimento infinito sta nel modulo condiviso (una macchina sola per la
+   casa e per l'officina): `setupInfiniteScroll` ora e' il filo che lo lega a
+   `window` e al documento, ed e' quel filo che si misura qui. */
+const { HistoryPager } = await import('__PAGER_URL__');
+
 function makeChat({ scrollTop = 0, scrollHeight = 3000, clientHeight = 1000, areaHeight = 900 } = {}) {
   const chat = {
     _scroller: { scrollTop, scrollHeight, clientHeight },
@@ -63,16 +55,28 @@ function makeChat({ scrollTop = 0, scrollHeight = 3000, clientHeight = 1000, are
     _active: true,
     fabUpdates: 0,
     loadedMore: 0,
-    isLoadingHistory: false,
-    hasMoreHistory: true,
     _updateScrollFab() { this.fabUpdates++; },
-    loadMoreHistory() { this.loadedMore++; },
     __NEAR__,
     __BOTTOM__,
     __REMEMBER__,
     __RESTORE__,
     __INFINITE__,
   };
+  chat._pager = new HistoryPager({
+    scroller: () => chat._scroller,
+    listenOn: globalThis.window,
+    container: () => ({ querySelector: () => null }),
+    pageSize: 120,
+    begin: () => null,
+    prepend() {},
+    mount() {},
+    label: () => 'i18n:chat.loadPrevious',
+  });
+  chat._pager.loadMore = async () => { chat.loadedMore++; };
+  Object.defineProperty(chat, 'hasMoreHistory', {
+    get: () => chat._pager.hasMore,
+    set: (v) => { chat._pager.hasMore = !!v; },
+  });
   return chat;
 }
 """
@@ -81,22 +85,17 @@ function makeChat({ scrollTop = 0, scrollHeight = 3000, clientHeight = 1000, are
 def _harness() -> str:
     src = CHAT_JS.read_text(encoding="utf-8")
     return (
-        _HARNESS.replace("__NEAR__", _member(src, "_isNearBottom"))
-        .replace("__BOTTOM__", _member(src, "scrollToBottom"))
-        .replace("__REMEMBER__", _member(src, "_rememberScrollAnchor"))
-        .replace("__RESTORE__", _member(src, "_restoreScrollAnchor"))
-        .replace("__INFINITE__", _member(src, "setupInfiniteScroll"))
+        _HARNESS.replace("__NEAR__", member(src, "_isNearBottom"))
+        .replace("__BOTTOM__", member(src, "scrollToBottom"))
+        .replace("__REMEMBER__", member(src, "_rememberScrollAnchor"))
+        .replace("__RESTORE__", member(src, "_restoreScrollAnchor"))
+        .replace("__INFINITE__", member(src, "setupInfiniteScroll"))
+        .replace("__PAGER_URL__", PAGER_JS.as_uri())
     )
 
 
 def _run_js(script: str) -> None:
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", _harness() + "\n" + script],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(_harness() + "\n" + script)
 
 
 def test_near_bottom_reads_the_document_scroller() -> None:

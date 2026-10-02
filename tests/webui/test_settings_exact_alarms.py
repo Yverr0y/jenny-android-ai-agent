@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 import pytest
+from support.kotlin_source import read_source
 
 from jenny.config.schema import KEEP_AWAKE_MODES
 
@@ -42,7 +43,7 @@ def _js() -> str:
 
 
 def _kotlin() -> str:
-    return _MAIN_ACTIVITY.read_text(encoding="utf-8")
+    return read_source(_MAIN_ACTIVITY)
 
 
 def _battery_copy(locale: str) -> dict:
@@ -58,8 +59,11 @@ def test_the_bridge_can_open_the_exact_alarm_permission_screen() -> None:
     source = _kotlin()
 
     index = source.index("fun requestExactAlarmPermission()")
-    # Senza l'annotazione il metodo, per il JS, semplicemente non esiste.
-    assert "@JavascriptInterface" in source[index - 200 : index]
+    # Raggiunto dalla porta dei comandi, non da @JavascriptInterface: apre una
+    # schermata di sistema, e nessun iframe deve poterlo fare. Senza la riga nel
+    # dispatch il metodo, per il JS, semplicemente non esiste.
+    assert '"requestExactAlarmPermission" -> requestExactAlarmPermission()' in source
+    assert "@JavascriptInterface" not in source[index - 200 : index]
     body = source[index : index + 1200]
     assert "ACTION_REQUEST_SCHEDULE_EXACT_ALARM" in body
     # L'azione senza il proprio package apre l'elenco di tutte le app.
@@ -72,8 +76,9 @@ def test_the_request_is_a_no_op_below_android_12() -> None:
     source = _kotlin()
     body = source[source.index("fun requestExactAlarmPermission()") :][:1200]
 
-    guard = body.index("Build.VERSION_CODES.S")
-    assert "return false" in body[guard : guard + 60]
+    # La guardia per intero, verso compreso: con `>=` il nome resta e la
+    # `return false` pure, ma il no-op finisce sulle versioni sbagliate.
+    guard = body.index("if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false")
     # La guardia sta prima di qualunque tentativo di aprire la schermata.
     assert guard < body.index("startActivity")
 
@@ -181,11 +186,13 @@ def test_the_cost_line_follows_the_selection() -> None:
 
     assert 'id="keep-awake-cost"' in source
     assert "settings.battery.keepAwakeCost." in source
-    # Cambia al `change` della select, prima ancora che il salvataggio torni:
-    # è l'informazione che l'utente sta valutando.
-    change = source.index("keepAwakeSelect.addEventListener('change'")
-    assert "showCost" in source[:change], "showCost definita dopo l'uso"
-    assert "showCost(mode)" in source[change : change + 400]
+    # Cambia al tocco del segmento, prima ancora che il salvataggio torni: è
+    # l'informazione che l'utente sta valutando. Il comando è passato da
+    # tendina a segmenti (la tavola lo vuole così, e il pezzo esisteva già):
+    # cambia l'evento, non la regola.
+    click = source.index("buttons.forEach(btn => btn.addEventListener('click'")
+    assert "const show = (mode)" in source[:click], "`mostra` definita dopo l'uso"
+    assert "show(mode)" in source[click : click + 400]
 
 
 def test_an_unknown_mode_prints_nothing_instead_of_the_raw_key() -> None:

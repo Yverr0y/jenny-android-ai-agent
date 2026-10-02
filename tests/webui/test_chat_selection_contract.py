@@ -28,7 +28,11 @@ ASSETS = UI / "assets"
 APP_JS = (ASSETS / "mobile-app.js").read_text(encoding="utf-8")
 CHAT_JS = (ASSETS / "mobile-chat.js").read_text(encoding="utf-8")
 SELECTION_JS = (ASSETS / "shared" / "selection.js").read_text(encoding="utf-8")
-INDEX_HTML = (UI / "index.html").read_text(encoding="utf-8")
+# Il riconoscimento del gesto e' uscito da mobile-app.js il 22/09/2026: la
+# soglia e la dominanza vivono nel modulo condiviso, che li tiene per tutti e
+# due i gusci (v. test_horizontal_swipe_contract.py).
+SWIPE_JS = (ASSETS / "shared" / "horizontal-swipe.js").read_text(encoding="utf-8")
+WORKSHOP_HTML = (UI / "workshop.html").read_text(encoding="utf-8")
 ANDROID_ASSETS = (ROOT / "jenny" / "utils" / "android_assets.py").read_text(encoding="utf-8")
 
 # Elementi HTML senza tag di chiusura: senza questo elenco lo stack del parser
@@ -65,8 +69,8 @@ class _Ancestry(HTMLParser):
 
 def _ancestor_ids(node_id: str) -> list[str]:
     parser = _Ancestry()
-    parser.feed(INDEX_HTML)
-    assert node_id in parser.ancestors, f"#{node_id} non esiste in index.html"
+    parser.feed(WORKSHOP_HTML)
+    assert node_id in parser.ancestors, f"#{node_id} non esiste in officina.html"
     return parser.ancestors[node_id]
 
 
@@ -104,19 +108,25 @@ def test_selection_module_is_shipped_to_android() -> None:
 
 
 def test_swipe_nav_stands_down_when_something_is_selected() -> None:
+    """La guardia sta fra le condizioni per partire, non dopo.
+
+    Adesso il gesto e' condiviso e il guscio dice la sua in `canStart`: se
+    quella guardia scivolasse piu' in basso, trascinare per aggiustare i manici
+    della selezione farebbe scivolare la vista sotto le dita.
+    """
     nav = _method(APP_JS, "setupSwipeNav")
-    touchstart = nav.split("touchstart", 1)[1].split("touchmove", 1)[0]
-    assert "hasSelection()" in touchstart
+    can_start = nav.split("canStart:", 1)[1].split("onHorizontal:", 1)[0]
+    assert "if (hasSelection()) return false;" in can_start
 
 
 def test_horizontal_slop_clears_the_android_touch_slop() -> None:
-    slop = re.search(r"const H_SLOP = (\d+);", APP_JS)
-    assert slop, "H_SLOP non trovato"
+    slop = re.search(r"const AXIS_THRESHOLD = (\d+);", SWIPE_JS)
+    assert slop, "AXIS_THRESHOLD non trovata"
     assert int(slop.group(1)) >= 20, "sotto il touch slop di sistema il long-press muore"
 
 
 def test_a_diagonal_drag_no_longer_arms_the_swipe() -> None:
-    assert "Math.abs(dx) <= Math.abs(dy) * 1.5" in APP_JS
+    assert "Math.abs(dx) <= Math.abs(dy) * 1.5" in SWIPE_JS
 
 
 # ── Passo 3: non si scrive sotto le dita ─────────────────────────────────────
@@ -149,26 +159,42 @@ def test_the_actions_row_reaches_history_too() -> None:
 
 
 def test_the_actions_row_is_idempotent_and_last() -> None:
-    body = _method(CHAT_JS, "_appendMsgActions")
+    body = _method(CHAT_JS, "_ensureMsgActions")
     assert "':scope > .chat-msg-actions'" in body
-    assert "msg.appendChild(existing)" in body
+    assert "msg.appendChild(row)" in body, "la riga non viene rimessa in coda"
 
 
-def test_the_sheet_lives_outside_the_swipe_surface() -> None:
-    """Dentro `#app` (e quindi `.main`) il listener dello swipe si prende il gesto."""
-    assert "app" not in _ancestor_ids("chat-msg-sheet")
+def test_the_message_sheet_is_gone_with_its_button() -> None:
+    """Il `⋯` e il foglio «Copia testo / Copia come Markdown» se ne vanno
+    insieme: era l'unica cosa che quel pulsante apriva, e l'unico modo di
+    aprirla.
+
+    Resta un Copia solo, e copia il **sorgente** — che era la voce «Copia come
+    Markdown», cioè quella per cui il foglio era stato scritto.
+    """
+    for gone in ("chat-msg-more", "_showMessageSheet", "_messagePlain",
+                    "chat-msg-sheet", "ti-dots"):
+        assert gone not in CHAT_JS, f"{gone} è ancora in mobile-chat.js"
+    assert "chat-msg-sheet" not in WORKSHOP_HTML
+    body = _method(CHAT_JS, "_copyMessage")
+    assert "markdown" not in body, "_copyMessage ha ancora la scelta che il foglio le dava"
 
 
 def test_no_inline_handlers_were_added() -> None:
     """La CSP della shell è `script-src 'self'`: un `onclick=` inline non gira."""
-    assert "onclick=" not in INDEX_HTML
+    assert "onclick=" not in WORKSHOP_HTML
 
 
-def test_the_new_keys_exist_in_both_locales() -> None:
-    keys = ("messageActions", "copyPlain", "copyMarkdown")
+def test_the_sheet_strings_left_with_the_sheet() -> None:
+    """Tre chiavi che nessuno legge più sono tre traduzioni da mantenere per
+    niente — e il posto in cui una stringa morta torna a schermo."""
+    dead = ("messageActions", "copyPlain", "copyMarkdown")
     for lang in ("it", "en"):
         chat = json.loads((ASSETS / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))["chat"]
-        for key in keys:
+        for key in dead:
+            assert key not in chat, f"{lang}.chat.{key} è rimasta orfana"
+        # E quella che resta c'è ancora, in tutte e due.
+        for key in ("copy", "copied", "copyFailed"):
             assert chat.get(key), f"{lang}.chat.{key}"
 
 
@@ -176,7 +202,7 @@ def test_the_select_sheet_and_the_anchor_pin_are_gone() -> None:
     """Il foglio era uno scroller interno e riproduceva il difetto al suo
     interno; il pin era un'euristica in JS su un difetto del motore. La radice
     sta in `test_chat_root_scroller_contract.py`."""
-    assert "chat-select-sheet" not in INDEX_HTML
+    assert "chat-select-sheet" not in WORKSHOP_HTML
     assert "_showSelectSheet" not in CHAT_JS
     assert "pinSelectionAnchor" not in SELECTION_JS and "pinSelectionAnchor" not in APP_JS
     assert "setBaseAndExtent" not in _code_only(SELECTION_JS), "nessuna scrittura della selezione da JS"

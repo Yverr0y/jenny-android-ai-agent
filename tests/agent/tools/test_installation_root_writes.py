@@ -1,6 +1,6 @@
 """Le scritture che usavano la radice dell'installazione invece di quella del turno.
 
-Passo **6** di ``roadmap/progetti-passi.md``.
+Passo **6** del piano dei progetti.
 
 Sono una famiglia, non due casi isolati: un tool che si porta la destinazione
 scritta dentro — ``<workspace>/downloads/``, ``apps/<nome>/data/`` — non passa da
@@ -49,13 +49,13 @@ from jenny.security.workspace_access import (
 @pytest.fixture
 def install(tmp_path: Path) -> Path:
     """Un'installazione con un progetto vero dentro (``wiki/`` compresa)."""
-    (tmp_path / "wikis" / "patreon" / "wiki").mkdir(parents=True)
+    (tmp_path / "wikis" / "palestra" / "wiki").mkdir(parents=True)
     (tmp_path / "apps" / "todo" / "data").mkdir(parents=True)
     return tmp_path
 
 
 def _project(install: Path) -> Path:
-    return install / "wikis" / "patreon"
+    return install / "wikis" / "palestra"
 
 
 def _action(op: str) -> AppAction:

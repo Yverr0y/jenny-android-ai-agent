@@ -70,7 +70,7 @@ class TestTheThresholdIsAboveTheModelsOwn:
         assert silently_broken_checks(state, now_ms=_NOW) == [("", WATCHDOG_AFTER_FAILURES)]
 
 
-class TestATimbroDoesNotBuySilenceForever:
+class TestAStampDoesNotBuySilenceForever:
     """``escalated`` dice che l'avviso è uscito una volta, non che sia bastato."""
 
     def _entry(self, *, escalated_at_ms: int | None) -> CronJobState:
@@ -80,7 +80,7 @@ class TestATimbroDoesNotBuySilenceForever:
                     consecutive_could_not_check=WATCHDOG_AFTER_FAILURES,
                     escalated=True,
                     escalated_at_ms=escalated_at_ms,
-                    label="WaterBot: umidità piante",
+                    label="RainCheck: pioggia nelle città",
                 )
             }
         )
@@ -94,7 +94,7 @@ class TestATimbroDoesNotBuySilenceForever:
         state = self._entry(escalated_at_ms=_NOW - WATCHDOG_QUIET_MS)
 
         assert silently_broken_checks(state, now_ms=_NOW) == [
-            ("WaterBot: umidità piante", WATCHDOG_AFTER_FAILURES)
+            ("RainCheck: pioggia nelle città", WATCHDOG_AFTER_FAILURES)
         ]
 
     def test_a_stamp_without_a_date_does_not_buy_anything(self) -> None:
@@ -123,24 +123,24 @@ class TestOneAlarmPerFailureNotTwo:
             consecutive_could_not_check=WATCHDOG_AFTER_FAILURES,
             task_checks={
                 "abc": CronTaskCheckState(
-                    consecutive_could_not_check=WATCHDOG_AFTER_FAILURES, label="piante"
+                    consecutive_could_not_check=WATCHDOG_AFTER_FAILURES, label="pioggia"
                 )
             },
         )
 
-        assert silently_broken_checks(state, now_ms=_NOW) == [("piante", WATCHDOG_AFTER_FAILURES)]
+        assert silently_broken_checks(state, now_ms=_NOW) == [("pioggia", WATCHDOG_AFTER_FAILURES)]
 
     def test_a_healthy_task_next_to_a_broken_one_is_not_named(self) -> None:
         state = CronJobState(
             task_checks={
                 "dead": CronTaskCheckState(
-                    consecutive_could_not_check=WATCHDOG_AFTER_FAILURES, label="piante"
+                    consecutive_could_not_check=WATCHDOG_AFTER_FAILURES, label="pioggia"
                 ),
                 "young": CronTaskCheckState(consecutive_could_not_check=1, label="backup"),
             }
         )
 
-        assert silently_broken_checks(state, now_ms=_NOW) == [("piante", WATCHDOG_AFTER_FAILURES)]
+        assert silently_broken_checks(state, now_ms=_NOW) == [("pioggia", WATCHDOG_AFTER_FAILURES)]
 
     def test_several_dead_checks_produce_one_alarm_that_counts_them(
         self, monkeypatch: pytest.MonkeyPatch
@@ -149,7 +149,7 @@ class TestOneAlarmPerFailureNotTwo:
         state = CronJobState(
             task_checks={
                 "a": CronTaskCheckState(
-                    consecutive_could_not_check=WATCHDOG_AFTER_FAILURES, label="piante"
+                    consecutive_could_not_check=WATCHDOG_AFTER_FAILURES, label="pioggia"
                 ),
                 "b": CronTaskCheckState(
                     consecutive_could_not_check=WATCHDOG_AFTER_FAILURES + 3, label="backup"
@@ -181,7 +181,7 @@ class TestTheAlertItself:
             task_checks={
                 "abc": CronTaskCheckState(
                     consecutive_could_not_check=WATCHDOG_AFTER_FAILURES,
-                    label="WaterBot: umidità piante",
+                    label="RainCheck: pioggia nelle città",
                 )
             }
         )
@@ -189,7 +189,7 @@ class TestTheAlertItself:
         alert_silently_broken_checks("heartbeat", state, now_ms=_NOW)
 
         content, _metadata = sent[0]
-        assert "WaterBot: umidità piante" in content
+        assert "RainCheck: pioggia nelle città" in content
         assert str(WATCHDOG_AFTER_FAILURES) in content
         assert "/cron" in content
 
@@ -205,20 +205,20 @@ class TestTheAlertItself:
         sent = _spy(monkeypatch)
         state = CronJobState(consecutive_could_not_check=WATCHDOG_AFTER_FAILURES)
 
-        alert_silently_broken_checks("piante", state, now_ms=_NOW)
+        alert_silently_broken_checks("pioggia", state, now_ms=_NOW)
 
         _content, metadata = sent[0]
         source = metadata[WEBUI_MESSAGE_SOURCE_METADATA_KEY]
         assert source["kind"] == "cron"
-        assert source["label"] != "piante"
-        assert "piante" in source["label"]
+        assert source["label"] != "pioggia"
+        assert "pioggia" in source["label"]
 
     def test_nothing_is_posted_when_nothing_is_wrong(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         sent = _spy(monkeypatch)
 
-        assert alert_silently_broken_checks("piante", CronJobState(), now_ms=_NOW) == []
+        assert alert_silently_broken_checks("pioggia", CronJobState(), now_ms=_NOW) == []
         assert sent == []
 
 
@@ -240,9 +240,9 @@ class TestTheServiceCallsIt:
 
         service.on_job = on_job
         job = service.add_job(
-            name="piante",
+            name="pioggia",
             schedule=CronSchedule(kind="every", every_ms=1_800_000),
-            message="controlla le piante",
+            message="controlla la pioggia",
             mode="monitor",
             session_key="unified:default",
             origin_channel="websocket",

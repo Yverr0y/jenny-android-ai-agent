@@ -1,7 +1,7 @@
 """``journal_append`` — la cattura di un progetto, e l'unica scrittura che
 l'agente principale sa fare da sé.
 
-Passo **T2.5** di ``roadmap/taccuino-passi.md``, e nasce da una misura, non da un
+Passo **T2.5** del piano del taccuino, e nasce da una misura, non da un
 disegno. Il 22/08 la politica di cattura ha funzionato al primo colpo — fatto
 stabile detto, riga nel diario, stesso turno — ma **passando da uno spawn**:
 ``orchestrator_mode`` è acceso di default e toglie all'agente principale
@@ -65,9 +65,9 @@ _MAX_TEXT_CHARS = 500
 # ── Attribuzione: di chi e' il fatto che la riga registra ────────────────────
 #
 # Il difetto che questi due token chiudono (**D1**): il 24/08 Jenny ha chiesto
-# «l'ogoh-ogoh te lo porti, *o quello resta a casa*?», l'utente ha risposto «l
-# ogoh ogoh che cenrtra?» — una domanda, nessuna scelta — e la cattura ha
-# registrato «L'ogoh-ogoh non c'entra col viaggio — **resta a casa**». Cioe'
+# «il telescopio te lo porti, *o quello resta a casa*?», l'utente ha risposto «il
+# telescopio che cenrtra?» — una domanda, nessuna scelta — e la cattura ha
+# registrato «Il telescopio non c'entra col viaggio — **resta a casa**». Cioe'
 # l'opzione B della domanda di Jenny, scritta come decisione dell'utente. Poi il
 # giardiniere l'ha promossa a ``state: decided`` e la mappa l'ha messa sotto
 # «Decided», dove entra a ogni turno. Nessuno dei due messaggi dell'utente
@@ -77,12 +77,11 @@ _MAX_TEXT_CHARS = 500
 # citazione contro le parole dell'utente» sono state provate su quel caso e
 # cadono tutte, l'ultima in modo istruttivo: chiedere che le parole di contenuto
 # della pagina compaiano nei messaggi dell'utente boccia la fabbricazione **e**
-# boccia ``starlink.md``, che registra una decisione vera e detta chiaramente, solo
+# boccia ``fibra.md``, che registra una decisione vera e detta chiaramente, solo
 # parafrasata. La parafrasi e' legittima e pervasiva, quindi nessun controllo a
-# livello di stringa separa una parafrasi onesta da una fabbricazione. Il
-# ragionamento intero sta in ``roadmap/memory-scope-and-journal-provenance.md``
-# (T3.0b) — chi vuole "rafforzare" questo con un confronto di stringhe lo legga
-# prima.
+# livello di stringa separa una parafrasi onesta da una fabbricazione: chi vuole
+# "rafforzare" questo con un confronto di stringhe boccerebbe proprio le
+# parafrasi oneste.
 #
 # **Perche' qui e non a valle.** La cattura e' l'unico momento in cui chi giudica
 # ha davanti la **propria domanda** e la risposta dell'utente insieme. A valle il

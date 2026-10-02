@@ -14,12 +14,14 @@ import com.jcraft.jsch.UIKeyboardInteractive
 import com.jcraft.jsch.UserInfo
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import java.io.IOException
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.net.SocketTimeoutException
-import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Security
 import javax.crypto.Cipher
@@ -29,6 +31,46 @@ import javax.crypto.Cipher
  * passare dall'euristica sui messaggi di jsch.
  */
 private class BridgeException(val category: String, message: String) : Exception(message)
+
+/**
+ * Stream di scrittura che conta i byte e si interrompe oltre [limit].
+ *
+ * Il tetto di [SshBridge.get] si controlla sulla dimensione remota prima di
+ * cominciare, ma quella e una dichiarazione del server: un file che cresce
+ * durante il trasferimento (un log), o un server che mente, scriverebbe
+ * comunque oltre. Qui il tetto si applica ai byte che arrivano davvero.
+ */
+private class CappedOutputStream(
+    private val inner: OutputStream,
+    private val limit: Long,
+) : OutputStream() {
+    var count: Long = 0
+        private set
+    var overflowed = false
+        private set
+
+    override fun write(b: Int) {
+        admit(1)
+        inner.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        admit(len)
+        inner.write(b, off, len)
+    }
+
+    private fun admit(n: Int) {
+        if (count + n > limit) {
+            overflowed = true
+            throw IOException("download over the $limit byte limit")
+        }
+        count += n
+    }
+
+    override fun flush() = inner.flush()
+
+    override fun close() = inner.close()
+}
 
 /**
  * Legge uno stream fino a EOF tenendo solo i primi [limit] CARATTERI.
@@ -189,52 +231,6 @@ object SshBridge {
         return out.toString()
     }
 
-    /** Ed25519 via JCE, chiedendo esplicitamente il provider "BC". */
-    private fun probeJceEd25519(): String =
-        try {
-            // Nome MAIUSCOLO e provider esplicito: entrambi necessari.
-            val gen = KeyPairGenerator.getInstance("ED25519", "BC")
-            val pair = gen.generateKeyPair()
-            "ok (${pair.public.algorithm}, ${pair.public.format})"
-        } catch (e: Throwable) {
-            "ERROR: ${e.javaClass.simpleName}: ${e.message}"
-        }
-
-    /** Ed25519 via jsch: e il percorso che usa [generateKeyPair]. */
-    private fun probeJschEd25519(): String =
-        try {
-            val jsch = JSch()
-            val kp = KeyPair.genKeyPair(jsch, KeyPair.ED25519)
-            val pub = ByteArrayOutputStream()
-            kp.writePublicKey(pub, "jenny-selftest")
-            val fingerprint = kp.fingerPrint
-            kp.dispose()
-            "ok ($fingerprint, ${pub.size()} bytes public)"
-        } catch (e: Throwable) {
-            "ERROR: ${e.javaClass.simpleName}: ${e.message}"
-        }
-
-    /**
-     * Diagnostica on-device: stato del provider, versione di jsch, Ed25519 via
-     * JCE e via jsch. Non solleva mai — ogni passo fallito diventa una stringa
-     * nel JSON, perche un'eccezione che sale nasconderebbe i passi successivi.
-     *
-     * Serve alla verifica manuale (`adb logcat -s SshBridge:I`) delle cose che
-     * nessun test sul Mac puo rispondere: R8 non si vede finche non si installa
-     * un APK release, perche jsch istanzia gli algoritmi per nome di classe.
-     */
-    @JvmStatic
-    fun selfTest(): String {
-        val out = JSONObject()
-        out.put("provider", JSONObject(installProvider()))
-        out.put("jschVersion", try { JSch.VERSION } catch (e: Throwable) { "unknown" })
-        out.put("jceEd25519", probeJceEd25519())
-        out.put("jschEd25519", probeJschEd25519())
-        val text = out.toString()
-        Log.i(TAG, "selfTest: $text")
-        return text
-    }
-
     // ---- traduzione degli errori ------------------------------------------
 
     /**
@@ -340,7 +336,7 @@ object SshBridge {
         }
 
         val jsch = JSch()
-        jsch.setKnownHosts(knownHosts)
+        jsch.setKnownHosts(repaddedKnownHosts(File(knownHosts)))
         if (password == null) {
             jsch.addIdentity(keyPath)
         }
@@ -593,23 +589,48 @@ object SshBridge {
     /**
      * Scarica un file remoto via SFTP.
      *
-     * La dimensione si verifica PRIMA di iniziare: un cap applicato mentre si
-     * scrive lascerebbe sul telefono un file troncato a meta, indistinguibile
-     * da uno buono.
+     * La dimensione si verifica PRIMA di iniziare, cosi un file troppo grande
+     * si rifiuta senza trasferirne un byte. Ma e la dimensione che dichiara il
+     * server: il tetto vale anche per i byte che arrivano davvero
+     * ([CappedOutputStream]). Si scrive su un temporaneo accanto alla
+     * destinazione (`.<nome>.<casuale>.part`, mai un file che c'era gia') e
+     * si rinomina solo a trasferimento completo: un download
+     * interrotto — dal tetto o dalla rete — non lascia un file troncato a
+     * meta, indistinguibile da uno buono.
      */
     @JvmStatic
     fun get(request: String): String = respond {
         val req = parseRequest(request)
         val remote = req.getString("remotePath")
-        val local = req.getString("localPath")
+        val target = File(req.getString("localPath")).absoluteFile
         val maxBytes = req.getLong("maxBytes")
         val written = withSftp(req) { sftp ->
             val size = sftp.stat(remote).size
             if (size > maxBytes) {
                 throw BridgeException("io", "$remote is $size bytes, over the $maxBytes byte limit")
             }
-            sftp.get(remote, local)
-            size
+            // Un nome che non c'era: `<nome>.part` poteva essere un file
+            // dell'utente, e questo ramo lo riscriveva e poi lo cancellava.
+            // `createTempFile` lo crea lui, con una parte casuale, e non
+            // riusa mai un file che esiste. Nascosto (il punto davanti) come
+            // ogni temporaneo, per l'esploratore del workspace.
+            val part = File.createTempFile(".${target.name}.", ".part", target.parentFile)
+            val out = CappedOutputStream(part.outputStream(), maxBytes)
+            try {
+                out.use { sftp.get(remote, it) }
+                if (!part.renameTo(target)) {
+                    throw BridgeException("io", "could not move the download into place")
+                }
+            } catch (e: Throwable) {
+                part.delete()
+                // jsch avvolge l'IOException dello stream in una SftpException:
+                // il motivo vero si legge dal contatore, non dal messaggio.
+                if (out.overflowed) {
+                    throw BridgeException("io", "$remote grew past the $maxBytes byte limit")
+                }
+                throw e
+            }
+            out.count
         }
         JSONObject().put("bytes", written)
     }
@@ -682,8 +703,11 @@ object SshBridge {
             ?: throw BridgeException("io", "$host:$port offered no host key")
 
         JSONObject()
-            .put("line", "${knownHostsName(host, port)} ${keyTypeOf(blob)} ${base64(blob)}")
-            .put("fingerprint", "SHA256:" + base64(MessageDigest.getInstance("SHA-256").digest(blob)))
+            .put("line", "${knownHostsName(host, port)} ${keyTypeOf(blob)} ${knownHostsBase64(blob)}")
+            .put(
+                "fingerprint",
+                "SHA256:" + fingerprintBase64(MessageDigest.getInstance("SHA-256").digest(blob))
+            )
     }
 
     /**
@@ -727,7 +751,48 @@ object SshBridge {
         return String(blob, 4, length, Charsets.US_ASCII)
     }
 
-    private fun base64(data: ByteArray): String =
+    /**
+     * La chiave come la vuole una riga di known_hosts: base64 **con** il
+     * padding, come la scrive `ssh-keyscan`. Il blob ed25519 (51 byte) non ne
+     * ha bisogno, ed e per questo che senza padding sembrava funzionare; quelli
+     * ECDSA e RSA≥3072 si', e jsch, che al padding ci tiene, rifiuta allora
+     * l'intero file — anche le righe degli host gia pinnati.
+     */
+    private fun knownHostsBase64(data: ByteArray): String =
+        Base64.encodeToString(data, Base64.NO_WRAP)
+
+    /**
+     * Il known_hosts come lo legge jsch, con il padding rimesso alle chiavi
+     * che ne sono prive.
+     *
+     * Fino al 26/09/2026 [probeHostKey] scriveva le righe senza padding: un
+     * telefono che ha pinnato un host ECDSA o RSA≥3072 ha un file che jsch
+     * rifiuta per intero. Il file su disco non si tocca — lo scrive Python —
+     * ma lo si legge riparato, cosi quei pin tornano validi senza rifarli.
+     * Una lunghezza con resto 1 non e base64 valido: resta com'e.
+     */
+    private fun repaddedKnownHosts(file: File): InputStream {
+        val repaired = file.readLines().joinToString("\n") { line ->
+            val fields = line.trim().split(Regex("\\s+"))
+            // [@marker] host tipo chiave [commento]
+            val keyAt = if (fields.firstOrNull()?.startsWith("@") == true) 3 else 2
+            val key = fields.getOrNull(keyAt)
+            val missing = if (key == null) 0 else (4 - key.length % 4) % 4
+            if (line.trimStart().startsWith("#") || key == null || missing !in 1..2) {
+                line
+            } else {
+                fields.toMutableList().also { it[keyAt] = key + "=".repeat(missing) }
+                    .joinToString(" ")
+            }
+        }
+        return ByteArrayInputStream(repaired.toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * L'impronta `SHA256:` va invece **senza** padding: e il formato di
+     * `ssh-keygen -l` e di quel che l'utente confronta a occhio.
+     */
+    private fun fingerprintBase64(data: ByteArray): String =
         Base64.encodeToString(data, Base64.NO_WRAP or Base64.NO_PADDING)
 
     /**

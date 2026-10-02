@@ -2,7 +2,7 @@
 
 Fino all'08/09/2026 ogni posa esisteva in due copie e ``poseUrl`` rimappava il
 suffisso ``-color`` su una preferenza dell'utente. La preferenza è stata
-ritirata (v. ``.agent/mascot-faces-plan.md``, F9): qui si tiene fermo che
+ritirata: qui si tiene fermo che
 nessun path lo cerchi più, che il modulo delle preferenze non lo esporti più, e
 che un telefono che *aveva* scelto il B/N non se lo porti dietro — la chiave
 morta in ``localStorage`` si ripulisce al caricamento invece di restare a
@@ -16,11 +16,9 @@ non dentro una funzione.
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from support.js_harness import requires_node, run_js
 
 from jenny.utils.android_assets import _UI_MANIFEST
 
@@ -28,18 +26,19 @@ ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "a
 MASCOT_JS = ASSETS / "shared" / "mascot.js"
 DEAD_KEY = "jenny-mascotte-color"
 
-_NODE = shutil.which("node")
-node = pytest.mark.skipif(_NODE is None, reason="node non disponibile")
+node = requires_node
+
+
+# Importare il modulo scrive i due ancoraggi su <html> (v.
+# ``test_mascot_dock_contract.py``): senza un `document` finto l'import muore
+# prima di arrivare a quel che questi test guardano.
+_DOM = """
+globalThis.document = { documentElement: { style: { setProperty() {} } } };
+"""
 
 
 def _run(source: str) -> None:
-    proc = subprocess.run(
-        [str(_NODE), "--input-type=module", "-e", source],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    run_js(_DOM + source, timeout=30)
 
 
 def test_no_asset_path_asks_for_a_color_twin() -> None:
@@ -85,10 +84,10 @@ globalThis.localStorage = {{
 }};
 const mod = await import({json.dumps(MASCOT_JS.as_uri())});
 for (const gone of ['poseUrl', 'mascotColor', 'setMascotColor']) {{
-  assert.ok(!(gone in mod), `{{gone}} è ancora esportato`.replace('{{gone}}', gone));
+  assert.ok(!(gone in mod), `{{gone}} è again exported`.replace('{{gone}}', gone));
 }}
 // Quello che resta, resta.
-for (const kept of ['mascotVisible', 'mascotSide', 'mascotSize', 'applyMascotSize']) {{
+for (const kept of ['mascotVisible', 'mascotSize', 'applyMascotSize']) {{
   assert.ok(kept in mod, kept + ' non è più esportato');
 }}
 """)
@@ -99,7 +98,7 @@ def test_a_phone_that_had_chosen_black_and_white_gets_it_cleaned_up() -> None:
     """La chiave morta si cancella al caricamento, e non fa cambiare nient'altro."""
     _run(f"""
 import assert from 'node:assert/strict';
-const store = new Map([[{json.dumps(DEAD_KEY)}, '0'], ['jenny-mascotte-size', 'lg']]);
+const store = new Map([[{json.dumps(DEAD_KEY)}, '0'], ['jenny-mascot-size', 'lg']]);
 globalThis.localStorage = {{
   getItem(k) {{ return store.has(k) ? store.get(k) : null; }},
   setItem(k, v) {{ store.set(k, String(v)); }},
@@ -130,4 +129,35 @@ globalThis.localStorage = {{
 }};
 const mod = await import({json.dumps(MASCOT_JS.as_uri())});
 assert.ok(typeof mod.mascotSize === 'function');
+""")
+
+
+@node
+def test_every_retired_preference_is_cleaned_up_and_nothing_reads_it() -> None:
+    """Le chiavi delle preferenze ritirate (lato, modalità sviluppatore, vista
+    di Home, lingua scelta a mano) si cancellano al caricamento come il B/N —
+    e nessun sorgente della WebUI le legge più, o la pulizia cancellerebbe
+    una preferenza viva."""
+    retired = [
+        "jenny-mascotte-dock-side", "jenny-mascotte-side", "jenny-advanced-mode",
+        "jenny-home-view", "locale",
+    ]
+    for path in sorted(ASSETS.rglob("*.js")):
+        if "vendor" in path.parts or path == MASCOT_JS:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for key in retired:
+            assert f"Item('{key}'" not in text and f'Item("{key}"' not in text, (
+                f"{path.name} usa ancora {key}"
+            )
+    _run(f"""
+import assert from 'node:assert/strict';
+const store = new Map({json.dumps([[k, "x"] for k in retired] + [["tc-theme", "kyoto"]])});
+globalThis.localStorage = {{
+  getItem(k) {{ return store.has(k) ? store.get(k) : null; }},
+  setItem(k, v) {{ store.set(k, String(v)); }},
+  removeItem(k) {{ store.delete(k); }},
+}};
+await import({json.dumps(MASCOT_JS.as_uri())});
+assert.deepEqual([...store.keys()], ['tc-theme'], 'restano chiavi ritirate');
 """)

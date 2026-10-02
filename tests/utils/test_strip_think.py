@@ -293,7 +293,7 @@ class TestStripThinkDeepSeekLeaks:
         assert strip_think(self.MEASURED_LEAK) == ""
 
     def test_end_of_thinking_marker_at_start_stripped(self):
-        assert strip_think("<｜end▁of▁thinking｜>\n\nciao papi") == "ciao papi"
+        assert strip_think("<｜end▁of▁thinking｜>\n\nciao boss") == "ciao boss"
 
     def test_other_family_markers_at_start_stripped(self):
         assert strip_think("<｜Assistant｜>risposta") == "risposta"

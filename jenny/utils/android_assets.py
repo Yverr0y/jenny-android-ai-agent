@@ -61,8 +61,8 @@ _TEMPLATES_MANIFEST = [*_USER_OWNED_TEMPLATES, *_SYSTEM_PROMPT_TEMPLATES]
 # ``retire_withdrawn_templates`` qui sotto, che quel file lo riscrive. Due copie
 # di un insieme che deve restare allineato è il guasto che questo repo continua
 # a dover riparare (tre copie della regola sui prefissi interni fra
-# ``session/keys.py``, ``agent/memory.py`` e ``agent/autocompact.py`; v.
-# ``roadmap/project-sessions.md``), quindi la definizione è una sola e chi la
+# ``session/keys.py``, ``agent/memory.py`` e ``agent/autocompact.py``),
+# quindi la definizione è una sola e chi la
 # vuole la importa.
 #
 # Servono perché il riconoscimento del template è un confronto con la copia
@@ -212,17 +212,42 @@ _UI_MANIFEST = [
     "assets/apps/jenny-kit.css",
     "assets/apps/jenny-sdk.js",
     "assets/bootstrap.js",
+    "assets/home-activity.js",
+    "assets/home-app.js",
+    "assets/home-audit.js",
+    "assets/home-backup.js",
+    "assets/home-chat.js",
+    "assets/home-jenny.js",
+    "assets/home-map.js",
+    "assets/home-model.js",
+    "assets/home-notebook-pages.js",
+    "assets/home-pages.js",
+    "assets/home-strip.js",
+    "assets/home-ui-query.js",
+    "assets/home-focus.js",
+    "assets/home-flower.js",
+    "assets/home-notebook.js",
+    "assets/home-reader.js",
+    "assets/home-style.css",
+    "assets/home-move.js",
+    "assets/home-you.js",
+    "assets/home-updates.js",
+    "assets/home-who.js",
     "assets/i18n/en.json",
     "assets/i18n/it.json",
     "assets/jenny-body-front-hand.webp",
     "assets/jenny-body-front-idle.webp",
     "assets/jenny-body-front-think.webp",
+    "assets/jenny-body-side-idle.webp",
     "assets/jenny-face-front-angry.webp",
     "assets/jenny-face-front-happy.webp",
     "assets/jenny-face-front-normal-talk.webp",
     "assets/jenny-face-front-normal.webp",
     "assets/jenny-face-front-sad.webp",
     "assets/jenny-face-front-thinking.webp",
+    "assets/jenny-face-side-angry.webp",
+    "assets/jenny-face-side-happy.webp",
+    "assets/jenny-face-side-sad.webp",
     "assets/jenny-fall.webp",
     "assets/jenny-ground.webp",
     "assets/jenny-hang.webp",
@@ -234,48 +259,68 @@ _UI_MANIFEST = [
     "assets/jenny-walk1.webp",
     "assets/jenny-walk2.webp",
     "assets/mobile-app.js",
-    "assets/mobile-apps.js",
     "assets/mobile-chat.js",
     "assets/mobile-drawer.js",
-    "assets/mobile-graph.js",
     "assets/mobile-header.js",
     "assets/mobile-jenny.js",
     "assets/mobile-launcher.js",
-    "assets/mobile-onboarding.js",
     "assets/mobile-settings.js",
     "assets/mobile-style.css",
     "assets/mobile-ui-query.js",
-    "assets/mobile-wiki.js",
     "assets/mobile-workspace.js",
-    "assets/shared/advanced-mode.js",
+    # Il primo avvio: un documento suo, di nessuno dei due gusci.
+    "assets/onboarding-app.js",
+    "assets/onboarding-wizard.js",
+    "assets/shared/api-base.js",
     "assets/shared/api-client.js",
+    "assets/shared/apps-actions.js",
+    "assets/shared/apps-source.js",
     "assets/shared/backup-flow.js",
     "assets/shared/battery-exemption.js",
+    "assets/shared/bot-name.js",
     "assets/shared/commands-chip.js",
+    "assets/shared/content-link.js",
+    "assets/shared/conversation-list.js",
     "assets/shared/cron-view.js",
     "assets/shared/dialog.js",
-    "assets/shared/home-view.js",
+    "assets/shared/first-run.js",
+    "assets/shared/history-pager.js",
+    "assets/shared/horizontal-swipe.js",
     "assets/shared/i18n.js",
     "assets/shared/image-handler.js",
     "assets/shared/image-lightbox.js",
+    "assets/shared/jenny-gap.js",
+    "assets/shared/jenny-mascot.js",
+    "assets/shared/jenny-minichat.js",
     "assets/shared/keyboard.js",
     "assets/shared/launcher-rank.js",
+    "assets/shared/launcher-usage-store.js",
     "assets/shared/longpress.js",
+    "assets/shared/map-layout.js",
+    "assets/shared/markdown.js",
+    "assets/shared/native-bridge.js",
+    "assets/shared/mascot-drag.js",
     "assets/shared/mascot.js",
     "assets/shared/pinch-zoom.js",
+    "assets/shared/project-create.js",
     "assets/shared/project-delete.js",
     "assets/shared/provider-brand.js",
     "assets/shared/rpc-client.js",
+    "assets/shared/rich-content.js",
     "assets/shared/scope-chip.js",
     "assets/shared/selection.js",
+    "assets/shared/skills-view.js",
+    "assets/shared/wire-error.js",
     "assets/shared/write-switch.js",
     "assets/shared/session-manager.js",
     "assets/shared/state.js",
     "assets/shared/subagent-policy.js",
     "assets/shared/telegram-pairing.js",
     "assets/shared/theme.js",
-    "assets/shared/tree-renderer.js",
+    "assets/shared/update-flow.js",
+    "assets/shared/when.js",
     "assets/shared/type-ahead.js",
+    "assets/shared/ui-query.js",
     "assets/shared/utils.js",
     "assets/shared/wiki-search.js",
     "assets/shared/ws-manager.js",
@@ -332,78 +377,47 @@ _UI_MANIFEST = [
     "assets/vendor/fonts/uU9NCBsR6Z2vfE9aq3bh3tSDulI.woff2",
     "assets/vendor/fonts/uU9NCBsR6Z2vfE9aq3bhZ_Wmh2uX.woff2",
     "assets/vendor/highlight.js@11.11.1/LICENSE",
-    "assets/vendor/highlight.js@11.11.1/build/highlight.min.js",
-    "assets/vendor/highlight.js@11.11.1/styles/github-dark.min.css",
-    "assets/vendor/highlight.js@11.11.1/styles/github.min.css",
     "assets/vendor/katex@0.16.10/LICENSE",
     "assets/vendor/katex@0.16.10/dist/contrib/auto-render.min.js",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_AMS-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_AMS-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_AMS-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Caligraphic-Bold.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Caligraphic-Bold.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Caligraphic-Bold.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Caligraphic-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Caligraphic-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Caligraphic-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Fraktur-Bold.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Fraktur-Bold.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Fraktur-Bold.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Fraktur-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Fraktur-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Fraktur-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Bold.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Bold.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Bold.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-BoldItalic.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-BoldItalic.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-BoldItalic.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Italic.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Italic.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Italic.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Main-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Math-BoldItalic.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Math-BoldItalic.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Math-BoldItalic.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Math-Italic.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Math-Italic.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Math-Italic.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Bold.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Bold.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Bold.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Italic.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Italic.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Italic.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_SansSerif-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Script-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Script-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Script-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size1-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size1-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size1-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size2-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size2-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size2-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size3-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size3-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size3-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size4-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size4-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Size4-Regular.woff2",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Typewriter-Regular.ttf",
-    "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Typewriter-Regular.woff",
     "assets/vendor/katex@0.16.10/dist/fonts/KaTeX_Typewriter-Regular.woff2",
     "assets/vendor/katex@0.16.10/dist/katex.min.css",
     "assets/vendor/katex@0.16.10/dist/katex.min.js",
-    "assets/vendor/marked@15.0.7/LICENSE",
-    "assets/vendor/marked@15.0.7/marked.min.js",
     "assets/vendor/mermaid@10/LICENSE",
     "assets/vendor/mermaid@10/dist/mermaid.min.js",
+    "assets/vendor/highlight.js@11.11.1/build/highlight.min.js",
+    "assets/vendor/highlight.js@11.11.1/styles/github-dark.min.css",
+    "assets/vendor/highlight.js@11.11.1/styles/github.min.css",
+    "assets/vendor/marked@15.0.7/LICENSE",
+    "assets/vendor/marked@15.0.7/marked.min.js",
+    # I documenti della WebUI (v. _SHELL_DOCUMENTS in jenny/webui/ws_http.py).
+    # Chi ne aggiunge uno e si dimentica questa riga non ottiene un 404:
+    # `_serve_static` ricade su index.html e serve un'altra interfaccia.
+    # ``index.html`` e' **la casa**: e' il documento che il guscio nativo carica
+    # (GATEWAY_PATH = "/html-mobile/") e su cui ricade ogni percorso ignoto.
+    # L'officina ha il suo nome e si raggiunge di proposito; l'onboarding e' il
+    # primo avvio, e ci rimandano entrambe quando non c'e' ancora un provider.
     "index.html",
+    "workshop.html",
+    "onboarding.html",
 ]
 
 _extracted_registry: dict[str, Path] = {}
@@ -469,6 +483,23 @@ def _get_manifest(package: str) -> list[str] | None:
     return None
 
 
+def bundled_skill_names() -> frozenset[str]:
+    """I nomi delle skill che vengono con l'app.
+
+    Sono le cartelle di ``_SKILLS_MANIFEST`` che hanno un ``SKILL.md``: lo stesso
+    elenco che ``sync_workspace_templates`` ri-estrae in ``workspace/skills/`` a
+    ogni avvio, **sovrascrivendole**. Per questo chi deve sapere se una modifica
+    a una skill sopravvive al riavvio chiede qui, e non a ``source`` — che per
+    le skill estratte e per quelle scritte dall'utente vale ``"workspace"`` in
+    entrambi i casi.
+    """
+    return frozenset(
+        entry.split("/", 1)[0]
+        for entry in _SKILLS_MANIFEST
+        if entry.count("/") == 1 and entry.endswith("/SKILL.md")
+    )
+
+
 def _write_bytes_force(target: Path, data: bytes) -> None:
     """Scrive *data* su *target*, sopravvivendo a un file mirror read-only.
 
@@ -490,6 +521,40 @@ def _write_bytes_force(target: Path, data: bytes) -> None:
     target.write_bytes(data)
 
 
+def _already_identical(target: Path, data: bytes) -> bool:
+    """*target* contiene gia' esattamente *data*?
+
+    Serve a non riscrivere un file che non e' cambiato, ed e' un risparmio piu'
+    grosso di quanto sembri. I prompt di sistema, la UI e le skill si estraggono
+    **senza** ``skip_existing`` di proposito — e' l'unico modo in cui la
+    correzione di un prompt arriva su un telefono gia' installato (v.
+    ``sync_workspace_templates``) — ma "riscrivere sempre" e "riscrivere quando
+    e' cambiato" mantengono la stessa promessa: il byte diverso atterra in tutti
+    e due i casi. La differenza e' solo in quante scritture su flash costa un
+    avvio in cui non e' cambiato niente, cioe' **tutti** gli avvii tranne quello
+    dopo un aggiornamento.
+
+    Misurato sul Titan 2 il 20/09/2026: 272 file riscritti per passata, e su
+    Android le passate sono due (``android_entry`` e ``runtime/container``, due
+    entry point che non sapevano l'uno dell'altro) — 544 scritture a ogni
+    accensione per lasciare il disco come l'avevano trovato.
+
+    La taglia si guarda per prima perche' risponde da sola nel caso che conta —
+    un file cambiato di solito cambia anche di lunghezza — e costa una ``stat``
+    invece di una lettura intera.
+
+    Qualunque guaio in lettura (file assente, permessi, un symlink rotto)
+    risponde "no": non sapere vuol dire scrivere, che e' il comportamento di
+    prima e non puo' peggiorare niente.
+    """
+    try:
+        if target.stat().st_size != len(data):
+            return False
+        return target.read_bytes() == data
+    except OSError:
+        return False
+
+
 def extract_package_dir(
     package: str,
     dest: Path,
@@ -507,7 +572,7 @@ def extract_package_dir(
     """
     manifest = _get_manifest(package)
     if manifest is None:
-        # Design a manifest esplicito (vedi .agent/gotchas.md): un package senza
+        # Design a manifest esplicito: un package senza
         # manifest non deve mai finire in un walk silenzioso, che sul dispositivo
         # farebbe arrivare/mancare file senza traccia. Fallire esplicito.
         raise ValueError(
@@ -537,6 +602,13 @@ def extract_package_dir(
             continue
         data = read_asset(package, rel_path)
         if data is not None:
+            # Gia' identico: niente da scrivere. Il conteggio diventa cosi'
+            # "quanti file sono **cambiati**" invece di "quanti ne ho riscritti
+            # comunque" — che e' anche la domanda a cui quel log serviva
+            # rispondere (v. l'intestazione di tests/utils/test_template_refresh.py:
+            # «tre prompt modificati e uno aggiunto, il log diceva Extracted 1»).
+            if _already_identical(target, data):
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
             _write_bytes_force(target, data)
             count += 1
@@ -649,6 +721,49 @@ def retire_withdrawn_templates(dest: Path) -> list[str]:
             name, label,
         )
     return rewritten
+
+
+#: I suffissi del codice della WebUI: gli stessi che ``ws_http`` serve dai byte
+#: canonici del package. Solo questi si ritirano da ``ui/``.
+_UI_CODE_SUFFIXES = (".html", ".js", ".css")
+
+
+def retire_withdrawn_ui_files(ui_dir: Path) -> list[str]:
+    """Toglie da ``workspace/ui`` il codice della WebUI che il package non spedisce piu'.
+
+    ``extract_package_dir`` scrive i file del manifest e non cancella mai niente:
+    un file rinominato o tolto restava sul disco con il nome vecchio, e il
+    gateway lo serviva ancora, perche' ``_serve_static`` ricade sul disco per
+    tutto cio' che il manifest non conosce. Misurato sul Titan 2 il 25/09/2026,
+    dopo il rinomino in inglese: ``officina.html`` e i ``casa-*.js`` erano ancora
+    li', e ``/html-mobile/officina.html`` rispondeva con l'officina di prima
+    sopra i moduli di adesso.
+
+    Il perimetro e' stretto di proposito: solo HTML, JS e CSS, cioe' codice
+    nostro che fuori dal manifest non ha motivo di esistere; font, immagini e
+    qualunque altra cosa restano. Un symlink non si segue e non si toglie.
+    ``ui/`` non e' una cartella dell'utente (``workspace_files`` la nasconde),
+    quindi non c'e' niente di suo da salvare.
+    """
+    if not ui_dir.is_dir():
+        return []
+    shipped = set(_UI_MANIFEST)
+    removed: list[str] = []
+    for path in sorted(ui_dir.rglob("*")):
+        if path.suffix not in _UI_CODE_SUFFIXES or path.is_symlink() or not path.is_file():
+            continue
+        rel = path.relative_to(ui_dir).as_posix()
+        if rel in shipped:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            logger.opt(exception=True).warning("Withdrawn UI file not removed: {}", rel)
+            continue
+        removed.append(rel)
+    if removed:
+        logger.info("Removed {} withdrawn UI files: {}", len(removed), ", ".join(removed))
+    return removed
 
 
 _JENNY_SRC_KEY = "jenny_src"

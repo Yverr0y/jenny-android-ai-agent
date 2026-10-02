@@ -2,7 +2,7 @@
 
 B8 ha dato ai monitor un terzo stato — "non ho potuto controllare" — ma si è
 fermato prima dell'heartbeat, che è però il posto dove il guasto è stato
-osservato davvero: il controllo delle piante gira da ``HEARTBEAT.md``, non da un
+osservato davvero: il controllo della pioggia gira da ``HEARTBEAT.md``, non da un
 job ``mode='monitor'``.
 
 La differenza che rende l'heartbeat un problema a sé è la granularità. Un run
@@ -187,8 +187,7 @@ def _uncommented_lines(content: str, source: str | None = None) -> Iterator[tupl
     righe — vive qui e in nessun altro posto. I lettori di questo formato sono
     due (i task, e il testo che va nel prompt) e devono restare d'accordo: se
     divergessero, al modello finirebbe sotto gli occhi un task che il parser non
-    conta, o viceversa. È lo stesso motivo per cui ``heartbeat_has_active_tasks``
-    non ha una scansione propria.
+    conta, o viceversa.
 
     Le righe di intestazione escono da qui come tutte le altre — è chi chiama a
     decidere se sono contenuto o solo struttura — e lo stato si aggiorna **prima**
@@ -261,10 +260,8 @@ def _uncommented_lines(content: str, source: str | None = None) -> Iterator[tupl
 def _active_task_lines(content: str) -> Iterator[str]:
     """Righe della sezione "Active Tasks", righe vuote comprese.
 
-    Stessa scansione che ``heartbeat_has_active_tasks`` faceva per rispondere
-    sì/no — intestazioni e commenti HTML fuori — con l'unica differenza che le
-    righe vuote della sezione vengono restituite: servono a separare un task
-    dall'altro.
+    Intestazioni e commenti HTML fuori; le righe vuote della sezione invece
+    vengono restituite: servono a separare un task dall'altro.
     """
     for line, in_active_section in _uncommented_lines(content):
         if not in_active_section:
@@ -283,9 +280,9 @@ def active_section_text(content: str, source: str | None = None) -> str:
     nostri: il template ne spedisce uno che spiega come funziona il file, e finché
     il prompt si costruiva dal file grezzo il modello se lo rileggeva a ogni run,
     per sempre, su ogni installazione. Le intestazioni **no**: un
-    ``### WaterBot: monitoraggio umidità piante`` sopra quattro righe è ciò che
+    ``### RainCheck: allerta pioggia nelle città`` sopra quattro righe è ciò che
     dice di cosa parlano quelle righe, e toglierlo lascerebbe un "notifica una
-    sola volta per pianta" senza soggetto.
+    sola volta per città" senza soggetto.
 
     Quindi qui esce tutto il resto verbatim — intestazioni, righe vuote,
     rientri — e la sola cosa che ci si aggiunge è togliere le righe vuote agli
@@ -580,8 +577,8 @@ def escalation_block(tasks: list[HeartbeatTask]) -> str:
 
     Un messaggio solo per tutti i task rotti: N task che si rompono insieme —
     tipicamente per la stessa causa, un host giù — devono costare un'interruzione
-    sola. E l'avviso nomina il controllo, non l'heartbeat: "il controllo delle
-    piante non parte" è utile, "l'heartbeat è rotto" no.
+    sola. E l'avviso nomina il controllo, non l'heartbeat: "il controllo della
+    pioggia non parte" è utile, "l'heartbeat è rotto" no.
 
     Il conto sta su ogni riga, e non una volta sola nella frase d'apertura, per
     due motivi che sono lo stesso. Non è ``ESCALATE_AFTER_FAILURES``: la soglia
@@ -769,7 +766,7 @@ def _count_failure(
         # spontaneo e uno richiesto sono lo stesso messaggio. Misurato sul Titan
         # 2 il 2026-08-16: al secondo ciclo di guasto, con il blocco di
         # escalation ancora assente dal prompt, il modello ha chiamato
-        # ``message`` di testa sua ("il server WaterBot non si raggiunge…").
+        # ``message`` di testa sua ("il server RainCheck non si raggiunge…").
         #
         # Il soggetto arriva da ``CHECK_WARNED``, e non più da ``spoke`` più
         # un'euristica. ``spoke`` riguarda il TURNO e non il task: era vero per

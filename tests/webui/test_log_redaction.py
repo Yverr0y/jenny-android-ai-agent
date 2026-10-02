@@ -3,28 +3,20 @@
 Secrets travel in query strings (``?token=…``, ``?api_key=…``). Logging today is
 already prudent, but nothing *guaranteed* it stayed that way. These tests lock in
 the invariant: the redaction helper masks secret values, and a real onboarding
-route call never emits the raw ``api_key`` into the logs.
+save never emits the raw ``api_key`` into the logs.
 """
 
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock
 
 import pytest
 from loguru import logger as loguru_logger
-from websockets.http11 import Headers
-from websockets.http11 import Request as WsRequest
 
-from jenny.channels.http_utils import (
-    http_error,
-    http_json_response,
-    parse_query,
-    redact_query_secrets,
-)
+from jenny.channels.http_utils import redact_query_secrets
 from jenny.runtime.context import get_runtime_context
 from jenny.session.manager import SessionManager
-from jenny.webui.settings_routes import WebUISettingsRouter
+from jenny.webui.commands import CommandContext, dispatch_command
 
 # ---------------------------------------------------------------------------
 # Unit: redact_query_secrets
@@ -75,31 +67,22 @@ def test_redact_masks_multiple_secrets():
 
 
 # ---------------------------------------------------------------------------
-# Regression: onboarding route must not leak the api_key value into logs
+# Regression: onboarding must not leak the api_key value into logs
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_onboarding_route_does_not_log_api_key_value(
+async def test_onboarding_does_not_log_api_key_value(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config_path = tmp_path / "config.json"
     monkeypatch.setattr(get_runtime_context(), "config_path", config_path)
 
     secret = "sk-live-DO-NOT-LOG-me-4a2b7"
-    path = (
-        "/api/onboarding/save?provider_name=openai&format=openai_compat"
-        f"&model=gpt-x&api_key={secret}"
-    )
-    request = WsRequest(path=path, headers=Headers())
-
-    router = WebUISettingsRouter(
-        bus=MagicMock(),
-        logger=loguru_logger,
-        check_api_token=lambda _req: True,
-        parse_query=parse_query,
-        json_response=http_json_response,
-        error_response=http_error,
+    ctx = CommandContext(
+        get_workspace_root=lambda: tmp_path,
+        invalidate_session=lambda _key: None,
+        busy_session_keys=lambda: (),
         session_manager=SessionManager(tmp_path),
         onboarding_event=asyncio.Event(),
     )
@@ -107,10 +90,19 @@ async def test_onboarding_route_does_not_log_api_key_value(
     captured: list[str] = []
     sink_id = loguru_logger.add(lambda m: captured.append(str(m)), level="DEBUG")
     try:
-        await router._handle_onboarding_save(request)
+        await dispatch_command(
+            ctx,
+            "onboarding.save",
+            {
+                "provider_name": "openai",
+                "format": "openai_compat",
+                "model": "gpt-x",
+                "api_key": secret,
+            },
+        )
     finally:
         loguru_logger.remove(sink_id)
 
     joined = "".join(captured)
-    assert joined, "expected the onboarding route to emit at least one log line"
+    assert joined, "expected the onboarding command to emit at least one log line"
     assert secret not in joined

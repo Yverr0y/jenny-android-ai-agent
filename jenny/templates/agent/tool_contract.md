@@ -1,21 +1,21 @@
-{# Due condizioni, e servono entrambe.
+{# Two conditions, and both are needed.
 
-   ``has('nome')`` dice che il tool esiste nel registry di *questo turno* (la
-   passa ``ContextBuilder.build_system_prompt``); ``doer`` dice che fare il lavoro
-   è mestiere di questo turno, invece di delegarlo. Le sezioni che erano chiuse
-   sul solo modo restano tali e guadagnano il gate sul tool, in congiunzione.
+   ``has('name')`` says the tool exists in *this turn's* registry (passed in by
+   ``ContextBuilder.build_system_prompt``); ``doer`` says doing the work is this
+   turn's job, rather than delegating it. Sections that used to be gated on the
+   mode alone stay that way and gain the tool gate as well, in conjunction.
 
-   Tenerne una sola è il difetto che questo file aveva. Con il solo modo, Dream
-   (``orchestrator=False``, quattro tool in tutto) si prendeva ~6 kB di istruzioni
-   su ``python_exec``, i tool web e ``download_file`` — non solo contesto pagato a
-   vuoto: invita a chiamare quel che non c'è, e fra quelle righe c'era "deleting
-   is the one file operation that needs ``python_exec``", detta all'unico agente a
-   cui si chiede di cancellare e che ``python_exec`` non ha. Con il solo ``has``,
-   un orchestratore dal registry sconosciuto si riprenderebbe le istruzioni
-   sull'esecuzione che non deve avere.
+   Keeping only one of the two was this file's defect. With the mode alone, Dream
+   (``orchestrator=False``, four tools in all) received ~6 kB of instructions on
+   ``python_exec``, the web tools and ``download_file`` — not just context paid
+   for nothing: it invites calls to tools that are not there, and among those
+   lines was "deleting is the one file operation that needs ``python_exec``",
+   said to the only agent that is asked to delete and has no ``python_exec``.
+   With ``has`` alone, an orchestrator with an unknown registry would get back the
+   execution instructions it must not have.
 
-   Registry sconosciuto (``None``) vuol dire "non lo so", non "non c'è": ``has``
-   risponde sì a tutto e il file resta quello di prima. #}
+   An unknown registry (``None``) means "I don't know", not "it isn't there":
+   ``has`` answers yes to everything and the file stays as it was before. #}
 {% set doer = not orchestrator %}
 # Tool Usage Notes
 
@@ -32,10 +32,10 @@ Tool signatures are provided automatically via function calling. This section do
 - After meaningful changes, verify with the smallest reliable check: re-read changed state, run targeted tests, or inspect command output.
 - Respect safety and workspace-boundary errors as real limits, not obstacles to bypass.
 
-{# ``locators``: i tool con cui si *trova* un file. Un registry che non ne ha
-   nessuno — Dream, che legge e scrive tre percorsi noti — non deve vedere né
-   questa sezione né la parola "locate" nel ciclo di lavoro qui sotto: era il
-   modo più diretto di suggerirgli una chiamata a un tool inesistente. #}
+{# ``locators``: the tools that *find* a file. A registry with none of them —
+   Dream, which reads and writes three known paths — must see neither this
+   section nor the word "locate" in the work cycle below: that was the most
+   direct way of suggesting a call to a tool that does not exist. #}
 {% set locators = [] %}
 {% for t in ['find_files', 'list_dir', 'grep'] if has(t) %}{% set _ = locators.append(t) %}{% endfor %}
 {% if locators or has('get_source') %}
@@ -179,11 +179,10 @@ This platform has no shell, subprocess, or CLI tools. The only code-execution to
 - Content with a home of its own keeps it: `downloads/`, `memory/`, `wikis/`, `apps/`, `skills/`.
 {% endif %}
 
-{# Il routing dei quaderni sta qui, nella coda che nessun gate tocca, e non in un
-   file dell'utente: quelli si creano al primo avvio e non si aggiornano mai più.
-   Prima esisteva soltanto nella scheda di aiuto della WebUI
-   (``ui/assets/i18n/*.json``), cioè in un posto che nessun modello legge: a
-   "ricordati questo" si scriveva dove capitava. #}
+{# Notebook routing lives here, in the tail no gate touches, and not in a user
+   file: those are created on first run and never updated again. It used to
+   exist only in the WebUI's help sheet (``ui/assets/i18n/*.json``), a place no
+   model reads: "remember this" got written wherever it happened to land. #}
 {% if not project %}
 ## Which File a Fact Belongs In
 

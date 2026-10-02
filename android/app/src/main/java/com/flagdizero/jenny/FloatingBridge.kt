@@ -1,12 +1,6 @@
 package com.flagdizero.jenny
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Bridge per la mascotte flottante, esposto a Python via Chaquopy
@@ -24,15 +18,19 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * **Il salto sul main thread è qui e non nel controller.** Python entra da un
  * thread di `asyncio.to_thread`, e toccare delle `View` da lì sarebbe un
- * `CalledFromWrongThreadException`. Il latch serve a rispondere davvero — se il
+ * `CalledFromWrongThreadException`. L'attesa serve a rispondere davvero — se il
  * risultato tornasse ottimisticamente, Python registrerebbe come mostrato un
  * fumetto che non è mai comparso, e un log che mente su questo costa una
  * diagnosi intera.
  *
- * Il tetto sull'attesa è corto di proposito: dall'altra parte c'è il loop del
- * gateway, fermo su questa chiamata dentro un `wait_for`. Se il main Looper è
- * occupato più di così, la cosa giusta è tornare `false` e lasciar andare il
- * turno — la risposta è comunque nella conversazione.
+ * Il tetto sull'attesa è corto di proposito: dall'altra parte c'è un thread di
+ * `asyncio.to_thread`, e il turno aspetta la sua risposta. Se il main Looper è
+ * occupato più di così si torna `false` e si lascia andare il turno — la
+ * risposta è comunque nella conversazione. E `false` resta vero: a tetto
+ * scaduto [MainHop] toglie il blocco dalla coda, quindi il fumetto non compare
+ * dopo (né la mascotte si accende dopo un «non applicato»). Fino al 26/09/2026
+ * il blocco girava lo stesso, in ritardo, e il `false` mentiva nell'altro
+ * verso.
  */
 class FloatingBridge(context: Context) {
 
@@ -42,33 +40,10 @@ class FloatingBridge(context: Context) {
         /** Attesa massima per il giro sul main thread. */
         private const val MAIN_HOP_TIMEOUT_MS = 3_000L
 
-        /** Esegue *block* sul main thread e ne ritorna l'esito.
-         *
-         *  Se siamo già sul main lo esegue sul posto: un `post` seguito da un
-         *  `await` sarebbe un blocco su sé stessi. Non dovrebbe capitare —
-         *  Python chiama sempre da un thread di lavoro — ma un deadlock è un
-         *  guasto troppo silenzioso per lasciarlo dipendere da quel dovrebbe.
-         */
-        private fun onMain(block: () -> Boolean): Boolean {
-            if (Looper.myLooper() == Looper.getMainLooper()) return block()
-            val result = AtomicBoolean(false)
-            val done = CountDownLatch(1)
-            Handler(Looper.getMainLooper()).post {
-                try {
-                    result.set(block())
-                } catch (e: Exception) {
-                    Log.e(TAG, "Floating bridge call failed", e)
-                } finally {
-                    done.countDown()
-                }
-            }
-            return if (done.await(MAIN_HOP_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                result.get()
-            } else {
-                Log.i(TAG, "Floating bridge call timed out on the main thread")
-                false
-            }
-        }
+        /** Esegue *block* sul main thread (v. [MainHop]); `false` se non ci
+         *  riesce in tempo. */
+        private fun onMain(block: () -> Boolean): Boolean =
+            MainHop.call(MAIN_HOP_TIMEOUT_MS, false, TAG, block = block)
     }
 
     private val appContext = context.applicationContext

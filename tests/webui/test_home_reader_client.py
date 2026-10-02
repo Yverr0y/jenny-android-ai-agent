@@ -1,0 +1,176 @@
+"""Dove porta un collegamento dentro una pagina del quaderno.
+
+Il testo lo rende il server; qui c'e' l'unica logica che la casa ci mette
+attorno, e il suo valore sta nella terza uscita: **`null` vuol dire «non da
+qui»**, e chi chiama lo deve dire invece di ingoiarlo. Un link inerte che non
+spiega perche' e' il difetto che l'officina ha gia' avuto e riparato.
+
+Due cose si rifiutano e non si normalizzano — la risalita (`..`) e il percorso
+assoluto. Il server la sua guardia ce l'ha (``safe_wiki_page_path``), e due
+guardie che normalizzano in modo diverso sono il modo classico di aprirsi un
+buco in mezzo: qui si dice solo di no.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from support.home_dom import requires_jsdom, run_home
+from support.js_harness import function, requires_node, run_js
+
+ASSETS = Path(__file__).resolve().parents[2] / "jenny" / "templates" / "ui" / "assets"
+READER_JS = ASSETS / "home-reader.js"
+CONTENT_LINK_JS = ASSETS / "shared" / "content-link.js"
+
+
+pytestmark = requires_node
+
+
+def _run(script: str) -> None:
+    src = READER_JS.read_text(encoding="utf-8")
+    harness = (
+        "import assert from 'node:assert/strict';\n"
+        # La regola degli indirizzi assoluti e' dei due gusci: si importa vera.
+        f"const {{ contentLinkTarget }} = await import('{CONTENT_LINK_JS.as_uri()}');\n"
+        "globalThis.location = { href: 'http://127.0.0.1:18790/html-mobile/index.html',"
+        " origin: 'http://127.0.0.1:18790' };\n"
+        + function(src, "resolveRelativePage")
+        + "\n"
+        + function(src, "linkTarget")
+        + "\n"
+    )
+    run_js(harness + script)
+
+
+def test_a_relative_link_resolves_against_the_page_that_holds_it() -> None:
+    _run("""
+      assert.equal(resolveRelativePage('concepts/orto.md', 'note.md'), 'concepts/note.md');
+      assert.equal(resolveRelativePage('concepts/orto.md', './note.md'), 'concepts/note.md');
+      assert.equal(resolveRelativePage('orto.md', 'sub/note.md'), 'sub/note.md');
+      assert.equal(resolveRelativePage('concepts/orto.md', 'note.md#taglio'),
+                   'concepts/note.md');
+    """)
+
+
+def test_what_is_not_a_page_of_this_notebook_is_refused() -> None:
+    _run("""
+      for (const href of ['../fuori.md', '/assoluto.md', 'http://x/y.md',
+                          'mailto:a@b.md', 'immagine.png', '']) {
+        assert.equal(resolveRelativePage('concepts/orto.md', href), null, href);
+      }
+    """)
+
+
+def test_a_wikilink_of_this_notebook_opens_its_page() -> None:
+    _run("""
+      const t = linkTarget({
+        href: '?wiki=orto&page=entities/rosmarino.md',
+        wikilink: true, notebook: 'orto', currentPath: 'index.md',
+      });
+      assert.deepEqual(t, { kind: 'page', path: 'entities/rosmarino.md' });
+    """)
+
+
+def test_a_wikilink_to_another_notebook_is_not_opened_from_here() -> None:
+    """In casa una pagina appartiene alla conversazione in cui sei: saltare in
+    un'altra stanza senza dirlo e' una scorciatoia che poi non si sa disfare."""
+    _run("""
+      const t = linkTarget({
+        href: '?wiki=erbe&page=x.md',
+        wikilink: true, notebook: 'orto', currentPath: 'index.md',
+      });
+      assert.equal(t, null);
+    """)
+
+
+def test_the_web_goes_out_of_the_webview() -> None:
+    _run("""
+      assert.deepEqual(
+        linkTarget({ href: 'https://example.org/a', notebook: 'orto', currentPath: 'i.md' }),
+        { kind: 'external', href: 'https://example.org/a' },
+      );
+      assert.equal(
+        linkTarget({ href: 'mailto:a@b.c', notebook: 'orto', currentPath: 'i.md' }).kind,
+        'external',
+      );
+    """)
+
+
+def test_a_link_to_the_gateway_is_not_the_web() -> None:
+    """Cominciare per ``http`` non basta a essere fuori. Un indirizzo assoluto
+    all'origine del gateway passava per esterno, e ``window.open`` lo caricava
+    **dentro** la WebView: la casa ricaricata senza ``#bs=``, de-autenticata."""
+    _run("""
+      for (const href of ['http://127.0.0.1:18790/html-mobile/workshop.html',
+                          'http://127.0.0.1:18790/html-mobile/?mode=chat',
+                          '//127.0.0.1:18790/html-mobile/index.html',
+                          'javascript:alert(1)']) {
+        assert.equal(linkTarget({ href, notebook: 'orto', currentPath: 'i.md' }), null, href);
+      }
+    """)
+
+
+def test_an_anchor_stays_on_the_page() -> None:
+    _run("""
+      assert.deepEqual(
+        linkTarget({ href: '#sintomi', notebook: 'orto', currentPath: 'i.md' }),
+        { kind: 'hash', id: 'sintomi' },
+      );
+    """)
+
+
+def test_a_dead_link_is_null_and_not_a_guess() -> None:
+    """Un wikilink che il renderer non ha risolto resta un href qualunque: si
+    dice che non si apre, non si prova a indovinare una pagina."""
+    _run("""
+      assert.equal(
+        linkTarget({ href: 'Pagina Che Non Esiste', wikilink: true,
+                     notebook: 'orto', currentPath: 'i.md' }),
+        null,
+      );
+      assert.equal(linkTarget({ href: '', notebook: 'orto', currentPath: 'i.md' }), null);
+    """)
+
+
+# ── Il lettore vero, in jsdom ────────────────────────────────────────────────
+
+# DOMPurify vero, legato alla finestra di jsdom: e' lui che rinomina gli id.
+_PURIFY_BOOT = f"""
+import assert from 'node:assert/strict';
+import {{ createRequire }} from 'node:module';
+import {{ boot, tick, routes }} from './boot.mjs';
+const require = createRequire(import.meta.url);
+const createDOMPurify = require({json.dumps(str(ASSETS / "vendor" / "dompurify@3" / "purify.min.js"))});
+globalThis.DOMPurify = createDOMPurify(window);
+window.DOMPurify = globalThis.DOMPurify;
+const scrolled = [];
+window.HTMLElement.prototype.scrollIntoView = function () {{ scrolled.push(this); }};
+"""
+
+
+@requires_jsdom
+def test_a_table_of_contents_link_scrolls_to_its_heading() -> None:
+    """L'indice (`toc`) del server porta ai titoli con ``#id``; il sanificatore
+    li fa uscire ``user-content-…``. Il lettore cercava l'id com'e'
+    scritto nell'href e non trovava niente: l'indice era morto."""
+    run_home(
+        _PURIFY_BOOT
+        + """
+routes['/api/page'] = {
+  title: 'Orto',
+  raw: '# Orto',
+  html: '<nav class="toc"><a href="#semina">Semina</a></nav>'
+    + '<h2 id="semina">Semina</h2><p>testo</p>',
+};
+const app = await boot();
+await tick(30);
+await app.reader.load('orto', 'index.md', 'Orto');
+const body = document.getElementById('home-reader-body');
+const heading = body.querySelector('h2');
+assert.equal(heading.id, 'user-content-semina', body.innerHTML);
+body.querySelector('.toc a').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+assert.equal(scrolled.length, 1, 'l\u2019indice non ha fatto scorrere');
+assert.equal(scrolled[0], heading);
+"""
+    )

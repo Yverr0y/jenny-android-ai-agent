@@ -41,7 +41,7 @@ from typing import Any
 
 from loguru import logger
 
-from jenny.channels.http_utils import parse_flag
+from jenny.channels.http_utils import QueryParams, parse_flag
 from jenny.config import store
 from jenny.config.loader import load_config
 from jenny.config.schema import Config, DreamConfig, GardenerConfig
@@ -53,8 +53,6 @@ from jenny.webui.settings_api import (
     _parse_int,
     settings_payload,
 )
-
-QueryParams = dict[str, list[str]]
 
 # Il pavimento operativo della cadenza di review. **Non e' nello schema**
 # (``review_every_runs`` resta ``ge=1``) perche' un ``config.json`` restaurato
@@ -72,11 +70,7 @@ QueryParams = dict[str, list[str]]
 REVIEW_CADENCE_FLOOR = 12
 
 
-
-
 # ── Lettura ──────────────────────────────────────────────────────────────────
-
-
 
 
 def _number(model: type, attr: str, value: Any) -> dict[str, Any]:
@@ -205,14 +199,6 @@ def _first(query: QueryParams, *names: str) -> str | None:
 def _flag(query: QueryParams, *names: str) -> bool:
     """Un flag di conferma: vero solo se dichiarato esplicitamente vero."""
     return parse_flag(_first(query, *names))
-
-
-
-
-
-
-
-
 
 
 # Le chiavi che, se presenti, chiedono un ri-armo del job di quel lavoratore.

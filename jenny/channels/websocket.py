@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
 import uuid
 from pathlib import Path
@@ -20,6 +19,7 @@ from jenny.config.paths import get_uploads_dir
 from jenny.config.schema import Base
 from jenny.pydantic_compat import Field, field_validator, model_validator
 from jenny.security.workspace_access import WORKSPACE_READONLY_METADATA_KEY
+from jenny.session.manager import scrub_lone_surrogates
 from jenny.session.webui_turns import websocket_turn_wall_started_at
 
 if TYPE_CHECKING:
@@ -36,6 +36,9 @@ from jenny.channels.http_utils import (
 )
 from jenny.channels.http_utils import (
     query_first as _query_first,
+)
+from jenny.channels.http_utils import (
+    secret_matches as _secret_matches,
 )
 from jenny.channels.subagent_activity_wire import (
     UNWATCH_REASON_CLIENT,
@@ -61,7 +64,7 @@ from jenny.channels.ws_parsing import (
 from jenny.channels.ws_sender import OutboundSenderMixin
 from jenny.session.keys import (
     PROJECT_SESSION_PREFIX,
-    is_project_session_key,
+    is_project_chat_id,
     is_valid_project_name,
 )
 from jenny.utils.media_decode import (
@@ -69,6 +72,13 @@ from jenny.utils.media_decode import (
     save_base64_data_url,
 )
 from jenny.webui.metadata import WEBUI_DEFAULT_CHAT_ID
+
+# Per ``websockets`` una richiesta HTTP è un handshake mai concluso, e
+# ``open_timeout`` (10 s di default) lo taglia chiudendo la connessione senza
+# risposta: ogni route ``/api/`` più lunga di così arrivava al client come
+# «Failed to fetch». L'export di un backup da 310 MB sul telefono ne dura di
+# più. Il server ascolta su localhost, quindi un tetto largo non apre niente.
+_HTTP_OPEN_TIMEOUT_S = 600.0
 
 
 class WebSocketConfig(Base):
@@ -126,12 +136,10 @@ class WebSocketConfig(Base):
         )
 
 
-
 class WebSocketChannel(OutboundSenderMixin):
     """Run a local WebSocket server; forward text/JSON messages to the message bus."""
 
     name = "websocket"
-    display_name = "WebSocket"
 
     def __init__(
         self,
@@ -237,6 +245,17 @@ class WebSocketChannel(OutboundSenderMixin):
         self._subs.setdefault(chat_id, set()).add(connection)
         self._conn_chats.setdefault(connection, set()).add(chat_id)
 
+    def _detach(self, connection: Any, chat_id: str) -> None:
+        """Idempotently unsubscribe *connection* from *chat_id*."""
+        subs = self._subs.get(chat_id)
+        if subs is not None:
+            subs.discard(connection)
+            if not subs:
+                self._subs.pop(chat_id, None)
+        chats = self._conn_chats.get(connection)
+        if chats is not None:
+            chats.discard(chat_id)
+
     def _cleanup_connection(self, connection: Any) -> None:
         """Remove *connection* from every subscription set; safe to call multiple times."""
         # Punto di uscita unico: ci passano la disconnessione pulita (il
@@ -334,7 +353,7 @@ class WebSocketChannel(OutboundSenderMixin):
         """
         supplied = _query_first(query, "token")
         secret = self.config.token_issue_secret.strip()
-        token_matches = bool(secret and supplied and hmac.compare_digest(supplied, secret))
+        token_matches = bool(secret and supplied and _secret_matches(supplied, secret))
 
         if self.config.websocket_requires_token:
             if not token_matches:
@@ -383,6 +402,7 @@ class WebSocketChannel(OutboundSenderMixin):
                 self.config.host,
                 self.config.port,
                 process_request=process_request,
+                open_timeout=_HTTP_OPEN_TIMEOUT_S,
                 max_size=self.config.max_message_bytes,
                 ping_interval=self.config.ping_interval_s,
                 ping_timeout=self.config.ping_timeout_s,
@@ -571,7 +591,7 @@ class WebSocketChannel(OutboundSenderMixin):
         ``WEBUI_DEFAULT_CHAT_ID``: era il modo in cui la collassata "una sola
         sessione" era stata implementata, e va bene finche' di conversazioni ce
         n'e' una. Con le sessioni-progetto diventa il punto in cui un messaggio
-        mandato a ``project:patreon`` finiva nella chat personale — e non lo
+        mandato a ``project:ricette`` finiva nella chat personale — e non lo
         diceva nessuno, perche' dal lato client sembrava partito.
 
         L'elenco delle forme accettate resta chiuso, e la verifica del nome e'
@@ -583,7 +603,7 @@ class WebSocketChannel(OutboundSenderMixin):
         **Ma per un ``chat_id`` che *e'* nella forma ``project:`` e sbaglia solo
         il nome, la caduta sulla chat personale era la risposta sbagliata**, e
         ritorna ``None`` — cioe' il frame va rifiutato. Un nome come
-        ``Ricerca ETF`` o ``citta``-con-l'accento non passa
+        ``Ricerca ETNA`` o ``citta``-con-l'accento non passa
         ``is_valid_project_name``, e il frame che lo portava finiva sulla
         conversazione personale: scope ``default()`` (l'installazione intera
         scrivibile), ``session_kind`` ``personal`` (quindi il contenuto alimenta
@@ -600,7 +620,7 @@ class WebSocketChannel(OutboundSenderMixin):
         silenzio e' peggio di dire no.
         """
         raw = envelope.get("chat_id")
-        if not isinstance(raw, str) or not is_project_session_key(raw):
+        if not isinstance(raw, str) or not is_project_chat_id(raw):
             return WEBUI_DEFAULT_CHAT_ID
         if not is_valid_project_name(raw[len(PROJECT_SESSION_PREFIX):]):
             return None
@@ -632,7 +652,7 @@ class WebSocketChannel(OutboundSenderMixin):
         client_id: str,
         envelope: dict[str, Any],
     ) -> None:
-        """Route one typed inbound envelope (``attach`` / ``message`` / ...)."""
+        """Route one typed inbound envelope (``attach`` / ``detach`` / ``message`` / ...)."""
         t = envelope.get("type")
         if t == "attach":
             cid = self._envelope_chat_id(envelope)
@@ -645,6 +665,23 @@ class WebSocketChannel(OutboundSenderMixin):
             await self._send_event(connection, "attached", chat_id=cid)
             await self._hydrate_after_subscribe(cid)
             return
+        if t == "detach":
+            # ``{"type": "detach", "chat_id": "project:<nome>"}``: il client ha
+            # lasciato il quaderno, e da qui in poi i suoi frame non gli
+            # arrivano più (prima ``detachChat`` era solo lato client e la
+            # connessione restava iscritta a ogni quaderno mai aperto).
+            # La chat personale non si lascia: ogni connessione ci nasce
+            # iscritta, e ci passano gli avvisi proattivi e la mascotte. Una
+            # chiave che ci ricade (assente, spazzatura) o un nome di progetto
+            # impossibile (l'``attach`` l'aveva già rifiutato) non hanno niente
+            # da staccare: nessuna risposta, e nessun ``error`` che il client
+            # mostrerebbe all'utente per una cosa che non ha chiesto.
+            cid = self._envelope_chat_id(envelope)
+            if cid is None or not is_project_chat_id(cid):
+                return
+            self._detach(connection, cid)
+            await self._send_event(connection, "detached", chat_id=cid)
+            return
         if t == "message":
             cid = self._envelope_chat_id(envelope)
             if cid is None:
@@ -654,8 +691,15 @@ class WebSocketChannel(OutboundSenderMixin):
                 return
             content = envelope.get("content")
             if not isinstance(content, str):
-                await self._send_event(connection, "error", detail="missing content")
+                await self._send_event(
+                    connection, "error",
+                    detail="missing content", reason="missing_content",
+                )
                 return
+            # Un surrogato isolato (un frame tagliato a metà di un'emoji) non
+            # esiste in UTF-8: la riga utente, scritta nel transcript prima che
+            # il loop ripulisca il messaggio, falliva la codifica e spariva.
+            content = scrub_lone_surrogates(content)
 
             raw_media = envelope.get("media")
             media_paths: list[str] = []
@@ -681,7 +725,10 @@ class WebSocketChannel(OutboundSenderMixin):
 
             # Allow image-only turns (content may be empty when media is attached).
             if not content.strip() and not media_paths:
-                await self._send_event(connection, "error", detail="missing content")
+                await self._send_event(
+                    connection, "error",
+                    detail="missing content", reason="missing_content",
+                )
                 return
 
             # Auto-attach on first use so clients can one-shot without a separate attach.
@@ -733,7 +780,10 @@ class WebSocketChannel(OutboundSenderMixin):
         if t == "rpc":
             await self._handle_rpc(connection, envelope)
             return
-        await self._send_event(connection, "error", detail=f"unknown type: {t!r}")
+        await self._send_event(
+            connection, "error",
+            detail=f"unknown type: {t!r}", reason="unknown_type",
+        )
 
     # -- RPC client→server -------------------------------------------------
 
@@ -802,7 +852,10 @@ class WebSocketChannel(OutboundSenderMixin):
         """
         task_id = normalize_task_id(envelope.get("task_id"))
         if task_id is None:
-            await self._send_event(connection, "error", detail="invalid task_id")
+            await self._send_event(
+                connection, "error",
+                detail="invalid task_id", reason="invalid_task_id",
+            )
             return
         since = normalize_since(envelope.get("since"))
         cursor = await self.send_subagent_activity_window(connection, task_id, since=since)
@@ -828,7 +881,10 @@ class WebSocketChannel(OutboundSenderMixin):
         """``{"type": "subagent_unwatch", "task_id": ...}``. Idempotente."""
         task_id = normalize_task_id(envelope.get("task_id"))
         if task_id is None:
-            await self._send_event(connection, "error", detail="invalid task_id")
+            await self._send_event(
+                connection, "error",
+                detail="invalid task_id", reason="invalid_task_id",
+            )
             return
         self._subagent_watches.unwatch(connection, task_id)
         await self._send_event(

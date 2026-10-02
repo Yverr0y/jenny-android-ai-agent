@@ -29,8 +29,8 @@ _JOB_MODES = ("reminder", "monitor")
 _DEFAULT_JOB_MODE = "reminder"
 
 # Dentro un progetto non si programma niente, e questo e' l'unico posto in cui
-# Jenny lo viene a sapere: nessuna riga lo dice nel prompt (deciso il 22/08 —
-# v. ``roadmap/progetti-passi.md``, passo 3). Il blocco di sistema si paga a
+# Jenny lo viene a sapere: nessuna riga lo dice nel prompt (deciso il 22/08,
+# passo 3 del piano dei progetti). Il blocco di sistema si paga a
 # ogni turno di ogni progetto, un promemoria capita una volta al mese, e
 # scoprirlo cosi' costa una chiamata e niente da ripianificare.
 #
@@ -56,7 +56,9 @@ _CRON_PARAMETERS = tool_parameters_schema(
         "(e.g., 'Send a reminder at 9am' or 'Check system status and report'). "
         "Not used for action='list' or action='remove'."
     ),
-    every_seconds=IntegerSchema(0, description="Interval in seconds (for recurring tasks)"),
+    every_seconds=IntegerSchema(
+        description="Interval in seconds (for recurring tasks)", minimum=1
+    ),
     cron_expr=StringSchema("Cron expression like '0 9 * * *' (for scheduled tasks)"),
     tz=StringSchema(
         "Optional IANA timezone for cron expressions (e.g. 'America/Vancouver'). "
@@ -293,17 +295,23 @@ class CronTool(Tool, ContextAware):
         else:
             return "Error: either every_seconds, cron_expr, or at is required"
 
-        job = self._cron.add_job(
-            name=name or message[:30],
-            schedule=schedule,
-            message=message,
-            mode=job_mode,
-            delete_after_run=delete_after,
-            session_key=session_key,
-            origin_channel=origin_channel,
-            origin_chat_id=origin_chat_id,
-            origin_metadata=dict(self._origin_metadata.get() or {}),
-        )
+        try:
+            job = self._cron.add_job(
+                name=name or message[:30],
+                schedule=schedule,
+                message=message,
+                mode=job_mode,
+                delete_after_run=delete_after,
+                session_key=session_key,
+                origin_channel=origin_channel,
+                origin_chat_id=origin_chat_id,
+                origin_metadata=dict(self._origin_metadata.get() or {}),
+            )
+        except ValueError as exc:
+            # Il rifiuto del servizio (un'espressione che non si legge o non
+            # scatta mai) torna al modello come le altre risposte d'errore di
+            # questo tool, da correggere e riprovare.
+            return f"Error: {exc}"
         return f"Created job '{job.name}' (id: {job.id})"
 
     def _format_timing(self, schedule: CronSchedule) -> str:
@@ -357,7 +365,7 @@ class CronTool(Tool, ContextAware):
         e i tre contatori del job qui sopra ne sono soltanto il riassunto ("almeno
         un controllo non è partito"). Quale sia stava in ``state.task_checks``, che
         lo store salva e ricarica da commit e che **non raggiungeva nessuna
-        superficie**: né questa, né la WebUI. "Il controllo delle piante sta
+        superficie**: né questa, né la WebUI. "Il controllo della pioggia sta
         funzionando?" si rispondeva solo leggendo logcat sul telefono.
 
         Le voci esistono solo per i controlli rotti (assente = sano), quindi su un
@@ -411,7 +419,13 @@ class CronTool(Tool, ContextAware):
         return system_job_purpose(job.id)
 
     def _list_jobs(self) -> str:
-        jobs = self._cron.list_jobs()
+        # I job spenti restano fuori (un ``at`` eseguito, un job senza sessione),
+        # tranne quelli **in pausa**: l'utente li ha fermati dall'officina e
+        # torneranno. Senza, Jenny non li vedrebbe e ne creerebbe un doppione.
+        jobs = [
+            j for j in self._cron.list_jobs(include_disabled=True)
+            if j.enabled or j.paused_at_ms is not None
+        ]
         if not jobs:
             return "No scheduled jobs."
         lines = []
@@ -429,6 +443,13 @@ class CronTool(Tool, ContextAware):
             if j.payload.kind == "system_event":
                 parts.append(f"  Purpose: {self._system_job_purpose(j)}")
                 parts.append("  Protected: visible for inspection, but cannot be removed.")
+            if j.paused_at_ms is not None:
+                since = self._format_timestamp(j.paused_at_ms, self._display_timezone(j.schedule))
+                parts.append(
+                    f"  Paused by the user from the workshop since {since}: it does not run "
+                    "until they resume it there (Workshop > Hands). Do not recreate it; "
+                    "remove it only if they ask to drop it for good."
+                )
             parts.extend(self._format_state(j.state, j.schedule))
             lines.append("\n".join(parts))
         return "Scheduled jobs:\n" + "\n".join(lines)

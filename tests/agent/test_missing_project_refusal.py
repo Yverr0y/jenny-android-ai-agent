@@ -1,6 +1,6 @@
 """Una cartella legata che è sparita fa rifiutare la chat, a voce.
 
-Passo **6** di ``roadmap/progetti-passi.md``.
+Passo **6** del piano dei progetti.
 
 Prima del passo 6 lo scope veniva costruito comunque e puntava al posto che
 manca. La parte importante era già giusta — **niente fallback sulla radice
@@ -68,9 +68,9 @@ async def test_the_refusal_names_the_project_and_the_way_back(
     loop: AgentLoop, published: list[str]
 ) -> None:
     """Il nome due volte apposta: una per dire *quale*, una per dire *cosa rimettere*."""
-    await loop._refuse_missing_project(_msg(), "project:patreon")
+    await loop._refuse_missing_project(_msg(), "project:palestra")
     text = published[0]
-    assert "patreon" in text
+    assert "palestra" in text
     assert "renam" in text.lower(), (
         "fino al passo 7 l'indirizzo è il nome della cartella: il rinomino è la causa "
         "probabile ed è anche la cura, e il rifiuto è l'unico posto in cui dirlo"

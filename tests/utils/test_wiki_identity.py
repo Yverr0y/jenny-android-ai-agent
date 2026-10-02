@@ -1,6 +1,6 @@
 """L'identità di una wiki: chi la scrive, chi la legge, e cosa fa se è ambigua.
 
-Passo **7.1** e **7.4** di ``roadmap/progetti-passi.md``, strada **B**.
+Passo **7.1** e **7.4** del piano dei progetti, strada **B**.
 
 L'id serve a **una** cosa: ritrovare la chat di una wiki dopo che la cartella ha
 cambiato nome. Non è l'indirizzo di niente — quello resta il nome della cartella,
@@ -72,7 +72,7 @@ def test_anything_else_is_not_an_id(raw) -> None:
 
 
 def test_the_id_is_read_from_the_instructions_file(wikis: Path) -> None:
-    project = _wiki(wikis, "patreon", "AGENTS.md", "---\nid: 3f9a2c1b7e04\n---\n\n# P\n")
+    project = _wiki(wikis, "palestra", "AGENTS.md", "---\nid: 3f9a2c1b7e04\n---\n\n# P\n")
     assert wiki_id(project) == "3f9a2c1b7e04"
 
 
@@ -110,11 +110,11 @@ def test_the_id_survives_a_frontmatter_that_yaml_cannot_parse(wikis: Path) -> No
     """
     import yaml
 
-    rotta = "---\nid: 3f9a2c1b7e04\nsummary: Prova del passo 7: la chat segue\n---\n\n# P\n"
+    broken = "---\nid: 3f9a2c1b7e04\nsummary: Prova del passo 7: la chat segue\n---\n\n# P\n"
     with pytest.raises(yaml.YAMLError):
-        yaml.safe_load(rotta.split("---")[1])
+        yaml.safe_load(broken.split("---")[1])
 
-    project = _wiki(wikis, "storta", "AGENTS.md", rotta)
+    project = _wiki(wikis, "storta", "AGENTS.md", broken)
     assert wiki_id(project) == "3f9a2c1b7e04"
 
 
@@ -295,16 +295,16 @@ def test_a_wiki_with_both_files_is_left_alone(wikis: Path) -> None:
 
 def test_a_wiki_with_no_instructions_file_gets_a_minimal_one(wikis: Path) -> None:
     """Minimo e non lo scaffold completo: `AGENTS.md` nasce quasi vuoto (21/08)."""
-    project = _wiki(wikis, "adhd")
+    project = _wiki(wikis, "acquari")
 
     migrate_wikis(wikis)
 
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert is_valid_wiki_id(wiki_id(project))
-    assert "# Adhd" in text
+    assert "# Acquari" in text
     assert "What this wiki covers" not in text, "lo scaffold pieno è mestiere di /init"
     # `summary` resta un segnaposto, non il nome della cartella: con il nome,
-    # `wikis/_index.md` direbbe «adhd — adhd», che *sembra* una descrizione. La
+    # `wikis/_index.md` direbbe «acquari — acquari», che *sembra* una descrizione. La
     # voce di prima diceva «(no AGENTS.md)», cioè la verità.
     from jenny.utils.wiki_paths import read_wiki_scope
 
@@ -364,7 +364,7 @@ def test_the_journal_is_created_once(wikis: Path) -> None:
 
 # ── Chi scrive l'id lo rilegge come lo legge chi lo usa ──────────────────
 
-_ROTTA = "---\nsummary: Prova del passo 7: la chat segue\n---\n\n# P\n"
+_BROKEN = "---\nsummary: Prova del passo 7: la chat segue\n---\n\n# P\n"
 
 
 def _id_lines(text: str) -> list[str]:
@@ -385,9 +385,9 @@ def test_four_boots_over_an_unparsable_frontmatter_write_one_id(wikis: Path) -> 
     import yaml
 
     with pytest.raises(yaml.YAMLError):
-        yaml.safe_load(_ROTTA.split("---")[1])
+        yaml.safe_load(_BROKEN.split("---")[1])
 
-    project = _wiki(wikis, "storta", "AGENTS.md", _ROTTA)
+    project = _wiki(wikis, "storta", "AGENTS.md", _BROKEN)
 
     seen = []
     identified = []
@@ -464,8 +464,8 @@ def test_a_file_with_no_frontmatter_at_all_gets_one_id_and_keeps_its_body(wikis:
 def test_a_broken_wiki_does_not_stop_the_others(wikis: Path) -> None:
     """Un avvio che muore su una cartella storta non migra nemmeno le altre."""
     _wiki(wikis, "sana")
-    rotta = _wiki(wikis, "rotta")
-    (rotta / "AGENTS.md").mkdir()  # una directory dove ci vuole un file
+    broken = _wiki(wikis, "rotta")
+    (broken / "AGENTS.md").mkdir()  # una directory dove ci vuole un file
 
     result = migrate_wikis(wikis)
 

@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import pytest
+from support.sessions import FakeSessions
 
 from jenny.agent.tools.context import RequestContext
 from jenny.agent.tools.cron import CronTool
@@ -32,7 +33,6 @@ from jenny.cron.session_turns import (
     CRON_MONITOR_META,
     CRON_TRIGGER_META,
     is_bound_cron_job,
-    is_monitor_cron_turn,
     monitor_session_key,
 )
 from jenny.cron.types import CronJob, CronJobSilencedError, CronPayload
@@ -46,7 +46,7 @@ def _bound_job(
     *,
     job_id: str = "job-1",
     name: str = "Promemoria",
-    message: str = "annaffia le piante",
+    message: str = "controlla la pioggia",
     origin_channel: str | None = "websocket",
     origin_chat_id: str | None = "chat-1",
     origin_metadata: dict[str, Any] | None = None,
@@ -68,31 +68,6 @@ def _bound_job(
     )
 
 
-class _FakeSession:
-    """Sessione finta: tiene solo traccia delle potature richieste."""
-
-    def __init__(self, key: str) -> None:
-        self.key = key
-        self.retained: list[int] = []
-
-    def retain_recent_legal_suffix(self, keep: int) -> None:
-        self.retained.append(keep)
-
-
-class _FakeSessions:
-    """Store di sessioni finto: registra quali sessioni sono aperte e salvate."""
-
-    def __init__(self) -> None:
-        self.sessions: dict[str, _FakeSession] = {}
-        self.saved: list[str] = []
-
-    def get_or_create(self, key: str) -> _FakeSession:
-        return self.sessions.setdefault(key, _FakeSession(key))
-
-    def save(self, session: _FakeSession) -> None:
-        self.saved.append(session.key)
-
-
 class _FakeAgent:
     """Agente finto: registra i messaggi ricevuti e restituisce (o solleva) una risposta."""
 
@@ -106,7 +81,7 @@ class _FakeAgent:
         spoke: bool | None = None,
     ) -> None:
         self.tools = tools if tools is not None else ToolRegistry()
-        self.sessions = _FakeSessions()
+        self.sessions = FakeSessions()
         self._response = response
         self._error = error
         self._spoke = spoke
@@ -204,7 +179,7 @@ class TestAReminderRunsInTheConversation:
         )
 
         assert (
-            await tool.execute(action="add", message="annaffia le piante", every_seconds=300)
+            await tool.execute(action="add", message="controlla la pioggia", every_seconds=300)
         ).startswith("Created job")
 
         job = CronService(store).list_jobs()[0]
@@ -224,18 +199,6 @@ class TestAReminderRunsInTheConversation:
 class TestMonitorMetadataHelpers:
     """Predicati di ``session_turns`` usati dalla FSM e dal runner."""
 
-    def test_a_monitor_turn_needs_both_the_cron_trigger_and_the_monitor_flag(self) -> None:
-        assert is_monitor_cron_turn({CRON_TRIGGER_META: {}, CRON_MONITOR_META: True}) is True
-
-    def test_the_monitor_flag_alone_is_not_a_cron_turn(self) -> None:
-        assert is_monitor_cron_turn({CRON_MONITOR_META: True}) is False
-
-    def test_a_cron_turn_without_the_flag_is_a_plain_reminder(self) -> None:
-        assert is_monitor_cron_turn({CRON_TRIGGER_META: {}}) is False
-
-    def test_absent_metadata_is_not_a_monitor_turn(self) -> None:
-        assert is_monitor_cron_turn(None) is False
-
     def test_each_monitor_gets_its_own_session_namespaced_by_job_id(self) -> None:
         assert monitor_session_key("job-m") == "cron:job-m"
         assert monitor_session_key("job-m") != "unified:default"
@@ -253,25 +216,25 @@ class TestRunBoundCronJobValidation:
 
 class TestRunBoundCronJobSuccess:
     async def test_records_queued_then_ok_and_returns_response(self) -> None:
-        job = _bound_job(job_id="job-42", name="Annaffia", message="annaffia le piante")
-        agent = _FakeAgent(response="Fatto, annaffiato.")
+        job = _bound_job(job_id="job-42", name="Pioggia", message="controlla la pioggia")
+        agent = _FakeAgent(response="Fatto, controllato.")
         cron = _FakeCronRecorder()
 
         result = await run_bound_cron_job(job, agent=agent, cron=cron)
 
-        assert result == "Fatto, annaffiato."
+        assert result == "Fatto, controllato."
         statuses = [record["status"] for _run_id, record in cron.records]
         assert statuses == ["queued", "ok"]
         run_id_queued, _record_queued = cron.records[0]
         run_id_ok, record_ok = cron.records[1]
         assert run_id_queued == run_id_ok
         assert re.match(r"^job-42:\d+:[0-9a-f]{8}$", run_id_queued)
-        assert record_ok["response"] == "Fatto, annaffiato."
+        assert record_ok["response"] == "Fatto, controllato."
         assert record_ok["job_id"] == "job-42"
-        assert record_ok["job_name"] == "Annaffia"
+        assert record_ok["job_name"] == "Pioggia"
         assert record_ok["session_key"] == "unified:default"
         expected_prompt = render_template(
-            "agent/cron_reminder.md", strip=True, message="annaffia le piante"
+            "agent/cron_reminder.md", strip=True, message="controlla la pioggia"
         )
         assert record_ok["rendered_prompt"] == expected_prompt
 
@@ -440,7 +403,7 @@ class TestReminderModeIsUnchanged:
 
         assert agent.received[0].session_key_override == "unified:default"
         # Nessuna sessione isolata aperta né potata: quella è roba da monitor.
-        assert agent.sessions.sessions == {}
+        assert agent.sessions.by_key == {}
         assert agent.sessions.saved == []
 
     async def test_a_reminder_run_record_carries_no_delivery_key(self) -> None:
@@ -574,7 +537,7 @@ class TestMonitorModeStaysQuiet:
         with pytest.raises(CronJobSilencedError):
             await run_bound_cron_job(job, agent=agent, cron=cron)
 
-        session = agent.sessions.sessions["cron:job-m"]
+        session = agent.sessions.by_key["cron:job-m"]
         assert session.retained == [MONITOR_KEEP_RECENT_MESSAGES]
         assert agent.sessions.saved == ["cron:job-m"]
 
@@ -659,7 +622,7 @@ class TestMonitorModeSpeaks:
 
         await run_bound_cron_job(job, agent=agent, cron=cron)
 
-        assert agent.sessions.sessions["cron:job-m"].retained == [MONITOR_KEEP_RECENT_MESSAGES]
+        assert agent.sessions.by_key["cron:job-m"].retained == [MONITOR_KEEP_RECENT_MESSAGES]
 
 
 class TestWakelock:

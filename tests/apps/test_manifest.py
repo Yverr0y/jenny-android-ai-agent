@@ -59,7 +59,7 @@ class TestLoadApp:
 
         Il vincolo `actions` non vuoto ha prodotto in produzione un'azione
         *inventata* (un ping verso il server, mai chiesto da nessuno) messa
-        lì solo per far passare lo schema. `.agent/jenny-apps.md` ha sempre
+        lì solo per far passare lo schema. Il disegno ha sempre
         detto che il lato agente è qualcosa che un'app "can" avere.
         """
         for manifest in (
@@ -105,8 +105,8 @@ class TestLoadApp:
         poteva dire "questo schermo sta altrove".
         """
         manifest = {
-            "name": "Telecomando", "description": "Il telecomando di hps",
-            "server": {"baseUrl": "http://hps:8091"},
+            "name": "Telecomando", "description": "Il telecomando di pibox",
+            "server": {"baseUrl": "http://pibox:8091"},
             "view": {"kind": "external"},
         }
         app = load_app(_write_app(tmp_path, "telecomando", manifest))

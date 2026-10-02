@@ -423,7 +423,7 @@ class TestSubagentCancellation:
 
         # Entrambi i path: un subagent chiede lo streaming, quindi il runner passa
         # da ``chat_stream_with_retry``.
-        from tests.agent.subagent_provider_fakes import script_provider
+        from support.subagent_provider_fakes import script_provider
         script_provider(provider, _scripted)
         mgr = SubagentManager(
             provider=provider,
@@ -496,7 +496,7 @@ class TestSubagentCancellation:
         provider = MagicMock()
         provider.get_default_model.return_value = "test-model"
         # Entrambi i path: un subagent chiede lo streaming.
-        from tests.agent.subagent_provider_fakes import script_provider
+        from support.subagent_provider_fakes import script_provider
         script_provider(provider, [LLMResponse(
             content="thinking",
             tool_calls=[ToolCallRequest(id="call_1", name="list_dir", arguments={"path": "."})],
@@ -541,7 +541,7 @@ class TestSubagentCancellation:
         provider = MagicMock()
         provider.get_default_model.return_value = "test-model"
         # Entrambi i path: un subagent chiede lo streaming.
-        from tests.agent.subagent_provider_fakes import script_provider
+        from support.subagent_provider_fakes import script_provider
         script_provider(provider, [LLMResponse(
             content="thinking",
             tool_calls=[ToolCallRequest(id="call_1", name="list_dir", arguments={"path": "."})],
@@ -858,16 +858,25 @@ class TestStopAbandonsStuckTasks:
         ctx = CommandContext(msg=msg, session=None, key=msg.session_key, raw="/stop", loop=loop)
         out = await cmd_stop(ctx)
 
-        assert "1 task" in out.content
-        roles = [m.get("role") for m in session.messages]
-        assert roles == ["user", "assistant", "tool"]
-        assert "runtime_checkpoint" not in session.metadata
-        loop.runtime_event_publisher.turn_completed.assert_awaited_once()
-        loop.runtime_event_publisher.run_status_changed.assert_awaited_once_with(
-            msg, UNIFIED_SESSION_KEY, "idle"
-        )
-        release.set()
-        task.cancel()
+        try:
+            assert "1 task" in out.content
+            roles = [m.get("role") for m in session.messages]
+            assert roles == ["user", "assistant", "tool"]
+            assert "runtime_checkpoint" not in session.metadata
+            # La chiusura e' **dopo** la risposta: l'handler la lascia a chi
+            # pubblica (v. `CommandContext.after_reply`). Emessa qui dentro,
+            # il client riceveva «Stopped» a turno gia' chiuso.
+            loop.runtime_event_publisher.turn_completed.assert_not_awaited()
+            assert len(ctx.after_reply) == 1
+            for step in ctx.after_reply:
+                await step()
+            loop.runtime_event_publisher.turn_completed.assert_awaited_once()
+            loop.runtime_event_publisher.run_status_changed.assert_awaited_once_with(
+                msg, UNIFIED_SESSION_KEY, "idle"
+            )
+        finally:
+            release.set()
+            task.cancel()
 
     @pytest.mark.asyncio
     async def test_cancel_by_session_abandons_stuck_subagent_and_suppresses_announce(self):

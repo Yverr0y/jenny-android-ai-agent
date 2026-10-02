@@ -31,7 +31,7 @@ def test_memory_and_user_ship_enforced_at_three_thousand() -> None:
     sia perché è cambiata una misura.
 
     **``USER.md`` è a 4.000 dall'08/09/2026, ed è cambiata una misura.** La corsia
-    di diario dei progetti (``.agent/project-memory-plan.md``) porta in quel file
+    di diario dei progetti porta in quel file
     una sorgente che prima non ci arrivava: misurati sul Titan 2, i fatti
     personali detti dentro i progetti valgono 1.749 caratteri su un file che ne
     occupava 2.466 — il 140% del tetto di allora. Il numero nuovo è la somma

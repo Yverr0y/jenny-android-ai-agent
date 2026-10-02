@@ -30,9 +30,16 @@ from jenny.providers.base import (
     ToolCallRequest,
     describe_exc,
     parse_tool_arguments,
+    stream_error_response,
+    stream_timeout_response,
+    stream_truncated_response,
 )
 from jenny.providers.body_merge import deep_merge
-from jenny.providers.endpoint_budget import is_local_endpoint, request_timeout_s
+from jenny.providers.endpoint_budget import (
+    is_local_endpoint,
+    read_timeout_s,
+    request_timeout_s,
+)
 from jenny.providers.opencode import session_headers
 from jenny.providers.tool_ids import dedupe_tool_ids, unique_tool_ids_in_history
 
@@ -94,7 +101,12 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         self._http_client = httpx.AsyncClient(
             base_url=base_url,
             headers=headers,
-            timeout=request_timeout_s(local=self._is_local),
+            # La read non scade prima del budget del primo token: quel silenzio
+            # lo misura lo stream, con il suo messaggio (v. ``read_timeout_s``).
+            timeout=httpx.Timeout(
+                request_timeout_s(local=self._is_local),
+                read=read_timeout_s(local=self._is_local),
+            ),
             # Senza CA di provider resta ``True``, che e' esattamente il default
             # di httpx: la fiducia di default non la ridefiniamo noi.
             verify=self._ssl_context or True,
@@ -136,65 +148,24 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
 
     @classmethod
     def _handle_error(cls, e: Exception, *, partial_content: str | None = None) -> LLMResponse:
-        response = getattr(e, "response", None)
-        headers = getattr(response, "headers", None)
-        # ``.text`` su una response in streaming non ancora letta solleva
-        # ResponseNotRead: qui l'errore vero è ``e``, non il fallimento della
-        # lettura, quindi si degrada a payload assente.
-        try:
-            payload = (
-                getattr(e, "body", None)
-                or getattr(e, "doc", None)
-                or getattr(response, "text", None)
-            )
-        except Exception:
-            payload = None
-        if payload is None and response is not None:
-            response_json = getattr(response, "json", None)
-            if callable(response_json):
-                try:
-                    payload = response_json()
-                except Exception:
-                    payload = None
+        # I metadati sono quelli di ogni provider (``LLMProvider._error_metadata``);
+        # qui resta il messaggio, che per Anthropic è il corpo dell'errore.
+        payload = cls._error_payload(e)
         payload_text = payload if isinstance(payload, str) else str(payload) if payload is not None else ""
         msg = f"Error: {payload_text.strip()[:500]}" if payload_text.strip() else f"Error calling LLM: {describe_exc(e)}"
-        retry_after = cls._extract_retry_after_from_headers(headers)
+        metadata = cls._error_metadata(e, payload=payload)
+        retry_after = metadata["error_retry_after_s"]
         if retry_after is None:
             retry_after = LLMProvider._extract_retry_after(msg)
-
-        status_code = getattr(e, "status_code", None)
-        if status_code is None and response is not None:
-            status_code = getattr(response, "status_code", None)
-
-        should_retry: bool | None = None
-        if headers is not None:
-            raw = headers.get("x-should-retry")
-            if isinstance(raw, str):
-                lowered = raw.strip().lower()
-                if lowered == "true":
-                    should_retry = True
-                elif lowered == "false":
-                    should_retry = False
-
-        error_kind: str | None = None
-        error_name = e.__class__.__name__.lower()
-        if "timeout" in error_name:
-            error_kind = "timeout"
-        elif "connection" in error_name:
-            error_kind = "connection"
-        error_type, error_code = LLMProvider._extract_error_type_code(payload)
-
+        # Qui il ritardo scritto nel messaggio va anche nel campo strutturato,
+        # com'è sempre stato per Anthropic: chi decide l'attesa li legge entrambi.
+        metadata["error_retry_after_s"] = retry_after
         return LLMResponse(
             content=msg,
             finish_reason="error",
             retry_after=retry_after,
             partial_content=partial_content or None,
-            error_status_code=int(status_code) if status_code is not None else None,
-            error_kind=error_kind,
-            error_type=error_type,
-            error_code=error_code,
-            error_retry_after_s=retry_after,
-            error_should_retry=should_retry,
+            **metadata,
         )
 
     @staticmethod
@@ -206,7 +177,6 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
     # ------------------------------------------------------------------
     # Message conversion: OpenAI chat format → Anthropic Messages API
     # ------------------------------------------------------------------
-
 
     # ------------------------------------------------------------------
     # Build API kwargs
@@ -242,7 +212,11 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         )
 
         max_tokens = max(1, max_tokens)
-        thinking_enabled = bool(reasoning_effort) and reasoning_effort.lower() != "none"
+        # ``minimal`` (e l'alias ``minimum``) spegne il thinking, come sul ramo
+        # OpenAI-compat: qui lo accendeva col budget di default.
+        thinking_enabled = bool(reasoning_effort) and reasoning_effort.lower() not in (
+            "none", "minimal", "minimum",
+        )
 
         # Several Anthropic models (opus-4-7, opus-4-8, fable) deprecated the
         # `temperature` parameter — the API returns 400 if it is present.
@@ -266,7 +240,12 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
             if not omit_temperature:
                 kwargs["temperature"] = 1.0
         elif thinking_enabled:
-            budget_map = {"low": 1024, "medium": 4096, "high": max(8192, max_tokens)}
+            # ``high`` prende tutto lo spazio che il ``max_tokens`` configurato
+            # lascia al testo (4096), non il ``max_tokens`` intero: con quello il
+            # finale diventava ``max_tokens + 4096`` e superava il tetto del
+            # modello (32000 su un Opus 4 → 36096, rifiutato). Il finale sale
+            # oltre il configurato solo quando questo è troppo piccolo.
+            budget_map = {"low": 1024, "medium": 4096, "high": max(8192, max_tokens - 4096)}
             budget = budget_map.get(reasoning_effort.lower(), 4096)
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
             kwargs["max_tokens"] = max(max_tokens, budget + 4096)
@@ -476,7 +455,11 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
         reasoning_parts: list[str] = []
         tool_blocks: dict[str, dict[str, Any]] = {}
         thinking_buffers: dict[str, dict[str, Any]] = {}
-        finish_reason = "stop"
+        # ``None`` finché il server non dice perché ha smesso: uno stream che
+        # si chiude senza ``stop_reason`` né ``message_stop`` è troncato, non
+        # finito, e non deve diventare ``stop`` per default.
+        finish_reason: str | None = None
+        saw_message_stop = False
         raw_usage: dict[str, Any] = {}
 
         try:
@@ -599,20 +582,20 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
                         if delta.get("stop_reason"):
                             finish_reason = delta["stop_reason"]
                         merge_raw_usage(raw_usage, event.get("usage"))
+                    elif event_type == "message_stop":
+                        saw_message_stop = True
+                    elif event_type == "error":
+                        # ``event: error`` a stream aperto (``overloaded_error``
+                        # sotto carico): lo status era 200, quindi senza questo
+                        # ramo il testo arrivato fin lì passava per completo.
+                        return stream_error_response(
+                            event.get("error") or event,
+                            partial_content="".join(content_parts) or None,
+                        )
 
         except asyncio.TimeoutError:
             waited_s = idle_timeout_s if saw_output else first_output_timeout_s
-            return LLMResponse(
-                content=(
-                    f"Error calling LLM: stream stalled for more than "
-                    f"{waited_s:g} seconds"
-                    if saw_output
-                    else f"Error calling LLM: no output from the model within "
-                    f"{waited_s:g} seconds"
-                ),
-                finish_reason="error",
-                error_kind="timeout",
-            )
+            return stream_timeout_response(waited_s, saw_output)
         except httpx.HTTPStatusError as e:
             # Passa da _handle_error: status code, retry-after e error_type
             # arrivano così alla retry policy, che altrimenti vedrebbe solo
@@ -625,12 +608,25 @@ class AnthropicProvider(AnthropicConversionMixin, LLMProvider):
             # behavior is unchanged when there is no partial content to carry;
             # this only adds partial_content when the stream had already
             # produced text before crashing (#audit mid-stream-exception loss).
+            # I metadati (``error_kind`` in testa) vengono dalla regola
+            # condivisa: senza, un ``ReadTimeout`` o un keep-alive chiuso
+            # arrivavano alla retry policy come testo nudo, e non si ritentavano.
+            metadata = self._error_metadata(exc)
             return LLMResponse(
                 content=f"Error calling LLM: {describe_exc(exc)}",
                 finish_reason="error",
                 partial_content="".join(content_parts) or None,
+                retry_after=metadata["error_retry_after_s"],
+                **metadata,
             )
 
+        if finish_reason is None and not saw_message_stop:
+            # Chiuso prima della fine: i ``tool_use`` aperti hanno argomenti a
+            # metà e non vanno eseguiti, il testo è un frammento. Basta uno dei
+            # due segnali di fine: ``message_delta`` porta lo ``stop_reason``
+            # dopo l'ultimo ``content_block_stop``, quindi tutto è già arrivato.
+            return stream_truncated_response("".join(content_parts) or None)
+        finish_reason = finish_reason or "stop"
         stop_map = {"tool_use": "tool_calls", "end_turn": "stop", "max_tokens": "length"}
         bufs = list(tool_blocks.values())
         # ``parse_tool_arguments``, non la variante "for_replay": queste tool

@@ -8,7 +8,7 @@ i delta di quel testo erano già partiti — quindi la WebUI, e solo la WebUI, l
 vedeva comunque.
 
 Misurato sul dispositivo il 27/08/2026, cron ``chiusura-giornata`` delle 20:00:
-il tool consegna "ciao papi, sono le 20:00 — ora di mollare tutto", il modello
+il tool consegna "ciao boss, sono le 20:00 — ora di mollare tutto", il modello
 scrive poi "L'ho chiamato. Ora aspetto la sua risposta", e in chat è comparso il
 secondo — sovrascrivendo il primo, perché il client riusava la bolla
 (v. ``tests/webui/test_message_bubble_client.py``). Notifica Android e transcript
@@ -24,6 +24,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+
+from support.aio import drain_nowait
 
 from jenny.agent.loop import AgentLoop
 from jenny.agent.tools.message import MessageTool
@@ -45,10 +47,7 @@ def _make_loop(tmp_path: Path) -> AgentLoop:
 
 
 def _drain(loop: AgentLoop) -> list[OutboundMessage]:
-    out: list[OutboundMessage] = []
-    while not loop.bus.outbound.empty():
-        out.append(loop.bus.outbound.get_nowait())
-    return out
+    return drain_nowait(loop.bus.outbound)
 
 
 async def _stream_callback(loop: AgentLoop):

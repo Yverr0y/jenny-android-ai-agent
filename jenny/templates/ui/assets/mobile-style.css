@@ -2,7 +2,11 @@
 
 /* ── Theme Variables ── */
 :root {
-  /* ── Chanel (default theme) ── */
+  /* ── Chanel ──
+     I valori di `:root` sono quelli di Chanel, e fanno da base che ogni tema
+     eredita. Il tema di default non e' questo ma `DEFAULT_THEME` in
+     shared/theme.js (`synthwave`), che bootstrap.js mette su <html> prima del
+     primo paint. */
   color-scheme: dark;
   --bg:            #141414;
   --surface:       #1e1e1e;
@@ -12,22 +16,64 @@
   --border:        rgba(244, 241, 234, 0.18);
   --border-strong: rgba(244, 241, 234, 0.28);
   --text:          #f4f1ea;
-  --text-muted:    rgba(244, 241, 234, 0.5);
+  --text-muted:    rgba(244, 241, 234, 0.54);
   --text-faint:    rgba(244, 241, 234, 0.32);
   --heading:       #f4f1ea;
   --accent:        #f4f1ea;
   --accent-rgb:    244, 241, 234;
   --accent-hover:  #ffffff;
   --on-accent:     #141414;
+  /* L'accento **su un fondo `--text`**, cioè su una superficie invertita.
+     Non è sempre `--accent`: in Chanel e in Fumetto l'accento *è* il testo
+     (#f4f1ea e #1b1820), quindi lì un'icona d'accento su fondo testo non si
+     vede affatto. Il default è `--bg`, che è leggibile per costruzione — è
+     l'altra metà della coppia di contrasto della pagina — e i temi con una
+     tinta vera se lo riprendono più sotto. Un tema nuovo eredita il default
+     e nasce leggibile invece che invisibile. */
+  --accent-on-text: var(--bg);
+  /* L'accento **quando e' testo** — link, percorsi, titoletti del markdown —
+     su `--bg` e `--surface`. Di serie e' `--accent`; lo riscrivono i temi in
+     cui la tinta del riempimento non arriva a 4,5:1 come parola (Synthwave,
+     Kyoto, Y2K): la stessa tonalita', piu' chiara sui fondi scuri e piu' scura
+     su quelli chiari. Il riempimento resta `--accent`, con `--on-accent` sopra
+     (il banco e' in `test_home_you_contract.py`). */
+  --text-accent: var(--accent);
+  /* L'anello del fuoco da tastiera (la tastiera fisica del Titan 2). Non
+     `--accent`: in Y2K il riempimento sta a 2,2:1 sul fondo, e in Fumetto
+     accento, bordo e bordo forte sono lo stesso nero — un fuoco detto dal
+     solo colore del bordo li' non cambia niente. `--text-accent` arriva a
+     4,5:1 su ogni fondo per costruzione (lo misura il banco), e i campi lo
+     portano **piu' spesso** del bordo, cosi' si vede anche dove il colore
+     coincide. */
+  --focus-ring: var(--text-accent);
   --ok:            #f4f1ea;
   --ok-rgb:        244, 241, 234;
-  --error:         #ef4444;
+  --error:         #f04b4b;
+  /* Il testo **su** un fondo `--error` (toast d'errore, «Installa» critico).
+     Non `#fff`: su #f04b4b il bianco sta a 3,6:1. `--bg` e' l'altra meta'
+     della coppia di contrasto della pagina, e `--error` arriva a 4,5:1 su
+     `--bg` in ogni tema (lo misura il banco): quindi anche il contrario. */
+  --on-error:      var(--bg);
   --warning:       #f59e0b;
   --hover:         rgba(255, 255, 255, 0.06);
   --active:        rgba(255, 255, 255, 0.09);
   --shadow:        0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 12px rgba(0, 0, 0, 0.3);
   --flower:        #c8a96a;
+  /* Il luccichio che attraversa la riga di lavoro, e l'alone che lo
+     accompagna. Fumetto e Pietra l'alone lo spengono: sulla carta e sulla
+     pietra una luce sfumata si legge come un'ombra, e l'ombra e' profondita'. */
+  --glint:         #fff1cf;
+  --glow:          rgba(200, 169, 106, 0.55);
   --meta:          #c8a96a;
+  /* I due gruppi delle pagine di un quaderno (il pallino dell'elenco, il nodo
+     della mappa): una coppia di tinte **sue**, non due stati. Erano `--ok` ed
+     `--error`, cioe' «riuscito» e «sbagliato»: ogni entita' aveva il pallino
+     di un errore, e in Y2K il verde dei concetti stava a 1,7:1 sul fondo.
+     Blu e oro, piu' scuri nei tre temi chiari: sopra
+     3:1 su ogni fondo (e' un segno, non una parola), lontani fra loro e dal
+     grigio di «altro». Il banco e' in `test_notebook_groups_contract.py`. */
+  --group-concepts: #6aa9e8;
+  --group-entities: #c8a96a;
   --bubble-user-bg: #f4f1ea;
   --bubble-user-text: #141414;
   --bubble-user-border: none;
@@ -49,6 +95,21 @@
      altre taglie la riscrivono su <html> (v. shared/mascot.js). Tutta la
      geometria di .jenny-duo e delle bolle minichat ne deriva. */
   --jenny-size:    120px;
+  /* Dove appoggia i piedi, dal fondo (in casa) o dal dock (in officina):
+     appena sopra il campo della minichat, che sta a 12 px ed e' alto una riga
+     del composer. **Sempre**, in ogni vista dell'officina — console compresa —
+     e aperta o chiusa la minichat. Dall'utente, il 28/09/2026: «il pavimento
+     e' dove appare nella minichat, sempre, in ogni schermata», e della console,
+     dove lei stava sopra la riga dei chip: «deve essere uguale agli altri».
+     Prima stava a 20 px e saltava su all'apertura, e in console sopra tutta la
+     barra di input. `FLOOR_NO_COMPOSER` in home-app.js e' lo stesso numero. */
+  --jenny-away-floor: 66px;
+  /* Il pavimento di Jenny: dove poggia il bordo basso del suo quadrato, cioe'
+     i piedi meno il margine trasparente sotto di loro (il 12,24% del lato, lo
+     stesso di `.home-shell`). La casa lo riscrive su `.home-shell`, dove in
+     chat lei sta sul composer. Lo leggono lo sprite e il fumetto e il pensa
+     della minichat. */
+  --jenny-floor:   calc(var(--dock-height) + var(--jenny-away-floor) - var(--jenny-size) * 0.1224);
   --font-sans:     'Inter', system-ui, sans-serif;
   --font-display:  'Tenor Sans', var(--font-sans);
   --font-mono:     'Fira Code', monospace;
@@ -61,34 +122,42 @@
 [data-theme="synthwave"] {
   color-scheme: dark;
   --font-display:  'Orbitron', var(--font-sans);
-  --bg:            #241b2f;
-  --surface:       #2a2139;
-  --surface-2:     #1d1526;
+  --bg:            #111013;
+  --surface:       #1a181d;
+  --surface-2:     #0a090b;
   --overlay:       rgba(255, 255, 255, 0.04);
   --overlay-strong: rgba(255, 255, 255, 0.07);
-  --border:        #3b2e52;
-  --border-strong: #4d3d6b;
+  --border:        #2a2730;
+  --border-strong: #3a3641;
   --text:          #f2ecff;
-  --text-muted:    #848bbd;
-  --text-faint:    #6a6798;
+  --text-muted:    #a39daa;
+  --text-faint:    #6e6875;
   --heading:       #ffffff;
   --accent:        #f92aad;
   --accent-rgb:    249, 42, 173;
   --accent-hover:  #ff5ec4;
-  --on-accent:     #ffffff;
+  --text-accent:   #fa3eb5;
+  --on-accent:     #0a090b;
   --ok:            #72f1b8;
   --ok-rgb:        114, 241, 184;
-  --error:         #fe4450;
+  --error:         #fe4c57;
   --warning:       #fede5d;
   --hover:         rgba(255, 255, 255, 0.05);
   --active:        rgba(255, 255, 255, 0.08);
   --shadow:        0 8px 40px rgba(0, 0, 0, 0.45), 0 2px 12px rgba(0, 0, 0, 0.3);
   --flower:        #03edf9;
+  --glint:         #eaffff;
+  --glow:          rgba(3, 237, 249, 0.7);
   --meta:          #03edf9;
-  --bubble-user-bg: rgba(3, 237, 249, 0.12);
-  --bubble-user-text: #f2ecff;
+  /* La bolla dell'utente a colore pieno, e non il velo ciano al 12% di prima:
+     sul fondo quasi nero quel velo diventava un verde petrolio (#0f2b2f). Il
+     rosa e' un filo piu' scuro dell'accento perche' il bianco sopra #f92aad
+     sta a 3,5:1; su #d61a8f arriva a 4,8:1 (il banco e' in
+     `test_home_you_contract.py`). Scelto il 28/09/2026. */
+  --bubble-user-bg: #d61a8f;
+  --bubble-user-text: #ffffff;
   --bubble-user-border: none;
-  --bubble-user-shadow: none;
+  --bubble-user-shadow: 0 0 16px rgba(214, 26, 143, 0.5);
 }
 
 [data-theme="kyoto"] {
@@ -102,22 +171,25 @@
   --border:        #3f3a33;
   --border-strong: #4a443b;
   --text:          #e5ddd0;
-  --text-muted:    #94897a;
+  --text-muted:    #a2978a;
   --text-faint:    #6b6255;
   --heading:       #efe7d8;
-  --accent:        #b2543f;
-  --accent-rgb:    178, 84, 63;
+  --accent:        #a94f3b;
+  --accent-rgb:    169, 79, 59;
   --accent-hover:  #c96751;
+  --text-accent:   #ca7b69;
   --on-accent:     #f5efe4;
   --ok:            #8fa382;
   --ok-rgb:        143, 163, 130;
-  --error:         #c9564a;
+  --error:         #d3756b;
   --warning:       #c99b4a;
   --hover:         rgba(255, 255, 255, 0.04);
   --active:        rgba(255, 255, 255, 0.07);
   --shadow:        0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.25);
   --flower:        #b2543f;
-  --meta:          #94897a;
+  --glint:         #f2b7a3;
+  --glow:          rgba(178, 84, 63, 0.55);
+  --meta:          #a2978a;
   --bubble-user-bg: transparent;
   --bubble-user-text: #e5ddd0;
   --bubble-user-border: 1px solid #4a443b;
@@ -152,6 +224,8 @@
   --active:        rgba(255, 255, 255, 0.1);
   --shadow:        4px 4px 0 rgba(0, 0, 0, 0.4);
   --flower:        #a78bfa;
+  --glint:         #ffe27a;
+  --glow:          rgba(167, 139, 250, 0.6);
   --meta:          #9d92ab;
   --bubble-user-bg: #a78bfa;
   --bubble-user-text: #221833;
@@ -160,7 +234,7 @@
   --radius-bubble: 14px;
 }
 
-[data-theme="fumetto"] {
+[data-theme="comic"] {
   color-scheme: light;
   --font-display:  'Bangers', var(--font-sans);
   --font-sans:     'Comic Neue', 'Inter', system-ui, sans-serif;
@@ -181,13 +255,17 @@
   --on-accent:     #faf6ef;
   --ok:            #1b1820;
   --ok-rgb:        27, 24, 32;
-  --error:         #d43d2a;
-  --warning:       #c77800;
+  --error:         #c13726;
+  --warning:       #975b00;
   --hover:         rgba(27, 24, 32, 0.05);
   --active:        rgba(27, 24, 32, 0.08);
   --shadow:        3px 3px 0 rgba(27, 24, 32, 0.15);
   --flower:        #7c5cff;
-  --meta:          #7c5cff;
+  --glint:         #ff4fa3;
+  --glow:          transparent;
+  --meta:          #6842ff;
+  --group-concepts: #2f6db3;
+  --group-entities: #8a6420;
   --bubble-user-bg: #1b1820;
   --bubble-user-text: #faf6ef;
   --bubble-user-border: none;
@@ -206,30 +284,35 @@
   --border:        rgba(70, 36, 90, 0.18);
   --border-strong: rgba(70, 36, 90, 0.3);
   --text:          #46245a;
-  --text-muted:    #9a7fae;
+  --text-muted:    #785a8e;
   --text-faint:    #b9a6c9;
   --heading:       #46245a;
   --accent:        #f56ab5;
   --accent-rgb:    245, 106, 181;
   --accent-hover:  #ff86c8;
-  --on-accent:     #ffffff;
-  --ok:            #4bc9a0;
-  --ok-rgb:        75, 201, 160;
-  --error:         #e23d6d;
-  --warning:       #f0a640;
+  --text-accent:   #c50d71;
+  --on-accent:     #46245a;
+  --ok:            #227258;
+  --ok-rgb:        34, 114, 88;
+  --error:         #c41d4e;
+  --warning:       #91590b;
   --hover:         rgba(70, 36, 90, 0.05);
   --active:        rgba(70, 36, 90, 0.08);
   --shadow:        0 3px 8px rgba(245, 106, 181, 0.25);
   --flower:        #b76bf0;
-  --meta:          #9a7fae;
+  --glint:         #f56ab5;
+  --glow:          rgba(245, 106, 181, 0.35);
+  --meta:          #785a8e;
+  --group-concepts: #2f6db3;
+  --group-entities: #8a6420;
   --bubble-user-bg: linear-gradient(180deg, #ffa7dd, #f56ab5);
-  --bubble-user-text: #ffffff;
+  --bubble-user-text: #46245a;
   --bubble-user-border: 1px solid #ffffff;
   --bubble-user-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.7), 0 4px 10px rgba(245, 106, 181, 0.35);
   --radius-bubble: 20px 20px 6px 20px;
 }
 
-[data-theme="pietra"] {
+[data-theme="stone"] {
   color-scheme: light;
   --font-display:  'Marcellus', serif;
   --bg:            #eae6df;
@@ -240,22 +323,26 @@
   --border:        #d4cec2;
   --border-strong: #c2bbac;
   --text:          #37332c;
-  --text-muted:    #8b8478;
+  --text-muted:    #656057;
   --text-faint:    #ada699;
   --heading:       #2e2a24;
-  --accent:        #8c6f4e;
-  --accent-rgb:    140, 111, 78;
+  --accent:        #735c40;
+  --accent-rgb:    115, 92, 64;
   --accent-hover:  #a08258;
   --on-accent:     #f4f1ec;
-  --ok:            #7a8b6f;
-  --ok-rgb:        122, 139, 111;
-  --error:         #b5493f;
-  --warning:       #b07d3e;
+  --ok:            #57634f;
+  --ok-rgb:        87, 99, 79;
+  --error:         #a24138;
+  --warning:       #7d592c;
   --hover:         rgba(55, 51, 44, 0.05);
   --active:        rgba(55, 51, 44, 0.08);
   --shadow:        0 4px 16px rgba(55, 51, 44, 0.12), 0 1px 4px rgba(55, 51, 44, 0.08);
   --flower:        #8c6f4e;
-  --meta:          #8b8478;
+  --glint:         #d2ab78;
+  --glow:          transparent;
+  --meta:          #656057;
+  --group-concepts: #2f6db3;
+  --group-entities: #8a6420;
   --bubble-user-bg: #37332c;
   --bubble-user-text: #f4f1ec;
   --bubble-user-border: none;
@@ -263,8 +350,32 @@
   --radius-bubble: 12px 12px 3px 12px;
 }
 
+/* I temi il cui accento si vede **sulla superficie invertita**, misurato: il
+   rapporto di contrasto contro `--text` sta sopra 3:1, che è la soglia per un
+   oggetto grafico. Gli altri quattro tengono il default.
+     synthwave 3,06 · kyoto 4,03 · y2k 4,58   ← qui sotto
+     sticker   2,41 · pietra 1,99             ← sotto soglia: l'inchiostro
+     chanel e fumetto: l'accento *è* il testo, cioè il fondo della scheda.
+   Il conto lo rifà un banco (`test_home_you_contract.py`), quindi ritoccare la
+   tinta di un tema lo dice invece di lasciarlo scoprire a chi guarda. */
+[data-theme="synthwave"],
+[data-theme="kyoto"],
+[data-theme="y2k"] {
+  --accent-on-text: var(--accent);
+}
+
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Il fuoco da tastiera, di serie: un anello del colore di `--focus-ring`.
+   `:where()` non pesa niente, quindi ogni regola che veste il suo fuoco in un
+   altro modo (una riga che si accende, un campo che ispessisce il bordo)
+   continua a vincere; questa copre chi non ne ha una. */
+:where(a, button, select, summary, [role="button"], [role="tab"], [role="switch"],
+       [role="radio"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 html {
   overflow: hidden;
@@ -334,210 +445,6 @@ body {
   background: rgba(0, 0, 0, 0.42);
 }
 
-/* ── Theme picker: passerella of self-dressed cards ──────────────────
-   Each card wears its own theme via a self-contained `.tk-<id>` block, so
-   it previews the theme regardless of which theme is currently active. The
-   selection ring/badge are the only theme-reactive bits (they cut into the
-   live settings background). */
-.theme-strip-eyebrow {
-  flex-shrink: 0;
-  padding: 4px 8px 2px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-.tstrip {
-  display: flex;
-  gap: 12px;
-  /* stretch: tutte le card alte quanto la più alta (il .tfoot con
-     margin-top:auto assorbe lo spazio extra dentro ogni card) */
-  align-items: stretch;
-  overflow-x: auto;
-  flex-shrink: 0;
-  margin: 0 -8px;
-  padding: 12px 8px 14px;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.tstrip::-webkit-scrollbar { display: none; }
-/* Dentro il body di una sezione (padding 10px 12px): il bleed compensa il
-   padding del contenitore così la passerella arriva a filo dei bordi. */
-.settings-section-body .theme-strip-eyebrow { padding-left: 0; }
-.settings-section-body .tstrip {
-  margin: 0 -12px;
-  padding-left: 12px;
-  padding-right: 12px;
-}
-
-.tcard {
-  flex: 0 0 178px;
-  border-radius: 16px;
-  padding: 13px 12px 12px;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  border: 1px solid transparent;
-  font-family: var(--font-sans);
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.tcard .thead {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 7px;
-}
-.tcard .tnm { font-size: 14.5px; font-weight: 700; line-height: 1.1; }
-.tcard .tfl { font-size: 17px; line-height: 1; }
-.tcard .tconv {
-  display: flex; flex-direction: column;
-  gap: 8px;
-  margin-top: 13px;
-}
-.tcard .tmeta {
-  align-self: flex-start;
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  margin-top: -3px;
-}
-.tcard .tblo {
-  align-self: flex-end;
-  max-width: 92%;
-  font-size: 10px; line-height: 1.55;
-  padding: 8px 10px;
-}
-.tcard .trep {
-  align-self: flex-start;
-  max-width: 94%;
-  font-size: 10px; line-height: 1.55;
-}
-.tcard .tfoot {
-  display: flex; align-items: center; gap: 6px;
-  margin-top: auto;
-  padding-top: 14px;
-}
-.tcard .tin {
-  flex: 1;
-  font-size: 9px; line-height: 1;
-  padding: 6px 9px;
-  border-radius: 99px;
-  border: 1px solid transparent;
-  white-space: nowrap; overflow: hidden;
-}
-.tcard .tsend {
-  width: 21px; height: 21px; border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 11px; font-weight: 700;
-  flex-shrink: 0;
-}
-.tcard .tsel {
-  position: absolute; top: -7px; right: -7px;
-  width: 19px; height: 19px; border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 10px; font-weight: 700;
-  background: var(--accent); color: var(--on-accent);
-  box-shadow: 0 0 0 2.5px var(--bg);
-  z-index: 1;
-}
-.tcard.sel { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--accent); }
-
-/* Chanel */
-.tk-chanel { background: #141414; border-color: rgba(244,241,234,.25); color: #f4f1ea; }
-.tk-chanel .tnm { font-family: 'Tenor Sans', serif; letter-spacing: .05em; }
-.tk-chanel .tfl { color: #c8a96a; }
-.tk-chanel .tblo { background: #f4f1ea; color: #141414; border-radius: 13px 13px 3px 13px; }
-.tk-chanel .trep { color: #f4f1ea; }
-.tk-chanel .trep::after { content: ""; display: block; width: 22px; height: 1px; background: #c8a96a; margin-top: 5px; }
-.tk-chanel .tmeta { color: #c8a96a; }
-.tk-chanel .tin { background: #1e1e1e; border-color: rgba(244,241,234,.22); color: rgba(244,241,234,.45); }
-.tk-chanel .tsend { background: #f4f1ea; color: #141414; }
-
-/* Synthwave '84 */
-.tk-synthwave { background: #241b2f; border-color: #3b2e52; color: #f2ecff;
-  box-shadow: 0 0 16px rgba(249,42,173,.3); }
-.tk-synthwave .tnm { font-family: 'Orbitron', var(--font-mono); text-transform: uppercase; letter-spacing: .07em;
-  font-size: 12px; color: #f92aad; text-shadow: 0 0 9px rgba(249,42,173,.75); }
-.tk-synthwave .tfl { color: #03edf9; text-shadow: 0 0 8px rgba(3,237,249,.6); }
-.tk-synthwave .tblo { background: rgba(3,237,249,.13); color: #f2ecff;
-  border-radius: 13px 13px 3px 13px; box-shadow: 0 0 10px rgba(3,237,249,.18); }
-.tk-synthwave .trep { color: #f2ecff; text-shadow: 0 0 7px rgba(3,237,249,.45); }
-.tk-synthwave .tmeta { color: #03edf9; }
-.tk-synthwave .tin { background: #2a2139; border-color: #3b2e52; color: #848bbd; }
-.tk-synthwave .tsend { background: #f92aad; color: #fff;
-  box-shadow: 0 0 10px rgba(249,42,173,.75); }
-
-/* Kyoto */
-.tk-kyoto { background: #201d1a; border-color: #3f3a33; color: #e5ddd0; }
-.tk-kyoto .tnm { font-family: 'Shippori Mincho', serif; font-weight: 600; }
-.tk-kyoto .tfl { color: #b2543f; }
-.tk-kyoto .tblo { background: transparent; color: #cfc5b4; border: 1px solid #4a443b;
-  border-radius: 2px 13px 2px 13px; }
-.tk-kyoto .trep { color: #e5ddd0; border-left: 2px solid #b2543f; padding-left: 8px; }
-.tk-kyoto .tmeta { color: #94897a; }
-.tk-kyoto .tin { background: #2b2723; border-color: #3f3a33; color: #94897a; border-radius: 5px; }
-.tk-kyoto .tsend { background: #b2543f; color: #f5efe4; border-radius: 5px; }
-
-/* Sticker */
-.tk-sticker { background: #17131c; border: 2px solid #ffffff; color: #f4effa;
-  transform: rotate(-1deg); box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
-.tk-sticker .tnm { font-family: 'Baloo 2', sans-serif; }
-.tk-sticker .tfl { color: #a78bfa; }
-.tk-sticker .tblo { background: #a78bfa; color: #221833; border: 1.5px solid #fff;
-  border-radius: 11px; transform: rotate(1deg); box-shadow: 2.5px 2.5px 0 rgba(0,0,0,.4);
-  font-weight: 500; }
-.tk-sticker .trep { background: #241d2c; color: #f4effa; border: 1.5px solid #fff;
-  border-radius: 11px; padding: 8px 10px; transform: rotate(-1deg);
-  box-shadow: 2.5px 2.5px 0 rgba(0,0,0,.4); }
-.tk-sticker .tmeta { color: #9d92ab; }
-.tk-sticker .tin { background: #241d2c; border-color: rgba(255,255,255,.35); color: #9d92ab; }
-.tk-sticker .tsend { background: #a78bfa; color: #221833; border: 1.5px solid #fff;
-  box-shadow: 2px 2px 0 rgba(0,0,0,.4); }
-
-/* Fumetto */
-.tk-fumetto { background-color: #faf6ef; color: #1b1820; border: 2px solid #1b1820;
-  background-image: radial-gradient(rgba(27,24,32,.12) 1px, transparent 1.3px);
-  background-size: 8px 8px;
-  box-shadow: 3px 3px 0 rgba(27,24,32,.8); }
-.tk-fumetto .tnm { font-family: 'Bangers', cursive; font-size: 16px; letter-spacing: .03em; }
-.tk-fumetto .tfl { color: #7c5cff; }
-.tk-fumetto .tblo { background: #ffffff; color: #1b1820; border: 2px solid #1b1820;
-  border-radius: 11px 11px 2px 11px; box-shadow: 2.5px 2.5px 0 rgba(27,24,32,.25); }
-.tk-fumetto .trep { background: #ffffff; color: #1b1820; border: 2px solid #1b1820;
-  border-radius: 11px 11px 11px 2px; padding: 8px 10px;
-  box-shadow: 2.5px 2.5px 0 rgba(27,24,32,.25); font-family: 'Comic Neue', cursive; }
-.tk-fumetto .tmeta { color: #7c5cff; }
-.tk-fumetto .tin { background: #ffffff; border: 1.5px solid #1b1820; color: #6f6a63; }
-.tk-fumetto .tsend { background: #1b1820; color: #faf6ef; }
-
-/* Y2K */
-.tk-y2k { background: linear-gradient(165deg, #efe0ff 0%, #ffe0f1 100%); color: #46245a;
-  border: 1px solid #ffffff;
-  box-shadow: inset 0 2px 3px rgba(255,255,255,.8), 0 4px 12px rgba(245,106,181,.3); }
-.tk-y2k .tnm { font-family: 'Fredoka', sans-serif; color: #f56ab5; }
-.tk-y2k .tfl { color: #b76bf0; }
-.tk-y2k .tblo { background: linear-gradient(180deg, #ffa7dd, #f56ab5); color: #fff;
-  border: 1px solid #fff; border-radius: 13px 13px 4px 13px;
-  box-shadow: inset 0 1.5px 2px rgba(255,255,255,.7), 0 3px 7px rgba(245,106,181,.4); }
-.tk-y2k .trep { color: #46245a; }
-.tk-y2k .trep::after { content: ""; display: block; width: 22px; height: 2px; border-radius: 2px;
-  background: linear-gradient(90deg, #ffa7dd, #f56ab5); margin-top: 5px; }
-.tk-y2k .tmeta { color: #b76bf0; }
-.tk-y2k .tin { background: #ffffff; border-color: #fff; color: #9a7fae;
-  box-shadow: inset 0 1.5px 2px rgba(255,255,255,.9), 0 1px 3px rgba(245,106,181,.2); }
-.tk-y2k .tsend { background: linear-gradient(180deg, #ff9ad9, #f56ab5); color: #fff;
-  border: 1px solid #fff;
-  box-shadow: inset 0 1.5px 2px rgba(255,255,255,.6), 0 2px 6px rgba(245,106,181,.5); }
-
-/* Pietra */
-.tk-pietra { background: #eae6df; border-color: #d4cec2; color: #37332c; }
-.tk-pietra .tnm { font-family: 'Marcellus', serif; letter-spacing: .03em; }
-.tk-pietra .tfl { color: #8c6f4e; }
-.tk-pietra .tblo { background: #37332c; color: #f4f1ec; border-radius: 11px 11px 3px 11px; }
-.tk-pietra .trep { color: #37332c; font-family: 'Marcellus', serif; font-style: italic; }
-.tk-pietra .tmeta { color: #8b8478; }
-.tk-pietra .tin { background: #f4f1ec; border-color: #d4cec2; color: #8b8478; }
-.tk-pietra .tsend { background: #8c6f4e; color: #f4f1ec; }
 
 /* ── View titles (scrolling-title pattern, replaces the fixed header) ── */
 .view-title-mount {
@@ -549,8 +456,36 @@ body {
   gap: 8px;
   padding: 14px 16px 6px;
 }
-.view-title-text {
+/* La colonna soprascritta / nome / sottotitolo. `align-items: flex-start` sul
+   contenitore solo quando c'e' una pila: con il solo titolo il centraggio
+   verticale di prima resta quello giusto. */
+.view-title:has(.view-title-sub:not([hidden])) { align-items: flex-start; }
+.view-title-stack {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.view-title-eyebrow {
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+/* La riga che dice a cosa serve il cassetto. Va a capo di proposito — il
+   titolo no, ma questa e' una frase e troncarla la renderebbe inutile. */
+.view-title-sub {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.view-title-text {
+  /* Niente `flex: 1`: il titolo sta dentro una colonna, e li' crescere vuol
+     dire allungarsi in verticale. A prendersi lo spazio orizzontale e' la
+     pila (`.view-title-stack`). */
   min-width: 0;
   margin: 0;
   font-family: var(--font-display);
@@ -582,23 +517,40 @@ body {
 }
 .ibtn:hover { transform: scale(1.08); }
 .ibtn:active { transform: scale(0.92); }
+/* Sul telefono il tocco sbiadisce anche. Stava nel blocco «Responsive /
+   Touch» in coda al foglio, che 0116b1f ha tolto insieme alla wiki: le altre
+   sue regole erano di classi sparite (`.app-cell`, `.audit-item`) o gia'
+   coperte dalle misure di dock e bottoni, questa no — ed e' la meta' del
+   riscontro al tocco che resta anche a movimento ridotto, dove il
+   rimpicciolimento si spegne. */
+@media (hover: none) {
+  .ibtn:active { opacity: 0.8; }
+}
 
 .ibtn i { font-size: 14px; }
 
-/* Drawer buttons */
-.ibtn-drawer {
-  color: var(--accent);
+/* Icona **e** parola, per un'azione la cui destinazione non si indovina
+   dall'icona: una casetta puo' voler dire home, casa, indietro; «Jenny» no.
+   Larghezza automatica — l'unico `.ibtn` che non e' un quadrato — e bordo
+   visibile, perche' senza sfondo una parola in cima alla pagina si confonde
+   con un titolo invece di leggersi come un tasto. */
+.ibtn-pill {
+  width: auto;
+  gap: 6px;
+  padding: 0 12px 0 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
 }
-.ibtn-drawer:hover {
-  opacity: 0.7;
-}
-.ibtn-drawer.active-tab {
-  opacity: 1;
-}
+.ibtn-pill i { color: var(--accent); font-size: 15px; }
 
 /* Action buttons */
 .ibtn-action {
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .ibtn-action:hover {
   opacity: 0.7;
@@ -629,10 +581,12 @@ body {
    cambiarlo. Costruito con l'idioma dei chip che l'app ha già
    (`.chat-tool-header`, `.tool-events-header`): inline-flex, fondo `--overlay`,
    bordo da mezzo pixel. Nessun valore nuovo.
-   La tendina prende il contenitore da `.wiki-popover` e le righe da
-   `.oc-sheet-action`, e si apre verso l'ALTO: sotto ci sono solo composer e
-   dock. Vive sopra la mascotte (z-index 120) perché il tap sul chip non deve
-   finire dietro Jenny. */
+   La tendina prende le righe da `.oc-sheet-action` e si apre verso l'ALTO: sotto ci sono solo composer e
+   dock. Il suo `z-index` la alza sul resto della riga del composer, **non**
+   sulla mascotte: `.chat-bottom` (sticky, `z-index: 6`) apre un contesto di
+   impilamento, e 121 vale solo li' dentro. Jenny (120, nel contesto della
+   pagina) le sta sopra, come sopra a tutto (D3); in pratica non si toccano —
+   il chip e la tendina stanno a sinistra, lei sul bordo destro. */
 .compose-scope {
   position: relative;
   z-index: 121;
@@ -641,23 +595,17 @@ body {
   gap: 6px;
   margin-bottom: 8px;
 }
-.scope-chip {
+/* Le tre pillole della riga del composer — scope, interruttore, comandi: la
+   stessa forma perché rispondono alle domande che si fanno prima di premere
+   invio, e si leggono nella stessa occhiata. Qui la pillola; nelle regole di
+   ciascuna quel che cede e quel che no. */
+.scope-chip,
+.write-switch,
+.commands-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  /* Cede lui, non l'interruttore. Da quando la riga tiene due controlli,
-     `max-width: 100%` non basta: il 100% e' della riga *intera*, quindi con un
-     nome di progetto lungo il chip se la prendeva tutta e l'interruttore — che
-     e' `flex-shrink: 0` — usciva a destra. Un nome di progetto arriva a 64
-     caratteri (`is_valid_project_name`), quindi il caso non e' teorico.
-     `min-width: 0` e' la meta' che si dimentica: senza, il contenuto flex
-     rifiuta di scendere sotto la propria larghezza intrinseca e lo shrink non
-     morde. La troncatura vera resta sul crumb (`max-width: 15ch`); questo e'
-     il tetto che tiene la riga dentro lo schermo comunque. */
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  padding: 4px 10px 4px 9px;
+  gap: 5px;
+  padding: 4px 9px;
   background: var(--overlay);
   border: 0.5px solid var(--border);
   /* `--radius-pill` e non `--radius-seg`: quel token e' il raggio dei controlli
@@ -675,9 +623,28 @@ body {
   -webkit-tap-highlight-color: transparent;
   transition: background .16s ease, border-color .16s ease, color .16s ease;
 }
-.scope-chip:hover { background: var(--overlay-strong); }
-.scope-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-.scope-chip:active { transform: scale(0.98); }
+.scope-chip:hover, .write-switch:hover, .commands-chip:hover { background: var(--overlay-strong); }
+.scope-chip:focus-visible, .write-switch:focus-visible, .commands-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.scope-chip:active, .write-switch:active, .commands-chip:active { transform: scale(0.98); }
+.scope-chip {
+  gap: 6px;
+  /* Cede lui, non l'interruttore. Da quando la riga tiene due controlli,
+     `max-width: 100%` non basta: il 100% e' della riga *intera*, quindi con un
+     nome di progetto lungo il chip se la prendeva tutta e l'interruttore — che
+     e' `flex-shrink: 0` — usciva a destra. Un nome di progetto arriva a 64
+     caratteri (`is_valid_project_name`), quindi il caso non e' teorico.
+     `min-width: 0` e' la meta' che si dimentica: senza, il contenuto flex
+     rifiuta di scendere sotto la propria larghezza intrinseca e lo shrink non
+     morde. La troncatura vera resta sul crumb (`max-width: 15ch`); questo e'
+     il tetto che tiene la riga dentro lo schermo comunque. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 10px 4px 9px;
+}
 /* Essere in un progetto è lo stato che deve farsi notare; la sessione
    personale è il default e resta quieta. */
 .scope-chip[data-scope="project"] {
@@ -694,27 +661,7 @@ body {
 /* Interruttore scrittura / sola lettura: stessa pillola del chip, perché
    risponde alla stessa domanda e si legge nella stessa occhiata. `--radius-pill`
    per la ragione scritta sopra, e non `--radius-seg`. */
-.write-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  padding: 4px 9px;
-  background: var(--overlay);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: background .16s ease, border-color .16s ease, color .16s ease;
-}
-.write-switch:hover { background: var(--overlay-strong); }
-.write-switch:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-.write-switch:active { transform: scale(0.98); }
+.write-switch { flex-shrink: 0; }
 /* La sola lettura è lo stato da notare: scrivere è il default, e resta quieto.
    Stessa logica del chip, dove è "essere in un progetto" a farsi vedere. */
 .write-switch[data-mode="readonly"] {
@@ -734,26 +681,7 @@ body {
    sono due vicini della stessa riga, e due forme diverse la farebbero leggere
    come due cose di natura diversa. Cede lo scope chip, non questo: il suo testo
    ha gia' l'ellissi (`.scope-chip-crumb`), questo e' un'icona e una parola. */
-.commands-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  padding: 4px 9px;
-  background: var(--overlay);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
-  -webkit-tap-highlight-color: transparent;
-}
-.commands-chip:hover { background: var(--overlay-strong); }
-.commands-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-.commands-chip:active { transform: scale(0.98); }
+.commands-chip { flex-shrink: 0; }
 .commands-chip[aria-expanded="true"] {
   background: var(--overlay-strong);
   border-color: var(--border-strong);
@@ -800,10 +728,9 @@ body {
      la voce con cui si torna indietro. Un tetto, e la lista sotto scorre.
      Lo spazio sottratto e' quel che chip, composer e dock occupano sotto il
      pannello, **scritto con i loro token** e non col 172 a cui sommavano: quel
-     numero era la stessa somma che `.jenny-duo` & c. fanno con
-     `var(--dock-height) + 58px + var(--scope-row)`, ricalcolata a mano, quindi
-     ritoccare il padding del chip (cioe' `--scope-row`) muoveva la mascotte e
-     lasciava il menu dov'era. I 25px in fondo sono il margine di rispetto
+     numero era `var(--dock-height) + 58px + var(--scope-row)`, l'altezza di chip,
+     composer e dock ricalcolata a mano, quindi ritoccare il padding del chip
+     (cioe' `--scope-row`) lasciava il menu dov'era. I 25px in fondo sono il margine di rispetto
      dall'alto dello schermo. Nessun secondo limite sulla lista: il tetto e' uno
      solo ed e' lei che cede, per flex, cosi' non ci sono due misure da tenere
      d'accordo. */
@@ -969,16 +896,14 @@ body {
    che questa riga non può mantenere. */
 .scope-menu-item.is-unopenable { color: var(--text-faint); cursor: default; }
 .scope-menu-item.is-unopenable:hover { background: transparent; }
-/* L'interruttore sta nella stessa riga del chip e ha la stessa transizione e lo
-   stesso `scale(0.98)` al tocco: e' nato dopo questo blocco e ne era rimasto
-   fuori. Il rimpicciolimento e' la parte che conta — le transizioni le azzera
-   comunque la regola `*` in fondo al file, il `transform` di uno stato `:active`
-   no, perche' non e' ne' un'animazione ne' una durata. */
+/* Le tre pillole della riga del composer senza transizioni a movimento
+   ridotto. Il rimpicciolimento al tocco, che era qui solo per loro, lo spegne
+   per tutti i bottoni il blocco in fondo al foglio («Movimento ridotto: il
+   tocco non rimpicciolisce»). */
 @media (prefers-reduced-motion: reduce) {
   .scope-chip { transition: none; }
-  .scope-chip:active { transform: none; }
   .write-switch { transition: none; }
-  .write-switch:active { transform: none; }
+  .commands-chip { transition: none; }
   .scope-menu-item { transition: none; }
 }
 
@@ -1004,8 +929,14 @@ body {
   padding: 8px 8px 8px 16px;
   transition: border-color 0.3s cubic-bezier(.25,.1,.25,1);
 }
-.compose-pill:focus-within {
-  border-color: var(--accent);
+/* L'anello si accende quando il fuoco **si vede**, non quando e' solo dentro:
+   il campo lo vede sempre (un campo di testo e' `:focus-visible` a ogni
+   fuoco), un bottone della pastiglia solo da tastiera. Con `:focus-within` un
+   tocco del dito su «Comandi» o sulla graffetta accendeva tutta la pastiglia,
+   e restava accesa. Come la casa (`.home-field` in `home-style.css`). */
+.compose-pill:has(:focus-visible) {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 /* ── Chat Input ── */
@@ -1073,24 +1004,38 @@ body {
   transform: scale(0.95);
 }
 
-/* Send button */
-.compose-send {
-  width: 50px; height: 50px; /* alto quanto .compose-pill: restano allineati */
+/* Il tasto manda e il cassetto delle app, suo gemello sinistro: lo stesso
+   tondo, alto quanto `.compose-pill` perche' la riga resti allineata, e la
+   stessa molla al tocco. */
+.compose-drawer, .compose-send {
+  width: 50px; height: 50px;
   border-radius: 50%;
-  background: var(--accent);
   border: none;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  color: var(--on-accent);
   font-size: 18px;
   flex-shrink: 0;
-  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), background 0.3s ease, opacity 0.3s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.compose-send:active {
-  transform: scale(0.92);
+.compose-drawer i, .compose-send i { font-size: 18px; }
+.compose-drawer:active, .compose-send:active { transform: scale(0.92); }
+
+/* Il cassetto **non** in accento, e non e' timidezza: in questa riga la cosa
+   accesa deve restare una sola — quella che manda il messaggio. Un secondo
+   tondo pieno accanto farebbe due primi attori e nessuno dei due si
+   leggerebbe piu' come «il» gesto. */
+.compose-drawer {
+  background: var(--overlay);
+  color: var(--text);
+  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), background 0.3s ease;
 }
-.compose-send i { font-size: 18px; }
+.compose-drawer:active { background: var(--overlay-strong); }
+
+.compose-send {
+  background: var(--accent);
+  color: var(--on-accent);
+  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), background 0.3s ease, opacity 0.3s ease;
+}
 
 .compose-send[disabled] {
   background: var(--overlay-strong);
@@ -1137,21 +1082,62 @@ body {
 }
 
 .dock-item {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   flex: 1;
-  padding: 10px 0;
+  min-width: 0;
+  padding: 7px 0 9px;
+  /* Le voci sono `<button>`: via il vestito di serie, cosi' restano
+     identiche a quando erano `<div>`. */
+  margin: 0;
+  border: none;
+  background: none;
+  font: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.2s cubic-bezier(.25,.1,.25,1);
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
-.dock-item:active { color: var(--text-muted); }
+.dock-item:active { color: var(--text); }
 .dock-item i { font-size: var(--dock-icon); line-height: 1; }
 .dock-flower { font-size: 19px; line-height: 1; }
 
+/* Il nome sotto l'icona. Quattro icone nude — un fiore, un cervello, una mano,
+   un cilindro — non dicono dove portano: la mano e il cilindro in particolare
+   si indovinano solo dopo averli toccati. La tavola le etichetta tutte, e le
+   stringhe esistevano gia' (`nav.*`), usate solo come `title` — cioe' visibili
+   a nessuno su un telefono, dove non esiste il passaggio del mouse. */
+.dock-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  line-height: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dock-item.active { color: var(--text); }
+.dock-item.active .dock-label { font-weight: 600; }
+
+/* Il puntino della voce attiva. Il colore da solo distingue male sui temi in
+   cui `--accent` *e'* il testo (Chanel, Fumetto): li' attivo e inattivo
+   differiscono per una sfumatura di grigio. Il puntino e' una seconda
+   differenza, di forma e non di tinta. */
+.dock-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+}
 
 /* ══ Drawer System ══ */
 
@@ -1225,7 +1211,14 @@ body {
   color: var(--text-faint); letter-spacing: .06em;
   text-transform: uppercase;
 }
-.drawer-close {
+/* La crocetta, una per quattro pannelli: i cassetti, il cassetto delle app,
+   e i due pannelli sopra la chat (l'anteprima di un file e le informazioni
+   della sessione). Stessa taglia, stesso bordo, stessa molla al tocco — tranne
+   quella del cassetto delle app, che la molla non ce l'ha: nessuno stato le
+   da' un `transform`, quindi la transizione di `transform` qui sotto per lei
+   non parte mai. Erano tre regole ricopiate, identiche riga per riga. */
+.drawer-close, .launcher-close, .file-preview-close, .session-info-close {
+  position: relative;
   width: 22px; height: 22px;
   border-radius: var(--radius-sm);
   border: 0.5px solid var(--border-strong);
@@ -1234,9 +1227,21 @@ body {
   display: flex; align-items: center; justify-content: center;
   transition: color .2s cubic-bezier(.25,.1,.25,1), border-color .2s, background .2s, transform .25s cubic-bezier(.34,1.56,.64,1);
 }
-.drawer-close:hover { color: var(--text); border-color: var(--border-strong); background: var(--overlay-strong); transform: scale(1.1); }
-.drawer-close:active { transform: scale(0.9); }
-.drawer-close i { font-size: 13px; }
+.drawer-close:hover, .launcher-close:hover,
+.file-preview-close:hover, .session-info-close:hover { color: var(--text); }
+.drawer-close:hover, .launcher-close:hover { background: var(--overlay-strong); }
+.drawer-close:hover, .file-preview-close:hover, .session-info-close:hover { transform: scale(1.1); }
+.drawer-close:active, .file-preview-close:active, .session-info-close:active { transform: scale(0.9); }
+.drawer-close i, .launcher-close i { font-size: 13px; }
+/* L'area di tocco e' piu' grande del disegno: la crocetta resta da 22 px, ma
+   un anello invisibile di 5 px tutt'attorno porta il bersaglio a 32 px —
+   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano. */
+.drawer-close::after, .launcher-close::after,
+.file-preview-close::after, .session-info-close::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
 
 /* Drawer body */
 .drawer-body {
@@ -1245,196 +1250,36 @@ body {
   display: flex; flex-direction: column; gap: 6px;
 }
 
-/* ══ Audit Items (drawer) ══ */
-.audit-item {
-  padding: 11px 13px;
-  border: 0.5px solid rgba(255,255,255,0.07);
-  border-radius: var(--radius);
-  display: flex; flex-direction: column; gap: 4px;
-  cursor: pointer;
-  transition: background .25s cubic-bezier(.25,.1,.25,1), box-shadow .25s cubic-bezier(.25,.1,.25,1), border-color .25s cubic-bezier(.25,.1,.25,1), transform .25s cubic-bezier(.34,1.56,.64,1);
-  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.10), inset 0 -0.5px 0 rgba(255,255,255,0.02);
-  animation: cardEntrance 0.3s cubic-bezier(.25,.1,.25,1) both;
+/* ══ Workspace Explorer (Finder-style) ══ */
+/* Dal 21/09/2026 l'esploratore non e' piu' una schermata a tutta altezza: sta
+   dentro la scheda «I file veri» di Memoria. Quindi **non scorre di suo**.
+   Un contenitore alto quanto vuole dentro una pagina che scorre da' due
+   scorrimenti annidati, e sul telefono il dito ne trova sempre quello
+   sbagliato: qui cresce, e a scorrere e' il cassetto. */
+.ws-explorer {
+  margin: 0 -14px -14px;   /* al vivo dei bordi della scheda */
 }
-.audit-item:hover {
-  background: var(--overlay-strong);
-  border-color: rgba(255,255,255,0.14);
-  box-shadow:
-    inset 0 1px 2px rgba(0,0,0,0.08),
-    inset 0 -0.5px 0 rgba(255,255,255,0.02),
-    0 4px 16px rgba(0,0,0,0.15);
-  transform: translateY(-1px);
-}
-.audit-item:active { transform: translateY(0) scale(0.98); }
-.ai-title {
-  font-size: 12px; font-weight: 500; color: var(--text);
-  display: flex; align-items: center; gap: 6px;
-}
-.ai-meta { font-size: 11px; color: var(--text-faint); }
-.audit-tag {
-  font-size: 10px; padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  margin-left: auto; flex-shrink: 0;
-}
-/* Tag colorati per severità. */
-.audit-tag.tag-info    { background: rgba(var(--accent-rgb), .15); color: var(--accent); }
-.audit-tag.tag-suggest { background: rgba(var(--accent-rgb), .15); color: var(--accent); }
-.audit-tag.tag-warn    { background: rgba(255, 179, 0, .16); color: var(--warning); }
-.audit-tag.tag-error   { background: rgba(255, 69, 58, .16); color: var(--error); }
-.audit-tag.tag-resolved { background: rgba(var(--accent-rgb), .10); color: var(--text-faint); }
-
-/* Toggle Open/Resolved nel drawer audit. */
-.audit-mode-toggle {
-  display: flex; gap: 6px; margin-bottom: 10px;
-}
-.audit-mode-toggle button {
-  flex: 1; font-size: 11px; padding: 5px 8px;
-  background: var(--surface-2); border: 0.5px solid var(--border);
-  color: var(--text-faint); border-radius: var(--radius-sm); cursor: pointer;
-}
-.audit-mode-toggle button.active {
-  background: rgba(var(--accent-rgb), .15); color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* Severity styles */
-.audit-item.sev-info    { border-left: 3px solid var(--accent); }
-.audit-item.sev-suggest { border-left: 3px solid var(--accent); }
-.audit-item.sev-warn    { border-left: 3px solid var(--warning); }
-.audit-item.sev-error   { border-left: 3px solid var(--error); }
-
-/* Fallback quando DOMPurify non è disponibile: markdown grezzo escapato. */
-.wiki-raw-fallback {
-  white-space: pre-wrap; word-break: break-word;
-  font-family: var(--font-mono, monospace); font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ══ File Tree (drawer) ══ */
-.ftree-path {
-  font-size: 10px; color: var(--text-faint);
-  padding: 0 2px 6px; letter-spacing: .02em;
-}
-
-.tree-node {
+.ws-bar {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background 0.12s ease;
-  white-space: nowrap;
+  align-items: stretch;
 }
-
-.tree-node:hover {
-  background: var(--surface-2);
-}
-
-.tree-node.active {
-  background: var(--surface-2);
-  color: var(--accent);
-}
-
-/* Chevron */
-.tree-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  font-size: 12px;
-  color: var(--text-faint);
-  transition: transform 0.2s ease, color 0.2s ease;
-  flex-shrink: 0;
-}
-
-.tree-chevron:hover {
-  color: var(--accent);
-}
-
-.tree-folder:not(.collapsed) > .tree-node .tree-chevron {
-  transform: rotate(90deg);
-}
-
-/* Icons — Apple-style with gradients */
-.tree-icon {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.tree-icon-svg {
-  width: 18px;
-  height: 18px;
-  display: block;
-}
-
-.tree-icon.icon-folder {
-  filter: drop-shadow(0 1px 1px rgba(212, 128, 14, 0.25));
-}
-
-.tree-icon.icon-md {
-  filter: drop-shadow(0 1px 1px rgba(59, 130, 246, 0.2));
-}
-
-/* Label */
-.tree-label {
+.ws-bar > .ws-breadcrumb {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text);
+  border-top: 0.5px solid var(--border);
 }
-
-.tree-dir .tree-label {
-  font-weight: 500;
-  color: var(--text-faint);
+.ws-new {
+  flex: 0 0 auto;
+  width: 40px;
+  border: none;
+  border-top: 0.5px solid var(--border);
+  border-bottom: 0.5px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  color: var(--text-accent);
+  font-size: 18px;
+  cursor: pointer;
 }
-
-.tree-dir:hover .tree-label {
-  color: var(--text);
-}
-
-/* Children container with guide line */
-.tree-children {
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
-  margin-left: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.tree-folder.collapsed > .tree-children {
-  display: none;
-}
-
-/* File type hover accents — Apple glow */
-.tree-file:hover .icon-md {
-  filter: drop-shadow(0 1px 3px rgba(59, 130, 246, 0.35));
-  transform: scale(1.08);
-}
-
-.tree-folder:hover > .tree-node .icon-folder {
-  filter: drop-shadow(0 1px 4px rgba(245, 166, 35, 0.45));
-  transform: scale(1.08);
-}
-
-/* ══ Workspace Explorer (Finder-style) ══ */
-.ws-explorer {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+.ws-new:active { background: var(--overlay); }
 
 /* Breadcrumb bar */
 .ws-breadcrumb {
@@ -1466,7 +1311,7 @@ body {
 }
 .ws-crumb:hover {
   background: var(--surface-2);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .ws-crumb:last-child {
   color: var(--text);
@@ -1487,8 +1332,6 @@ body {
 
 /* File grid */
 .ws-grid {
-  flex: 1;
-  overflow-y: auto;
   padding: 12px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
@@ -1520,11 +1363,6 @@ body {
   transform: translateY(-1px);
 }
 .ws-item:active { transform: translateY(0) scale(0.96); }
-.ws-item.selected {
-  background: rgba(var(--accent-rgb), 0.12);
-  outline: 0.5px solid var(--accent);
-  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.06), 0 4px 16px rgba(var(--accent-rgb), 0.10);
-}
 
 /* Item icon — Apple-style */
 .ws-item-icon {
@@ -1588,13 +1426,12 @@ body {
 
 /* Empty state */
 .ws-empty {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 40px;
+  padding: 28px 40px;
   animation: viewEntrance 0.3s cubic-bezier(.25,.1,.25,1) both;
 }
 .ws-empty-icon {
@@ -1660,8 +1497,7 @@ body {
    ritaglio del viewport: il testo scrollato fuori da uno scroller INTERNO è
    irraggiungibile, e la selezione saltava sul composer prendendosi tutto.
    Quindi in chat scorre `html`, e nessun antenato del testo ritaglia.
-   Solo in chat: senza `mode-chat` il guscio è quello fisso di sempre.
-   Ragionamento e misure: .agent/chat-selection-root-plan.md. */
+   Solo in chat: senza `mode-chat` il guscio è quello fisso di sempre. */
 #view-chat { position: relative; flex-direction: column; height: 100%; }
 
 :root.mode-chat { overflow-y: auto; overflow-x: hidden; }
@@ -1682,6 +1518,22 @@ body {
 }
 :root.mode-chat .chat-area { overflow: visible; }
 
+/* L'intestazione della chat, in cima e ferma — l'altra meta' di `.chat-bottom`,
+   e per la stessa ragione. Nelle altre viste dell'officina il mount sta in una
+   colonna alta quanto lo schermo e resta su da solo; qui a scorrere e' il
+   **documento** (v. sopra), quindi senza `sticky` il titolo se ne andrebbe al
+   primo dito — e in casa, dov'e' nato, quel titolo non se ne va mai.
+
+   `top` sull'inset e non su zero: `.app` si scansa la status bar con un
+   padding, ma un elemento appiccicato si misura sullo scrollport, cioe' sul
+   viewport intero, e con `top: 0` finirebbe sotto l'orologio. */
+#title-chat {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 6;
+  background: var(--bg);
+}
+
 /* Quello che sta fermo mentre la chat scorre resta in FLUSSO e si incolla al
    fondo del viewport: niente padding da calcolare, niente ResizeObserver. Il
    composer sopra il dock, il dock a filo. */
@@ -1701,7 +1553,7 @@ body {
 
 /* Finché c'è una selezione la chrome non partecipa al hit-test: è la
    condizione perché il motore ritrovi il testo sotto il composer o il dock
-   (misurato: .agent/selection-rig, pagina C). Il tap che così finirebbe sotto
+   (misurato sul telefono con un banco di gesti adb). Il tap che così finirebbe sotto
    lo riconsegna forwardTapsThroughChrome() in shared/selection.js. */
 :root.has-selection .chat-bottom,
 :root.has-selection .dock,
@@ -1738,17 +1590,19 @@ body {
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-/* Quando la mascotte è agganciata a sinistra (drag dell'utente) l'angolo
-   destro è libero: lo scostamento sopra serve solo quando lei è lì. */
-:root:has(.jenny-duo.side-left) .chat-scroll-fab {
-  right: 14px;
+  /* Nascosto davvero, non solo trasparente: a opacita' 0 restava nell'ordine
+     del Tab, e la tastiera fisica ci si fermava sopra senza mostrare niente.
+     `visibility` scatta **dopo** la dissolvenza
+     quando sparisce (ritardo 0,15s) e subito quando compare. */
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
 }
 .chat-scroll-fab.visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+  visibility: visible;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s;
 }
 .chat-scroll-fab-badge {
   position: absolute;
@@ -1862,23 +1716,22 @@ body {
   gap: 4px;
 }
 
-/* Turn latency */
+/* I secondi del turno. Stanno **dentro** la riga di azioni, accanto al Copia:
+   erano un nodo a se' sopra di essa, e due dati che si leggono insieme
+   occupavano due righe in coda a ogni risposta. */
 .chat-meta {
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--meta);
 }
 
-/* Riga di azioni in coda alla bolla (Copia · ⋯). Discreta come `.chat-meta`,
-   che le sta accanto: è un'affordance, non un pulsante di prima fila. */
+/* La riga in coda alla bolla: Copia e i secondi. Discreta come `.chat-meta`
+   che le sta dentro — e' un'affordance, non un pulsante di prima fila. */
 .chat-msg-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   margin-top: 2px;
-}
-.chat-msg-user .chat-msg-actions {
-  justify-content: flex-end;
 }
 .chat-msg-action {
   display: inline-flex;
@@ -1921,7 +1774,11 @@ body {
   display: contents;
 }
 
-.chat-thinking-header {
+/* Le intestazioni che si toccano per aprire un pezzo del turno — il
+   ragionamento, un tool, il gruppo dei tool, il resoconto di un subagent: la
+   stessa etichetta squadrata. Quella del singolo tool si scrive nel colore del
+   testo e senza grassetto. */
+.chat-thinking-header, .chat-tool-header, .tool-events-header, .sa-digest-head {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1930,14 +1787,21 @@ body {
   border: 0.5px solid var(--border);
   border-radius: var(--radius-seg);
   font-size: 10px;
-  font-weight: 500;
-  color: var(--text-muted);
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+.chat-thinking-header, .tool-events-header, .sa-digest-head {
+  font-weight: 500;
+  color: var(--text-muted);
+}
 
-.chat-thinking-header i {
+/* L'icona della testata, non la freccina in fondo: con un selettore `i` nudo
+   (0,1,1) la regola vinceva su `.chat-thinking-chevron` e
+   `.tool-events-chevron` (0,1,0), e le freccine uscivano colore accento a
+   12px invece che tenui a 11px. */
+.chat-thinking-header i:not(.chat-thinking-chevron),
+.tool-events-header i:not(.tool-events-chevron) {
   font-size: 12px;
   color: var(--accent);
 }
@@ -2035,20 +1899,7 @@ body {
   display: contents;
 }
 
-.chat-tool-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  background: var(--overlay);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-seg);
-  font-size: 10px;
-  color: var(--text);
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
+.chat-tool-header { color: var(--text); }
 
 .chat-tool-icon {
   font-size: 11px;
@@ -2112,7 +1963,7 @@ body {
 .chat-content h3 {
   font-size: 1.05em;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text-accent);
   margin: 0.6em 0 0.3em;
 }
 
@@ -2132,13 +1983,13 @@ body {
 }
 
 .chat-content a {
-  color: var(--accent);
+  color: var(--text-accent);
   text-decoration: none;
   border-bottom: 1px dashed var(--border-strong);
 }
 
 .chat-content a:hover {
-  color: var(--accent);
+  color: var(--text-accent);
   border-bottom-color: var(--accent);
 }
 
@@ -2165,21 +2016,33 @@ body {
   font-style: italic;
 }
 
+/* Una tabella larga scorre **di lato da sola**, dentro la sua scatola, e non
+   si stringe sotto le parole che contiene: nessuna parola spezzata a meta'
+   in una cella, e la pagina resta ferma. La stessa resa in tre posti — la
+   chat e il lettore della casa, la chat dell'officina — perche' e' la stessa
+   tabella. `fit-content`: la scatola e'
+   larga quanto la tabella, cosi' il bordo non gira attorno a un vuoto. */
 .chat-content table {
-  width: 100%;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;
   margin: 0.6em 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  overflow: hidden;
 }
 
 .chat-content th, .chat-content td {
   padding: 6px 8px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  /* Il contenitore spezza ovunque (`overflow-wrap: anywhere`/`word-break`):
+     qui no, o la cella si stringe fino a una lettera per riga. */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .chat-content th {
@@ -2201,7 +2064,7 @@ body {
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 0.88em;
-  color: var(--accent);
+  color: var(--text-accent);
   border: 1px solid var(--border);
 }
 
@@ -2483,7 +2346,7 @@ body {
    stato e cambiarlo al tocco farebbe sembrare che il job sia cambiato. */
 .sa-row:active { background: var(--active); }
 .sa-row:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .sa-row.state-running { border-left-color: var(--ok); }
@@ -2682,11 +2545,17 @@ body {
   cursor: pointer;
 }
 
-/* Lightbox: overlay fullscreen aperto al tap su un'immagine di chat. */
+/* Lightbox: overlay fullscreen aperto al tap su un'immagine di chat.
+   Il livello sta **sotto Jenny** (D3, 25/09/2026: «Jenny sempre sopra», anche
+   alle immagini) e sopra la mini-app (110), che e' l'ordine della catena di
+   Indietro (`MobileApp._overlayLayers`). Era 1000, cioe' sopra di lei in tutte
+   e due le interfacce. Sopra di lei restano solo `<dialog>` e toast, che
+   vivono nel top layer e non dipendono da nessun numero. Mentre c'e' una
+   lightbox lei non prende tocchi: v. `:root:has(.image-lightbox) .jenny-duo`. */
 .image-lightbox {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 115;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2873,25 +2742,6 @@ body {
 .tool-events-container {
   display: contents;
 }
-.tool-events-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  background: var(--overlay);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-seg);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.tool-events-header i {
-  font-size: 12px;
-  color: var(--accent);
-}
 .tool-events-badge {
   display: inline-flex;
   align-items: center;
@@ -2901,7 +2751,7 @@ body {
   padding: 0 5px;
   border-radius: 7px;
   background: var(--overlay);
-  color: var(--accent);
+  color: var(--text-accent);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -3034,372 +2884,6 @@ body {
 .ws-save-btn:disabled { opacity: .5; cursor: default; }
 .ws-save-btn:disabled:hover { transform: none; }
 
-/* ── Skills ── */
-/* ── Apps View ── */
-.apps-search {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 0.5px solid var(--border);
-  background:
-    radial-gradient(ellipse 80% 120% at 50% 100%, rgba(var(--accent-rgb), 0.03), transparent 70%),
-    rgba(255,255,255,0.02);
-  flex-shrink: 0;
-}
-.apps-search i { color: var(--text-faint); font-size: 15px; }
-.apps-search input {
-  flex: 1; background: transparent; border: none; outline: none;
-  color: var(--text); font-family: var(--font-sans); font-size: 13px;
-}
-.apps-search input::placeholder { color: var(--text-faint); font-style: italic; }
-
-/* Il segmento delle tre stanze. Sta fra il titolo e la ricerca: è il primo
-   controllo che si incontra scendendo, perché decide che cosa la ricerca
-   filtrerà. */
-.apps-rooms {
-  display: flex;
-  gap: 6px;
-  padding: 8px 16px 0;
-  flex-shrink: 0;
-}
-
-.apps-room-tab {
-  flex: 1;
-  min-height: 36px;
-  padding: 7px 8px;
-  border: 0.5px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  -webkit-tap-highlight-color: transparent;
-  transition: background .2s cubic-bezier(.25,.1,.25,1), color .2s cubic-bezier(.25,.1,.25,1), border-color .2s cubic-bezier(.25,.1,.25,1);
-}
-
-.apps-room-tab.active {
-  background: rgba(var(--accent-rgb), 0.10);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.apps-room-tab:focus-visible,
-.apps-row-main:focus-visible,
-.apps-add-row:focus-visible,
-.apps-az-letter:focus-visible,
-.app-cell:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius);
-}
-
-/* Una stanza per volta, e lo scorrimento sta **dentro** la stanza: la guida
-   A–Z della stanza Android deve restare ferma sul bordo mentre la griglia
-   scorre, e non può farlo se a scorrere è il contenitore. */
-.apps-content {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  min-height: 0;
-}
-
-.apps-room-scroll {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 12px 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* ── Righe (stanze «Jenny App» e «Skill») ── */
-
-.apps-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* La riga è un contenitore, non un pulsante: nella stanza Skill deve ospitare
-   accanto al corpo un interruttore, che un <button> non può contenere. */
-.apps-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 0.5px solid var(--border);
-  padding-right: 12px;
-  transition: background .2s cubic-bezier(.25,.1,.25,1), border-color .2s cubic-bezier(.25,.1,.25,1);
-}
-
-.apps-row:hover { background: var(--surface-2); }
-.apps-row--broken { border-color: rgba(239,68,68,0.35); }
-
-/* Il corpo toccabile: un <button> vero, così Invio e Spazio funzionano da soli. */
-.apps-row-main {
-  flex: 1;
-  min-width: 0;
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0 10px 12px;
-  background: transparent;
-  border: none;
-  color: inherit;
-  font-family: var(--font-sans);
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  touch-action: manipulation;
-}
-
-.apps-row-main:active { background: var(--hover); }
-
-.apps-row-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.apps-row-name {
-  font-size: 13px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Due righe di descrizione al massimo: è il tetto che tiene tutte le righe allo
-   stesso passo, che era il difetto 04 (100 / 118 / 147 px nella stessa vista). */
-.apps-row-desc {
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--text-faint);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* «Non può girare», che è un'altra cosa da «è spenta» (v. _buildSkillRow). */
-.apps-row-warn {
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--warning);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.apps-row-action {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  background: rgba(var(--accent-rgb), 0.10);
-}
-
-.apps-row-action--repair {
-  color: var(--error);
-  background: rgba(239,68,68,0.12);
-}
-
-.apps-row-toggle { flex-shrink: 0; }
-
-.apps-row-lock {
-  flex-shrink: 0;
-  font-size: 15px;
-  color: var(--text-faint);
-}
-
-.apps-group-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin: 6px 2px 0;
-}
-
-/* Banda in cima alla stanza: il guasto di una app sta qui, non dentro la sua
-   riga (difetto 05 — l'errore nella tessera alzava tutta la fila). */
-.apps-band {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.apps-band--error {
-  background: rgba(239,68,68,0.10);
-  border: 0.5px solid rgba(239,68,68,0.35);
-  color: var(--error);
-}
-
-.apps-band i { font-size: 14px; flex-shrink: 0; }
-
-/* La riga tratteggiata in fondo alla stanza. */
-.apps-add-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-faint);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: color .2s cubic-bezier(.25,.1,.25,1), border-color .2s cubic-bezier(.25,.1,.25,1);
-  margin-top: 4px;
-}
-
-.apps-add-row:hover { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.45); }
-
-.apps-note {
-  padding: 20px;
-  color: var(--text-faint);
-  font-style: italic;
-  text-align: center;
-  font-size: 12px;
-}
-
-/* ── Stanza «Android»: griglia densa + guida A–Z ── */
-
-.apps-android {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-}
-
-/* Sei colonne, non quattro: una cella da quattro sprecava 56 px di larghezza
-   per icona, e quei pixel sono quelli su cui la guida A–Z sta a destra. */
-.apps-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px 4px;
-}
-
-.app-cell {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 5px; cursor: pointer; padding: 6px 2px;
-  border-radius: var(--radius);
-  background: transparent;
-  border: none;
-  font-family: var(--font-sans);
-  transition: background .2s cubic-bezier(.25,.1,.25,1), transform .25s cubic-bezier(.34,1.56,.64,1);
-  -webkit-tap-highlight-color: transparent;
-  /* Prevent the WebView's native long-press callout (text selection /
-     "save image") from firing pointercancel and killing the long-press timer. */
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  touch-action: manipulation;
-}
-.app-cell:hover { transform: scale(1.05); }
-.app-cell:active { background: var(--hover); transform: scale(0.95); }
-.app-icon {
-  width: 40px; height: 40px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 19px;
-  background: var(--surface);
-  color: var(--accent);
-  border: 0.5px solid var(--border-strong);
-  transition: background 0.2s cubic-bezier(.25,.1,.25,1), border-color 0.2s cubic-bezier(.25,.1,.25,1), transform 0.25s cubic-bezier(.34,1.56,.64,1);
-}
-.app-cell:hover .app-icon {
-  background: var(--surface-2);
-  border-color: rgba(var(--accent-rgb), 0.35);
-  transform: scale(1.05);
-}
-.app-icon img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
-  /* Route touch to the cell (not the img) so no native image callout starts. */
-  pointer-events: none;
-  -webkit-user-drag: none;
-  -webkit-touch-callout: none;
-  user-select: none;
-}
-.app-label {
-  font-size: 10px; color: var(--text-muted); text-align: center;
-  line-height: 1.2; max-width: 100%;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-/* Hidden Android apps (shown only with the header "eye" toggle on) */
-.app-cell--hidden { opacity: 0.5; }
-.app-icon { position: relative; }
-.app-hidden-badge {
-  position: absolute; top: -4px; right: -4px;
-  width: 18px; height: 18px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface-2);
-  border: 0.5px solid var(--border-strong);
-  color: var(--text-faint); font-size: 10px;
-}
-.app-hidden-badge i { font-size: 10px; }
-
-/* La guida alfabetica sul bordo destro. Non scorre con la griglia: è ferma, e
-   la griglia le scorre accanto.
-
-   Allineata **in alto**, non centrata: con poche app la griglia occupa solo la
-   cima dello schermo, e una guida centrata verticalmente galleggerebbe accanto
-   al vuoto invece che accanto a ciò che indicizza (visto sul telefono, con 18
-   app: le lettere stavano a metà schermo, sotto l'ultima fila). Il
-   `padding-top` è quello di `.apps-room-scroll`, così la prima lettera parte
-   dalla prima fila. */
-.apps-az {
-  flex-shrink: 0;
-  width: 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px 0 20px;
-  gap: 1px;
-}
-
-.apps-az-letter {
-  width: 20px;
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  font-family: var(--font-sans);
-  font-size: 9px;
-  line-height: 1.15;
-  padding: 0;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.apps-az-letter:active { color: var(--accent); }
-
-/* `display: flex` sopra batte la regola dello user agent per `[hidden]`, e la
-   guida restava a schermo anche misurata inutile (visto sul telefono). */
-.apps-az[hidden] { display: none; }
 
 /* App Android context sheet — icon + label header */
 .app-sheet-head {
@@ -3445,18 +2929,23 @@ body {
 .app-frame-overlay iframe { flex: 1; width: 100%; border: 0; background: transparent; }
 /* Fascia d'errore di un sub-frame che non ha caricato. Sta *sotto* l'header e
    sopra l'iframe: il riquadro bianco resta visibile (è l'informazione che
-   l'utente sta già guardando), ma smette di essere l'unica cosa che dice. */
+   l'utente sta già guardando), ma smette di essere l'unica cosa che dice.
+   I colori vengono dai token del tema: `--danger`, `--danger-bg` e `--code-bg`,
+   che c'erano scritti prima, non li definisce nessuno, e valevano sempre i
+   ripieghi fissi — lo stesso rosso e lo stesso grigio in tutti e sette i temi.
+   Il fondo e' l'errore del tema al 12%, la stessa dose del ripiego di prima;
+   il codice ha il fondo del codice in linea della chat (`--surface-2`). */
 .app-frame-error {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 10px 14px;
-  background: var(--danger-bg, rgba(220, 80, 80, 0.12));
+  background: color-mix(in srgb, var(--error) 12%, transparent);
   border-bottom: 1px solid var(--border);
   color: var(--text); font-size: 13px; line-height: 1.4;
 }
-.app-frame-error i { flex: none; margin-top: 1px; color: var(--danger, #d85050); }
+.app-frame-error i { flex: none; margin-top: 1px; color: var(--error); }
 .app-frame-error code {
   font-size: 12px; word-break: break-all;
-  background: var(--code-bg, rgba(127, 127, 127, 0.14));
+  background: var(--surface-2);
   padding: 1px 4px; border-radius: 3px;
 }
 
@@ -3472,13 +2961,15 @@ body {
 
    L'entrata NON usa l'easing elastico dei drawer: quello supera la posizione di
    riposo, e su un foglio ancorato a `bottom: 0` l'oltrepasso è una fessura di
-   sfondo sotto il foglio. */
-/* Col cassetto aperto la mascotte scende sotto lo scrim: sta dentro `#app`,
-   cioè dentro lo sfondo che si sta oscurando, e a 120 resterebbe dipinta sopra
-   le righe del foglio (difetto visto sul telefono). 98 = subito sotto lo scrim.
-   Nota: sopra l'overlay di una mini-app (110) la mascotte galleggia comunque —
-   difetto preesistente a questo lavoro, non toccato qui. */
-:root.launcher-open .jenny-duo { z-index: 98; }
+   sfondo sotto il foglio.
+
+   Col cassetto aperto la mascotte resta **sopra** foglio e scrim, come sopra
+   ogni altra cosa (D3, 25/09/2026). Qui scendeva a 98, sotto lo scrim, perche'
+   dipinta sulle righe sembrava un difetto; la decisione dell'utente e' che lo
+   stesso sprite non sta sopra in una stanza e sotto in un'altra. I tocchi non
+   li ruba: vive dentro `#app`, che il foglio rende `inert`
+   (`LauncherController._setBackgroundInert`), e un nodo inerte si lascia
+   attraversare — il dito arriva alla riga che ha sotto. */
 
 /* Il foglio riceve il fuoco all'apertura, ma solo come àncora: `tabindex="-1"`
    lo tiene fuori dal giro di Tab, quindi da tastiera non ci si arriva mai e
@@ -3491,7 +2982,21 @@ body {
 
 .launcher-scrim {
   position: fixed; inset: 0; z-index: 99;
-  background: rgba(0, 0, 0, 0.55);
+  /* Il nero scende da 0,55 a 0,35: con la sfocatura sopra, il velo di prima
+     copriva tutto e la sfocatura non si sarebbe vista. */
+  background: rgba(0, 0, 0, 0.35);
+  /* **La sfocatura, malgrado il commento di `.swipe-scrim` qui sotto**, che
+     dice «no filter/backdrop-filter, so WebView never renders transparent
+     regions (icons) black». Quella nota vale per un altro elemento e per un
+     altro WebView: `.swipe-scrim` anima l'opacita' a **ogni frame** durante il
+     gesto, mentre questo sfuma una volta e poi sta fermo; e sul Titan 2 oggi
+     gira WebView 143.0.7499.192 (misurato il 20/09/2026), dove il difetto
+     delle zone trasparenti rese nere non c'e' piu'.
+     Le due cose da guardare sul telefono se un giorno tornasse: le icone delle
+     app nella lista e la mascotte, che e' il nodo trasparente piu' grosso
+     della casa. */
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   opacity: 0; pointer-events: none;
   transition: opacity .25s cubic-bezier(.25,.1,.25,1);
 }
@@ -3568,8 +3073,8 @@ body {
   /* Il movimento ridotto vale anche per il trascinamento — cioè per il tratto
      che il CSS anima da solo dopo il rilascio, perché quello sotto il dito non
      è un'animazione ma una manipolazione diretta. Esplicito e non lasciato alla
-     regola generale in fondo al foglio: quella è una rete di sicurezza, non una
-     dichiarazione di intenti. */
+     regola generale `*` della sezione «Reduced Motion», più su in questo
+     foglio: quella è una rete di sicurezza, non una dichiarazione di intenti. */
   .launcher-sheet, .launcher-sheet.open, .launcher-scrim { transition: none; }
 }
 
@@ -3608,20 +3113,10 @@ body {
 }
 .launcher-title {
   font-size: 11px; font-weight: 500;
-  color: var(--text-faint); letter-spacing: .06em;
+  color: var(--text-muted); letter-spacing: .06em;
   text-transform: uppercase;
 }
-.launcher-close {
-  width: 22px; height: 22px;
-  border-radius: var(--radius-sm);
-  border: 0.5px solid var(--border-strong);
-  background: var(--overlay); color: var(--text-faint);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: color .2s cubic-bezier(.25,.1,.25,1), border-color .2s, background .2s;
-}
-.launcher-close:hover { color: var(--text); background: var(--overlay-strong); }
-.launcher-close i { font-size: 13px; }
+/* `.launcher-close`: la crocetta dei cassetti, v. `.drawer-close`. */
 
 /* ── Il campo di ricerca ──
    Sta fra l'intestazione e la lista, ed è il corpo del cassetto: alto quanto
@@ -3652,7 +3147,7 @@ body {
   transition: border-color .2s cubic-bezier(.25,.1,.25,1);
 }
 .launcher-search::placeholder { color: var(--text-faint); }
-.launcher-search:focus { border-color: rgba(var(--accent-rgb), 0.55); }
+.launcher-search:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 /* La ✕ compare solo quando c'è qualcosa da pulire: un pulsante sempre visibile
    che a volte non fa niente insegna a non fidarsi dei pulsanti. Nascosta con
    `visibility`, non `display`, così il campo non cambia larghezza sotto il dito
@@ -3670,6 +3165,15 @@ body {
 }
 .launcher-search-clear.visible { visibility: visible; opacity: 1; }
 .launcher-search-clear i { font-size: 12px; }
+/* L'area di tocco e' piu' grande del disegno: la crocetta resta da 22 px, ma
+   un anello invisibile di 5 px tutt'attorno porta il bersaglio a 32 px —
+   sopra i 24 di WCAG 2.5.8, che 22 px da soli non facevano. */
+.launcher-search-clear::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+}
 
 .launcher-list {
   flex: 1; min-height: 0;
@@ -3759,18 +3263,18 @@ body {
 /* Jenny App con un backend proprio (`has_server`): un glifo, non una parola —
    la colonna di destra è già occupata dal tipo. */
 .launcher-row-server {
-  font-size: 13px; color: var(--text-faint);
+  font-size: 13px; color: var(--text-muted);
   flex-shrink: 0;
 }
 .launcher-row-kind {
-  font-size: 10px; color: var(--text-faint);
+  font-size: 10px; color: var(--text-muted);
   letter-spacing: .04em; text-transform: uppercase;
   flex-shrink: 0;
 }
 .launcher-note {
   margin: 6px 2px 0;
   font-size: 11px; font-style: italic;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 /* ── L'avviso di elenco incompleto (6.2) ──
@@ -3806,201 +3310,19 @@ body {
 }
 .launcher-status-retry:disabled { opacity: 0.5; cursor: default; }
 
-/* ── La riga «Gestisci» (6.1, D4) ──
-   In fondo e fuori dalla lista: resta ferma mentre i risultati scorrono, e non
-   è una voce del `listbox` — non si apre con ⏎ e non si trova cercando, perché
-   non è una cosa da lanciare. Il filo sopra dice che il cambio di registro è
-   voluto: sopra si lancia, qui si va altrove. */
-.launcher-manage {
-  display: flex; align-items: center; gap: 8px;
-  flex-shrink: 0;
-  padding: 9px 14px;
-  border: none;
-  border-top: 0.5px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background .15s cubic-bezier(.25,.1,.25,1);
-}
-.launcher-manage:active { background: var(--overlay); }
-.launcher-manage:focus-visible { outline: none; background: var(--overlay-strong); }
-.launcher-manage span { flex: 1; text-align: left; }
-.launcher-manage i { font-size: 14px; }
-.launcher-manage-chevron { color: var(--text-faint); font-size: 13px; }
+
 /* Con la tastiera su, sullo schermo quadrato al foglio restano 116 px: la
    cornice `.compact` esiste per far entrare **una riga intera** (5.5), e tutto
-   ciò che non è la lista se la riprende. Misurato con la tastiera su: la riga
-   «Gestisci» costa 30 px su 46 di lista, e l'avviso di 6.2 ne costa 28 — con
-   l'avviso a schermo la lista scende a **14 px, zero righe intere**, cioè
-   esattamente il difetto che 5.5 esiste per chiudere, reintrodotto da un
-   bordo.
-   Spariscono entrambi, e tornano appena la tastiera scende. Non si perde
-   niente: sono due informazioni secondarie rispetto al vedere ciò che si sta
-   cercando, e nel caso in cui **tutto** sia fallito la lista è vuota e il
-   guasto lo dice comunque la nota là dentro, che di cornice non ne costa. */
-.launcher-sheet.compact .launcher-manage,
+   ciò che non è la lista se la riprende. Misurato con la tastiera su: l'avviso
+   di 6.2 costa 28 px, e quando c'era anche la riga «Gestisci» (altri 30) la
+   lista scendeva a **14 px, zero righe intere**, cioè esattamente il difetto
+   che 5.5 esiste per chiudere, reintrodotto da un bordo.
+   L'avviso sparisce, e torna appena la tastiera scende. Non si perde niente: è
+   un'informazione secondaria rispetto al vedere ciò che si sta cercando, e nel
+   caso in cui **tutto** sia fallito la lista è vuota e il guasto lo dice
+   comunque la nota là dentro, che di cornice non ne costa. */
 .launcher-sheet.compact .launcher-status { display: none; }
 
-
-/* ── Graph ── */
-/* Colonna, non blocco: breadcrumb e barra di ricerca sono righe ad altezza
-   propria e la tela prende quel che resta. Da blocco l'SVG chiedeva `height:
-   100%` dell'intero wrap *sotto* i breadcrumb, e `overflow: hidden` gli
-   tagliava in silenzio dal fondo tanti pixel quanti ne occupavano loro. */
-.graph-wrap {
-  flex: 1; overflow: hidden; position: relative;
-  display: flex; flex-direction: column;
-}
-.graph-wrap svg { width: 100%; flex: 1; min-height: 0; }
-
-/* Graph legend */
-.graph-legend {
-  position: absolute;
-  bottom: 12px; left: 12px;
-  padding: 8px 12px;
-  background: var(--surface-2);
-  border: 0.5px solid var(--border-strong);
-  border-radius: var(--radius);
-  font-size: 10px;
-  color: var(--text-faint);
-  z-index: 5;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-}
-.legend-row {
-  display: flex; align-items: center; gap: 6px;
-  padding: 2px 0;
-}
-.legend-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.legend-dot.concepts { background: var(--accent); }
-.legend-dot.entities { background: var(--error); }
-.legend-dot.summaries { background: var(--ok); }
-.legend-dot.other { background: var(--text-faint); }
-
-/* D3 graph styles */
-.graph-wrap .link { stroke: var(--border-strong); stroke-width: 1.1; fill: none; transition: opacity 0.3s ease; }
-.graph-wrap .link.highlight { stroke: var(--accent); stroke-width: 1.8; stroke-opacity: 0.92; }
-.graph-wrap .node { transition: opacity 0.3s ease; }
-.graph-wrap .node .node-main { fill: var(--text-faint); stroke: var(--bg); stroke-width: 1.4; }
-.graph-wrap .node.group-concepts .node-main { fill: var(--accent); }
-.graph-wrap .node.group-entities .node-main { fill: var(--error); }
-.graph-wrap .node.group-summaries .node-main { fill: var(--ok); }
-.graph-wrap .node.group-other .node-main { fill: var(--text-faint); }
-.graph-wrap .node.group-home .node-main { fill: var(--accent); }
-.graph-wrap .node.group-wiki .node-main { fill: var(--text); }
-/* Le label vivono in un layer separato sopra i nodi (z-order corretto: mai
-   coperte dai cerchi disegnati dopo). Visibili (.big) per default: le spegne solo
-   declutterLabels() quando si sovrappongono a un'etichetta già piazzata. Restano
-   rivelate su hover/focus (.highlight) e nascoste quando dimmate (.dim). */
-.graph-wrap .node-label {
-  fill: var(--text); font-size: 11px; pointer-events: none;
-  stroke: var(--bg); stroke-width: 2.5px; paint-order: stroke;
-  opacity: 0; transition: opacity 0.2s ease;
-}
-.graph-wrap .node-label.big { opacity: 1; }
-.graph-wrap .node-label.highlight { opacity: 1; }
-.graph-wrap .node-label.dim { opacity: 0; }
-.graph-wrap .node.dim { opacity: 0.12; }
-.graph-wrap .link.dim { opacity: 0.08; }
-.graph-wrap .node.highlight .node-main { filter: brightness(1.3); }
-
-/* Risultato di ricerca. Marcatore *indipendente* da dim/highlight: quelli
-   dicono "il focus sta guardando qui", questo dice "la query ti riguarda", e
-   le due cose devono poter convivere — entrando nel focus di un risultato i
-   vicini si accendono ma restano distinguibili da chi la query aveva trovato.
-
-   L'anello è nel colore del **fondo** e cade dentro al disco. Non è una scelta
-   estetica: i riempimenti dei nodi sono --accent, --error, --ok e --text-faint,
-   e non esiste un altro token in contrasto con tutti e quattro in tutti i temi
-   — in due dei sette --accent *è* --text, quindi un anello accento (o testo)
-   sparirebbe proprio sui nodi concept, che sono la maggioranza. --bg invece è
-   in contrasto con ogni riempimento per costruzione, altrimenti i nodi non si
-   vedrebbero sullo sfondo; è la stessa ragione per cui l'alone di .node-main
-   funziona ovunque. Marcatore di forma, non di tinta: regge anche i temi
-   monocromatici, dove per definizione nessun colore può distinguere niente. */
-.graph-wrap .node .node-ring {
-  fill: none; stroke: var(--bg); stroke-width: 2; opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.graph-wrap .node.match .node-ring { opacity: 1; }
-.graph-wrap .node-label.match { fill: var(--accent); }
-
-/* ── Ricerca nel grafo ── */
-.graph-search {
-  flex-shrink: 0;
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 16px;
-  background: var(--surface);
-  border-bottom: 0.5px solid var(--border);
-}
-.graph-search[hidden] { display: none; }
-.graph-search-icon { color: var(--text-faint); font-size: 15px; flex-shrink: 0; }
-.graph-search input {
-  flex: 1; min-width: 0;
-  background: none; border: 0; outline: none; padding: 0;
-  color: var(--text); font-size: 13px; font-family: inherit;
-}
-.graph-search input::placeholder { color: var(--text-faint); }
-/* La X nativa di input[type=search] duplicherebbe il nostro pulsante. */
-.graph-search input::-webkit-search-cancel-button { display: none; }
-.graph-search-count {
-  flex-shrink: 0;
-  font-size: 11px; color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.graph-search-count.empty { color: var(--error); }
-.graph-search-count[hidden] { display: none; }
-.graph-search-clear {
-  flex-shrink: 0;
-  background: none; border: 0; padding: 2px;
-  color: var(--text-faint); font-size: 15px; cursor: pointer;
-  display: flex; align-items: center;
-}
-.graph-search-clear[hidden] { display: none; }
-
-/* ══ Responsive / Touch ══ */
-
-/* Touch targets min 44px */
-.dock-item,
-.app-cell,
-.audit-item {
-  min-height: 44px;
-}
-
-.ibtn {
-  min-height: 36px;
-}
-
-@media (hover: none) {
-  .dock-item:hover,
-  .app-cell:hover,
-  .audit-item:hover {
-    background: transparent;
-  }
-  .dock-item:active {
-    color: var(--text-muted);
-  }
-  .app-cell:active,
-  .audit-item:active {
-    background: var(--surface-2);
-  }
-  .ibtn:active {
-    opacity: 0.8;
-  }
-}
-
-/* Safe area for notch */
-@supports (padding-top: env(safe-area-inset-top)) {
-  .app {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 4px; }
@@ -4031,9 +3353,23 @@ body {
   animation: toastIn 0.3s cubic-bezier(.34,1.56,.64,1);
   max-width: 90vw;
   word-break: break-word;
+  /* Uno sotto l'altro, non uno sopra l'altro: due toast di fila stavano
+     tutti e due a `top: 50px`, e il secondo copriva il primo. Ogni
+     toast e' un'ancora (`--toast`) e si mette sotto il **precedente** — il
+     browser sceglie come ancora l'ultimo toast venuto prima di lui, mai se'
+     stesso — con 8 px d'aria; il primo non ne ha e resta a 50 px. Quando uno
+     sparisce, quelli sotto risalgono da soli. Senza ancore (WebView vecchia)
+     resta il `top` fisso di sopra. */
+  anchor-name: --toast;
   box-shadow:
     0 8px 32px rgba(0,0,0,0.30),
     inset 0 0.5px 0 rgba(255,255,255,0.06);
+}
+@supports (anchor-name: --toast) {
+  .mobile-toast {
+    position-anchor: --toast;
+    top: calc(anchor(bottom, 42px) + 8px);
+  }
 }
 .mobile-toast.info {
   background: var(--surface-2);
@@ -4041,11 +3377,13 @@ body {
 }
 .mobile-toast.error {
   background: var(--error);
-  color: #fff;
+  color: var(--on-error);
   border-color: var(--error);
 }
+/* Opaco: al 10% d'alfa il successo era il colore di cio' che aveva sotto —
+   una bolla, un'immagine, lei — e la parola ci si perdeva sopra. */
 .mobile-toast.success {
-  background: rgba(var(--ok-rgb), 0.10);
+  background: var(--surface);
   color: var(--ok);
   border-color: var(--ok);
 }
@@ -4101,7 +3439,14 @@ body {
   }
 }
 
-@media (max-height: 500px) {
+/* Schermo basso: via il dock, che li' costa un quarto dell'altezza. La soglia
+   era 500 px, pensata per un telefono in orizzontale (330-390 px utili), e
+   prendeva anche il quadrato da 1440 px a 480 dpi dell'emulatore
+   `jenny_square`: 480 px CSS, 432 tolte le due barre di sistema. Li'
+   l'officina restava **senza navigazione**, per sempre (visto il 27/09/2026).
+   A 380 il quadrato e il Titan 2 (566) tengono il dock; l'orizzontale e lo
+   schermo con la tastiera aperta lo tolgono ancora. */
+@media (max-height: 380px) {
   .app {
     grid-template-rows: 1fr;
   }
@@ -4167,7 +3512,21 @@ body {
   border: 0.5px solid var(--border-strong);
   border-radius: var(--radius-sm);
 }
-.oc-dialog-input:focus { outline: none; border-color: var(--accent); }
+.oc-dialog-input:focus { outline: none; border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+/* La regola sotto il campo e l'errore che tiene aperto il dialog: il margine
+   del campo passa a loro, cosi' i bottoni restano alla stessa distanza. */
+.oc-dialog-input:has(~ .oc-dialog-hint:not([hidden])),
+.oc-dialog-input:has(~ .oc-dialog-error:not([hidden])) { margin-bottom: 6px; }
+.oc-dialog-hint,
+.oc-dialog-error {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.oc-dialog-hint { color: var(--text-faint); }
+.oc-dialog-error { color: var(--error); }
+.oc-dialog-hint:not([hidden]) + .oc-dialog-error:not([hidden]) { margin-top: -4px; }
+.oc-dialog-input[aria-invalid="true"] { border-color: var(--error); }
 .oc-dialog-buttons {
   display: flex;
   justify-content: flex-end;
@@ -4748,12 +4107,12 @@ body {
 .sa-digest {
   display: contents;
 }
-/* Chip: stessa taglia e stessa forma di `.chat-thinking-header`. Sta nella stessa
-   riga e apre la stessa specie di cosa — se si distingue, si distingue a caso. */
+/* Chip: stessa taglia e stessa forma di `.chat-thinking-header`, e sta nel suo
+   gruppo (v. «Le intestazioni che si toccano»). Sta nella stessa riga e apre
+   la stessa specie di cosa — se si distingue, si distingue a caso. Qui solo
+   quel che le serve in piu': e' un `<button>`, che carattere e allineamento
+   non li eredita, e vive anche fuori dalla meta-row. */
 .sa-digest-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   /* Il chip non può essere più larga della riga: è ciò che dà a `.sa-digest-sub`
      un limite contro cui troncare quando l'etichetta del job è lunga. */
   max-width: 100%;
@@ -4762,18 +4121,8 @@ body {
      flex a colonna — senza questo lo `stretch` di default la allargherebbe a
      tutta la chat, cioè l'opposto della gerarchia che deve avere. */
   align-self: flex-start;
-  padding: 3px 9px;
-  background: var(--overlay);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-seg);
-  color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 500;
   text-align: left;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
 }
 .sa-digest-head:active { background: var(--active); }
 .sa-digest-head > i:first-child {
@@ -4977,6 +4326,27 @@ body {
 .oc-sheet-action.danger {
   color: var(--error, #e74c3c);
 }
+/* Una riga che non si puo' usare resta **visibile**, e dice perche': in casa
+   «Metti come pagina» su un'app che si apre fuori da Jenny. Una riga che
+   manca fa chiedere cosa c'e' di diverso; una spenta lo spiega. */
+.oc-sheet-action:disabled {
+  cursor: default;
+  opacity: .55;
+}
+.oc-sheet-action:disabled:active {
+  background: transparent;
+  opacity: .55;
+}
+.oc-sheet-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.oc-sheet-reason {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 .oc-sheet-action.danger i {
   color: var(--error, #e74c3c);
 }
@@ -4987,7 +4357,7 @@ body {
   padding: 12px;
   border: 0.5px solid var(--border-strong);
   background: var(--overlay);
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
   border-radius: var(--radius);
@@ -5042,6 +4412,9 @@ body {
    non era leggibile, quindi deve farsi notare senza urlare. La variante
    -strong è per il caso peggiore (ripartiti dai default, chiave API da
    rimettere). */
+/* Il `display` di qui sotto vincerebbe su `hidden` (l'avviso della posizione). */
+.settings-notice[hidden],
+.onboarding-nav[hidden] { display: none; }
 .settings-notice {
   display: flex;
   gap: 10px;
@@ -5063,12 +4436,14 @@ body {
   color: var(--text-muted);
 }
 
+/* L'errore del tema, non un rosso fisso: `--danger` non lo definisce
+   nessuno, e qui valeva sempre il ripiego #e5484d. */
 .settings-notice-strong {
-  border-left-color: var(--danger, #e5484d);
+  border-left-color: var(--error);
 }
 
 .settings-notice-strong i {
-  color: var(--danger, #e5484d);
+  color: var(--error);
 }
 
 .settings-notice-path {
@@ -5079,161 +4454,42 @@ body {
   word-break: break-all;
 }
 
-/* ── Aggiornamento dell'app ──
-   La pastiglia accanto al numero di versione, e il riquadro di stato che
-   compare solo mentre l'installazione è in corso. La variante -critical usa il
-   colore d'errore di proposito: un aggiornamento di sicurezza deve leggersi
-   diverso da una versione nuova qualsiasi anche a colpo d'occhio. */
-.update-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: rgba(var(--accent-rgb), 0.15);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 500;
+
+/* ── Gruppi di impostazioni ──────────────────────────────────────────────
+   Una soprascritta fuori, una scheda aperta sotto. Erano fisarmoniche: testa
+   cliccabile, chevron, corpo chiuso. La tavola non ne ha nessuna, e il motivo
+   non e' estetico — un cassetto di teste chiuse si apre su quattro righe che
+   non dicono niente, e ogni risposta costa un tocco e un'attesa. */
+
+.settings-group {
+  flex-shrink: 0;
+  animation: cardEntrance 0.3s cubic-bezier(.25,.1,.25,1) both;
+}
+
+/* La soprascritta sta **fuori** dalla scheda e non dentro una testa: cosi'
+   non somiglia a un bottone, e non invita a toccarla per aprire qualcosa che
+   e' gia' aperto. */
+.settings-group-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  vertical-align: middle;
-}
-
-.update-badge i { font-size: 11px; }
-
-.update-badge.critical {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--error);
-}
-
-.update-status {
-  margin-top: 10px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text);
-}
-
-.update-status .update-phase {
-  margin-top: 4px;
   color: var(--text-muted);
+  margin: 0 4px 6px;
 }
 
-.update-status .update-detail {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-faint);
-  word-break: break-word;
-}
-
-.update-progress-track {
-  margin-top: 8px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--overlay-strong);
-  overflow: hidden;
-}
-
-.update-progress-bar {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-  transition: width 0.3s cubic-bezier(.25,.1,.25,1);
-}
-
-/* Il blocco "ultimo controllo riuscito" + il bottone che ne forza uno. Sta
-   sotto il riquadro dell'aggiornamento ma c'è anche quando quello non c'è: è
-   l'unico posto in cui si vede che il meccanismo è morto, e in quel caso vale
-   più del resto della pagina. La variante .warn prende il colore d'errore
-   perché "non controllo da mesi" e "sei aggiornato" non devono somigliarsi. */
-.update-check {
-  margin-top: 10px;
-}
-
-.update-check-line {
-  margin-bottom: 6px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
-.update-check-line.warn {
-  color: var(--error);
-}
-
-/* `.settings-btn-add` non ha uno stato disabilitato suo: qui serve, perché il
-   controllo dura quanto un giro di rete e un bottone che resta identico invita
-   a ripremerlo. Regola locale e non globale — gli altri bottoni della pagina
-   non si disabilitano mai, e cambiarli tutti per questo sarebbe di troppo. */
-.update-check .settings-btn-add:disabled {
-  opacity: 0.55;
-  cursor: default;
-  transform: none;
-}
-
-.settings-section {
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
   border: 0.5px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
-  flex-shrink: 0;
   background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
   box-shadow:
     0 2px 16px rgba(0,0,0,0.15),
     inset 0 1px 2px rgba(0,0,0,0.10),
     inset 0 0.5px 0 rgba(255,255,255,0.04);
-  animation: cardEntrance 0.3s cubic-bezier(.25,.1,.25,1) both;
-}
-
-.settings-section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
-  background: rgba(255,255,255,0.02);
-  font-size: 13px;
-  font-weight: 500;
-  user-select: none;
-  transition: background 0.2s cubic-bezier(.25,.1,.25,1);
-}
-
-.settings-section-header:hover {
-  background: var(--surface-2);
-}
-
-.settings-section-header i:first-child {
-  color: var(--accent);
-  font-size: 16px;
-}
-
-.settings-chevron {
-  margin-left: auto;
-  font-size: 14px;
-  color: var(--text-faint);
-  transition: transform 0.25s cubic-bezier(.34,1.56,.64,1);
-}
-
-.settings-section.collapsed .settings-chevron {
-  transform: rotate(-90deg);
-}
-
-.settings-section-body {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: max-height 0.3s cubic-bezier(.25,.1,.25,1), padding 0.3s cubic-bezier(.25,.1,.25,1), opacity 0.25s cubic-bezier(.25,.1,.25,1);
-  max-height: 2000px;
-  opacity: 1;
-  overflow: hidden;
-}
-
-.settings-section.collapsed .settings-section-body {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
 }
 
 .settings-divider {
@@ -5257,6 +4513,410 @@ body {
   flex-direction: column;
   gap: 3px;
 }
+/* `display: flex` qui sopra vincerebbe su `hidden` (il «First model» spento
+   col suo interruttore). */
+.settings-field[hidden] { display: none; }
+
+/* ── La riga di un lavoro periodico ───────────────────────────────────────
+   Nome e natura a sinistra, l'esito dell'ultimo giro sotto, **quando tocca di
+   nuovo** a destra. Era una scheda alta con «Next:» e «Last:» su due righe
+   intere: con cinque lavori faceva oltre un terzo di Mani. */
+/* La riga delle liste dell'officina — lavori, marche, host SSH: un pulsante
+   largo quanto la lista, filetto sopra tranne la prima, e il tocco che la
+   sbiadisce. Il `min-height` resta in ogni riga: è il bersaglio del dito, e i
+   contratti di ciascuna lo cercano lì. La riga di riepilogo delle
+   impostazioni è lo stesso pulsante senza filetto (v. `.settings-summary`). */
+.cron-row, .brand-row, .ssh-row, .settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  border-top: 0.5px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cron-row:first-of-type, .brand-row:first-of-type, .ssh-row:first-of-type { border-top: 0; }
+.cron-row:active, .brand-row:active, .ssh-row:active,
+.settings-summary:active { opacity: .6; }
+/* Il lavoro periodico ha due righe di testo, e un filo d'aria in più. */
+.cron-row { min-height: 52px; padding: 6px 0; }
+.cron-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cron-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.cron-row-under {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+/* A destra e in monospazio: incolonnati, cinque «fra quanto» si confrontano a
+   colpo d'occhio invece di leggerli uno per uno. */
+.cron-row-when {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-align: right;
+  color: var(--text-muted);
+}
+.cron-row-when.is-late { color: var(--warning, var(--text-muted)); }
+.cron-row-when.is-mute { color: var(--text-faint); }
+
+
+/* ── La riga di una marca ─────────────────────────────────────────────────
+   Pallino, nome, indirizzo, chiave mascherata, freccina — piu' la pastiglia
+   «risponde» su quella che risponde adesso. Era una scheda alta il triplo. */
+.brand-row { min-height: 52px; }
+/* Il bordo tiene il pallino visibile anche quando la sua tinta e' vicina al
+   fondo del tema di turno. */
+.brand-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.brand-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.brand-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+}
+.brand-answers {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--overlay-strong);
+  border: 0.5px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--ok, var(--text-muted));
+}
+.brand-where {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-key {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.brand-row > i { flex-shrink: 0; font-size: 16px; color: var(--text-faint); }
+
+/* ── Il pannello di una marca ─────────────────────────────────────────────
+   Alto quanto quel che contiene, fino al 75% degli altri cassetti: con
+   l'altezza fissa, formato, indirizzo, chiave e due bottoni lasciavano due
+   terzi del pannello vuoti. */
+#drawer-brand { height: auto; max-height: 75%; }
+#drawer-brand .drawer-body { flex: 0 1 auto; min-height: 0; gap: 0; }
+/* Qui si legge e basta: i 44 px di `.settings-row` sono la misura di un campo
+   da toccare, e in un pannello di quattro righe erano quasi tutto lo spazio. */
+#drawer-brand .settings-row { min-height: 32px; }
+#drawer-brand .settings-summary-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#drawer-brand .provider-card-actions { margin-top: 6px; }
+
+/* ── «Chi pensa»: una marca, un gruppo coi suoi modelli ───────────────────
+   L'intestazione e' la riga di sempre (`.brand-row`, 52 px) che apre e
+   chiude; accanto, un bersaglio a parte per gestire la marca. */
+.brand-groups-hint { margin: 0 0 8px; font-size: 12px; color: var(--text-faint); }
+.brand-groups { display: flex; flex-direction: column; gap: 8px; }
+.brand-group {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding-left: 12px;
+}
+.brand-group.is-active { border-color: rgba(var(--accent-rgb), 0.45); }
+.brand-group-head { display: flex; align-items: center; gap: 2px; }
+.brand-group .brand-row { flex: 1 1 auto; min-width: 0; border-top: 0; }
+.brand-count { flex-shrink: 0; font-size: 11.5px; color: var(--text-faint); }
+.brand-count:empty { display: none; }
+.brand-chevron { transition: transform .2s ease; }
+.brand-row[aria-expanded="true"] .brand-chevron { transform: rotate(180deg); }
+.brand-says { color: var(--accent); }
+.brand-manage {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.brand-manage:active { opacity: .6; }
+
+/* `display` qui sotto vincerebbe sull'attributo `hidden`: senza questa riga
+   un gruppo chiuso resterebbe aperto. */
+.brand-body[hidden], .brand-filter[hidden], .brand-custom[hidden],
+.brand-models-note[hidden], .brand-more[hidden], .brand-custom-open[hidden] { display: none; }
+.brand-body { display: flex; flex-direction: column; padding: 0 12px 8px 0; }
+.brand-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+}
+.brand-filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.brand-models { display: flex; flex-direction: column; }
+.brand-models-note { margin: 6px 0; font-size: 12px; line-height: 1.45; color: var(--text-faint); }
+/* Un modello, una riga da 40 px: l'id in monospazio, perche' si confronta con
+   quello scritto altrove (un file di config, un messaggio d'errore), e il
+   segno su quello che risponde. */
+.brand-model, .brand-more, .brand-custom-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 2px;
+  border: 0;
+  border-top: 0.5px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.brand-model:first-child { border-top: 0; }
+.brand-model:active, .brand-more:active, .brand-custom-open:active { opacity: .6; }
+/* Durante un salvataggio le righe sono spente (v. `_pickBrandModel`). */
+.brand-model[disabled] { opacity: .5; cursor: default; }
+.brand-more, .brand-custom-open { font-size: 13px; color: var(--text-muted); }
+.brand-model-id {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-model > i { flex-shrink: 0; width: 16px; font-size: 16px; color: var(--accent); }
+.brand-model.is-on .brand-model-id { color: var(--accent); font-weight: 600; }
+.brand-custom { display: flex; gap: 8px; padding-top: 6px; }
+.brand-custom .settings-input { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); }
+
+/* ── La riga di un host SSH ───────────────────────────────────────────────
+   Alias e indirizzo a sinistra, i due stati a destra, la freccina. Era una
+   scheda alta con la chiave pubblica per intero e quattro bottoni.
+
+   **I due stati restano in chiaro**, ed e' il punto: sono i due passi che
+   l'utente deve fare, e nasconderli dietro il tocco lascerebbe host mezzi
+   configurati che falliscono solo al primo comando. Qui costano due parole
+   invece di due targhette. */
+.ssh-row { min-height: 52px; }
+.ssh-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ssh-row-name { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+.ssh-row-where {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ssh-row-states { flex-shrink: 0; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+/* Pieno contro vuoto, non solo verde contro giallo: su un tema in cui
+   l'accento **e'** il colore del testo due pallini colorati si somigliano. */
+.ssh-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--text-faint);
+}
+.ssh-mark i { font-size: 12px; }
+.ssh-mark.is-ok { color: var(--ok, var(--text-muted)); }
+.ssh-mark.is-missing { color: var(--warning, var(--text-faint)); }
+.ssh-row > i { flex-shrink: 0; font-size: 16px; color: var(--text-faint); }
+
+/* La riga che chiude un gruppo mandando altrove. Fuori dai comandi e in tono
+   basso: non e' un'impostazione ne' un bottone, e' un'indicazione. */
+.settings-link {
+  margin: 8px 2px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* ── La riga di una skill (pannello di Mani) ──────────────────────────────
+   Nome e una riga sotto a sinistra, il comando a destra: la forma di
+   `.cron-row`. Il testo e' un bottone perche' il tocco scioglie il
+   troncamento a due righe — l'unica cosa in piu' che la riga ha da dire. */
+.skill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-top: 0.5px solid var(--border);
+}
+.skill-row:first-of-type { border-top: 0; }
+.skill-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.skill-row-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.skill-row-under {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.skill-row-text[aria-expanded="true"] .skill-row-under {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+/* Non disponibile: il motivo in testo, il pallino per chi scorre. Il colore
+   da solo non basterebbe. */
+.skill-row-broken { color: var(--warning); }
+.skill-row-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--warning);
+  vertical-align: 1px;
+}
+.skill-row-lock { flex-shrink: 0; font-size: 16px; color: var(--text-faint); }
+
+/* «Le tue», vuota: un invito, non una scusa. */
+.skill-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  text-align: center;
+}
+.skill-empty > .ti { font-size: 20px; color: var(--flower); }
+.skill-empty-title { font-size: 13px; color: var(--text); }
+.skill-empty .settings-hint { margin: 0 0 6px; }
+
+/* ── La riga di riepilogo ─────────────────────────────────────────────────
+   Nome a sinistra, la risposta breve a destra, una freccina. Il tocco apre il
+   pannello col dettaglio.
+
+   E' `<button>` e non una riga cliccabile: da tastiera ci si arriva, e chi
+   legge lo schermo sente che e' un comando invece di due frasi accostate.
+   Il pulsante e' quello di `.cron-row` (stesso gruppo, e stesso tocco che
+   sbiadisce); qui cio' che cambia: niente filetto, niente aria sopra e sotto,
+   e il bersaglio del dito. */
+.settings-summary {
+  min-height: 44px;
+  padding: 0;
+  border-top: 0;
+}
+.settings-summary-name { flex-shrink: 0; font-size: 13px; color: var(--text); }
+/* La risposta si prende lo spazio che resta e si tronca: e' un riassunto, e un
+   riassunto che va a capo due volte non e' piu' un riassunto. */
+.settings-summary-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-summary i { flex-shrink: 0; font-size: 16px; color: var(--text-faint); }
+
+/* ── La riga a due colonne: nome a sinistra, comando a destra ─────────────
+   La forma della tavola, e la forma che `.settings-toggle-row` ha sempre avuto:
+   un interruttore non e' mai stato sotto la sua etichetta. Adesso ce l'hanno
+   anche i numeri e i menu'.
+
+   **Classe nuova invece di cambiare `.settings-field`**, che non e' timidezza:
+   quella classe la usano anche `shared/backup-flow.js` e
+   `shared/telegram-pairing.js`, e backup-flow disegna i due campi della
+   passphrase **dentro una finestra, anche in casa**. Una password schiacciata
+   in 92 px sarebbe il prezzo di un allineamento che non la riguarda. */
+.settings-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.settings-row > .settings-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+/* Larghezze fisse, e il numero allineato a destra: incolonnati, tre numeri si
+   confrontano con l'occhio invece che leggendoli uno per uno. */
+.settings-row > .settings-input { width: 92px; flex-shrink: 0; text-align: right; }
+.settings-row > .settings-select { width: 150px; flex-shrink: 0; }
 
 .settings-label {
   font-size: 11px;
@@ -5285,8 +4945,8 @@ body {
 
 .settings-input:focus,
 .settings-select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.06), 0 0 12px rgba(var(--accent-rgb), 0.10);
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring), 0 0 12px rgba(var(--accent-rgb), 0.10);
   background: var(--overlay);
 }
 
@@ -5327,11 +4987,6 @@ body {
   color: var(--text-faint);
 }
 
-/* Stessa riga, ma quando dice che qualcosa NON sta funzionando: il permesso
-   overlay negato mentre l'interruttore è acceso. Cambia solo il colore —
-   restare una `.settings-hint` è il punto, perché è la stessa riga che spiega
-   la manopola, non un banner che si aggiunge. */
-.settings-hint-warn { color: var(--warn, #c98a2e); }
 
 /* Una riga vuota non lascia un buco: la riga della pianificazione tace quando
    quel lavoratore è spento (`_scheduleText`), e senza questo resterebbe lo
@@ -5482,7 +5137,6 @@ body {
 }
 
 /* Buttons */
-.settings-btn-save,
 .settings-btn-add {
   font-family: var(--font-sans);
   font-size: 12px;
@@ -5494,30 +5148,28 @@ body {
   margin-top: 4px;
 }
 
-.settings-btn-save {
+/* Il bottone principale di un gruppo: pieno d'accento, a tutta larghezza.
+   Modificatore e non sostituzione di `.settings-btn-add`: gli altri cinque usi
+   (genera chiave, verifica, copia, crea istantanea, aggiungi host) sono azioni
+   secondarie, e sei bottoni pieni sulla stessa pagina non ne fanno risaltare
+   nessuno. `--on-accent` e non il bianco: con un accento chiaro (Chanel) il
+   bianco su bianco non si legge. */
+.settings-btn-full {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 999px;
   background: var(--accent);
-  /* --on-accent, non #fff: con accent chiari (Chanel) il bianco è illeggibile */
-  color: var(--on-accent);
   border-color: var(--accent);
-  align-self: flex-end;
-  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.25);
-}
-
-/* Variante a tutta larghezza (sezione backup: allineata agli altri bottoni) */
-.settings-btn-save.settings-btn-block {
-  align-self: stretch;
-  display: flex;
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
 }
+.settings-btn-full:active { opacity: .85; }
 
-.settings-btn-save:hover {
-  opacity: 0.95;
-  transform: scale(1.03);
-  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.35);
-}
-.settings-btn-save:active { transform: scale(0.97); }
 
 .settings-btn-add {
   background: var(--overlay);
@@ -5534,12 +5186,6 @@ body {
 }
 .settings-btn-add:active { transform: scale(0.97); }
 
-/* Language selector */
-.settings-language-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 
 /* Bottone segmented condiviso (lingua, taglia mascotte, ...): in lista
    verticale occupa la riga, dentro .settings-seg si divide la riga. */
@@ -5554,12 +5200,6 @@ body {
   text-align: center;
 }
 .settings-seg .settings-seg-btn:hover { transform: none; }
-
-/* Opzione visibile ma inerte: la usa il blocco mascotte a mascotte spenta, per
-   mostrare cosa si potrebbe regolare senza far credere che sia regolabile ora. */
-.settings-field[data-settings-off] { opacity: 0.45; }
-.settings-field[data-settings-off] .settings-seg-btn,
-.settings-field[data-settings-off] .toggle-switch { pointer-events: none; }
 
 .settings-seg-btn {
   display: flex;
@@ -5586,7 +5226,7 @@ body {
 .settings-seg-btn.active {
   border-color: var(--accent);
   background: rgba(var(--accent-rgb), .08);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .settings-seg-btn i:first-child {
@@ -5603,16 +5243,6 @@ body {
   color: var(--accent);
 }
 
-/* ── Provider Badges ── */
-.provider-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-weight: 600;
-  flex-shrink: 0;
-}
 
 /* ══ Workspace Scope Picker ══ */
 
@@ -5640,7 +5270,7 @@ body {
 
 .scope-badge.full {
   background: rgba(var(--accent-rgb), 0.15);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .scope-badge i {
@@ -5671,7 +5301,7 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--text-accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5686,27 +5316,9 @@ body {
   white-space: nowrap;
 }
 
-.file-preview-close {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  border: 0.5px solid var(--border-strong);
-  background: var(--overlay);
-  color: var(--text-faint);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color .2s cubic-bezier(.25,.1,.25,1), border-color .2s, background .2s, transform .25s cubic-bezier(.34,1.56,.64,1);
-  flex-shrink: 0;
-}
-
-.file-preview-close:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-  transform: scale(1.1);
-}
-.file-preview-close:active { transform: scale(0.9); }
+/* La crocetta dei due pannelli sopra la chat e' quella dei cassetti, v.
+   `.drawer-close`. Qui solo quel che cambia. */
+.file-preview-close { flex-shrink: 0; }
 
 .file-preview-close i {
   font-size: 12px;
@@ -5767,7 +5379,7 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--accent);
+  color: var(--text-accent);
   text-decoration: none;
   padding: 3px 8px;
   border-radius: var(--radius-sm);
@@ -5784,7 +5396,7 @@ body {
 
 /* Clickable file paths in chat */
 .chat-file-path-link {
-  color: var(--accent);
+  color: var(--text-accent);
   cursor: pointer;
   border-bottom: 1px dashed var(--border-strong);
   font-family: var(--font-mono);
@@ -5794,7 +5406,7 @@ body {
 }
 
 .chat-file-path-link:hover {
-  color: var(--accent);
+  color: var(--text-accent);
   border-bottom-color: var(--accent);
 }
 
@@ -5836,27 +5448,6 @@ body {
   font-size: 13px;
   margin-right: 4px;
 }
-
-.session-info-close {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  border: 0.5px solid var(--border-strong);
-  background: var(--overlay);
-  color: var(--text-faint);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color .2s cubic-bezier(.25,.1,.25,1), border-color .2s, background .2s, transform .25s cubic-bezier(.34,1.56,.64,1);
-}
-
-.session-info-close:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-  transform: scale(1.1);
-}
-.session-info-close:active { transform: scale(0.9); }
 
 .session-info-close i {
   font-size: 13px;
@@ -5943,6 +5534,12 @@ body {
 }
 .format-card i {
   font-size: 28px;
+  flex-shrink: 0;
+  color: var(--text);
+}
+.format-card .brand-logo {
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   color: var(--text);
 }
@@ -6085,7 +5682,16 @@ body {
   border-color: var(--border);
 }
 
-.onboarding-btn:not(:disabled):hover { transform: scale(1.03); }
+/* Il passaggio del mouse esiste solo dove c'e' un mouse. Su un telefono un
+   tocco lascia `:hover` acceso finche' non si tocca altrove, e il bottone
+   restava ingrandito e del colore di passaggio. Prima lo si «annullava» con
+   `revert` sotto `(hover: none)`, ma `revert` torna al foglio **del
+   browser**, non allo stile di base: dopo un tocco il bottone diventava
+   grigio di sistema con il testo bianco. Qui il
+   passaggio del mouse non si accende affatto, e non c'e' niente da annullare. */
+@media (hover: hover) {
+  .onboarding-btn:not(:disabled):hover { transform: scale(1.03); }
+}
 .onboarding-btn:not(:disabled):active { transform: scale(0.97); }
 
 .onboarding-btn-primary {
@@ -6094,10 +5700,12 @@ body {
   box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.25);
 }
 
-.onboarding-btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  color: var(--on-accent);
-  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.35);
+@media (hover: hover) {
+  .onboarding-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    color: var(--on-accent);
+    box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.35);
+  }
 }
 
 .onboarding-btn-secondary {
@@ -6106,8 +5714,10 @@ body {
   border: 1px solid var(--border-strong);
 }
 
-.onboarding-btn-secondary:hover:not(:disabled) {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .onboarding-btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
 }
 
 .onboarding-btn-lg {
@@ -6145,7 +5755,7 @@ body {
 
 .onboarding-model-item.selected {
   background: rgba(var(--accent-rgb), 0.15);
-  color: var(--accent);
+  color: var(--text-accent);
   font-weight: 600;
 }
 
@@ -6194,10 +5804,10 @@ body {
 }
 
 .onboarding-input:focus {
-  border-color: rgba(var(--accent-rgb), 0.4);
+  border-color: var(--focus-ring);
   box-shadow:
     inset 0 1px 2px rgba(0,0,0,0.04),
-    0 0 0 3px rgba(var(--accent-rgb), 0.10),
+    0 0 0 1px var(--focus-ring),
     0 4px 20px rgba(0,0,0,0.12);
   background: var(--overlay-strong);
 }
@@ -6241,15 +5851,6 @@ body {
   transform: scale(0.97);
 }
 
-@media (hover: none) {
-  .onboarding-btn-primary:hover:not(:disabled),
-  .onboarding-btn-secondary:hover:not(:disabled) {
-    background: revert;
-    color: revert;
-    border-color: revert;
-  }
-}
-
 .onboarding-loading-overlay {
   display: none;
   position: fixed;
@@ -6281,9 +5882,19 @@ body {
 
 /* ── Mini Jenny dell'onboarding: in piedi sul bordo inferiore.
    Il layer vive in #view-onboarding (fuori dal content ri-renderizzato);
-   le pose sono i webp condivisi della mascotte, swappati da JS. */
+   le pose sono i webp condivisi della mascotte, swappati da JS.
+
+   In `onboarding.html` la vista e' l'intero documento: nessun guscio intorno
+   le da' un'altezza, quindi la prende dal viewport visibile — `--vv-height`,
+   scritta da `onboarding-app.js`, perche' con la tastiera su il form si
+   restringa invece di finirci sotto. */
 #view-onboarding {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--vv-height, 100%);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-sizing: border-box;
 }
 
 .onboarding-jenny {
@@ -6330,414 +5941,10 @@ body {
   .format-card { padding: 11px; }
 }
 
-/* ══ Wiki View ══ */
 
-#view-wiki {
-  background: var(--bg);
-  overflow-y: auto;
-  position: relative;
-}
 
-.wiki-content {
-  padding: 16px;
-  line-height: 1.6;
-  color: var(--text);
-  font-size: 13px;
-  flex: 1;
-}
 
-.wiki-blockq {
-  padding: 16px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* ══ Wiki Breadcrumbs ══ */
-
-.wiki-breadcrumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--surface);
-  border-bottom: 0.5px solid var(--border);
-  font-size: 11px;
-  color: var(--text-muted);
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  /* Resta visibile mentre il contenuto scrolla (è primo figlio di #wiki-content). */
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-
-.wiki-breadcrumbs .bc-folder {
-  color: var(--text-muted);
-}
-
-.wiki-breadcrumbs .bc-link {
-  color: var(--accent);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.wiki-breadcrumbs .bc-link:hover {
-  text-decoration: underline;
-  opacity: 0.8;
-}
-
-.wiki-breadcrumbs .bc-sep {
-  color: var(--text-faint);
-  font-size: 14px;
-}
-
-.wiki-breadcrumbs .bc-current {
-  color: var(--text);
-  font-weight: 500;
-}
-
-/* ══ Wiki Content Typography ══ */
-
-.wiki-content h1, .wiki-content h2, .wiki-content h3, .wiki-content h4,
-.wiki-content h5, .wiki-content h6 {
-  color: var(--heading);
-  margin: 1.2em 0 0.6em;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.wiki-content h1 { font-size: 20px; border-bottom: 0.5px solid var(--border); padding-bottom: 8px; margin-top: 0.5em; }
-.wiki-content h2 { font-size: 17px; }
-.wiki-content h3 { font-size: 15px; }
-.wiki-content h4 { font-size: 14px; }
-
-.wiki-content p { margin: 0.8em 0; color: var(--text); }
-.wiki-content strong { color: var(--heading); font-weight: 600; }
-
-.wiki-content a {
-  color: var(--accent);
-  text-decoration: none;
-  border-bottom: 0.5px solid transparent;
-  transition: border-color .12s;
-}
-
-.wiki-content a:hover { border-bottom-color: var(--accent); opacity: 0.85; }
-
-.wiki-content code {
-  background: var(--surface-2);
-  padding: 2px 5px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.wiki-content pre {
-  background: var(--surface-2);
-  padding: 12px;
-  border-radius: var(--radius);
-  overflow-x: auto;
-  border: 0.5px solid var(--border);
-  margin: 1em 0;
-}
-
-.wiki-content pre code {
-  background: transparent;
-  padding: 0;
-  font-size: 12px;
-  color: inherit;
-}
-
-.wiki-content blockquote {
-  border-left: 3px solid var(--accent);
-  padding-left: 12px;
-  margin: 1em 0;
-  color: var(--text-muted);
-  background: var(--overlay);
-  padding: 8px 12px;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.wiki-content ul, .wiki-content ol {
-  margin: 0.8em 0;
-  padding-left: 24px;
-  color: var(--text);
-}
-
-.wiki-content li { margin: 0.3em 0; }
-
-.wiki-content table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1em 0;
-  font-size: 12px;
-}
-
-.wiki-content th, .wiki-content td {
-  border: 0.5px solid var(--border);
-  padding: 6px 8px;
-  text-align: left;
-}
-
-.wiki-content th {
-  background: var(--surface);
-  color: var(--heading);
-  font-weight: 600;
-}
-
-.wiki-content tr:last-child td { border-bottom: none; }
-.wiki-content tr:hover td { background: var(--hover); }
-
-.wiki-content hr {
-  border: none;
-  border-top: 0.5px solid var(--border);
-  margin: 1.5em 0;
-}
-
-.wiki-content img {
-  max-width: 100%;
-  border-radius: var(--radius-sm);
-}
-
-.wiki-content .mermaid-block {
-  background: var(--surface-2);
-  padding: 12px;
-  border-radius: var(--radius);
-  overflow-x: auto;
-  text-align: center;
-  margin: 1em 0;
-}
-
-/* ══ Wiki Feedback Popover ══ */
-
-.wiki-popover {
-  position: absolute;
-  z-index: 100;
-  background: var(--surface-2);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  padding: 4px;
-  pointer-events: auto;
-}
-
-.wiki-popover.hidden { display: none; }
-
-.wiki-popover-btn {
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: 11px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.wiki-popover-btn:hover {
-  background: var(--accent-hover);
-}
-
-.wiki-popover-btn i { font-size: 14px; }
-
-/* ══ Wiki Tree (drawer) ══ */
-
-.wiki-tree {
-  padding: 4px 0;
-}
-
-.wiki-tree .tree-node {
-  cursor: pointer;
-  user-select: none;
-}
-
-/* ══ Graph Breadcrumbs ══ */
-
-.graph-breadcrumbs {
-  padding: 6px 12px;
-  font-size: 11px;
-  background: var(--surface);
-  border-bottom: 0.5px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-/* ══ Wiki Feedback Dialog ══ */
-
-#wiki-feedback-dialog .field-label {
-  display: block;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-  margin-top: 8px;
-}
-
-#wiki-feedback-dialog textarea {
-  width: 100%;
-  min-height: 60px;
-  padding: 8px;
-  background: var(--surface-2);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: 12px;
-  font-family: var(--font-sans);
-  resize: vertical;
-}
-
-#wiki-feedback-dialog textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-#wiki-feedback-dialog .dialog-buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-#wiki-feedback-dialog .dialog-buttons button {
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  border: 0.5px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-#wiki-feedback-dialog .dialog-buttons button.primary {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
-}
-
-#wiki-feedback-dialog .dialog-buttons button:hover {
-  opacity: 0.85;
-}
-
-.mobile-dialog {
-  border: none;
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  padding: 0;
-  max-width: 92vw;
-  width: 360px;
-}
-.mobile-dialog::backdrop {
-  background: rgba(0,0,0,0.45);
-}
-.dialog-inner {
-  padding: 16px;
-}
-
-/* Model list (onboarding step 2 + settings) */
-.model-list {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin: 8px 0;
-}
-
-/* Provider card (settings) — glass-morphism */
-.provider-card {
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px;
-  margin: 6px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-  transition: background 0.25s, box-shadow 0.25s, border-color 0.25s, transform 0.25s cubic-bezier(.34,1.56,.64,1);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.08), inset 0 -0.5px 0 rgba(255,255,255,0.02);
-}
-.provider-card:hover {
-  background: var(--overlay-strong);
-  border-color: rgba(255,255,255,0.14);
-}
-/* ── Sezione Modello: card "In uso" + catalogo unificato ── */
-.model-inuse {
-  border: 0.5px solid rgba(var(--accent-rgb), 0.45);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.10), rgba(var(--accent-rgb), 0.02));
-  padding: 11px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.model-inuse-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.model-inuse-via { font-size: 11px; color: var(--text-faint); }
-.model-inuse .model-change-btn { margin-top: 9px; align-self: flex-start; }
-
-.model-catalog {
-  margin-top: 10px;
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.18);
-}
-.model-catalog #model-search { margin-bottom: 4px; }
-#model-catalog-groups { max-height: 280px; overflow-y: auto; }
-.model-group-label {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 10px 4px 4px;
-}
-.model-group-label span { color: var(--text-faint); letter-spacing: 0; text-transform: none; }
-.model-group:first-child .model-group-label { margin-top: 4px; }
-.model-group-msg { font-size: 12px; color: var(--text-faint); padding: 4px 10px; margin: 0; }
-.model-custom-input { margin: 4px 0 2px; font-size: 12px; }
-
-/* Disclosure "Parametri avanzati": chiusa di default, per i power user */
-.settings-disclosure {
-  margin-top: 12px;
-  border-top: 0.5px solid var(--border);
-  padding-top: 10px;
-}
-.settings-disclosure summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-faint);
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.settings-disclosure summary::-webkit-details-marker { display: none; }
-.settings-disclosure summary::before { content: "\25B8"; font-size: 10px; }
-.settings-disclosure[open] summary::before { content: "\25BE"; }
-
-.provider-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.provider-name { font-weight: 500; font-size: 13px; }
-.provider-badge {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 8px;
-    font-weight: 500;
-    background: rgba(var(--accent-rgb), 0.15);
-    color: var(--accent);
-}
-.provider-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 11px;
-    color: var(--text-faint);
-}
+.provider-name { font-family: var(--font-mono); font-weight: 500; font-size: 13px; }
 .provider-card-actions {
     display: flex;
     gap: 4px;
@@ -6766,23 +5973,23 @@ body {
    Small scoped modules for the themes whose character goes beyond tokens. */
 
 /* — Fumetto: china e mezzitoni — */
-[data-theme="fumetto"] .main {
+[data-theme="comic"] .main {
   background-color: var(--bg);
   background-image: radial-gradient(rgba(27, 24, 32, 0.10) 1px, transparent 1.3px);
   background-size: 9px 9px;
 }
-[data-theme="fumetto"] .chat-msg-ai .chat-content:not(:empty) {
+[data-theme="comic"] .chat-msg-ai .chat-content:not(:empty) {
   background: var(--surface);
   border: 2px solid #1b1820;
   border-radius: 12px 12px 12px 2px;
   padding: 8px 12px;
   box-shadow: 3px 3px 0 rgba(27, 24, 32, 0.15);
 }
-[data-theme="fumetto"] .compose-pill {
+[data-theme="comic"] .compose-pill {
   border: 2px solid #1b1820;
 }
-[data-theme="fumetto"] .view-title-text,
-[data-theme="fumetto"] .chat-identity-name {
+[data-theme="comic"] .view-title-text,
+[data-theme="comic"] .chat-identity-name {
   letter-spacing: .02em;
 }
 
@@ -6821,42 +6028,62 @@ body {
    Jenny companion — mascotte sul bordo di ogni vista
    ══════════════════════════════════════════════════ */
 
-/* Nella scheda Apps la mascotte non prende i tocchi.
-   È ancorata al bordo destro a un'altezza fissa (l'offset qui sotto deriva da
-   `#input-bar`, che in questa vista non esiste nemmeno) e la sua **sagoma** —
-   non il margine trasparente, che sporge quasi tutto fuori schermo — copre i
-   ~53 px più a destra. Lì ora ci sono gli interruttori delle skill: misurato
-   sul Titan 2, tre tocchi su tre aprivano la minichat invece di spostare
-   l'interruttore.
-   Resta visibile: è identità, non decorazione, e farla sparire a ogni visita
-   sarebbe più brusco del non poterla toccare da qui. Il prezzo, detto: da
-   questa scheda il tocco sulla mascotte non apre più la minichat. */
-:root.mode-apps .jenny-duo { pointer-events: none; }
-
 .jenny-duo {
   position: absolute;
-  /* L'arte è il canvas QUADRATO 3000² intero (nessun crop): il personaggio
-     occupa ~45% del quadrato, i margini sono trasparenti. 120px di quadrato
-     ≈ 54px di personaggio visibile; gli offset compensano i margini.
+  /* L'arte è il canvas QUADRATO 3000² intero (nessun crop): i margini sono
+     trasparenti e il personaggio ne occupa il **73% dell'altezza** — misurato
+     col bounding box alpha dei webp impacchettati, non sull'arte originale.
+     120px di quadrato ≈ 88px di personaggio visibile; gli offset compensano i
+     margini.
+     (Qui c'era scritto ~45%, che è il rapporto dell'arte a 3000px prima
+     dell'impacchettamento: fidarsene fa disegnare un mockup con la mascotte
+     grande il doppio del vero. Gli offset sotto erano e restano giusti.)
      Tutta la geometria deriva da --jenny-size (impostata su :root da
      shared/mascot.js, default 120px): i rapporti qui sotto valgono a ogni
-     taglia, quindi cambiarne una non richiede di ritoccare gli offset. */
-  right: calc(var(--jenny-size) * -0.469);
-  /* Fissa per tutti gli stati: appena sopra la barra di input (dock +
-     altezza #input-bar, riga dello scope inclusa). Non deve mai cambiare in Y. */
-  bottom: calc(var(--dock-height) + 58px + var(--scope-row));
+     taglia, quindi cambiarne una non richiede di ritoccare gli offset.
+     --jenny-dock e --jenny-out sono i due ancoraggi (al bordo / venuta fuori)
+     e arrivano dallo stesso modulo: sono gli stessi numeri che la fisica usa
+     per far arrivare la camminata di rientro sul punto giusto. Scriverli qui a
+     mano li farebbe diventare due.
+     **Questa e' anche la Jenny della casa** (shared/jenny-mascot.js, lo stesso
+     sprite), che carica questo foglio: la' si cambia solo il pavimento —
+     `--jenny-floor`, che il `bottom` qui sotto legge — su `.home-shell` in
+     home-style.css.
+     **Il livello e' uno per le due interfacce** (D3, 25/09/2026: «Jenny sempre
+     sopra»): 120 sta sopra la mini-app (110) e la lightbox (115), e sopra di
+     lei ci sono solo la sua minichat (121) e il top layer (`<dialog>`, toast),
+     che nessun numero scavalca. Un livello nuovo sopra il suo lo fermano
+     `test_she_is_on_top_of_everything_in_the_house` e
+     `test_she_is_on_top_of_everything_in_the_workshop`. */
+  right: calc(var(--jenny-size) * var(--jenny-dock) * -1);
+  /* Il pavimento del guscio (v. `--jenny-floor`): uguale per tutti gli stati
+     di lei — fuori, al bordo, pensa, parla, con la minichat aperta. In
+     officina e' uno per ogni vista; in casa cambia fra la chat e le pagine. */
+  bottom: var(--jenny-floor);
   width: var(--jenny-size);
   z-index: 120;
   background: none;
   border: none;
   padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
   cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   transform: translateZ(0);
   transition: right 0.3s cubic-bezier(0.2, 0.8, 0.3, 1.15);
 }
+/* Sopra una lightbox lei si vede ma non si tocca. La lightbox si chiude
+   toccando dovunque, e un tocco che finisse su di lei aprirebbe la minichat
+   sopra l'immagine: in officina un livello in piu' in mezzo alla catena di
+   Indietro, in casa un cambio di posa al posto della chiusura. Cosi' le due
+   cose non stanno mai aperte insieme — mentre la minichat e' aperta lo scrim
+   (119) copre la chat e un'immagine non si apre — e l'ordine fra loro in
+   `MobileApp._overlayLayers` non e' una domanda che si pone. Stessa forma del
+   cassetto, dove lei resta sopra e il dito le passa attraverso. */
+:root:has(.image-lightbox) .jenny-duo { pointer-events: none; }
 .jenny-duo.dragging { cursor: grabbing; transition: none; }
 .jenny-duo:active { filter: brightness(0.92); }
 .jenny-duo:focus { outline: none; }
@@ -6867,13 +6094,18 @@ body {
   pointer-events: none;
   -webkit-user-drag: none;
 }
-.jenny-duo.out { right: calc(var(--jenny-size) * -0.25); }
+.jenny-duo.out { right: calc(var(--jenny-size) * var(--jenny-out) * -1); }
 .jenny-duo.out img {
   animation: jenny-bob 3.4s ease-in-out infinite;
   transform-origin: 50% 100%;
 }
 .jenny-duo.dragging img { animation: none; }
-.jenny-duo.thinking img {
+/* Il dondolio del pensa e' della Jenny venuta fuori: messa via mentre pensa,
+   mezza Jenny che oscilla contro il bordo somiglia a un guasto della pagina.
+   La classe `thinking` puo' restarle addosso (il tocco la manda al bordo senza
+   cambiare stato), quindi e' qui che si decide, non in JS. Solo sull'arte di
+   riposo: le pose del volo non ereditano gli stati (v. `.jenny-fly img`). */
+.jenny-duo.out.thinking .jenny-art-stack img {
   animation: jenny-wobble 1.1s ease-in-out infinite;
   transform-origin: 50% 90%;
 }
@@ -6883,11 +6115,11 @@ body {
 /* Anti-flash: attributo impostato in bootstrap.js prima del render, per
    evitare che la mascotte compaia un istante prima che mobile-jenny.js
    applichi la preferenza "non visibile" (fonte di verità a runtime). */
-:root[data-mascotte-hidden] .jenny-duo,
-:root[data-mascotte-hidden] .jenny-scrim,
-:root[data-mascotte-hidden] .jenny-mc { display: none; }
+:root[data-mascot-hidden] .jenny-duo,
+:root[data-mascot-hidden] .jenny-scrim,
+:root[data-mascot-hidden] .jenny-mc { display: none; }
 
-/* Arte a due livelli (v. .agent/mascot-faces-plan.md): a mascotte intera il
+/* Arte a due livelli: a mascotte intera il
    corpo (senza faccia) e la faccia sono due img impilate sullo stesso quadrato.
    Il corpo resta in flusso e dà l'altezza al duo, la faccia gli sta sopra in
    absolute. Da docked l'arte è cotta e la faccia si spegne (.off).
@@ -6901,21 +6133,6 @@ body {
   top: 0;
 }
 .jenny-art-stack img.jenny-face.off { visibility: hidden; }
-
-/* Lato sinistro (v. shared/mascot.js): mirroring completo, stesso offset di
-   destra ma ancorato a left invece che a right. L'arte si specchia così Jenny
-   guarda verso l'interno dello schermo.
-   Lo specchio sta sul contenitore e non sulle img: le due sono un solo
-   disegno, e `transform` non si compone con sé stesso sullo stesso elemento —
-   quando era sull'img il respiro di .out (che scrive transform) lo annullava e
-   da sinistra, uscita, Jenny finiva per guardare fuori dallo schermo. */
-.jenny-duo.side-left {
-  left: calc(var(--jenny-size) * -0.469);
-  right: auto;
-  transition: left 0.3s cubic-bezier(0.2, 0.8, 0.3, 1.15);
-}
-.jenny-duo.side-left.out { left: calc(var(--jenny-size) * -0.25); }
-.jenny-duo.side-left .jenny-art-stack { transform: scaleX(-1); }
 
 /* Volo Pegman: durante il grab il layer .jenny-fly (una posa per fase:
    hang/fall/ground/walk1/walk2, una sola visibile via .on) sostituisce
@@ -6974,55 +6191,128 @@ body {
   transition: opacity 0.25s, visibility 0s linear 0s;
 }
 /* Nascosta per preferenza (mascotte non visibile) o onboarding, v. setMode()
-   in mobile-jenny.js: !important come nel media-query landscape sotto,
-   così vince anche su .open. */
-.jenny-scrim.hidden-mode { display: none !important; }
+   in mobile-jenny.js. Senza `!important`: `.jenny-scrim.open` non tocca
+   `display` (apre con opacita' e visibilita'), quindi non c'e' niente da
+   battere. Qui c'era scritto che serviva a vincere su `.open`. */
+.jenny-scrim.hidden-mode { display: none; }
 
 /* Minichat: campo centrato in basso, fumetto solo sopra la sua testa. */
 .jenny-mc { position: absolute; inset: 0; z-index: 121; pointer-events: none; display: none; }
 .jenny-mc.open { display: block; }
-.jenny-mc.hidden-mode { display: none !important; }
+/* Stessa specificita' di `.open` e scritta dopo: vince per ordine, senza
+   `!important`. Tenerla sotto. */
+.jenny-mc.hidden-mode { display: none; }
+/* Il fumetto e' scuro: la superficie delle schede, col testo della chat e un
+   bordo che lo stacca dallo scrim. Prima era `--accent` / `--on-accent`, nero
+   su rosa in Synthwave; il 28/09/2026 l'utente l'aveva chiesto «bianco su rosa
+   come gli altri messaggi», e visto a schermo, con una risposta intera dentro,
+   ha cambiato idea: «fallo scuro, che cosi' ti acceca». Raggio e corpo del
+   testo restano quelli dei messaggi. Il contrasto di ogni parola su
+   `--surface` lo misura gia' `test_home_you_contract.py`, in ogni tema.
+   Contiene tutta la risposta e scorre dentro di se': l'altezza va dalla sua
+   testa al margine alto. Il testo scorre in `.jenny-mc-text`, e non qui,
+   perche' un `overflow` sul fumetto taglierebbe la coda. */
 .jenny-mc-bubble {
   display: none;
+  flex-direction: column;
   position: absolute;
-  /* right tale che la coda (right 12 + mezza base 6) cada sull'asse di Jenny */
+  /* right tale che la coda (right 12 + mezza diagonale 6) cada sull'asse di Jenny */
   right: 14px;
   /* la coda deve galleggiare sopra l'ahoge, non poggiare sulla testa */
-  bottom: calc(var(--dock-height) + 58px + var(--scope-row) + var(--jenny-size) - 4px);
-  max-width: 74%;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 13px;
-  line-height: 1.45;
-  padding: 9px 12px;
-  border-radius: var(--radius-bubble);
-  border: var(--bubble-user-border);
+  bottom: calc(var(--jenny-floor) + var(--jenny-size) - 4px);
+  max-width: calc(100% - 28px);
+  max-height: calc(100% - var(--jenny-floor) - var(--jenny-size) - 12px);
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   box-shadow: var(--shadow);
+  border-radius: var(--radius-bubble);
+  font-size: 14.5px;
+  line-height: 1.45;
+  pointer-events: auto;
 }
+/* La coda: un quadratino ruotato col fondo e il bordo della bolla, e non un
+   triangolo di bordi, che non sa portare un contorno. Sta dietro la bolla
+   (`z-index: -1`, dentro il contesto di `.jenny-mc`), quindi se ne vede solo
+   la meta' che sporge, e il bordo sui due lati esterni la chiude. */
 .jenny-mc-bubble::after {
   content: "";
   position: absolute;
+  z-index: -1;
   bottom: -6px;
   right: 12px;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 7px solid var(--accent);
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  transform: rotate(45deg);
 }
-/* Lato sinistro (v. .jenny-duo.side-left sopra): stessi ancoraggi ma
-   riflessi, applicati anche a .jenny-mc via mobile-jenny.js#_applySide. */
-.jenny-mc.side-left .jenny-mc-bubble {
-  right: auto;
-  left: 14px;
+.jenny-mc-text {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 9px 13px;
+  overflow-wrap: anywhere;
+  /* Lo scorrimento resta suo: la pista della casa non deve prenderlo per uno
+     swipe di pagina. */
+  touch-action: pan-y;
 }
-.jenny-mc.side-left .jenny-mc-bubble::after {
-  right: auto;
-  left: 12px;
+.jenny-mc-block + .jenny-mc-block { margin-top: 8px; }
+.jenny-mc-block[data-kind="note"] { font-style: italic; opacity: .85; }
+/* Il markdown del fumetto: le regole dei messaggi della casa (`.home-block`),
+   sulla stessa superficie scura. */
+.jenny-mc-text > * > :first-child { margin-top: 0; }
+.jenny-mc-text > * > :last-child { margin-bottom: 0; }
+.jenny-mc-text p { margin: 0 0 8px; }
+.jenny-mc-text ul, .jenny-mc-text ol { margin: 0 0 8px; padding-left: 20px; }
+.jenny-mc-text li { margin: 2px 0; }
+.jenny-mc-text h1, .jenny-mc-text h2, .jenny-mc-text h3 {
+  margin: 10px 0 6px;
+  font-size: 15.5px;
+  font-weight: 600;
 }
+.jenny-mc-text a { color: var(--text-accent); }
+.jenny-mc-text code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--overlay);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.jenny-mc-text pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow-x: auto;
+}
+.jenny-mc-text pre code { padding: 0; background: none; }
+.jenny-mc-text blockquote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+}
+.jenny-mc-text table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 8px;
+}
+.jenny-mc-text th, .jenny-mc-text td {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+}
+.jenny-mc-text img { max-width: 100%; height: auto; }
 .jenny-mc-think {
   display: none;
   position: absolute;
   right: 30px;
-  bottom: calc(var(--dock-height) + 58px + var(--scope-row) + var(--jenny-size) - 4px);
+  bottom: calc(var(--jenny-floor) + var(--jenny-size) - 4px);
   font-family: var(--font-mono);
   font-size: 14px;
   color: var(--text);
@@ -7031,10 +6321,6 @@ body {
   padding: 3px 12px;
   border-radius: var(--radius-pill);
   animation: jenny-pulse 1.1s ease-in-out infinite;
-}
-.jenny-mc.side-left .jenny-mc-think {
-  right: auto;
-  left: 30px;
 }
 /* Il form della minichat È il compose condiviso (.compose-row/.compose-pill/
    .compose-send): qui solo posizionamento e visibilità. */
@@ -7070,16 +6356,22 @@ body {
 .jenny-mc.open[data-state="ask"] .jenny-mc-ask,
 .jenny-mc.open[data-state="reply"] .jenny-mc-ask { display: flex; animation: jenny-pop 0.2s ease-out; }
 .jenny-mc.open[data-state="think"] .jenny-mc-think { display: block; }
-.jenny-mc.open[data-state="reply"] .jenny-mc-bubble { display: block; animation: jenny-pop 0.22s ease-out; }
+.jenny-mc.open[data-state="reply"] .jenny-mc-bubble { display: flex; animation: jenny-pop 0.22s ease-out; }
 
 @keyframes jenny-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes jenny-wobble { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }
 @keyframes jenny-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 @keyframes jenny-pop { from { opacity: 0; transform: translateY(6px) scale(0.94); } to { opacity: 1; transform: none; } }
 
-/* In landscape basso il dock sparisce: niente spazio nemmeno per lei. */
-@media (max-height: 500px) {
-  .jenny-duo, .jenny-scrim, .jenny-mc { display: none !important; }
+/* In landscape basso il dock dell'officina sparisce (v. il `@media
+   (max-height: 380px)` dopo `.dock`): niente spazio nemmeno per lei. Stessa
+   soglia, di proposito: lei sta dove sta il dock.
+   **Solo nell'officina**, la cui radice e' `.app`: la casa il dock non ce
+   l'ha, e la stessa altezza la faceva sparire anche li' senza motivo.
+   Senza `!important`: (0,2,0) e scritta dopo `.jenny-mc.open`, vince per
+   ordine. */
+@media (max-height: 380px) {
+  .app .jenny-duo, .app .jenny-scrim, .app .jenny-mc { display: none; }
 }
 
 /* ── Telegram pairing (onboarding step 4 + sezione impostazioni) ── */
@@ -7120,54 +6412,16 @@ body {
   padding: 12px; font-weight: 600; color: var(--text-faint);
 }
 .tg-disabled .ti-circle-off { font-size: 20px; }
-.tg-bot-link { color: var(--accent); font-weight: 600; }
+.tg-bot-link { color: var(--text-accent); font-weight: 600; }
 
-/* ── Programmazione (sezione impostazioni) ─────────────────────────────────
-   Una card per job. Il bordo sinistro porta il verdetto — rotto, inerte,
-   spento, sano — perché è la cosa che si cerca scorrendo, e i pallini portano
-   l'esito dei singoli run. Nessun colore su `silenced`: un monitor che tace ha
-   funzionato, e colorarlo insegnerebbe a ignorare i colori. */
-.cron-card {
-  padding: 11px 12px;
-  margin-bottom: 8px;
-  border: 0.5px solid var(--border);
-  border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.03);
-  cursor: pointer;
-}
 
-.cron-card:active { background: var(--active); }
-.cron-card-broken { border-left-color: var(--warning); }
-.cron-card-inert { border-left-color: var(--warning); }
-.cron-card-off { border-left-color: var(--border); opacity: 0.62; }
+/* Un lavoro spento si legge spento: la riga intera sbiadisce. Il suffisso
+   `cron-card-<salute>` lo scrive `_renderCronJob` per tutti gli stati, ma gli altri
+   non hanno una regola — il colore del bordo sinistro che portavano era della
+   scheda di prima, e su `.cron-row`, che di bordo ha solo quello in alto, non
+   si vedeva piu'. */
+.cron-card-off { opacity: 0.62; }
 
-.cron-card-head {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.cron-name {
-  font-weight: 600;
-  font-size: 13.5px;
-  color: var(--heading);
-}
-
-.cron-schedule {
-  flex-shrink: 0;
-  font-size: 11.5px;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.cron-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-}
 
 .cron-badge {
   padding: 1px 7px;
@@ -7177,23 +6431,7 @@ body {
   color: var(--text-muted);
 }
 
-/* Le due righe di tempo vanno in colonna e non affiancate: «fra 28 minuti» e
-   «2 ore fa · ha guardato, niente da dire» hanno lunghezze molto diverse, e su
-   380 px affiancarle manderebbe la seconda a capo in mezzo a una parola. */
-.cron-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 7px;
-}
 
-.cron-when {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.cron-when-muted { color: var(--text-faint); }
-.cron-when-overdue { color: var(--warning); font-weight: 600; }
 .cron-tz { color: var(--text-faint); }
 
 .cron-health {
@@ -7299,4 +6537,56 @@ body {
 .cron-task-note {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+
+/* ── Un diagramma disegnato (shared/rich-content.js) ── */
+
+/* Sostituisce l'involucro del blocco di codice: in chat quello portava
+   l'intestazione «mermaid» e il tasto Copia, che accanto a un disegno non
+   vogliono dire piu' niente.
+
+   **Scorre invece di rimpicciolirsi.** Su 590 px un flowchart largo ridotto a
+   tutta larghezza ha etichette da quattro pixel — l'immagine di un diagramma,
+   non un diagramma. Si legge scorrendo di lato, come una tabella larga.
+   (Da guardare sul telefono: e' l'unico posto dove questa scelta si giudica.) */
+.diagram {
+  margin: 10px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.diagram svg {
+  display: block;
+  height: auto;
+}
+
+
+/* ── Movimento ridotto: il tocco non rimpicciolisce ────────────────────────
+   La regola `*` della sezione «Reduced Motion» azzera durate e animazioni, ma
+   un `transform` su `:active` non e' ne' l'una ne' l'altra: il bottone
+   rimpiccioliva lo stesso, a scatto. Fino al 25/09/2026 lo spegnevano solo le
+   tre pillole del composer e le altre venti no, quindi la stessa preferenza
+   valeva per meta' dei bottoni. Adesso vale per tutti,
+   come dicevano le pillole: il rimpicciolimento e' la parte che quella
+   preferenza chiede di togliere. Il riscontro al tocco resta a fondo, colore
+   e opacita' (v. `.ibtn:active` sotto `hover: none`).
+   **Sta in fondo al foglio apposta**: a pari specificita' vince chi viene
+   dopo, e deve venire dopo ogni regola che rimpicciolisce. Un bottone nuovo
+   con `scale()` al tocco va aggiunto qui — lo chiede
+   `test_reduced_motion_stops_every_press_from_shrinking`. */
+@media (prefers-reduced-motion: reduce) {
+  .ibtn:active,
+  .scope-chip:active, .write-switch:active, .commands-chip:active,
+  .scope-menu-del:active,
+  .input-action:active,
+  .compose-drawer:active, .compose-send:active,
+  .drawer-close:active, .file-preview-close:active, .session-info-close:active,
+  .ws-item:active,
+  .chat-code-copy:active,
+  .ws-save-btn:active,
+  .launcher-row:active,
+  .oc-btn-cancel:active, .oc-btn-confirm:active,
+  .settings-btn-add:active,
+  .onboarding-btn:active, .onboarding-btn:not(:disabled):active,
+  .btn-icon:active { transform: none; }
 }

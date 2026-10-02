@@ -1,7 +1,7 @@
 """Il contratto della sezione ``compile`` per il layout **progetto**.
 
 Perché esiste, e il caso di campo che l'ha chiesta. Il 26/08/2026, dentro
-``wikis/salute``, l'utente ha detto «sistema un po' la wiki, se necessario spezza
+``wikis/sartoria``, l'utente ha detto «sistema un po' la wiki, se necessario spezza
 i concetti» e il risultato è stato buono: una pagina sovraccarica spezzata, un
 rapporto di ``raw/research/`` promosso, la mappa riallineata. Ma la passata si è
 **inventata la forma** — la skill aveva già l'operazione (``compile``, che nomina

@@ -14,8 +14,7 @@ ma il prompt di sistema non è fatto solo di template: ``_HEARTBEAT_PREAMBLE`` e
 ``Tool.description`` con le description del proprio schema di parametri sta nei
 moduli di ``jenny/agent/tools/`` — dove ``cron.py`` da solo tiene quattro copie
 della regola sui modi. Tutto questo raggiunge il modello, e la guardia non
-poteva vederlo (v. ``roadmap/agents-md-ownership.md``, "the system prompt is not
-only made of templates").
+poteva vederlo: il prompt di sistema non è fatto solo di template.
 
 **(b) Cercava letterali sensibili alle virgolette.** Cercava ``mode='reminder'``
 con l'apice singolo; ``skills/cron/SKILL.md`` scrive ``mode="reminder"``. Una
@@ -138,7 +137,7 @@ def _schema_descriptions(node: Any, path: str = "") -> Iterator[tuple[str, str]]
 
 
 def _model_facing_corpus() -> Iterator[tuple[str, str]]:
-    """``(sorgente, testo)`` per ogni pezzo di testo che il modello può leggere."""
+    """``(source, text)`` per ogni pezzo di testo che il modello può leggere."""
     for name in _SYSTEM_PROMPT_TEMPLATES:
         yield f"template {name}", load_bundled_template(name) or ""
 
@@ -223,14 +222,12 @@ _ALLOWED: dict[str, str] = {
     # Lo schema di un tool NON è una copia della regola: è la firma del tool, e
     # il modello la legge nel momento in cui compone la chiamata. Toglierla da
     # lì significherebbe chiedergli di indovinare i valori ammessi di `mode`.
-    # `roadmap/agents-md-ownership.md` mette esplicitamente fuori scope il
-    # consolidamento fra `skills/cron/SKILL.md` e la description del tool.
+    # Il consolidamento fra `skills/cron/SKILL.md` e la description del tool.
     #
     # Attenzione: è una deroga sulla *descrizione dei parametri*, non sulla
     # regola di instradamento. Oggi quelle stringhe conoscono due destinazioni
     # (`reminder`/`monitor`) e non nominano `HEARTBEAT.md`, il che è una
-    # divergenza reale da `agent/scheduling.md` — annotata in
-    # `roadmap/agents-md-ownership.md`, non sanata qui perché vive in
+    # divergenza reale da `agent/scheduling.md` — nota, non sanata qui perché vive in
     # `jenny/agent/tools/cron.py`.
     "tool cron.description": "lo schema del tool: il modello lo legge mentre compone la chiamata",
     "tool cron.parameters": "idem — description del blocco parametri",
@@ -240,7 +237,7 @@ _ALLOWED: dict[str, str] = {
 
 
 def _violations() -> list[tuple[str, str, str]]:
-    """``(sorgente, pattern, contesto)`` per ogni match fuori dalle due case."""
+    """``(source, pattern, context)`` per ogni match fuori dalle due case."""
     found: list[tuple[str, str, str]] = []
     for source, text in _model_facing_corpus():
         if source in _HOMES or source in _ALLOWED:
@@ -344,7 +341,7 @@ def _heartbeat_halves() -> dict[str, str]:
     from jenny.cron.heartbeat_tasks import HeartbeatTask, followup_block
     from jenny.runtime.cron_dispatch import _HEARTBEAT_PREAMBLE
 
-    pending = [HeartbeatTask(id="t1", index=1, label="controlla le piante", text="…")]
+    pending = [HeartbeatTask(id="t1", index=1, label="controlla la pioggia", text="…")]
     return {
         "_HEARTBEAT_PREAMBLE (jenny/runtime/cron_dispatch.py)": _HEARTBEAT_PREAMBLE,
         "followup_block (jenny/cron/heartbeat_tasks.py)": followup_block(pending, []),

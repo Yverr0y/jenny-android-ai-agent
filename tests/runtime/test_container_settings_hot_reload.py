@@ -18,6 +18,7 @@ dimenticato in silenzio.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -229,3 +230,106 @@ def test_fingerprint_without_an_active_provider() -> None:
     """Nessun provider e' uno stato a se': uscirne conta come cambio."""
     empty = Config()
     assert provider_fingerprint(empty) != provider_fingerprint(_config())
+
+
+# -- I riferimenti ``${VAR}`` si risolvono anche dopo l'avvio --------------------
+#
+# L'avvio passa da ``gateway_runtime._load_runtime_config``, che risolve i
+# ``${VAR}``; il hot reload e la nascita dell'agente dopo l'onboarding rileggevano
+# il config con il solo ``load_config``. Il provider nuovo riceveva la stringa
+# letterale ``${...}`` come chiave, e l'impronta (calcolata all'avvio sul config
+# risolto) non coincideva mai: ogni salvataggio ricostruiva il provider rotto.
+
+_ENV_KEY = "JENNY_TEST_HOT_RELOAD_KEY"
+
+
+def _patch_reload_capturing(monkeypatch: pytest.MonkeyPatch, config: Config) -> list[Config]:
+    from jenny.config import loader as config_loader
+    from jenny.providers import factory as provider_factory
+
+    built: list[Config] = []
+
+    def _make(cfg, *a, **k):
+        built.append(cfg)
+        return _provider(cfg.agents.defaults.model, GenerationSettings(max_tokens=8192))
+
+    monkeypatch.setattr(config_loader, "load_config", lambda *a, **k: config)
+    monkeypatch.setattr(provider_factory, "make_provider", _make)
+    return built
+
+
+def test_hot_reload_resolves_env_references(container_with_agent, monkeypatch) -> None:
+    container, agent = container_with_agent
+    monkeypatch.setenv(_ENV_KEY, "secret-from-env")
+    config = _config(api_key="${%s}" % _ENV_KEY)
+    config.agents.defaults.max_tokens = 4096
+    built = _patch_reload_capturing(monkeypatch, config)
+
+    container._on_settings_changed()
+
+    agent._apply_provider_switch.assert_called_once()
+    assert built[0].get_active_provider().api_key == "secret-from-env"
+
+
+def test_hot_reload_of_an_unchanged_env_config_short_circuits(
+    container_with_agent, monkeypatch
+) -> None:
+    """L'impronta dell'avvio e' sul config risolto: uguale, niente da ricostruire."""
+    container, agent = container_with_agent
+    monkeypatch.setenv(_ENV_KEY, "k")  # ``_config()`` ha api_key="k"
+    built = _patch_reload_capturing(monkeypatch, _config(api_key="${%s}" % _ENV_KEY))
+
+    container._on_settings_changed()
+
+    agent._apply_provider_switch.assert_not_called()
+    assert built == []
+
+
+async def test_the_agent_born_after_onboarding_resolves_env_references(monkeypatch) -> None:
+    container = GatewayContainer.__new__(GatewayContainer)
+    container.onboarding_event = asyncio.Event()
+    container.onboarding_event.set()
+    monkeypatch.setenv(_ENV_KEY, "secret-from-env")
+    built = _patch_reload_capturing(monkeypatch, _config(api_key="${%s}" % _ENV_KEY))
+
+    async def _run() -> None:
+        return None
+
+    born: list[Config] = []
+
+    def _instantiate(cfg, provider):
+        born.append(cfg)
+        return SimpleNamespace(run=_run)
+
+    container._instantiate_agent = _instantiate
+    container.set_agent = lambda agent: None
+
+    await container._wait_and_create_agent()
+
+    assert built[0].get_active_provider().api_key == "secret-from-env"
+    assert born[0].get_active_provider().api_key == "secret-from-env"
+
+
+def test_replaced_provider_is_closed_in_background(container_with_agent, monkeypatch) -> None:
+    """Il provider sostituito chiude il suo client httpx.
+
+    Prima restava vivo, con pool e connessioni, uno per salvataggio.
+    """
+    container, agent = container_with_agent
+    closed: list[str] = []
+
+    async def _aclose() -> None:
+        closed.append("old")
+
+    container.provider.aclose = _aclose
+    old_provider = container.provider
+    scheduled: list[Any] = []
+    agent._schedule_background = scheduled.append
+    _patch_reload(monkeypatch, config=_config(model="other-model"))
+
+    container._on_settings_changed()
+
+    assert container.provider is not old_provider
+    assert len(scheduled) == 1
+    asyncio.run(scheduled[0])
+    assert closed == ["old"]

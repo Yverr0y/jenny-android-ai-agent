@@ -14,24 +14,15 @@ It is also what makes the "dedicated device" use case work: a spare Android phon
 2. Press the Home button on your device.
 3. Android detects more than one app registered to handle Home and shows you a chooser. Pick Jenny, and choose "Always" (rather than "Just once") if you want it to stick without asking again every time.
 
-<!-- TODO: verify on-device (O-3): exact wording and timing of the Android HOME-app chooser, and whether it appears immediately after onboarding or only on the next Home press. Behavior can vary by Android version and OEM launcher. -->
-
 If you don't want the chooser to appear at all yet, just don't press Home after installing — Jenny only takes over the role once you actively pick it.
 
 ## Where the Home button lands
 
-Once Jenny is your launcher, every press of Home arrives inside the app and means "collapse back to the home screen": any open mini-app closes, the drawer closes, any open dialog closes. What counts as the home screen is yours to choose, in **Settings → Personalization → Home button**:
+Once Jenny is your launcher, every press of Home arrives inside the app and means "you're home": whatever is open on top closes (a sheet, a mini-app, an enlarged image), you land back in your personal conversation, even if you were inside a notebook, and the chat scrolls to its latest message. The on-screen keyboard closes too; with a physical keyboard the message field keeps the focus, so you can start typing straight away. If you are in the workshop when you press Home, it closes whatever is open there and goes to the workshop's **Console**.
 
-| Choice | What Home does |
-|---|---|
-| Chat | Lands on the chat (✿). The historical behavior, and still the default. |
-| Apps | Lands on the Apps tab. |
-| Workspace | Lands on the Workspace tab. |
-| Wherever I was | Changes no view at all — it closes the mini-app, drawer and dialogs and leaves you on whichever tab you were reading. |
+There is no setting for where Home lands. Earlier versions had a **Home button** choice (Chat, Apps, Workspace, or "Wherever I was"); it was retired, and Home always goes back to the conversation.
 
-Earlier versions always went to chat, which is fine if you chat all day and less fine if you mostly use Jenny for mini-apps or files: every Home press threw away where you were. Leave the setting alone and nothing changes from before.
-
-This is separate from what happens on a cold start. When the app is launched fresh it reopens on the tab you last used, regardless of this setting — the setting governs the Home button specifically.
+Pressing Back works one layer at a time and, in the personal conversation with nothing open on top, does nothing: since Jenny is the launcher, Back never closes it.
 
 ## Reverting to your normal launcher
 
@@ -46,16 +37,16 @@ Used that way, Jenny sits in the app switcher like any other app, so swiping thr
 
 ## A note on screen shape
 
-The screenshots in this documentation, and the device the project is developed and tested against day to day, is a Unihertz Titan 2 with a square 1440×1440 display and a physical scroll wheel. Jenny's UI is built mobile-first and works on ordinary tall rectangular phone screens too, but if something in a screenshot looks unusually square, that's why — it isn't a fixed aspect ratio the app requires.
+Jenny grew up on a Unihertz Titan 2, a phone with a square 1440×1440 display and a physical keyboard, and the UI still works there: it is built mobile-first and does not assume an aspect ratio. The screenshots in this documentation come from an ordinary tall phone screen (1080×1920), which is what most people will see.
 
 ## The honest assessment: as a launcher, it's not a good one
 
-Judged purely as a home-screen replacement, Jenny is a weak launcher. There are no widgets, no folders, no icon packs, and no wallpaper management — none of the things a dedicated launcher app is judged on. What it has instead is a search drawer that opens over the conversation and lists your installed Android apps alongside Jenny's own mini-apps and skills (see [Phone app launcher](../using/app-launcher.md) for what it can and can't do), plus a theme picker and a mascot.
+Judged purely as a home-screen replacement, Jenny is a weak launcher. There are no widgets, no folders, no icon packs, and no wallpaper management — none of the things a dedicated launcher app is judged on. What it has instead is a search drawer, the **Apps** page beside the conversation, that lists your installed Android apps alongside Jenny's own mini-apps (see [Phone app launcher](../using/app-launcher.md) for what it can and can't do), plus a theme picker and a mascot.
 
 The launcher role is the *how*, not the *what*: it exists to make the agent the thing you land on, not to compete with Nova or Niagara on features. If you want both — Jenny's presence and a fully-featured launcher — treat this as an either/or per device rather than expecting Jenny to cover both jobs on your primary phone.
 
 ## Related pages
 
-- [Phone app launcher](../using/app-launcher.md) — the drawer that opens your apps, and the tab where you hide and uninstall them
+- [Phone app launcher](../using/app-launcher.md) — the drawer that opens your apps, and the card (a long press) where you uninstall an Android app or pin a mini-app as a page
 - [Install the APK](install.md) — permissions declared, including why there's no `CAMERA` or storage permission
 - [Introduction](introduction.md) — the "daily launcher vs. dedicated device" framing in full

@@ -1,6 +1,6 @@
 """Il cursore del giardiniere, e il delta di diario che ne esce.
 
-Passo **T4.1** di ``roadmap/taccuino-passi.md``: la metà del giardiniere che non
+Passo **T4.1** del piano del taccuino: la metà del giardiniere che non
 chiama nessun modello. Risponde a una domanda sola — *«di questo diario, cosa non
 ho ancora letto?»* — e tiene su disco la risposta.
 

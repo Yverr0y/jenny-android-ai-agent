@@ -34,9 +34,9 @@ from jenny.session.project_traces import (
     describe_project_traces,
     project_trace_paths,
 )
+from jenny.webui.commands import _project_delete_refusal
 from jenny.webui.project_create import create_project
 from jenny.webui.project_delete import ProjectDeleteError, delete_project
-from jenny.webui.workspace_routes import _project_delete_refusal
 
 NAME = "viaggio"
 KEY = f"project:{NAME}"
@@ -405,6 +405,21 @@ def test_an_unopenable_wiki_is_not_protected_by_the_refusal(workspace: Path) -> 
     """Una cartella il cui nome non puo' essere una conversazione non ha una chat
     da orfanare — e ``project.delete`` la rifiuterebbe per il nome. Rifiutare
     anche la strada generica la renderebbe incancellabile da ogni porta."""
-    odd = workspace / "wikis" / "Ricerca ETF"
+    odd = workspace / "wikis" / "Ricerca ETNA"
     (odd / "wiki").mkdir(parents=True)
     assert _project_delete_refusal(workspace, odd) is None
+
+
+def test_deleting_a_project_takes_its_interrupted_turn_journal(workspace: Path) -> None:
+    """Il diario di un turno interrotto sta accanto alla sessione: se restasse,
+    il prossimo quaderno con lo stesso nome riprenderebbe il turno di un altro."""
+    from jenny.session.manager import SessionManager
+
+    _make(workspace)
+    _live_chat(workspace)
+    journal = SessionManager(workspace).turn_journal_path(KEY)
+    journal.write_text('{"_type": "turn_journal", "stamp": "x"}\n', encoding="utf-8")
+
+    _remove(workspace)
+
+    assert not journal.exists(), "il diario del turno e' rimasto orfano"

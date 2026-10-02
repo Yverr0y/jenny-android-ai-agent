@@ -19,6 +19,7 @@ import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -74,8 +75,12 @@ class _Env:
 
 
 @asynccontextmanager
-async def ssh_env(tmp_path: Path):
-    """Server SSH su loopback con chiave host e chiave client generate al volo."""
+async def ssh_env(tmp_path: Path, *, sftp_factory: Any = True):
+    """Server SSH su loopback con chiave host e chiave client generate al volo.
+
+    *sftp_factory* è quella di ``asyncssh.listen``: ``True`` è il server SFTP
+    di serie, una sottoclasse di ``SFTPServer`` ne cambia un comportamento.
+    """
     host_key = asyncssh.generate_private_key("ssh-ed25519")
     host_key_path = tmp_path / "host_key"
     host_key.write_private_key(str(host_key_path))
@@ -94,7 +99,7 @@ async def ssh_env(tmp_path: Path):
         server_host_keys=[str(host_key_path)],
         authorized_client_keys=str(authorized),
         process_factory=_handle_process,
-        sftp_factory=True,
+        sftp_factory=sftp_factory,
     )
     port = server.sockets[0].getsockname()[1]
 
@@ -380,6 +385,72 @@ async def test_get_refuses_file_over_cap_without_writing_it(tmp_path):
                 env.target, str(remote), destination, max_bytes=1000
             )
         assert not destination.exists()
+
+
+class _UnderstatingSFTPServer(asyncssh.SFTPServer):
+    """Un server che dichiara 10 byte per ogni file, qualunque ne sia la misura.
+
+    È il caso che il controllo sulla ``stat`` non vede: un file cresciuto fra
+    la ``stat`` e la lettura, o un server che risponde male. Il tetto deve
+    valere sui byte che arrivano, non su quelli annunciati.
+    """
+
+    def stat(self, path: bytes):  # type: ignore[override]
+        attrs = asyncssh.SFTPAttrs.from_local(super().stat(path))
+        attrs.size = 10
+        return attrs
+
+
+async def test_get_caps_the_bytes_that_arrive_not_the_declared_size(tmp_path):
+    """La ``stat`` dice 10 byte, ne arrivano 5000: la copia si ferma al tetto,
+    niente file sul telefono, nemmeno il ``.part``."""
+    async with ssh_env(tmp_path, sftp_factory=_UnderstatingSFTPServer) as env:
+        remote = tmp_path / "grows.bin"
+        remote.write_bytes(b"z" * 5000)
+        destination = tmp_path / "downloads" / "grows.bin"
+        destination.parent.mkdir()
+
+        with pytest.raises(SshTransportError, match="grew past the 1000 byte limit"):
+            await env.backend.get(env.target, str(remote), destination, max_bytes=1000)
+
+        assert list(destination.parent.iterdir()) == []
+
+
+async def test_get_never_touches_a_file_already_named_like_the_partial(tmp_path):
+    """Il temporaneo ha un nome che prima non c'era: un ``<nome>.part`` dell'utente
+    (o di un altro download) accanto alla destinazione resta com'era, sia a copia
+    riuscita sia a copia interrotta."""
+    async with ssh_env(tmp_path, sftp_factory=_UnderstatingSFTPServer) as env:
+        downloads = tmp_path / "downloads"
+        downloads.mkdir()
+        destination = downloads / "report.bin"
+        bystander = downloads / "report.bin.part"
+        bystander.write_bytes(b"un file che c'era gia'")
+
+        remote = tmp_path / "report.bin"
+        remote.write_bytes(b"r" * 300)
+        await env.backend.get(env.target, str(remote), destination, max_bytes=1000)
+        assert destination.read_bytes() == b"r" * 300
+        assert bystander.read_bytes() == b"un file che c'era gia'"
+
+        remote.write_bytes(b"r" * 5000)
+        with pytest.raises(SshTransportError, match="grew past"):
+            await env.backend.get(env.target, str(remote), destination, max_bytes=1000)
+        assert bystander.read_bytes() == b"un file che c'era gia'"
+        assert sorted(p.name for p in downloads.iterdir()) == ["report.bin", "report.bin.part"]
+
+
+async def test_get_returns_the_bytes_written(tmp_path):
+    """Il conto che torna è quello dei byte scritti, non la ``stat``."""
+    async with ssh_env(tmp_path, sftp_factory=_UnderstatingSFTPServer) as env:
+        remote = tmp_path / "small.bin"
+        remote.write_bytes(b"q" * 300)
+        destination = tmp_path / "small_copy.bin"
+
+        read = await env.backend.get(env.target, str(remote), destination, max_bytes=1000)
+
+        assert read == 300
+        assert destination.read_bytes() == b"q" * 300
 
 
 # -- chiavi e host key -------------------------------------------------------

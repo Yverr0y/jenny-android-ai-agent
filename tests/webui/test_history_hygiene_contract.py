@@ -82,20 +82,29 @@ def test_a_foreign_history_entry_keeps_the_back_walking() -> None:
 
 
 def test_leaving_the_editor_returns_to_the_origin_without_stacking() -> None:
-    """L'editor aperto da un'altra sezione (App → modifica skill) ha la entry di
-    quella sezione già nello stack, sotto la propria.
+    """Il file aperto ha la entry di Memoria già nello stack, sotto la propria:
+    è da lì che lo si è aperto, e dal 21/09/2026 non c'è altra strada.
 
     Il back hardware lo sa e ritorna ``false`` apposta, lasciando che sia la
     history a riportare indietro. La freccia ← dell'header faceva l'opposto:
-    ``switchMode(ret)``, con push di default, impilava una entry *in avanti*
+    uno ``switchMode`` con push di default impilava una entry *in avanti*
     mentre l'utente stava tornando indietro.
+
+    **Aggiornato**: la destinazione era il campo ``_returnMode``, che descriveva
+    un'origine variabile. Adesso è scritta dove si usa, perché di origini ce
+    n'è una sola — ma la regola su *come* ci si torna non è cambiata di una
+    virgola, ed è quella che questo banco misura.
     """
     workspace = WORKSPACE_JS.read_text(encoding="utf-8")
     # I commenti citano il prima: qui interessa solo il codice.
     close_editor = re.sub(r"//.*", "", _method(workspace, "_closeEditor"))
-    assert "window.mobileApp?.navigateBack(ret);" in close_editor
-    assert "switchMode(ret)" not in close_editor, (
+    assert "window.mobileApp?.navigateBack('memory');" in close_editor
+    assert "switchMode(" not in close_editor, (
         "switchMode con push di default impila una entry in avanti mentre si va indietro"
+    )
+    assert "if (hardwareBack) return false;" in close_editor, (
+        "col back hardware la history riporta indietro da sé: navigare qui "
+        "sarebbe un secondo cambiamento per una pressione sola"
     )
 
     back = _method(_app(), "navigateBack")
@@ -119,15 +128,45 @@ def test_home_collapses_to_the_root_instead_of_stacking_over_it() -> None:
     mai: dieci Home, dieci entry da smaltire una pressione alla volta.
     """
     body = _method(_app(), "goHome")
-    assert "this.switchMode(target, false);" in body, "la vista home non si impila"
+    assert "this.switchMode('chat', false);" in body, "la vista home non si impila"
     assert "this._navPos = 0;" in body, "Home riporta al fondo dello stack nostro"
     assert "this.replaceNav(" in body, "la entry corrente deve descrivere la home"
-    assert body.index("this.switchMode(target, false);") < body.index("this._navPos = 0;"), (
+    assert body.index("this.switchMode('chat', false);") < body.index("this._navPos = 0;"), (
         "prima si cambia vista, poi si marca la radice: replaceNav descrive dove si è atterrati"
     )
-    assert "target === 'last'" in body, (
-        "'last' vuol dire 'lasciami dove sono': niente cambio vista e niente riscrittura"
+    # Quale vista sia «home» era una preferenza a quattro voci, con un 'last'
+    # che voleva dire "non muoverti". Tolta il 21/09/2026 col gruppo che la
+    # conteneva: la schermata iniziale è **sempre** la chat. La regola di
+    # sopra non cambia — Home collassa e non impila — cambia solo che la
+    # destinazione non è più leggibile da fuori.
+    assert "homeView()" not in body, "la schermata iniziale è la chat, non una preferenza"
+    assert "'last'" not in body, "il ramo che lasciava l'utente dov'era è tornato"
+
+
+def test_the_home_view_preference_is_gone_from_the_product() -> None:
+    """Non basta che `goHome` non la legga: finche' il modulo esiste, il valore
+    resta scritto nel `localStorage` di chi l'aveva cambiato e la prossima
+    persona che lo trova crede che la preferenza esista ancora da qualche
+    parte. Il file se n'e' andato, e con lui la sua riga di manifesto — un file
+    elencato e non presente e' un 404 silenzioso sul telefono, che in locale
+    non si vede.
+    """
+    from jenny.utils.android_assets import _UI_MANIFEST
+
+    module = ASSETS / "shared" / "home-view.js"
+    assert not module.exists(), "il modulo della vista home e' tornato"
+    assert "assets/shared/home-view.js" not in _UI_MANIFEST, (
+        "il manifesto elenca ancora un file che non esiste"
     )
+    # Solo gli `import`, non la parola: il commento di `goHome` nomina il
+    # modulo apposta, per dire dove la preferenza viveva prima di sparire.
+    for js in sorted(ASSETS.rglob("*.js")):
+        if "vendor" in js.parts:
+            continue
+        for row in js.read_text(encoding="utf-8").splitlines():
+            assert not (row.lstrip().startswith("import") and "home-view" in row), (
+                f"{js.name} importa ancora la preferenza della vista home"
+            )
 
 
 def test_the_workspace_editor_is_never_dropped_behind_home() -> None:
@@ -143,7 +182,7 @@ def test_the_workspace_editor_is_never_dropped_behind_home() -> None:
 
 
 def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
-    """I listener del dock sono attivi da subito: durante i due await del boot
+    """I listener del dock sono attivi da subito: durante gli await del boot
     un tap impilava la propria entry sopra una radice non ancora marcata, e la
     marcatura tardiva la riscriveva con pos 0 — vista riportata indietro da sé,
     pressione annullata in silenzio e una entry mai contata sotto.
@@ -155,6 +194,11 @@ def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
     variabili locali compresi (``initialWiki``, ``const settings = ...``):
     rinominare una locale — che non cambia niente per nessuno — le faceva
     fallire. Il contratto è un *ordine*, e si verifica confrontando posizioni.
+
+    **Aggiornato il 27/09/2026.** Gli await erano due: la lettura del primo
+    avvio e le sessioni. La prima si fa adesso in testa al boot, **prima** che
+    i listener del dock esistano — un tap non puo' arrivare — perche' il primo
+    avvio non si fa piu' qui ma in ``onboarding.html``. Resta il secondo.
     """
     source = _app()
     init = re.search(r"\n  async init\(\)\s*\{(.*?)\n  \}", source, re.S)
@@ -164,18 +208,21 @@ def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
     marks = [m.start() for m in re.finditer(r"this\.replaceNav\(this\._navStateFor\(", body)]
     assert marks, "il boot non marca più la radice"
     mark = marks[0]
-    # I due await che aprono la finestra: non sono variabili locali, sono i
-    # nomi delle chiamate — rinominarli *è* un cambio di contratto.
-    for await_call in (r"await api\.getSettings\(\)", r"await this\._initSessions\(\)"):
-        found = re.search(await_call, body)
-        assert found, f"await sparito dal boot: {await_call}"
-        assert mark < found.start(), (
-            "la radice va marcata prima degli await, altrimenti un tap sul dock la scavalca"
-        )
+    # L'await che apre la finestra: non e' una variabile locale, e' il nome
+    # della chiamata — rinominarlo *è* un cambio di contratto.
+    found = re.search(r"await this\._initSessions\(\)", body)
+    assert found, "await gone dal boot: _initSessions"
+    assert mark < found.start(), (
+        "la radice va marcata prima dell'await, altrimenti un tap sul dock la scavalca"
+    )
+    # La domanda sul primo avvio si fa prima che il dock ascolti.
+    listeners = body.index("document.querySelectorAll('.dock-item[data-mode]')")
+    assert body.index("isFirstRun(") < listeners, (
+        "un tap durante la lettura del primo avvio scavalcherebbe una radice non marcata"
+    )
 
-    assert "if (!this.currentMode || this._firstRun) {" in body, (
-        "un tap durante il boot ha già scelto la vista: va onorato, non annullato "
-        "(il primo avvio è l'eccezione, lì la navigazione è bloccata)"
+    assert "if (!this.currentMode) {" in body, (
+        "un tap durante il boot ha già scelto la vista: va onorato, non annullato"
     )
 
 
@@ -259,15 +306,17 @@ def test_the_settings_scroll_restore_does_not_destroy_what_it_restores() -> None
     """La prima stesura del ripristino si auto-distruggeva, e l'asserzione «sta
     in coda a render()» era vera lo stesso — per questo il difetto è passato.
 
-    Il meccanismo: ``render()`` rimette la posizione mentre catalogo modelli,
-    blocco SSH e lista snapshot sono ancora dei «Caricamento…». La pagina è
+    Il meccanismo: ``render()`` rimette la posizione mentre blocco SSH e lista
+    snapshot sono ancora dei «Caricamento…». La pagina è
     molto più corta di quando la posizione fu misurata, quindi Blink clampa
     l'assegnazione a ``scrollHeight - clientHeight``; l'assegnazione emette un
     evento ``scroll``, e il listener del costruttore riscriveva ``_scrollTop``
     col valore clampato. La posizione buona non era approssimata: era persa, e
     quando i gruppi del catalogo si riempivano un attimo dopo non la
-    riapplicava nessuno. Lo scenario è esattamente quello che motiva N19:
-    scegliere un modello a catalogo aperto e pagina scorsa in basso.
+    riapplicava nessuno. Lo scenario che lo motivava — scegliere un modello a
+    catalogo aperto e pagina scorsa in basso — adesso vive in casa; il
+    meccanismo resta perché SSH e la storia degli snapshot atterrano allo
+    stesso modo.
 
     Due proprietà, quindi: il listener non registra le scritture nostre, e i
     caricatori asincroni riapplicano quando il contenuto è atterrato.
@@ -294,25 +343,45 @@ def test_the_settings_scroll_restore_does_not_destroy_what_it_restores() -> None
     )
 
     # Il contenuto asincrono atterra dopo: chi lo inietta riapplica.
-    for name in ("_fillCatalogGroup", "_loadSsh", "_loadSnapshotList"):
+    # `_fillCatalogGroup` non c'e' piu': il catalogo modelli e' in casa dal
+    # 20/09/2026, e con lui se n'e' andato il caso che dava il nome a N19.
+    for name in ("_loadSsh", "_loadSnapshotList"):
         assert "this._restoreScrollTop();" in _method(settings, name), (
             f"{name}() allunga la pagina dopo il ripristino: deve riapplicarlo"
         )
 
 
-def test_the_model_catalog_survives_the_save_that_re_renders_it() -> None:
-    """Scegliere un modello *è* un salvataggio, e il salvataggio ridisegna:
-    catalogo richiuso e filtro perso proprio mentre si stava confrontando due
-    modelli."""
+def test_the_model_catalog_lives_in_the_controller_on_both_sides() -> None:
+    """Il catalogo modelli e' in casa, da «Chi risponde», e dal 27/09/2026 anche
+    in officina, nei gruppi di «Chi pensa».
+
+    Questo banco difendeva lo stato «aperto + filtro» attraverso il
+    ridisegno, perche' scegliere un modello *e'* un salvataggio e il
+    salvataggio ridisegna. Il catalogo di allora teneva quello stato nel DOM
+    che `render()` riscrive. Adesso vive nel controller — `_catalogs` in casa;
+    in officina `_brandCatalogs` per gli elenchi, `_brandsOpen`,
+    `_modelOrder`, `_brandFilters` e `_brandShowAll` per la visita — e una
+    scelta in officina non ridisegna la pagina: ridipinge solo le marche
+    (`_repaintBrands`). Le promesse di casa sono in `test_home_model_client.py`;
+    quelle dell'officina in `test_workshop_who_thinks_client.py`.
+
+    Quel che si misura qui: la vecchia sotto-schermata non torna, e lo stato
+    resta in memoria.
+    """
     settings = SETTINGS_JS.read_text(encoding="utf-8")
-    toggle = _method(settings, "_toggleModelCatalog")
-    assert "this._catalogOpen = !wasOpen;" in toggle, "lo stato aperto/chiuso non vive solo nel DOM"
-
-    filt = _method(settings, "_applyCatalogFilter")
-    assert "this._catalogFilter" in filt
-
-    restore = _method(settings, "_restoreCatalogState")
-    assert "if (!this._catalogOpen) return;" in restore
-    assert "search.value = this._catalogFilter;" in restore
-    assert "this._loadModelCatalog();" in restore, "riaperto vuoto non è riaperto"
-    assert "this._restoreCatalogState();" in _method(settings, "render")
+    for piece in ("model-catalog", "btn-change-model", "_loadModelCatalog", "_selectModel"):
+        assert piece not in settings, (
+            f"«{piece}» e' tornato in officina: era la sotto-schermata che il "
+            "ridisegno buttava via"
+        )
+    assert "this._brandCatalogs = new Map()" in settings, (
+        "l'officina non tiene piu' gli elenchi nel controller: ogni salvataggio "
+        "li richiederebbe"
+    )
+    for field in ("this._modelOrder = new Map()", "this._brandFilters = new Map()",
+                  "this._brandShowAll = new Set()"):
+        assert field in settings, f"lo stato della visita non e' piu' nel controller: {field}"
+    home = (SETTINGS_JS.parent / "home-model.js").read_text(encoding="utf-8")
+    assert "getProviderModels" in home and "default_provider" in home, (
+        "la casa non ha piu' il catalogo"
+    )

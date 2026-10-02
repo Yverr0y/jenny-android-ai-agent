@@ -10,12 +10,11 @@ passi da ``store.mutate`` e non da ``save_config``.
 from __future__ import annotations
 
 import json
-import urllib.parse
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from websockets.http11 import Headers
+from support.gateway_http import make_request
 from websockets.http11 import Request as WsRequest
 
 from jenny.channels.http_utils import check_api_secret, http_error, http_json_response, parse_query
@@ -184,17 +183,19 @@ def test_the_control_lives_in_the_background_activity_section() -> None:
     assert "settings.battery.keepAwake" in source
     assert "settings.battery.keepAwakeRestart" in source
     # Niente etichette inline: la copy sta nei file i18n.
-    assert "keep-awake-select" in source
+    # Da tendina a segmenti (v. `_renderKeepAwake`): l'id cambia, il fatto che
+    # il comando esista e stia qui no.
+    assert "keep-awake-seg" in source
+    assert "settings.battery.keepAwakeShort." in source, (
+        "i segmenti usano le parole corte: quelle lunghe non stanno in un terzo di riga"
+    )
 
 
 # -- strato route ------------------------------------------------------------
 
 
 def _request(path: str, token: str | None = _SECRET) -> WsRequest:
-    if token is not None and "token=" not in path:
-        sep = "&" if "?" in path else "?"
-        path = f"{path}{sep}token={urllib.parse.quote(token)}"
-    return WsRequest(path=path, headers=Headers())
+    return make_request(path, token)
 
 
 def _router() -> WebUISettingsRouter:

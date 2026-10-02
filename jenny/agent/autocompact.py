@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,7 @@ from jenny.session.keys import (
     UNIFIED_SESSION_KEY,
     is_project_session_key,
 )
-from jenny.session.manager import Session, SessionManager
+from jenny.session.manager import DIARY_HARVEST_METADATA_KEY, Session, SessionManager
 
 # La sottocartella dei progetti quando nessuno la passa. Dalla stessa costante
 # che usa il ``Consolidator``, non da un letterale: ``config.wiki.wikis_dir`` e'
@@ -63,8 +64,19 @@ class AutoCompact:
 
     # Dove la sessione si annota fin dove il diario e' stato raccolto. Un indice
     # nei messaggi, non un timestamp: i messaggi sono la cosa che si conta, e un
-    # orologio andrebbe confrontato con quello di chi scrive.
-    _DIARY_HARVEST_KEY = "_diary_harvested"
+    # orologio andrebbe confrontato con quello di chi scrive. La costante vive
+    # con ``Session``, che lo sposta quando accorcia o azzera i messaggi.
+    _DIARY_HARVEST_KEY = DIARY_HARVEST_METADATA_KEY
+
+    # Quanti riassunti al massimo per una raccolta: una sessione oltre il budget
+    # d'input si legge a pezzi, e il resto aspetta il giro dopo.
+    _DIARY_HARVEST_MAX_CHUNKS = 4
+
+    # Quanto aspetta una compattazione per inattivita' fallita prima di
+    # riprovare. A LLM giu' la sessione non si tronca
+    # e resta scaduta, e il giro TTL passa ogni 60 secondi: senza questa attesa
+    # sarebbe una chiamata al minuto per tutta la durata del guasto.
+    _RETRY_AFTER_FAILURE_S = 600.0
 
     def __init__(self, sessions: SessionManager, consolidator: Consolidator,
                  session_ttl_minutes: int = 0,
@@ -96,6 +108,9 @@ class AutoCompact:
         # la stessa riga di log ogni minuto (il giro TTL gira a 60s). La
         # decisione non e' memorizzata — si rifa ogni volta.
         self._deferred: dict[str, str] = {}
+        # Il momento (``time.monotonic``) prima del quale una sessione la cui
+        # compattazione e' fallita non si riprova. V. ``_RETRY_AFTER_FAILURE_S``.
+        self._retry_not_before: dict[str, float] = {}
 
     @property
     def _workspace(self) -> Path | None:
@@ -115,7 +130,16 @@ class AutoCompact:
         if self._ttl <= 0 or not ts:
             return False
         if isinstance(ts, str):
-            ts = datetime.fromisoformat(ts)
+            try:
+                ts = datetime.fromisoformat(ts)
+            except ValueError:
+                # ``updated_at`` arriva grezzo dal file di sessione (un backup
+                # di un'altra versione, un edit a mano): un valore illeggibile
+                # non e' una scadenza, e alzare qui — dentro il giro TTL di
+                # ``AgentLoop.run`` — spegnerebbe il gateway a ogni riavvio.
+                return False
+        if not isinstance(ts, datetime):
+            return False
         return ((now or datetime.now()) - ts).total_seconds() >= self._ttl * 60
 
     @staticmethod
@@ -316,11 +340,26 @@ class AutoCompact:
             return ()
         return tuple(path.stem.replace("_", ":", 1) for path in files)
 
+    def busy_session_keys(self) -> tuple[str, ...]:
+        """Le sessioni che l'autocompact sta riscrivendo **adesso**.
+
+        Sono due lavori, e tutti e due salvano la sessione dopo una chiamata LLM:
+        la compattazione (``_archiving``) la accorcia, la raccolta del diario
+        (``_harvesting``) ci annota fin dove ha letto. Lo chiede
+        ``AgentLoop.busy_session_keys``: un rinomino o una cancellazione di
+        progetto in quella finestra lascerebbe una chat sotto il nome vecchio.
+        """
+        keys = dict.fromkeys(sorted(self._archiving))
+        keys.update(dict.fromkeys(sorted(self._harvesting)))
+        return tuple(keys)
+
     def check_expired(self, schedule_background: Callable[[Coroutine], None],
                       active_session_keys: Collection[str] = ()) -> None:
         """Schedule archival of idle sessions, unless a task is in flight."""
         for key in self._idle_candidates():
             if key in self._archiving or key in active_session_keys:
+                continue
+            if self._retry_not_before.get(key, 0.0) > time.monotonic():
                 continue
             info = self.sessions.read_session_metadata(key)
             if info is None:
@@ -336,6 +375,8 @@ class AutoCompact:
             schedule_background(self._archive(key))
         for key in self._diary_candidates():
             if key in self._harvesting or key in active_session_keys:
+                continue
+            if self._retry_not_before.get(key, 0.0) > time.monotonic():
                 continue
             info = self.sessions.read_session_metadata(key)
             if info is None or not self._is_expired(info.get("updated_at")):
@@ -360,8 +401,7 @@ class AutoCompact:
     async def _harvest_project_diary(self, key: str) -> None:
         """Riassume quel che un progetto ha detto di nuovo, **senza toccarlo**.
 
-        **La fase che rende la corsia di diario non vuota** (08/09/2026, v.
-        ``.agent/project-memory-plan.md``). Aperta la scrittura in
+        **La fase che rende la corsia di diario non vuota** (08/09/2026). Aperta la scrittura in
         ``history.jsonl``, il trasporto restava quello della compattazione: un
         riassunto lo produce solo chi compatta. Misurato sul telefono lo stesso
         giorno, **3 sessioni di progetto su 9** erano mai state compattate — fra
@@ -379,10 +419,23 @@ class AutoCompact:
         all'orologio del giardiniere sarebbe la corsa fra orologi che quel metodo
         esiste per evitare.
 
-        L'indice avanza **anche quando la chiamata LLM fallisce**, e non e' una
-        svista: in quel caso ``archive`` scrive il dump grezzo nella coda con la
-        stessa chiave, quindi la materia e' arrivata lo stesso e riassumerla di
-        nuovo produrrebbe una seconda voce sullo stesso contenuto.
+        **L'indice dice "riassunto", e nient'altro**.
+        Tre cose lo tradivano. Era una posizione assoluta, e dopo ``/new`` restava
+        al valore di prima: i messaggi nuovi, meno dei vecchi, non entravano mai —
+        ora ``Session.clear`` lo toglie e ``retain_recent_legal_suffix`` lo fa
+        scorrere. La prima raccolta partiva da zero anche sul prefisso gia'
+        consolidato per lunghezza, che nella coda c'e' gia' con la stessa chiave:
+        ora parte da ``last_consolidated`` se e' piu' avanti. E una sessione oltre
+        il budget d'input del Consolidator veniva troncata dentro ``archive`` e
+        segnata letta per intero: ora si legge a pezzi che ci stanno interi
+        (:meth:`Consolidator.messages_fitting_budget`) e l'indice avanza di un
+        pezzo alla volta.
+
+        **Una chiamata fallita non avanza niente.** Avanzava, contando sul dump
+        grezzo; ma il dump e' tagliato a ``_RAW_ARCHIVE_MAX_CHARS``, quindi la
+        coda di una conversazione lunga risultava letta senza esserlo. Ora niente
+        dump (ogni riprova ne scriverebbe un altro) e si riprova dopo
+        ``_RETRY_AFTER_FAILURE_S``.
         """
         try:
             session = self.sessions.get_or_create(key)
@@ -390,17 +443,44 @@ class AutoCompact:
             # ``min``: se qualcuno ha compattato in mezzo, l'indice puo' essere
             # oltre la fine. Ripartire da li' invece che da zero — rileggere
             # tutto produrrebbe un doppione di quel che e' gia' nella coda.
-            start = min(int(session.metadata.get(self._DIARY_HARVEST_KEY, 0)), len(messages))
-            fresh = messages[start:]
-            if len(fresh) < self._DIARY_HARVEST_MIN_MESSAGES:
+            mark = session.metadata.get(self._DIARY_HARVEST_KEY, 0)
+            if not isinstance(mark, int) or isinstance(mark, bool):
+                mark = 0
+            start = min(max(mark, session.last_consolidated), len(messages))
+            if len(messages) - start < self._DIARY_HARVEST_MIN_MESSAGES:
                 return
-            await self.consolidator.archive(fresh, session_key=key)
-            session = self.sessions.get_or_create(key)
-            session.metadata[self._DIARY_HARVEST_KEY] = len(messages)
-            self.sessions.save(session)
-            logger.info(
-                "Diary harvest for {}: {} new messages read into the queue", key, len(fresh),
-            )
+            position = start
+            for _ in range(self._DIARY_HARVEST_MAX_CHUNKS):
+                rest = messages[position:]
+                if not rest:
+                    break
+                count = self.consolidator.messages_fitting_budget(rest, session_key=key)
+                summary = await self.consolidator.archive(
+                    rest[:count], session_key=key, raw_dump_on_failure=False,
+                )
+                if summary is None:
+                    self._retry_not_before[key] = (
+                        time.monotonic() + self._RETRY_AFTER_FAILURE_S
+                    )
+                    break
+                position += count
+                current = self.sessions.get_or_create(key)
+                # La sessione puo' essere stata azzerata o accorciata durante la
+                # chiamata: un indice scritto su messaggi diversi da quelli letti
+                # salterebbe quelli nuovi.
+                if (
+                    len(current.messages) < position
+                    or current.messages[position - 1] != messages[position - 1]
+                ):
+                    break
+                current.metadata[self._DIARY_HARVEST_KEY] = position
+                self.sessions.save(current)
+            if position > start:
+                self._retry_not_before.pop(key, None)
+                logger.info(
+                    "Diary harvest for {}: {} new messages read into the queue",
+                    key, position - start,
+                )
         except Exception:
             logger.exception("Diary harvest failed for {}", key)
         finally:
@@ -422,6 +502,12 @@ class AutoCompact:
             summary = await self.consolidator.compact_idle_session(
                 key, self._RECENT_SUFFIX_MESSAGES,
             )
+            # ``None`` e' il fallimento: la sessione non e' stata toccata e resta
+            # scaduta, quindi si riprova — ma non al prossimo giro.
+            if summary is None:
+                self._retry_not_before[key] = time.monotonic() + self._RETRY_AFTER_FAILURE_S
+            else:
+                self._retry_not_before.pop(key, None)
             if summary and summary != "(nothing)":
                 session = self.sessions.get_or_create(key)
                 meta = session.metadata.get("_last_summary")
@@ -432,6 +518,7 @@ class AutoCompact:
                     )
         except Exception:
             logger.exception("Auto-compact: failed for {}", key)
+            self._retry_not_before[key] = time.monotonic() + self._RETRY_AFTER_FAILURE_S
         finally:
             self._archiving.discard(key)
 

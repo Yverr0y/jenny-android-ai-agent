@@ -45,7 +45,8 @@ from loguru import logger
 
 from jenny.agent.memory import MemoryStore
 from jenny.agent.memory_archive import archived_ids, summarize_archived
-from jenny.agent.memory_budget import count_chars, render_gauge
+from jenny.agent.memory_budget import render_gauge
+from jenny.session.turn_visibility import silent_progress
 from jenny.utils.prompt_templates import render_template
 
 if TYPE_CHECKING:
@@ -135,26 +136,17 @@ def review_session_key() -> str:
     return f"dream:review-{datetime.now():%Y%m%d-%H%M%S}"
 
 
-async def _silent(*_args: Any, **_kwargs: Any) -> None:
-    """``on_progress`` no-op: un run interno non ha nessuno a cui riferire."""
-
-
-def _timezone_of(agent: Any) -> str | None:
-    """Fuso dell'agente, per datare la riga di consumo token. Come nel giardiniere."""
-    context = getattr(agent, "context", None)
-    return getattr(context, "timezone", None)
-
-
 def _measure(report: Sequence[FileBudget]) -> dict[str, int]:
     """Rimisura i file del report, ``label -> caratteri``.
 
-    Riusa ``count_chars`` invece di rileggere a modo suo: è la stessa funzione
-    con cui ``budget_report`` ha prodotto le misure di partenza (stesso
-    ``errors="ignore"``, stesso 0 per file assente), e due implementazioni
+    Riusa ``FileBudget.measure_now`` invece di rileggere a modo suo: è la
+    stessa misura con cui ``budget_report`` ha prodotto quelle di partenza
+    (stesso ``errors="ignore"``, stesso 0 per file assente, stesso blocco
+    dell'utente escluso da SOUL.md), e due implementazioni
     diverse ai due capi del confronto produrrebbero delta inventati sul primo
     byte malformato.
     """
-    return {item.label: count_chars(item.path) for item in report}
+    return {item.label: item.measure_now() for item in report}
 
 
 # Oltre quante voci spostate in un solo passaggio la cosa va detta per nome.
@@ -236,7 +228,7 @@ async def run_dream_review(
             session_key=review_session_key(),
             ephemeral=True,
             tools=tools,
-            on_progress=_silent,
+            on_progress=silent_progress,
         )
     except Exception:  # noqa: BLE001 — l'esito viaggia nell'outcome, non in un raise
         # Un review pass è un lavoro di manutenzione: farlo esplodere in faccia

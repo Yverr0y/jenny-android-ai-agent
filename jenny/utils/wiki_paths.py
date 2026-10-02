@@ -9,6 +9,7 @@ suoi helper privati restano dove i chiamanti li hanno sempre trovati.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, overload
@@ -152,7 +153,7 @@ def is_wiki_page_rel(
     **Una regola sola per i quattro camminatori** (T9.5). Prima ce n'erano
     quattro, e le differenze non erano decisioni: :func:`iter_wiki_pages`
     saltava i nascosti, ``webui/wiki.py::iter_page_files`` no — quindi un
-    ``.bozza.md`` sotto ``wiki/`` non arrivava al modello ma diventava un nodo
+    ``.draft.md`` sotto ``wiki/`` non arrivava al modello ma diventava un nodo
     del grafo e un risultato di ricerca — e ``_walk`` saltava i nascosti a ogni
     livello, cioe' **anche le cartelle**, mentre gli altri due guardavano solo
     il nome del file. Il risultato: l'albero dei file nascondeva una cartella
@@ -202,6 +203,32 @@ def is_wiki_page_rel(
 # Da non confondere con :data:`_WIKIS_REGISTRY_FILENAME` (``wikis/_index.md``),
 # che e' il registro delle wiki e non la mappa di una.
 WIKI_INDEX_FILENAME = "index.md"
+
+
+def safe_wiki_page_path(input_path: str) -> str | None:
+    """Normalizza e valida un path di pagina wiki relativo.
+
+    Rifiuta path assoluti o che risalgono fuori dalla wiki (``..``). Ritorna il
+    path normalizzato relativo, la mappa (:data:`WIKI_INDEX_FILENAME`) se vuoto,
+    o ``None`` se invalido.
+
+    **E' una guardia sulla stringa, non sul filesystem**: un link simbolico
+    dentro ``wiki/`` la supera senza obiezioni e finisce comunque fuori. Il
+    secondo cancello e' il contenimento (``resolve().relative_to(...)``), e i
+    due servono a cose diverse — v. ``test_wiki_routes_server_scope``.
+
+    Sta qui, nel layer neutro, e non nell'adapter HTTP che l'aveva scritta:
+    la stessa domanda se la fa ora anche ``webui/commands.py``, che di trasporti
+    non sa niente e non puo' importare da ``wiki_routes``.
+    """
+    if not input_path:
+        return WIKI_INDEX_FILENAME
+    if os.path.isabs(input_path):
+        return None
+    normalized = os.path.normpath(input_path).replace(os.sep, "/")
+    if normalized.startswith(".."):
+        return None
+    return normalized
 
 
 def page_chars(text: str) -> int:
@@ -365,7 +392,7 @@ def iter_wiki_pages(
 
     **Quel corpo non e' quello del telefono:** ricontato il 24/08 in sola lettura sono 8
     wiki / 274 pagine sotto wiki/ / la piu' grande (main) 65. La misura del 23/08 girava
-    su una copia nello scratchpad con alberi duplicati e una wiki blackberry che sul
+    su una copia nello scratchpad con alberi duplicati e una wiki in piu' che sul
     telefono non c'e', quindi i valori assoluti qui sopra non sono quelli del
     dispositivo: vale il prima/dopo, non il numero.
 
@@ -415,12 +442,12 @@ def iter_wiki_pages(
 WIKI_ID_KEY = "id"
 
 # Forma dell'id: 12 caratteri esadecimali. Non finisce **mai** in un nome di
-# file — l'indirizzo di una chat resta il nome della cartella (v.
-# ``roadmap/progetti-passi.md``, passo 7, strada B) — quindi non deve essere
+# file — l'indirizzo di una chat resta il nome della cartella
+# (v. ``jenny/session/project_rename.py``) — quindi non deve essere
 # leggibile, deve solo essere improbabile da ripetere. Se un domani diventasse
 # l'indirizzo, i nomi dei file diventerebbero ``project_<id>.jsonl``, cioe'
 # illeggibili con adb: e' una delle ragioni per cui non lo e'.
-_WIKI_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+_WIKI_ID_RE = re.compile(r"\A[0-9a-f]{12}\Z")
 
 
 def is_valid_wiki_id(value: Any) -> bool:
@@ -608,8 +635,3 @@ def _frontmatter_scalar(text: str, *keys: str) -> str | None:
             if v and not _is_placeholder(v):
                 return v
     return None
-
-
-def has_wikis(wikis_dir: Path) -> bool:
-    """True se esiste almeno una wiki scansionabile."""
-    return bool(discover_wikis(wikis_dir))
