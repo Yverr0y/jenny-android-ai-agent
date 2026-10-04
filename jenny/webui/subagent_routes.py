@@ -127,8 +127,10 @@ class SubagentRoutes:
         """``?session_key=`` opzionale, tradotta nella chiave core.
 
         Assente = nessun filtro (tutti i subagent, anche quelli del lavoro
-        interno). I client passano la chiave WebUI ``websocket:default``, che
-        lato core è la sessione unificata.
+        interno). I due gusci passano la chiave della conversazione aperta, in
+        una delle due forme di ``shared/session-manager.js``:
+        ``websocket:default``, che lato core è la sessione unificata, oppure
+        ``project:<nome>``, che è già la chiave core del quaderno.
         """
         raw = query_first(parse_query(request.path), "session_key")
         if not raw:
@@ -139,6 +141,45 @@ class SubagentRoutes:
         if key == "websocket:default":
             return UNIFIED_SESSION_KEY
         return key
+
+    def _foreign(self, request: WsRequest, manager: Any, task_id: str) -> Response | None:
+        """404 se ``task_id`` non è un subagent della conversazione che chiede.
+
+        Senza ``?session_key=`` non si controlla niente, come prima: la chiave
+        dice da quale conversazione arriva la domanda, e chi non la dice non
+        ne dichiara nessuna. Con la chiave, l'officina che guarda un quaderno
+        non può fermare, rilanciare o leggere il subagent della chat personale
+        o dell'heartbeat — che è quello che faceva quando il pannello mostrava
+        i subagent di tutte le sessioni.
+
+        Le domande sono le stesse di ``SubagentControlTool._belongs_here``
+        (``jenny/agent/tools/subagent_control.py``): i vivi da
+        ``status_snapshot``, i finiti da ``list_records``, per ``task_id`` o
+        ``lineage_id``. Copiate e non importate per il vincolo di layering del
+        modulo: il manager resta una dipendenza opaca.
+        """
+        key = self._session_key(request)
+        if key is None:
+            return None
+        try:
+            snapshot = manager.status_snapshot(key)
+            running = snapshot.get("running") if isinstance(snapshot, dict) else None
+            if any(
+                task_id in (entry.get("task_id"), entry.get("lineage_id"))
+                for entry in running or []
+                if isinstance(entry, dict)
+            ):
+                return None
+            records = manager.list_records(key)
+            if any(
+                task_id in (getattr(r, "task_id", None), getattr(r, "lineage_id", None))
+                for r in records or []
+            ):
+                return None
+        except Exception:
+            self._log.exception("Subagent ownership check failed")
+            return http_error(500, "subagent ownership check failed")
+        return http_error(404, "not a subagent of this conversation")
 
     # -- GET /api/subagents -------------------------------------------------
 
@@ -173,6 +214,9 @@ class SubagentRoutes:
         manager = self._manager()
         if manager is None:
             return http_error(503, "subagent manager unavailable")
+        foreign = self._foreign(request, manager, target_id)
+        if foreign is not None:
+            return foreign
         if action == "restart":
             return await self._restart(manager, target_id)
         return await self._cancel(manager, target_id)
@@ -224,6 +268,11 @@ class SubagentRoutes:
         task_id = unquote(raw_id)
         if _ID_RE.match(task_id) is None:
             return http_error(400, "invalid subagent id")
+        manager = self._manager()
+        if manager is not None:
+            foreign = self._foreign(request, manager, task_id)
+            if foreign is not None:
+                return foreign
         if resource == "activity":
             return self._activity(request, task_id)
         return self._digest(task_id)

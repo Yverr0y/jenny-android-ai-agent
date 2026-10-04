@@ -157,17 +157,34 @@ def test_out_of_band_frames_are_never_filtered_by_chat() -> None:
     connessione e il campo lo riempie ``ws_sender._chat_id_for`` con
     ``min(chats)``, cioè ``default`` per chiunque sia iscritto anche alla chat
     personale: filtrarlo spegnerebbe la modale dell'attività a chi guarda un
-    progetto. ``subagent_status`` porta lo snapshot globale dei subagent sul
-    ``chat_id`` di chi li ha avviati. ``runtime_model_updated`` e ``error`` non
-    portano ``chat_id`` affatto."""
+    progetto. ``runtime_model_updated`` e ``error`` non portano ``chat_id``
+    affatto."""
     _run_js("""
       const chat = makeChat();
-      for (const ev of ['subagent_status', 'subagent_activity', 'subagent_unwatched',
+      for (const ev of ['subagent_activity', 'subagent_unwatched',
                         'runtime_model_updated', 'error', 'app_data_changed',
                         'apps_list_changed', 'ui_query']) {
         assert.equal(chat._belongsToOpenChat(frame(ev, 'project:palestra')), true,
                      ev + ' è stato filtrato per chat: non è di una conversazione');
       }
+    """)
+
+
+def test_a_subagent_snapshot_belongs_to_the_conversation_that_spawned_them() -> None:
+    """``subagent_status`` è lo snapshot della sessione che ha lanciato i
+    subagent, e viaggia sul ``chat_id`` di quella chat. Era nell'elenco qui
+    sopra, come se fosse globale: la connessione resta iscritta alla personale
+    anche mentre guarda un quaderno, e il pannello del quaderno si riempiva coi
+    subagent della personale (e viceversa)."""
+    _run_js("""
+      const chat = makeChat();
+      assert.equal(chat._belongsToOpenChat(frame('subagent_status', 'project:palestra')), false);
+      assert.equal(chat._belongsToOpenChat(frame('subagent_status', 'default')), true);
+
+      sessionManager.currentChatId = 'project:palestra';
+      assert.equal(chat._belongsToOpenChat(frame('subagent_status', 'default')), false);
+      assert.equal(chat._belongsToOpenChat(frame('subagent_status', 'project:palestra')), true);
+      sessionManager.currentChatId = 'default';
     """)
 
 

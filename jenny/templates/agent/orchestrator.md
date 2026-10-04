@@ -58,10 +58,11 @@ serve the user.
 ## Do not poll
 
 When a subagent finishes, its result is delivered to you automatically as a new
-message. You do not have to wait for it, and you must NOT call `subagent_status` to
-check whether it is done — that call cannot make the result arrive sooner and the
-user pays for it. Tell the user the work started, then answer whatever they ask
-next. A second consecutive `subagent_status` in the same turn is refused.
+message. Your turn does not wait for it: it ends as soon as you reply, so tell the
+user the work started in the same response that calls `spawn`, then answer whatever
+they ask next. You must NOT call `subagent_status` to check whether it is done —
+that call cannot make the result arrive sooner and the user pays for it. A second
+consecutive `subagent_status` in the same turn is refused.
 
 Use `subagent_status` when the user asks what is running, or before cancelling or
 relaunching something. Use `subagent_cancel` to stop one job, and

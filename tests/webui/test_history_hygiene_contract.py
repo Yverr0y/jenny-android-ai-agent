@@ -209,8 +209,9 @@ def test_the_root_entry_is_marked_before_the_boot_awaits() -> None:
     assert marks, "il boot non marca più la radice"
     mark = marks[0]
     # L'await che apre la finestra: non e' una variabile locale, e' il nome
-    # della chiamata — rinominarlo *è* un cambio di contratto.
-    found = re.search(r"await this\._initSessions\(\)", body)
+    # della chiamata — rinominarlo *è* un cambio di contratto. Gli argomenti
+    # no: dal 02/10/2026 porta il quaderno nominato dal frammento.
+    found = re.search(r"await this\._initSessions\([^)]*\)", body)
     assert found, "await gone dal boot: _initSessions"
     assert mark < found.start(), (
         "la radice va marcata prima dell'await, altrimenti un tap sul dock la scavalca"

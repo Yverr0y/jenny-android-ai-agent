@@ -139,6 +139,9 @@ class AgentRunSpec:
     tool_choice: str | None = None
     goal_active_predicate: Callable[[], bool] | None = None
     goal_continue_message: GoalContinueMessage | None = None
+    # Lavoro delegato ancora in corso (un subagent vivo della sessione): il goal
+    # non si sprona e non si parcheggia, perche' il rientro riapre il turno.
+    delegated_work_pending: Callable[[], bool] | None = None
     finalize_on_max_iterations: bool = True
     on_context_overflow: Callable[[int], Any] | None = None  # Called when context_length error; receives current window, returns new window
 
@@ -347,12 +350,26 @@ class AgentRunner(RequestExecutionMixin, ToolExecutionMixin):
            chi aspetta una risposta non può avanzare da solo.
         3. **budget**: ``_MAX_GOAL_CONTINUE_CYCLES`` per run.
 
+        Prima delle tre, una condizione che nega senza parcheggiare: un subagent
+        della sessione ancora vivo (``delegated_work_pending``).
+
         Quando nega con un goal attivo alza ``state.goal_stalled``: il turno finisce
         normalmente e il product layer parcheggia il goal (resta ``active``) invece
         di lasciare che il modello lo chiuda per uscire.
         """
         predicate = spec.goal_active_predicate
         if predicate is None or not predicate():
+            return False
+        if spec.delegated_work_pending is not None and spec.delegated_work_pending():
+            # Il turno non aspetta i subagent: chi ha appena delegato ha fatto
+            # la sua parte, e il pezzo che manca rientra col risultato, in un
+            # turno suo che riprende il goal. Spronarlo adesso lo farebbe
+            # rilanciare o interrogare lo stesso lavoro; parcheggiarlo
+            # («aspetta l'utente») direbbe una cosa falsa.
+            logger.info(
+                "Sustained-goal continuation withheld for {}: delegated work still running",
+                spec.session_key or "default",
+            )
             return False
         if state is None:
             # Nessuno stato = nessun budget da spendere: comportamento storico.

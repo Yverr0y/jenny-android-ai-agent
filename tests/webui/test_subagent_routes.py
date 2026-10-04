@@ -313,3 +313,91 @@ async def test_routes_are_reachable_from_the_main_dispatch(env) -> None:
     response = await env.handler._dispatch_misc_routes(MagicMock(), request, "/api/subagents")
     assert response is not None and response.status_code == 200
     assert _json(response) == _SNAPSHOT
+
+
+# -- appartenenza alla conversazione -----------------------------------------
+#
+# Con ``?session_key=`` le azioni e le letture rispondono solo per i subagent di
+# quella conversazione: l'officina che guarda un quaderno non deve poter fermare
+# il subagent della chat personale. Senza chiave resta tutto com'era (i test qui
+# sopra), così chi non dichiara una conversazione non perde niente.
+
+
+class ScopedManager(FakeManager):
+    """Doppio che filtra per sessione come quello vero: vivi e finiti per chiave."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._running = {
+            "unified:default": [{"task_id": "aaaa1111", "lineage_id": "11110000"}],
+            "project:piante": [{"task_id": "bbbb2222", "lineage_id": "22220000"}],
+        }
+        self._records = {
+            "project:piante": [SimpleNamespace(task_id="cccc3333", lineage_id="33330000")],
+        }
+
+    def status_snapshot(self, session_key=None):
+        self.snapshot_calls.append(session_key)
+        return {"running": self._running.get(session_key, []), "recent": []}
+
+    def list_records(self, session_key=None):
+        return self._records.get(session_key, [])
+
+
+@pytest.fixture()
+def scoped():
+    manager = ScopedManager()
+    return SimpleNamespace(handler=_make_handler(lambda: manager), manager=manager)
+
+
+@pytest.mark.parametrize("action", ["restart", "cancel"])
+async def test_an_action_on_another_conversations_subagent_is_refused(scoped, action) -> None:
+    response = await _dispatch(
+        scoped.handler, f"/api/subagents/aaaa1111/{action}?session_key=project%3Apiante"
+    )
+    assert response.status_code == 404
+    assert scoped.manager.restart_calls == []
+    assert scoped.manager.cancel_calls == []
+
+
+@pytest.mark.parametrize("target", ["bbbb2222", "22220000", "cccc3333", "33330000"])
+async def test_an_action_on_this_conversations_subagent_goes_through(scoped, target) -> None:
+    # Vivo o finito, per task o per lineage: le stesse quattro strade del tool.
+    response = await _dispatch(
+        scoped.handler, f"/api/subagents/{target}/cancel?session_key=project%3Apiante"
+    )
+    assert response.status_code == 200
+    assert scoped.manager.cancel_calls == [target]
+
+
+async def test_the_personal_key_is_translated_before_the_check(scoped) -> None:
+    response = await _dispatch(
+        scoped.handler, "/api/subagents/aaaa1111/restart?session_key=websocket%3Adefault"
+    )
+    assert response.status_code == 200
+    assert scoped.manager.restart_calls == [("aaaa1111", {"manual": True})]
+    response = await _dispatch(
+        scoped.handler, "/api/subagents/bbbb2222/cancel?session_key=websocket%3Adefault"
+    )
+    assert response.status_code == 404
+    assert scoped.manager.cancel_calls == []
+
+
+async def test_without_a_key_nothing_is_checked(scoped) -> None:
+    response = await _dispatch(scoped.handler, "/api/subagents/aaaa1111/cancel")
+    assert response.status_code == 200
+    assert scoped.manager.cancel_calls == ["aaaa1111"]
+    assert scoped.manager.snapshot_calls == []
+
+
+async def test_a_failing_check_is_a_500_not_a_pass(scoped) -> None:
+    def broken(session_key=None):
+        raise ValueError("dettaglio interno")
+
+    scoped.manager.list_records = broken
+    response = await _dispatch(
+        scoped.handler, "/api/subagents/zzzz9999/cancel?session_key=project%3Apiante"
+    )
+    assert response.status_code == 500
+    assert b"dettaglio interno" not in response.body
+    assert scoped.manager.cancel_calls == []

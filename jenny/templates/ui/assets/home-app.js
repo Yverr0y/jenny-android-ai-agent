@@ -25,6 +25,7 @@
  */
 
 import { ActivityLine } from './home-activity.js';
+import { SubagentChip } from './home-subagents.js';
 import { HomeChat } from './home-chat.js';
 import { NotebookPages } from './home-notebook-pages.js';
 import { HomeReader } from './home-reader.js';
@@ -149,7 +150,14 @@ class HomeApp {
        quando la trascini dall'altra parte. */
     this.chat.gap = new JennyGap(this.thread, this.jenny.el);
     this.activity = new ActivityLine(document.getElementById('home-activity'), {
-      onOpenInWorkshop: (turnId) => this._openInWorkshop(turnId),
+      onOpenInWorkshop: (turnId) => this._openInWorkshop(turnId, sessionManager.currentKey),
+    });
+    /* Gli agenti che lavorano per questa conversazione oltre la fine del turno:
+       la riga di lavoro si spegne col `turn_end`, il lavoro no. */
+    this.subagents = new SubagentChip(document.getElementById('home-subagents'), {
+      fetchSnapshot: (sessionKey) => api.getSubagents({ sessionKey }),
+      currentKey: () => sessionManager.currentKey,
+      onOpenInWorkshop: () => this._openInWorkshop(null, sessionManager.currentKey),
     });
     this.empty = document.getElementById('home-empty');
     this.emptyText = document.getElementById('home-empty-text');
@@ -399,12 +407,19 @@ class HomeApp {
        Quaderni si puo' saltare in un altro, e restare li' vorrebbe dire leggere
        l'elenco di una stanza in cui non sei piu'. */
     sessionManager.addEventListener('chat:switch', () => this._setView('chat'));
+    /* Gli agenti sono della conversazione: quelli della vecchia spariscono, e
+       quelli della nuova si leggono, perche' l'attach non rimanda lo snapshot. */
+    sessionManager.addEventListener('chat:switch', () => {
+      this.subagents.clear();
+      this.subagents.load();
+    });
 
     wsManager.addEventListener('chat:open', () => this._onWireOpen());
     wsManager.addEventListener('chat:close', () => this._setWire(false));
     wsManager.addEventListener('chat:message', (e) => {
       this._readRunStatus(e.detail);
       this._readActivity(e.detail);
+      this._readSubagents(e.detail);
       this.chat.handleFrame(e.detail);
     });
 
@@ -1933,10 +1948,6 @@ class HomeApp {
            `progress` (v. `WebSocketDispatcher._tool_start_without_hint`). */
         if (msg.tool_events) this.activity.tools(msg.tool_events);
         break;
-      case 'turn_waiting':
-        // Il turno e' fermo ad aspettare i subagent che ha lanciato.
-        this.activity.waiting();
-        break;
       case 'delta':
         // La risposta sta arrivando: la riga si toglie di mezzo.
         this.activity.answering();
@@ -1949,27 +1960,34 @@ class HomeApp {
     }
   }
 
-  /* Il tocco lungo sulla riga: lo stesso turno, in officina, con tutto quello
-     che la casa non mostra. `api.navigate` e non `location.href` perche' il
-     segreto di bootstrap vive solo nella memoria di questa pagina: una
-     navigazione secca lo perderebbe e l'officina prenderebbe 401.
+  /* Il tocco lungo sulla riga o sul chip degli agenti: la stessa conversazione,
+     in officina, con tutto quello che la casa non mostra. `api.navigate` e non
+     `location.href` perche' il segreto di bootstrap vive solo nella memoria di
+     questa pagina: una navigazione secca lo perderebbe e l'officina prenderebbe
+     401.
 
-     Il frammento `#turn=` resta nell'URL dopo che il segreto e' stato consumato
-     e tolto: l'officina oggi non lo legge ancora, e non fa danno — quando lo
-     leggera', da questa parte non c'e' niente da cambiare.
+     `key` e' la conversazione da aprire. Un quaderno viaggia nel frammento come
+     `chat=project:<nome>`, e l'officina lo legge al boot (v.
+     `conversationFromFragment` in `mobile-app.js`). La personale non viaggia:
+     e' gia' quella da cui l'officina parte. La porta delle Impostazioni non
+     passa nessuna chiave, e porta sempre alla personale — da li' non stai
+     guardando un quaderno.
 
-     **Da dentro un quaderno questa porta apre l'officina sulla conversazione
-     personale**, ed e' un buco noto, non una svista: nessuno dei due gusci
-     ricorda la chiave aperta (nessun `localStorage`), quindi l'officina riparte
-     sempre da `websocket:default`. Chiuderlo vuol dire passarle la chiave nel
-     frammento e insegnarle a leggerla — lavoro nell'altro guscio, che non legge
-     ancora nemmeno il `#turn=` che gli mandiamo da mesi. Il chip dell'officina
-     dice comunque a voce alta dove sei finito, che e' il motivo per cui questo
-     buco costa poco. */
-  _openInWorkshop(turnId) {
-    const target = turnId ? `/html-mobile/workshop.html#turn=${encodeURIComponent(turnId)}`
-                          : '/html-mobile/workshop.html';
-    api.navigate(target);
+     Il frammento `#turn=` invece l'officina non lo legge ancora: non fa danno,
+     e quando lo leggera' da questa parte non c'e' niente da cambiare. */
+  _openInWorkshop(turnId, key = null) {
+    const fragment = new URLSearchParams();
+    if (turnId) fragment.set('turn', turnId);
+    const name = projectNameOf(key);
+    if (name !== null && isOpenableProjectName(name)) fragment.set('chat', key);
+    const rest = fragment.toString();
+    api.navigate(`/html-mobile/workshop.html${rest ? `#${rest}` : ''}`);
+  }
+
+  /* Lo snapshot dei subagent, se e' della conversazione a schermo. */
+  _readSubagents(msg) {
+    if (msg?.event !== 'subagent_status' || !this._frameIsHere(msg)) return;
+    this.subagents.ingest(msg);
   }
 
   /* `goal_status` dice se un turno sta girando: e' quel che trasforma il
@@ -2007,6 +2025,9 @@ class HomeApp {
    *  schermo puo' essere rimasto indietro. */
   _onWireOpen() {
     this._setWire(true);
+    /* Gli agenti si rileggono a ogni apertura, la prima compresa: le
+       transizioni avvenute a socket chiuso non le ridice nessuno. */
+    this.subagents.load();
     /* Al boot le impostazioni non si leggevano, quindi non si sa se questo e'
        il primo avvio: il socket aperto dice che il gateway adesso c'e', e si
        richiede. Una volta sola — un secondo «non lo so» resta nella casa. */
@@ -2110,6 +2131,7 @@ class HomeApp {
     this.strip?.draw();
     if (this.files?.count) this._renderPending();
     if (this.wire && !this.wire.hidden) this.wire.textContent = i18n.t('home.wire.offline');
+    this.subagents?.applyTranslations();
   }
 
 }

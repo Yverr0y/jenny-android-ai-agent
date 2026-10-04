@@ -369,3 +369,40 @@ async def test_runner_resolves_goal_continue_message_lazily():
     user_msgs = [m for m in result.messages if m.get("role") == "user"]
     assert calls["n"] == 1
     assert any("Write the article draft." in str(m.get("content", "")) for m in user_msgs)
+
+
+@pytest.mark.asyncio
+async def test_runner_withholds_the_nudge_while_delegated_work_runs():
+    """Tool work, plain text, goal active, but a subagent of the session is still
+    running: no continuation, and the goal is NOT parked — it is not waiting for
+    the user, it is waiting for the result, which reopens the turn on its own.
+
+    Il turno non aspetta piu' i subagent (02/10/2026): senza questa condizione un
+    goal che ha appena delegato verrebbe spronato subito a «continua».
+    """
+    from jenny.agent.runner import AgentRunner
+
+    provider = MagicMock(spec=LLMProvider)
+    calls = {"n": 0}
+
+    async def chat_with_retry(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _tool_response()
+        return LLMResponse(content="a subagent is on it", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+
+    runner = AgentRunner(provider)
+    result = await runner.run(make_spec(
+        initial_messages=[{"role": "user", "content": "do task"}],
+        tools=_tools(),
+        max_iterations=20,
+        goal_active_predicate=lambda: True,
+        delegated_work_pending=lambda: True,
+    ))
+
+    assert calls["n"] == 2
+    assert _goal_continue_messages(result.messages) == []
+    assert result.goal_stalled is False
+    assert result.stop_reason == "completed"

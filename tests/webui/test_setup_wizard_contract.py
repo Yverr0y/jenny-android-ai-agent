@@ -192,7 +192,7 @@ def test_home_and_workshop_send_a_first_run_to_the_onboarding() -> None:
     assert "isFirstRun(" in winit
     assert f"api.navigate({ONBOARDING_URL})" in winit
     assert winit.index("await api.bootstrap()") < winit.index("isFirstRun(")
-    assert winit.index("isFirstRun(") < winit.index("await this._initSessions()")
+    assert winit.index("isFirstRun(") < winit.index("await this._initSessions(")
 
 
 def test_a_home_that_could_not_ask_asks_again_when_the_wire_opens() -> None:

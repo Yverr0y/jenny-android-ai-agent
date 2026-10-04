@@ -1402,16 +1402,18 @@ export class ChatController {
   ]);
 
   /* Eventi che appartengono a *una* conversazione, e che quindi si rendono solo
-     se arrivano da quella aperta. Sono i frame di un turno più i due che
+     se arrivano da quella aperta. Sono i frame di un turno più i tre che
      descrivono lo stato della conversazione: `user` (un messaggio entrato da un
-     altro canale) e `goal_status` (il banner, spinto per `chat_id`).
+     altro canale), `goal_status` (il banner, spinto per `chat_id`) e
+     `subagent_status`. Quest'ultimo è lo snapshot dei subagent **della sessione
+     che li ha lanciati** (`status_snapshot(spec.session_key)` nel manager), e
+     viaggia sul `chat_id` di quella chat. Una connessione resta iscritta alla
+     chat personale anche mentre guarda un quaderno, quindi senza filtro il
+     pannello del quaderno si riempiva coi subagent della personale.
 
      Fuori restano i frame che parlano del runtime, non di una conversazione, e
      che vanno resi qualunque chat sia a schermo:
 
-     - `subagent_status` porta lo snapshot *globale* dei subagent (identico a
-       `GET /api/subagents`) e viaggia sul `chat_id` di chi li ha avviati:
-       filtrarlo vorrebbe dire un pannello che non si aggiorna più;
      - `subagent_activity` porta un `chat_id` che **non è affidabile**: è
        mirato a una connessione e il campo lo riempie `ws_sender._chat_id_for`
        con `min(chats)`, cioè `default` per chiunque sia iscritto anche alla
@@ -1422,7 +1424,7 @@ export class ChatController {
      - `error` è un errore di protocollo della connessione (`_send_event`), e
        nemmeno lui porta un `chat_id`. */
   static CHAT_SCOPED_EVENTS = new Set([
-    ...ChatController.TURN_SCOPED_EVENTS, 'user', 'goal_status',
+    ...ChatController.TURN_SCOPED_EVENTS, 'user', 'goal_status', 'subagent_status',
   ]);
 
   /* Un frame appartiene alla conversazione aperta?
@@ -2299,6 +2301,10 @@ export class ChatController {
       this._syncSubagentPolling(this._subagentHasRunning);
       if (visible) this._refreshSubagents();
     });
+    // Il pannello è della conversazione aperta: cambiandola, quel che mostrava
+    // non è più di nessuno a schermo. `chat:switch` e non `invalidateHistory`,
+    // che scatta anche senza cambio (la minichat che chiude un turno).
+    sessionManager.addEventListener('chat:switch', () => this._resetSubagentPanel());
     // Sopravvivere al reload è il caso comune, non l'eccezione: su Android il
     // processo della WebView muore e il frame WS di transizione è già passato.
     // Al reload solo i vivi compaiono: `_subagentLiveIds` è vuoto, quindi i
@@ -2313,12 +2319,39 @@ export class ChatController {
     this.subagentsBody.hidden = !this._subagentsOpen;
   }
 
+  /* Solo i subagent della conversazione aperta. Senza `sessionKey` il gateway
+     risponde con quelli di tutte le sessioni — heartbeat, Dream, giardiniere,
+     gli altri quaderni — e il poll ogni 5 s li rimetteva nel pannello fra un
+     frame e l'altro, che invece sono già filtrati. La chiave e la generazione
+     si leggono prima dell'attesa: una risposta che torna dopo un cambio di
+     conversazione è della chat lasciata, e va buttata. */
   async _refreshSubagents() {
+    const sessionKey = sessionManager.currentKey;
+    const generation = sessionManager.switchGeneration;
     try {
-      this._renderSubagents(await api.getSubagents());
+      const snapshot = await api.getSubagents({ sessionKey });
+      if (generation !== sessionManager.switchGeneration) return;
+      this._renderSubagents(snapshot);
     } catch (_) {
       // Best-effort: lo stato è ricalcolabile, il prossimo frame o poll lo porta.
     }
+  }
+
+  /* Cambio di conversazione: il pannello riparte da zero e si rilegge per la
+     chat nuova. Si svuotano anche gli insiemi che decidono il blocco «cosa ha
+     fatto davvero» (`_subagentLiveIds`, `_saDigestSeen`): un subagent visto
+     vivo nella chat lasciata non deve lasciare il suo blocco in questa.
+
+     La modale di dettaglio, se è aperta, si chiude dal suo evento `close`
+     (v. `shared/dialog.js`): è la stessa uscita della X, quindi passa da
+     `_detachSubagentStream` e non lascia un watch appeso. */
+  _resetSubagentPanel() {
+    if (this._saStream) document.getElementById('oc-detail-dialog')?.close();
+    this._subagentLiveIds = new Set();
+    this._saDigestSeen = new Set();
+    this._lastStalledIds = '';
+    this._renderSubagents({ running: [], recent: [] });
+    this._refreshSubagents();
   }
 
   /* Poll solo mentre c'è qualcosa che gira *e* la vista è davanti: il manager
@@ -2977,7 +3010,9 @@ export class ChatController {
     if (!stream) return;
     this._saResyncing = true;
     try {
-      const payload = await api.getSubagentActivity(stream.taskId, since);
+      const payload = await api.getSubagentActivity(stream.taskId, since, {
+        sessionKey: sessionManager.currentKey,
+      });
       // La modale può essere stata chiusa o riaperta su un altro task mentre la
       // lettura era in volo: il cursore di allora non appartiene a questa lista.
       if (!this._saStream || this._saStream.taskId !== stream.taskId) return;
@@ -3302,7 +3337,9 @@ export class ChatController {
     body.innerHTML = `<div class="sa-digest-msg">` +
       `${escapeHtml(i18n.t('subagents.digest.loading'))}</div>`;
     try {
-      const view = saDigestView(await api.getSubagentDigest(block.dataset.taskId));
+      const view = saDigestView(await api.getSubagentDigest(block.dataset.taskId, {
+        sessionKey: sessionManager.currentKey,
+      }));
       if (!view.show) {
         // `source: "none"`: niente da mostrare, quindi niente blocco. Un accordion
         // che si apre sul vuoto è peggio della sua assenza; il toast spiega il tap.
@@ -3337,7 +3374,7 @@ export class ChatController {
   async _stopSubagent(taskId, btn) {
     if (btn) btn.disabled = true;
     try {
-      await api.cancelSubagent(taskId);
+      await api.cancelSubagent(taskId, { sessionKey: sessionManager.currentKey });
       showToast(i18n.t('subagents.stopped'), 'success');
     } catch (e) {
       showToast(e?.message || i18n.t('subagents.actionFailed'), 'error');
@@ -3350,7 +3387,7 @@ export class ChatController {
   async _restartSubagent(taskId, btn) {
     if (btn) btn.disabled = true;
     try {
-      await api.restartSubagent(taskId);
+      await api.restartSubagent(taskId, { sessionKey: sessionManager.currentKey });
       showToast(i18n.t('subagents.relaunched'), 'success');
     } catch (e) {
       showToast(e?.message || i18n.t('subagents.actionFailed'), 'error');

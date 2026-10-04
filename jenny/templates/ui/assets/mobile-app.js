@@ -30,6 +30,7 @@ import {
   releaseSelectionOnBlur,
 } from './shared/selection.js';
 import { watchHorizontalSwipe, elastic } from './shared/horizontal-swipe.js';
+import { isOpenableProjectName, projectNameOf } from './shared/conversation-list.js';
 import './shared/theme.js';
 
 /* ── Global Error Handling ── */
@@ -50,6 +51,17 @@ window.addEventListener('unhandledrejection', (e) => {
   // Non ogni rifiuto e' la rete: un difetto del codice si dice tale.
   showToast(i18n.t(isNetworkFailure(e.reason) ? 'common.networkError' : 'common.genericError'), 'error');
 });
+
+/* La conversazione con cui aprire l'officina, se chi ci manda la nomina nel
+   frammento (`#chat=project:<nome>`): e' la casa, quando la tieni premuta
+   dentro un quaderno (v. `HomeApp._openInWorkshop`). Si accetta solo un
+   quaderno con un nome che il gateway accetterebbe; tutto il resto — la
+   personale compresa, che e' gia' il default — e' `null`. */
+function conversationFromFragment(hash) {
+  const key = new URLSearchParams(String(hash || '').replace(/^#/, '')).get('chat');
+  const name = projectNameOf(key);
+  return name !== null && isOpenableProjectName(name) ? key : null;
+}
 
 /* ── Keyboard Helper ── */
 function ensureVisible(el) {
@@ -215,11 +227,18 @@ class MobileApp {
     releaseSelectionOnBlur();
     forwardTapsThroughChrome(['.chat-bottom', '.dock']);
 
+    /* Letto qui, prima del `replaceNav` qui sotto: e' lui a toglierlo
+       dall'URL (v. `_navUrl`). */
+    const openKey = conversationFromFragment(window.location.hash);
+
     // Determine initial mode
     const urlParams = new URLSearchParams(window.location.search);
     const urlMode = urlParams.get('mode');
     const savedMode = readStorage('mobile-last-mode');
-    let initialMode = urlMode || savedMode || 'chat';
+    /* Chi arriva dalla casa nominando un quaderno vuole vederne la chat, non
+       l'ultimo cassetto rimasto in `mobile-last-mode`. Un `?mode=` esplicito
+       vince comunque. */
+    let initialMode = urlMode || (openKey ? 'chat' : null) || savedMode || 'chat';
     /* `workspace` **e' un file aperto**, non una sezione: l'esploratore vive
        in Memoria, e questa vista senza il suo file e' una schermata bianca.
        Da `mobile-last-mode` arriva esattamente cosi' — chiudendo l'app con un
@@ -244,7 +263,7 @@ class MobileApp {
     this.replaceNav(this._navStateFor(initialMode));
 
     // Initialize sessions and load module
-    await this._initSessions();
+    await this._initSessions(openKey);
 
     // Un tap sul dock durante l'await qui sopra ha già scelto la vista e
     // impilato la propria entry sopra la radice (marcata prima di partire):
@@ -316,9 +335,15 @@ class MobileApp {
     });
   }
 
-  async _initSessions() {
+  /* `openKey` e' il quaderno nominato dal frammento, o `null`. Il cambio si fa
+     qui, prima che esista il controller della chat: il suo primo
+     `loadInitialHistory` legge gia' la chiave giusta, e il chip prende il nome
+     dallo scope di quel thread, quindi non c'e' un attimo in cui l'officina
+     dica «personale» guardando il quaderno. */
+  async _initSessions(openKey = null) {
     try {
       await sessionManager.init();
+      if (openKey) sessionManager.switchTo(openKey);
     } catch (err) {
       console.error('Failed to init sessions:', err);
     }
@@ -364,6 +389,17 @@ class MobileApp {
        ogni entry successiva. */
     url.searchParams.delete('wiki');
     url.searchParams.delete('page');
+    /* `chat` nel frammento e' un'istruzione per il boot (v.
+       `conversationFromFragment`), non lo stato della vista: si legge una
+       volta e qui sparisce, alla prima entry che il boot riscrive. Rimasto
+       nell'URL, un reload dopo essere tornati alla personale dal chip
+       riaprirebbe il quaderno. */
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    if (fragment.has('chat')) {
+      fragment.delete('chat');
+      const rest = fragment.toString();
+      url.hash = rest ? `#${rest}` : '';
+    }
     return url;
   }
 

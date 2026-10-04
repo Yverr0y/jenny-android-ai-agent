@@ -1058,40 +1058,6 @@ async def test_send_mascot_mood_without_subscribers_sends_nothing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_subagent_wait_is_a_dedicated_frame_never_a_bubble() -> None:
-    """L'attesa dei subagent: un frame suo, solo a quella chat, mai nel transcript.
-
-    Arriva come progress (``bus.progress``), e senza il suo ramo finirebbe nel
-    percorso generico: una riga vuota in chat e nel transcript.
-    """
-    bus = MagicMock()
-    channel = WebSocketChannel({"enabled": True, "allowFrom": ["*"]}, bus, gateway=_basic_handler(bus))
-    ws_here = AsyncMock()
-    ws_other = AsyncMock()
-    channel._attach(ws_here, "project:orto")
-    channel._attach(ws_other, "default")
-    channel._transcripts = MagicMock()
-
-    pending = await channel.send(OutboundMessage(
-        channel="websocket",
-        chat_id="project:orto",
-        content="",
-        metadata={
-            "_progress": True, "_tool_hint": False,
-            "_waiting_for_subagents": 2, "webui_turn_id": "t-3",
-        },
-    ))
-
-    assert pending == []
-    assert json.loads(ws_here.send.await_args.args[0]) == {
-        "event": "turn_waiting", "chat_id": "project:orto",
-        "reason": "subagents", "subagents": 2, "turn_id": "t-3",
-    }
-    ws_other.send.assert_not_awaited()
-    channel._transcripts.prepare_and_append.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_send_goal_status_idle_omits_started_at() -> None:
     bus = MagicMock()
     channel = WebSocketChannel({"enabled": True, "allowFrom": ["*"]}, bus, gateway=_basic_handler(bus))

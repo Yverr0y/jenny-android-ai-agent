@@ -64,21 +64,16 @@ SHELLS = {
 # ``WITHOUT_LISTENER``: chi ne aggiunge uno lo fa sapendolo.
 SHELL_WITHOUT_LISTENER = {
     "index.html": {
-        # Il pannello dei subagent e' un arnese d'operatore: la casa non lo
-        # disegna, e «apri nell'officina» porta dove c'e' (``home-activity.js``).
-        "subagent_activity": "pannello dei subagent: solo officina",
-        "subagent_status": "pannello dei subagent: solo officina",
-        "subagent_unwatched": "pannello dei subagent: solo officina",
+        # Il dettaglio dei subagent e' un arnese d'operatore: la casa ne mostra
+        # solo il chip «al lavoro» (``subagent_status``, ``home-subagents.js``), e
+        # «apri nell'officina» porta dove c'e' il resto.
+        "subagent_activity": "dettaglio dei subagent: solo officina",
+        "subagent_unwatched": "dettaglio dei subagent: solo officina",
         # La casa non mostra il modello in vivo: la stanza «Chi risponde» lo
         # legge dalle impostazioni quando la apri.
         "runtime_model_updated": "il modello si rilegge all'apertura della stanza",
     },
-    "workshop.html": {
-        # Serve alla riga di lavoro della casa, che dopo il testo di stato si
-        # spegneva per tutta l'attesa; l'officina i subagent che girano li
-        # mostra gia' nel loro pannello (``subagent_status``).
-        "turn_waiting": "la riga di lavoro: solo casa",
-    },
+    "workshop.html": {},
 }
 
 _IMPORT = re.compile(

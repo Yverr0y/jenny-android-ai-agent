@@ -223,6 +223,7 @@ _UI_MANIFEST = [
     "assets/home-notebook-pages.js",
     "assets/home-pages.js",
     "assets/home-strip.js",
+    "assets/home-subagents.js",
     "assets/home-ui-query.js",
     "assets/home-focus.js",
     "assets/home-flower.js",

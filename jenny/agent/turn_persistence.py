@@ -8,6 +8,7 @@ zero churn ai call-site. Nessuna logica di concorrenza vive qui.
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,7 @@ from jenny.agent.context import ContextBuilder
 from jenny.session.history_meta import (
     INJECTED_EVENT_META,
     SUBAGENT_RESULT_EVENT,
+    is_synthetic_history_row,
 )
 from jenny.utils.helpers import image_placeholder_text
 from jenny.utils.helpers import truncate_text as truncate_text_fn
@@ -24,6 +26,19 @@ from jenny.utils.helpers import truncate_text as truncate_text_fn
 if TYPE_CHECKING:
     from jenny.bus.events import InboundMessage
     from jenny.session.manager import Session, SessionManager
+
+
+class FollowupState(Enum):
+    """Dove sta in storia il rientro di un subagent arrivato a turno chiuso."""
+
+    #: Mai visto: il turno d'annuncio lo scrive e lo presenta al modello.
+    NEW = "new"
+    #: Gia' scritto da un turno d'annuncio che non ha risposto (interrotto).
+    PENDING = "pending"
+    #: Gia' scritto e gia' risposto: un secondo turno ripeterebbe la sintesi.
+    DELIVERED = "delivered"
+    #: Niente da dire: nessun turno.
+    EMPTY = "empty"
 
 
 class TurnPersistenceMixin:
@@ -148,30 +163,61 @@ class TurnPersistenceMixin:
             session.messages[last_assistant_idx]["latency_ms"] = int(turn_latency_ms)
         session.updated_at = datetime.now()
 
-    def _persist_subagent_followup(self, session: Session, msg: InboundMessage) -> bool:
-        """Persist subagent follow-ups before prompt assembly so history stays durable.
+    def _subagent_followup_state(self, session: Session, msg: InboundMessage) -> FollowupState:
+        """A che punto e' in storia il rientro di subagent che ``msg`` porta.
 
-        Returns True if a new entry was appended; False if the follow-up was
-        deduped (same ``subagent_task_id`` already in session) or carries no
-        content worth persisting.
+        Il turno d'annuncio ne ha bisogno *prima* di costruire il prompt: un
+        rientro nuovo si legge in storia dopo averla letta, uno gia' scritto da
+        un turno interrotto e' gia' li', e uno a cui Jenny ha gia' risposto non
+        deve far rispondere due volte.
+
+        Un rientro in sospeso scritto da una versione precedente porta
+        ``role: "assistant"``: qui torna ``user``, perche' in coda al prompt un
+        assistant lo tolgono i provider (``enforce_role_alternation``) e il
+        modello non lo vedrebbe — e' il difetto da cui viene questo metodo.
         """
         if not msg.content:
-            return False
+            return FollowupState.EMPTY
         task_id = msg.metadata.get("subagent_task_id") if isinstance(msg.metadata, dict) else None
-        if task_id and any(
-            m.get(INJECTED_EVENT_META) == SUBAGENT_RESULT_EVENT
-            and m.get("subagent_task_id") == task_id
-            for m in session.messages
-        ):
-            return False
+        if not task_id:
+            return FollowupState.NEW
+        found = None
+        for index in range(len(session.messages) - 1, -1, -1):
+            row = session.messages[index]
+            if (
+                row.get(INJECTED_EVENT_META) == SUBAGENT_RESULT_EVENT
+                and row.get("subagent_task_id") == task_id
+            ):
+                found = index
+                break
+        if found is None:
+            return FollowupState.NEW
+        answered = any(
+            row.get("role") == "assistant" and not is_synthetic_history_row(row)
+            for row in session.messages[found + 1:]
+        )
+        if answered:
+            return FollowupState.DELIVERED
+        session.messages[found]["role"] = "user"
+        return FollowupState.PENDING
+
+    def _persist_subagent_followup(self, session: Session, msg: InboundMessage) -> None:
+        """Scrive in storia il rientro di un subagent arrivato a turno chiuso.
+
+        Ruolo ``user``, come il rientro iniettato a meta' turno
+        (``AgentLoop._drain_pending``): per il modello e' una notizia che arriva,
+        non una cosa che ha detto lui. I metadati sono quelli che fanno
+        riconoscere la riga come sintetica (``history_meta``) e che
+        ``_subagent_followup_state`` usa per non scriverla due volte.
+        """
+        task_id = msg.metadata.get("subagent_task_id") if isinstance(msg.metadata, dict) else None
         session.add_message(
-            "assistant",
+            "user",
             msg.content,
             sender_id=msg.sender_id,
             injected_event=SUBAGENT_RESULT_EVENT,
             subagent_task_id=task_id,
         )
-        return True
 
     def _set_runtime_checkpoint(self, session: Session, payload: dict[str, Any]) -> None:
         """Persist the latest in-flight turn state into session metadata.

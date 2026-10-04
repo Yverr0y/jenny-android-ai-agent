@@ -14,6 +14,13 @@
  *  risposta finisce, e lo dice con due cose che servono invece che con una
  *  linea che non serve a niente.
  *
+ *  **E il 02/10/2026 sono rientrati i subagent, ma solo per dire che ci sono.**
+ *  Un turno non li aspetta piu': Jenny risponde «ci sto lavorando» e il turno
+ *  finisce, mentre il lavoro va avanti per minuti. Senza un segno la
+ *  conversazione sembrava ferma. Il segno e' un chip fuori dal filo
+ *  (`home-subagents.js`) che dice quanti lavorano e se uno e' fermo; il resto
+ *  — stato, strumenti, Ferma — resta in officina, e qui non si legge.
+ *
  *  **Le regole del filo non sono state inventate qui.** Sono quelle che
  *  `mobile-chat.js` ha imparato sbagliando, e che valgono identiche in casa
  *  perche' descrivono il protocollo, non il disegno:
